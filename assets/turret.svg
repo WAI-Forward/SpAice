@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Turret">
+  <defs>
+    <linearGradient id="body" x1="28" x2="100" y1="80" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#30384d"/>
+      <stop offset=".52" stop-color="#cfd7e7"/>
+      <stop offset="1" stop-color="#f8fbff"/>
+    </linearGradient>
+    <linearGradient id="barrel" x1="64" x2="64" y1="12" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffec9a"/>
+      <stop offset=".42" stop-color="#ff73ad"/>
+      <stop offset="1" stop-color="#79354f"/>
+    </linearGradient>
+    <filter id="turretGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g transform="translate(64 64) scale(.86) translate(-64 -64)">
+    <path d="M28 96h72l10 16H18l10-16Z" fill="#121722"/>
+    <path d="M36 78c0-16 13-29 29-29s29 13 29 29v19H36V78Z" fill="url(#body)" stroke="#eaf6ff" stroke-opacity=".32" stroke-width="3"/>
+    <path d="M55 19c0-5 4-9 9-9s9 4 9 9v48H55V19Z" fill="url(#barrel)" filter="url(#turretGlow)"/>
+    <path d="M48 60h32c7 0 13 6 13 13v8H35v-8c0-7 6-13 13-13Z" fill="#20283a" stroke="#dce8f8" stroke-opacity=".26" stroke-width="3"/>
+    <circle cx="64" cy="77" r="13" fill="#58e2ff" filter="url(#turretGlow)"/>
+    <path d="M34 96h60" stroke="#ffd166" stroke-opacity=".72" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

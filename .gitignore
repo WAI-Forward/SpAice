@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# IDE files
+.idea/
+
+# Local data and secrets
+data/
+.env
+.env.*
+
+# Logs
+*.log
+*.pid
+
+# OS files
+.DS_Store
+Thumbs.db

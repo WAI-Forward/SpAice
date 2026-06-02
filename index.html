@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SpAice Particle Collector</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <canvas id="game" aria-label="SpAice particle collector game"></canvas>
+
+    <div class="hud" aria-live="polite">
+      <div class="hud__group">
+        <span>Mass</span>
+        <strong id="massValue">1</strong>
+      </div>
+      <div class="hud__group">
+        <span>Particles</span>
+        <strong id="particleValue">0</strong>
+      </div>
+      <div class="hud__progress hud__health">
+        <div class="hud__progress-row">
+          <span>Health</span>
+          <strong id="healthValue">100</strong>
+        </div>
+        <div class="hud__progress-track" aria-hidden="true">
+          <div class="hud__progress-fill hud__health-fill" id="healthFill"></div>
+        </div>
+      </div>
+      <div class="hud__mode" id="modeValue">Drift</div>
+      <div class="hud__progress">
+        <div class="hud__progress-row">
+          <span id="nextMilestoneLabel">Next rock</span>
+          <strong id="nextMilestoneValue">1/10</strong>
+        </div>
+        <div class="hud__progress-track" aria-hidden="true">
+          <div class="hud__progress-fill" id="milestoneFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="reticle" aria-hidden="true"></div>
+    <aside class="tech-ledger" aria-label="Technology resources">
+      <div class="tech-ledger__title">Tech</div>
+      <div class="tech-ledger__list" id="techLedgerList"></div>
+    </aside>
+    <section class="build-menu" id="buildMenu" aria-label="Build menu" aria-hidden="true">
+      <div class="build-menu__panel">
+        <div class="build-menu__header">
+          <span>Build Menu</span>
+          <strong id="buildMenuStatus">Systems</strong>
+        </div>
+        <div class="build-menu__tabs" id="buildMenuTabs" role="tablist" aria-label="Build filters"></div>
+        <div class="build-menu__body">
+          <aside class="build-menu__resources" aria-label="Build menu technology resources">
+            <div class="build-menu__resources-title">Tech Stores</div>
+            <div class="build-menu__resources-list" id="buildMenuTech"></div>
+          </aside>
+          <div class="build-menu__grid" id="buildMenuList"></div>
+        </div>
+      </div>
+    </section>
+    <div class="tool-hotbar" id="toolHotbar" aria-label="Tool hotbar"></div>
+    <button class="map-toggle" id="mapToggle" type="button" aria-label="Toggle map" aria-pressed="false" title="Toggle map">
+      <span class="map-toggle__icon" aria-hidden="true"></span>
+    </button>
+    <div class="notifications" id="notifications" aria-live="polite"></div>
+
+    <script src="src/game.js" defer></script>
+  </body>
+</html>
