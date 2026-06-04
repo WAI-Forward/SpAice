@@ -10,33 +10,35 @@
     <canvas id="game" aria-label="SpAice particle collector game"></canvas>
 
     <div class="hud" aria-live="polite">
-      <div class="hud__group">
-        <span>Mass</span>
-        <strong id="massValue">1</strong>
-      </div>
-      <div class="hud__group">
-        <span>Particles</span>
-        <strong id="particleValue">0</strong>
-      </div>
       <div class="hud__progress hud__health">
         <div class="hud__progress-row">
           <span>Health</span>
-          <strong id="healthValue">100</strong>
+          <strong id="healthValue">HP: 100%</strong>
         </div>
         <div class="hud__progress-track" aria-hidden="true">
           <div class="hud__progress-fill hud__health-fill" id="healthFill"></div>
         </div>
       </div>
-      <div class="hud__mode" id="modeValue">Drift</div>
-      <div class="hud__progress">
-        <div class="hud__progress-row">
-          <span id="nextMilestoneLabel">Next rock</span>
-          <strong id="nextMilestoneValue">1/10</strong>
+      <div class="hud__body" aria-label="Body mass milestone">
+        <span class="hud__body-label" id="currentBodyLabel">Current Particle 1g</span>
+        <div class="hud__body-meter">
+          <div class="hud__progress-track" aria-hidden="true">
+            <div class="hud__progress-fill" id="milestoneFill"></div>
+          </div>
+          <strong id="nextMilestoneValue">10%</strong>
         </div>
-        <div class="hud__progress-track" aria-hidden="true">
-          <div class="hud__progress-fill" id="milestoneFill"></div>
-        </div>
+        <span class="hud__body-label hud__body-label--next" id="nextMilestoneLabel">10g Rock Next</span>
       </div>
+      <button class="hud__leaderboard-toggle" id="leaderboardToggle" type="button" aria-controls="leaderboardPanel" aria-expanded="false">
+        Leaderboard
+      </button>
+      <section class="leaderboard-panel" id="leaderboardPanel" aria-label="Leaderboard" aria-hidden="true">
+        <div class="leaderboard-panel__header">
+          <strong>Leaderboard</strong>
+          <span>Score</span>
+        </div>
+        <div class="leaderboard-panel__list" id="leaderboardList"></div>
+      </section>
     </div>
 
     <div class="reticle" aria-hidden="true"></div>
@@ -57,13 +59,56 @@
             <div class="build-menu__resources-list" id="buildMenuTech"></div>
           </aside>
           <div class="build-menu__grid" id="buildMenuList"></div>
+          <aside class="build-menu__details" id="buildMenuDetail" aria-live="polite"></aside>
         </div>
       </div>
     </section>
     <div class="tool-hotbar" id="toolHotbar" aria-label="Tool hotbar"></div>
-    <button class="map-toggle" id="mapToggle" type="button" aria-label="Toggle map" aria-pressed="false" title="Toggle map">
-      <span class="map-toggle__icon" aria-hidden="true"></span>
+    <button class="online-toggle" id="onlineToggle" type="button" aria-label="Open online players">
+      <strong id="onlineCount">0</strong>
+      <span>online</span>
     </button>
+    <button class="sound-toggle" id="soundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
+    <section class="social-panel" id="socialPanel" aria-label="Online players" aria-hidden="true">
+      <div class="social-panel__header">
+        <strong id="publicNameValue">Player</strong>
+        <button class="social-panel__close" id="socialPanelClose" type="button" aria-label="Close online players">x</button>
+      </div>
+      <div class="social-panel__tools">
+        <input id="playerSearch" type="search" autocomplete="off" placeholder="Search name">
+        <label class="social-panel__filter">
+          <input id="friendsOnlyFilter" type="checkbox">
+          <span>Friends</span>
+        </label>
+      </div>
+      <div class="social-panel__list" id="playerSearchList"></div>
+    </section>
+    <section class="signal-panel" id="signalPanel" aria-label="Signal detected" aria-hidden="true">
+      <strong>! Signal detected</strong>
+      <span id="signalName">Unknown contact</span>
+      <div class="signal-panel__actions">
+        <button id="investigateSignal" type="button">Investigate</button>
+        <button id="avoidSignal" type="button">Avoid</button>
+      </div>
+    </section>
+    <section class="command-panel" id="commandPanel" aria-label="Command console" aria-hidden="true">
+      <input id="commandInput" type="text" autocomplete="off" spellcheck="false" placeholder="/tp player">
+      <div class="command-panel__hint" id="commandHint">Tab completes player names</div>
+    </section>
+    <section class="death-screen" id="deathScreen" aria-label="You died" aria-hidden="true">
+      <div class="death-screen__panel">
+        <p class="death-screen__eyebrow">Life support offline</p>
+        <h1>You died</h1>
+        <dl class="death-screen__stats" id="deathStatsList"></dl>
+        <form class="death-screen__leaderboard" id="deathLeaderboardForm">
+          <label for="deathRunNameInput">Name this run</label>
+          <input id="deathRunNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Run name">
+          <button class="death-screen__button" id="deathLeaderboardButton" type="submit">Save run</button>
+          <p class="death-screen__leaderboard-status" id="deathLeaderboardStatus" aria-live="polite"></p>
+        </form>
+        <button class="death-screen__button" id="playAgainButton" type="button">Play again</button>
+      </div>
+    </section>
     <div class="notifications" id="notifications" aria-live="polite"></div>
 
     <script src="src/game.js" defer></script>
