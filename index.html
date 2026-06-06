@@ -19,15 +19,19 @@
           <div class="hud__progress-fill hud__health-fill" id="healthFill"></div>
         </div>
       </div>
+      <div class="hud__score" aria-label="Run score">
+        <span id="difficultyValue">Medium</span>
+        <strong id="scoreValue">0 pts</strong>
+      </div>
       <div class="hud__body" aria-label="Body mass milestone">
-        <span class="hud__body-label" id="currentBodyLabel">Current Particle 1g</span>
+        <span class="hud__body-label" id="currentBodyLabel">PARTICLE:</span>
         <div class="hud__body-meter">
           <div class="hud__progress-track" aria-hidden="true">
             <div class="hud__progress-fill" id="milestoneFill"></div>
           </div>
-          <strong id="nextMilestoneValue">10%</strong>
+          <strong id="nextMilestoneValue">1 / 10</strong>
         </div>
-        <span class="hud__body-label hud__body-label--next" id="nextMilestoneLabel">10g Rock Next</span>
+        <span class="hud__body-label hud__body-label--next" id="nextMilestoneLabel">ROCK</span>
       </div>
       <button class="hud__leaderboard-toggle" id="leaderboardToggle" type="button" aria-controls="leaderboardPanel" aria-expanded="false">
         Leaderboard
@@ -68,7 +72,50 @@
       <strong id="onlineCount">0</strong>
       <span>online</span>
     </button>
-    <button class="sound-toggle" id="soundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
+    <button class="settings-toggle" id="settingsToggle" type="button" aria-label="Open settings" aria-controls="settingsPanel" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.5 4.9v-2.8l-2.1-.5a7.3 7.3 0 0 0-.7-1.6l1.1-1.9-2-2-1.9 1.1c-.5-.3-1-.5-1.6-.7L12.8 3h-2.8l-.5 2.1c-.6.2-1.1.4-1.6.7L6 4.7l-2 2 1.1 1.9c-.3.5-.5 1-.7 1.6l-2.1.5v2.8l2.1.5c.2.6.4 1.1.7 1.6L4 17.5l2 2 1.9-1.1c.5.3 1 .5 1.6.7l.5 2.1h2.8l.5-2.1c.6-.2 1.1-.4 1.6-.7l1.9 1.1 2-2-1.1-1.9c.3-.5.5-1 .7-1.6l2.1-.6Z"/>
+      </svg>
+    </button>
+    <section class="settings-panel" id="settingsPanel" aria-label="Settings" aria-hidden="true">
+      <div class="settings-panel__panel">
+        <div class="settings-panel__header">
+          <strong>Settings</strong>
+          <button class="settings-panel__close" id="settingsClose" type="button" aria-label="Close settings">x</button>
+        </div>
+        <div class="settings-panel__body">
+          <div class="settings-panel__group">
+            <div class="settings-panel__section-title">Audio</div>
+            <button class="sound-toggle" id="soundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
+          </div>
+          <div class="settings-panel__group">
+            <label class="settings-panel__range" for="uiScaleInput">
+              <span>UI scale</span>
+              <output id="uiScaleValue" for="uiScaleInput">100%</output>
+            </label>
+            <input id="uiScaleInput" type="range" min="80" max="130" step="5" value="100">
+          </div>
+          <div class="settings-panel__group">
+            <label class="settings-panel__range" for="zoomInput">
+              <span>Zoom level</span>
+              <output id="zoomValue" for="zoomInput">100%</output>
+            </label>
+            <input id="zoomInput" type="range" min="62" max="175" step="1" value="100">
+          </div>
+          <div class="settings-panel__group">
+            <label class="settings-panel__check" for="surfaceCameraRotationInput">
+              <span>Rotate camera on surfaces</span>
+              <input id="surfaceCameraRotationInput" type="checkbox">
+            </label>
+          </div>
+          <div class="settings-panel__group settings-panel__group--controls">
+            <div class="settings-panel__section-title">Controls</div>
+            <div class="settings-panel__controls" id="controlBindingsList"></div>
+            <button class="settings-panel__reset" id="resetControlsButton" type="button">Reset controls</button>
+          </div>
+        </div>
+      </div>
+    </section>
     <section class="social-panel" id="socialPanel" aria-label="Online players" aria-hidden="true">
       <div class="social-panel__header">
         <strong id="publicNameValue">Player</strong>
@@ -95,6 +142,54 @@
       <input id="commandInput" type="text" autocomplete="off" spellcheck="false" placeholder="/tp player">
       <div class="command-panel__hint" id="commandHint">Tab completes player names</div>
     </section>
+    <section class="player-interaction" id="playerInteractionPanel" aria-label="Player interaction choices" aria-hidden="true">
+      <div class="player-interaction__name" id="playerInteractionName">Contact</div>
+      <div class="player-interaction__choices" id="playerInteractionChoices"></div>
+    </section>
+    <section class="trade-panel" id="tradePanel" aria-label="Trade technology resources" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="tradePeerName">Trade</strong>
+        <button class="trade-panel__close" id="tradeClose" type="button" aria-label="Close trade">x</button>
+      </div>
+      <div class="trade-panel__columns">
+        <div>
+          <span class="trade-panel__column-title">You offer</span>
+          <div class="trade-panel__list" id="tradeOfferList"></div>
+        </div>
+        <div>
+          <span class="trade-panel__column-title">They offer</span>
+          <div class="trade-panel__list" id="tradeReceiveList"></div>
+        </div>
+      </div>
+      <div class="trade-panel__actions">
+        <button id="tradeSendOffer" type="button">Send Offer</button>
+        <button id="tradeAccept" type="button">Accept</button>
+      </div>
+      <p class="trade-panel__status" id="tradeStatus">Choose resources to trade.</p>
+    </section>
+    <section class="difficulty-screen is-open" id="difficultyScreen" aria-label="Choose difficulty">
+      <div class="difficulty-screen__panel">
+        <p class="difficulty-screen__eyebrow">New run</p>
+        <h1>Choose difficulty</h1>
+        <div class="difficulty-screen__options">
+          <button class="difficulty-card" type="button" data-difficulty="easy">
+            <strong>Easy</strong>
+            <span>Fewer mobs, more tech</span>
+            <small>0.75x body / 0.65x mob / 1.45x tech</small>
+          </button>
+          <button class="difficulty-card is-recommended" type="button" data-difficulty="medium">
+            <strong>Medium</strong>
+            <span>Balanced pressure</span>
+            <small>1.00x body / 1.00x mob / 1.15x tech</small>
+          </button>
+          <button class="difficulty-card" type="button" data-difficulty="hard">
+            <strong>Hard</strong>
+            <span>More mobs</span>
+            <small>1.25x body / 1.65x mob / 1.00x tech</small>
+          </button>
+        </div>
+      </div>
+    </section>
     <section class="death-screen" id="deathScreen" aria-label="You died" aria-hidden="true">
       <div class="death-screen__panel">
         <p class="death-screen__eyebrow">Life support offline</p>
@@ -107,6 +202,12 @@
           <p class="death-screen__leaderboard-status" id="deathLeaderboardStatus" aria-live="polite"></p>
         </form>
         <button class="death-screen__button" id="playAgainButton" type="button">Play again</button>
+      </div>
+    </section>
+    <section class="pause-screen" id="pauseScreen" aria-label="Game paused" aria-hidden="true">
+      <div class="pause-screen__panel">
+        <h1>Game paused</h1>
+        <p>Press P to continue</p>
       </div>
     </section>
     <div class="notifications" id="notifications" aria-live="polite"></div>

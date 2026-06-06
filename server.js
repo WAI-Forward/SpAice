@@ -20,7 +20,7 @@ const signalTimeoutMs = 15000;
 const randomSignalCooldownMs = 45000;
 const randomSignalIntervalMs = 10 * 60 * 1000;
 const randomOverlapLifetimeMs = 120000;
-const techKeys = ["suction", "weapon", "plating", "energy", "repair", "propulsion", "shield", "communication"];
+const techKeys = ["suction", "weapon", "plating", "energy", "repair", "target", "propulsion", "shield", "communication"];
 const toolKeys = ["suction-gadget", "laser-pistol", "laser-rifle", "spanner"];
 const toolUpgradeKeys = {
   "suction-gadget": ["suck", "blow"],
@@ -28,7 +28,7 @@ const toolUpgradeKeys = {
   "laser-rifle": ["damage", "range"],
   spanner: ["repair-speed", "dismantle-speed"]
 };
-const mobTierOrder = ["alienoid", "ufo", "rambot", "tesla", "engineer", "rocket", "fighter"];
+const mobTierOrder = ["alienoid", "ufo", "rambot", "tesla", "engineer", "satellite", "rocket", "fighter"];
 const memoryPersistence = {
   worlds: new Map(),
   players: new Map(),
@@ -39,9 +39,11 @@ let dbPoolPromise = null;
 const sockets = new Set();
 const clientsByPlayerId = new Map();
 const pendingSignals = new Map();
+const pendingPlayerInteractions = new Map();
 const overlaps = new Map();
 const playerCooldowns = new Map();
 let nextOverlapNumber = 1;
+const playerInteractionChoices = new Set(["trade", "truce", "team"]);
 const multiplayerDebugEnabled = process.env.SPAICE_MULTIPLAYER_DEBUG === "1";
 
 function logMultiplayer(event, details) {
@@ -102,8 +104,9 @@ function createDefaultWorldState() {
       rambot: 300,
       tesla: 420,
       engineer: 660,
-      rocket: 780,
-      fighter: 900
+      satellite: 780,
+      rocket: 840,
+      fighter: 960
     },
     mobDefeatsByKind: {
       alienoid: 0,
@@ -111,6 +114,7 @@ function createDefaultWorldState() {
       rambot: 0,
       tesla: 0,
       engineer: 0,
+      satellite: 0,
       rocket: 0,
       fighter: 0
     },
@@ -777,7 +781,7 @@ function normalizeLeaderboardEntry(source) {
   const snapshot = source && typeof source === "object" ? source : {};
   const stats = snapshot.stats && typeof snapshot.stats === "object" ? snapshot.stats : {};
   const playerId = sanitizeText(snapshot.playerId, 80);
-  const score = Math.max(1, Math.round(clampNumber(snapshot.score ?? snapshot.maxMass ?? stats.maxMass, 1, 1000000000)));
+  const score = Math.max(1, Math.round(clampNumber(snapshot.score ?? stats.score ?? snapshot.maxMass ?? stats.maxMass, 1, 1000000000)));
   const createdAt = clampNumber(snapshot.createdAt, 0, Date.now()) || Date.now();
 
   return {
@@ -785,7 +789,12 @@ function normalizeLeaderboardEntry(source) {
     playerId,
     name: sanitizeText(snapshot.name ?? stats.name, 32) || (playerId ? `Player ${playerId.slice(-4).toUpperCase()}` : "Player"),
     score,
-    maxMass: score,
+    difficulty: sanitizeText(snapshot.difficulty ?? stats.difficulty, 16) || "medium",
+    bodyScore: Math.max(0, Math.round(clampNumber(snapshot.bodyScore ?? stats.bodyScore, 0, 1000000000))),
+    mobScore: Math.max(0, Math.round(clampNumber(snapshot.mobScore ?? stats.mobScore, 0, 1000000000))),
+    ownedMass: Math.max(0, Math.round(clampNumber(snapshot.ownedMass ?? stats.ownedMass, 0, 1000000000))),
+    ownedBodies: Math.max(0, Math.round(clampNumber(snapshot.ownedBodies ?? stats.ownedBodies, 0, 1000000))),
+    maxMass: Math.max(1, Math.round(clampNumber(snapshot.maxMass ?? stats.maxMass ?? score, 1, 1000000000))),
     maxTier: sanitizeText(snapshot.maxTier ?? stats.maxTier, 32) || "particle",
     survived: sanitizeText(snapshot.survived ?? stats.survived, 16) || "0:00",
     cause: sanitizeText(snapshot.cause ?? stats.cause, 80) || "Unknown impact",
@@ -1282,7 +1291,7 @@ function normalizeToolUpgrades(source) {
     const toolLevels = snapshot[toolId] && typeof snapshot[toolId] === "object" ? snapshot[toolId] : {};
     upgrades[toolId] = {};
     for (const upgradeId of upgradeIds) {
-      upgrades[toolId][upgradeId] = Math.floor(clampNumber(toolLevels[upgradeId], 0, 1000000));
+      upgrades[toolId][upgradeId] = clampNumber(toolLevels[upgradeId], 0, 1000000);
     }
   }
 
@@ -1328,8 +1337,9 @@ function normalizeMobSpawnTimers(source) {
     rambot: timer("rambot", 300),
     tesla: timer("tesla", 420),
     engineer: timer("engineer", 660),
-    rocket: timer("rocket", 780),
-    fighter: timer("fighter", 900)
+    satellite: timer("satellite", 780),
+    rocket: timer("rocket", 840),
+    fighter: timer("fighter", 960)
   };
 }
 
@@ -1491,16 +1501,20 @@ function normalizeRocket(source) {
     return null;
   }
 
+  const legacyShooter = !Number.isFinite(Number(source.chargeCooldown)) && Number.isFinite(Number(source.scanProgress));
+  const kind = source.kind === "satellite" || legacyShooter ? "satellite" : "rocket";
+  const maxHealth = kind === "satellite" ? 180 : 170;
+
   return {
-    kind: "rocket",
+    kind,
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
     y: clampNumber(source.y, -1000000, 1000000),
     vx: clampNumber(source.vx, -1600, 1600),
     vy: clampNumber(source.vy, -1600, 1600),
     radius: clampNumber(source.radius, 8, 150),
-    health: clampNumber(source.health, 0, 180),
-    maxHealth: clampNumber(source.maxHealth, 1, 180),
+    health: clampNumber(source.health, 0, maxHealth),
+    maxHealth: clampNumber(source.maxHealth, 1, maxHealth),
     color: normalizeColor(source.color),
     flash: clampNumber(source.flash, 0, 5),
     hitCooldown: clampNumber(source.hitCooldown, 0, 10),
@@ -1517,6 +1531,11 @@ function normalizeRocket(source) {
     blastDirY: clampNumber(source.blastDirY, -1, 1),
     volleyTimer: clampNumber(source.volleyTimer, 0, 10),
     volleyShots: Math.max(0, Math.floor(clampNumber(source.volleyShots, 0, 12))),
+    chargeCooldown: clampNumber(source.chargeCooldown, 0, 10),
+    chargeTimer: clampNumber(source.chargeTimer, 0, 10),
+    chargeDirX: clampNumber(source.chargeDirX, -1, 1),
+    chargeDirY: clampNumber(source.chargeDirY, -1, 1),
+    chargePower: clampNumber(source.chargePower, 0, 1),
     impactCooldown: clampNumber(source.impactCooldown, 0, 10),
     wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
   };
@@ -1766,7 +1785,10 @@ server.on("upgrade", (request, socket) => {
     universeId: "",
     profile: null,
     lastSnapshot: null,
-    overlaps: new Set()
+    overlaps: new Set(),
+    closed: false,
+    fragmentedMessageParts: [],
+    fragmentedMessageBytes: 0
   };
 
   sockets.add(client);
@@ -1777,10 +1799,16 @@ server.on("upgrade", (request, socket) => {
   socket.on("data", (chunk) => handleSocketData(client, chunk));
   socket.on("close", () => handleSocketClose(client, "close"));
   socket.on("error", (error) => {
-    logSpAiceError("ws socket error", {
+    const details = {
       playerId: client.playerId || null,
+      code: error && error.code ? String(error.code) : "",
       message: error instanceof Error ? error.message : "unknown error"
-    });
+    };
+    if (isExpectedWsDisconnectError(error)) {
+      logMultiplayer("ws socket disconnected", details);
+    } else {
+      logSpAiceError("ws socket error", details);
+    }
     handleSocketClose(client, "error");
   });
 });
@@ -1801,28 +1829,79 @@ function handleSocketData(client, chunk) {
       continue;
     }
 
-    if (frame.opcode !== 1) {
+    if (frame.opcode === 1) {
+      client.fragmentedMessageParts = [frame.payload];
+      client.fragmentedMessageBytes = frame.payload.length;
+      if (client.fragmentedMessageBytes > maxJsonBodyBytes) {
+        logSpAiceError("ws message too large", {
+          playerId: client.playerId || null,
+          bytes: client.fragmentedMessageBytes
+        });
+        sendWsJson(client, { type: "error", message: "WebSocket message too large." });
+        client.socket.end();
+        return;
+      }
+
+      if (frame.fin) {
+        processWsTextMessage(client, frame.payload);
+        client.fragmentedMessageParts = [];
+        client.fragmentedMessageBytes = 0;
+      }
       continue;
     }
 
-    try {
-      const message = JSON.parse(frame.payload.toString("utf8"));
-      void handleSocketMessage(client, message).catch((error) => {
-        logSpAiceError("ws message handler failed", {
+    if (frame.opcode === 0) {
+      if (!client.fragmentedMessageParts.length) {
+        logMultiplayer("ws continuation ignored", {
           playerId: client.playerId || null,
-          messageType: message && typeof message === "object" ? message.type || null : null,
-          message: error instanceof Error ? error.message : "handler failed",
-          stack: error instanceof Error ? error.stack : ""
+          reason: "missing text frame"
         });
-        sendWsJson(client, { type: "error", message: "Server failed to process multiplayer message." });
-      });
-    } catch (error) {
-      logSpAiceError("ws invalid json", {
-        playerId: client.playerId || null,
-        message: error instanceof Error ? error.message : "parse failed"
-      });
-      sendWsJson(client, { type: "error", message: "Invalid WebSocket JSON." });
+        continue;
+      }
+
+      client.fragmentedMessageParts.push(frame.payload);
+      client.fragmentedMessageBytes += frame.payload.length;
+      if (client.fragmentedMessageBytes > maxJsonBodyBytes) {
+        logSpAiceError("ws message too large", {
+          playerId: client.playerId || null,
+          bytes: client.fragmentedMessageBytes
+        });
+        sendWsJson(client, { type: "error", message: "WebSocket message too large." });
+        client.socket.end();
+        return;
+      }
+
+      if (frame.fin) {
+        processWsTextMessage(client, Buffer.concat(client.fragmentedMessageParts, client.fragmentedMessageBytes));
+        client.fragmentedMessageParts = [];
+        client.fragmentedMessageBytes = 0;
+      }
+      continue;
     }
+
+    client.fragmentedMessageParts = [];
+    client.fragmentedMessageBytes = 0;
+  }
+}
+
+function processWsTextMessage(client, payload) {
+  try {
+    const message = JSON.parse(payload.toString("utf8"));
+    void handleSocketMessage(client, message).catch((error) => {
+      logSpAiceError("ws message handler failed", {
+        playerId: client.playerId || null,
+        messageType: message && typeof message === "object" ? message.type || null : null,
+        message: error instanceof Error ? error.message : "handler failed",
+        stack: error instanceof Error ? error.stack : ""
+      });
+      sendWsJson(client, { type: "error", message: "Server failed to process multiplayer message." });
+    });
+  } catch (error) {
+    logSpAiceError("ws invalid json", {
+      playerId: client.playerId || null,
+      message: error instanceof Error ? error.message : "parse failed"
+    });
+    sendWsJson(client, { type: "error", message: "Invalid WebSocket JSON." });
   }
 }
 
@@ -1834,6 +1913,7 @@ function decodeWsFrames(buffer) {
     const start = offset;
     const first = buffer[offset++];
     const second = buffer[offset++];
+    const fin = Boolean(first & 0x80);
     const opcode = first & 0x0f;
     const masked = Boolean(second & 0x80);
     let length = second & 0x7f;
@@ -1880,7 +1960,7 @@ function decodeWsFrames(buffer) {
       }
     }
 
-    frames.push({ opcode, payload });
+    frames.push({ fin, opcode, payload });
   }
 
   return {
@@ -1908,24 +1988,66 @@ function encodeWsFrame(payload, opcode) {
   return Buffer.concat([header, data]);
 }
 
+function isExpectedWsDisconnectError(error) {
+  const code = error && error.code ? String(error.code) : "";
+  return ["ECONNABORTED", "ECONNRESET", "EPIPE", "ETIMEDOUT", "ERR_STREAM_DESTROYED"].includes(code);
+}
+
+function isWsClientWritable(client) {
+  return (
+    client &&
+    client.socket &&
+    !client.closed &&
+    !client.socket.destroyed &&
+    !client.socket.writableEnded &&
+    !client.socket.writableDestroyed
+  );
+}
+
 function sendWsJson(client, payload) {
-  if (!client || client.socket.destroyed) {
+  if (!isWsClientWritable(client)) {
     logMultiplayer("ws send skipped", {
       playerId: client && client.playerId ? client.playerId : null,
       type: payload && payload.type,
-      reason: "socket destroyed"
+      reason: "socket unavailable"
     });
+    if (client && !client.closed) {
+      handleSocketClose(client, "socket unavailable");
+    }
     return;
   }
 
   try {
-    client.socket.write(encodeWsFrame(JSON.stringify(payload), 1));
+    client.socket.write(encodeWsFrame(JSON.stringify(payload), 1), (error) => {
+      if (!error) {
+        return;
+      }
+
+      const details = {
+        playerId: client.playerId || null,
+        type: payload && payload.type,
+        code: error && error.code ? String(error.code) : "",
+        message: error instanceof Error ? error.message : "send failed"
+      };
+      if (isExpectedWsDisconnectError(error)) {
+        logMultiplayer("ws send disconnected", details);
+      } else {
+        logSpAiceError("ws send failed", details);
+      }
+      handleSocketClose(client, "send failed");
+    });
   } catch (error) {
-    logSpAiceError("ws send failed", {
+    const details = {
       playerId: client.playerId || null,
       type: payload && payload.type,
+      code: error && error.code ? String(error.code) : "",
       message: error instanceof Error ? error.message : "send failed"
-    });
+    };
+    if (isExpectedWsDisconnectError(error)) {
+      logMultiplayer("ws send disconnected", details);
+    } else {
+      logSpAiceError("ws send failed", details);
+    }
     handleSocketClose(client, "send failed");
   }
 }
@@ -1983,6 +2105,16 @@ async function handleSocketMessage(client, message) {
       targetPlayerId: sanitizeText(message.fromPlayerId || message.targetPlayerId, 80)
     });
     await handleFriendAccept(client, message);
+    return;
+  }
+
+  if (message.type === "interaction.choice") {
+    logMultiplayer("interaction choice received", {
+      fromPlayerId: client.playerId,
+      targetPlayerId: sanitizeText(message.targetPlayerId, 80),
+      choice: message.choice
+    });
+    await handlePlayerInteractionChoice(client, message);
     return;
   }
 
@@ -2082,10 +2214,11 @@ async function sendClientBootstrap(client) {
 }
 
 function handleSocketClose(client, reason) {
-  if (!sockets.has(client)) {
+  if (client.closed || !sockets.has(client)) {
     return;
   }
 
+  client.closed = true;
   logMultiplayer("ws disconnected", {
     playerId: client.playerId || null,
     reason: reason || "unknown",
@@ -2307,6 +2440,104 @@ async function handleFriendAccept(client, message) {
     participants
   });
   startOverlap(participants, "friend");
+}
+
+async function handlePlayerInteractionChoice(client, message) {
+  const targetPlayerId = sanitizeText(message.targetPlayerId, 80);
+  const choice = sanitizeText(message.choice, 16);
+  if (!targetPlayerId || targetPlayerId === client.playerId || !playerInteractionChoices.has(choice)) {
+    logMultiplayer("interaction choice rejected", {
+      fromPlayerId: client.playerId,
+      targetPlayerId,
+      choice,
+      reason: "invalid"
+    });
+    sendWsJson(client, { type: "error", message: "Invalid player interaction." });
+    return;
+  }
+
+  const targetClient = firstOnlineClient(targetPlayerId);
+  if (!targetClient) {
+    logMultiplayer("interaction choice rejected", {
+      fromPlayerId: client.playerId,
+      targetPlayerId,
+      choice,
+      reason: "target offline"
+    });
+    sendWsJson(client, { type: "error", message: "That player is offline." });
+    return;
+  }
+
+  const key = interactionPairKey(client.playerId, targetPlayerId);
+  const existing = pendingPlayerInteractions.get(key);
+  const pending =
+    existing && Date.now() - existing.updatedAt < 30000
+      ? existing
+      : {
+          players: [client.playerId, targetPlayerId].sort(),
+          choices: new Map(),
+          updatedAt: Date.now()
+        };
+
+  pending.choices.set(client.playerId, choice);
+  pending.updatedAt = Date.now();
+  pendingPlayerInteractions.set(key, pending);
+  relayInteractionRequest(client, targetClient, choice);
+
+  const otherChoice = pending.choices.get(targetPlayerId);
+  if (otherChoice !== choice) {
+    return;
+  }
+
+  pendingPlayerInteractions.delete(key);
+  await acceptPlayerInteraction(client.playerId, targetPlayerId, choice);
+}
+
+function interactionPairKey(a, b) {
+  return [a, b].sort().join("|");
+}
+
+function relayInteractionRequest(fromClient, targetClient, choice) {
+  relayToPlayer(targetClient.playerId, {
+    type: "interaction.request",
+    fromPlayerId: fromClient.playerId,
+    fromName: fromClient.profile ? fromClient.profile.publicName : fromClient.playerId,
+    choice
+  });
+}
+
+async function acceptPlayerInteraction(aPlayerId, bPlayerId, choice) {
+  const aClient = firstOnlineClient(aPlayerId);
+  const bClient = firstOnlineClient(bPlayerId);
+  if (!aClient || !bClient) {
+    return;
+  }
+
+  if (choice === "team") {
+    await addFriendship(aPlayerId, bPlayerId);
+    notifyProfileChanged(aPlayerId);
+    notifyProfileChanged(bPlayerId);
+    startOverlap(addToFriendOverlap(aPlayerId, bPlayerId), "friend");
+  }
+
+  sendInteractionResult(aClient, bClient, choice, true);
+  sendInteractionResult(bClient, aClient, choice, true);
+  logMultiplayer("interaction accepted", {
+    players: [aPlayerId, bPlayerId],
+    choice
+  });
+}
+
+function sendInteractionResult(receiverClient, peerClient, choice, accepted) {
+  sendWsJson(receiverClient, {
+    type: "interaction.result",
+    fromPlayerId: peerClient.playerId,
+    fromName: peerClient.profile ? peerClient.profile.publicName : peerClient.playerId,
+    targetPlayerId: receiverClient.playerId,
+    peerName: peerClient.profile ? peerClient.profile.publicName : peerClient.playerId,
+    choice,
+    accepted: Boolean(accepted)
+  });
 }
 
 function addToFriendOverlap(inviterId, targetId) {
