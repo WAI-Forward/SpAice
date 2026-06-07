@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Jet</title>
+  <desc id="desc">A compact surface thruster with a purple exhaust flame.</desc>
+  <defs>
+    <linearGradient id="shell" x1="18" y1="18" x2="74" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="0.48" stop-color="#9aa4b8"/>
+      <stop offset="1" stop-color="#30384d"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="48" y1="58" x2="48" y2="94" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="0.36" stop-color="#58e2ff"/>
+      <stop offset="1" stop-color="#a985ff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <path d="M23 83h54c5 0 9-4 9-9v-7c0-5-4-9-9-9H23c-5 0-9 4-9 9v7c0 5 4 9 9 9Z" fill="#070b18" stroke="#dffcff" stroke-opacity=".35" stroke-width="4"/>
+  <path d="M21 62 32 19c2-7 11-11 18-7l19 11c5 3 8 9 6 15L64 62H21Z" fill="url(#shell)" stroke="#0b1020" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M35 57h29" stroke="#dffcff" stroke-opacity=".58" stroke-width="5" stroke-linecap="round"/>
+  <ellipse cx="48" cy="68" rx="22" ry="10" fill="#070b18" stroke="#a985ff" stroke-width="4"/>
+  <path d="M30 71c5 11 10 18 18 24 8-6 14-13 19-24-8 4-27 4-37 0Z" fill="url(#flame)"/>
+  <circle cx="48" cy="36" r="12" fill="#a985ff" fill-opacity=".36"/>
+  <circle cx="48" cy="36" r="6" fill="#dffcff"/>
+</svg>

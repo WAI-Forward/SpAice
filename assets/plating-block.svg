@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Plating block">
+  <defs>
+    <linearGradient id="plateMetal" x1="20" x2="108" y1="36" y2="94" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff4bf"/>
+      <stop offset=".38" stop-color="#ffd166"/>
+      <stop offset=".72" stop-color="#6f7688"/>
+      <stop offset="1" stop-color="#20283a"/>
+    </linearGradient>
+    <filter id="plateGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g transform="translate(64 64) rotate(-10) translate(-64 -64)">
+    <path d="M19 48c0-7 5-12 12-12h66c7 0 12 5 12 12v32c0 7-5 12-12 12H31c-7 0-12-5-12-12V48Z" fill="#101524"/>
+    <path d="M25 45c0-5 4-9 9-9h60c5 0 9 4 9 9v29c0 5-4 9-9 9H34c-5 0-9-4-9-9V45Z" fill="url(#plateMetal)" stroke="#f8fbff" stroke-opacity=".36" stroke-width="3"/>
+    <path d="M33 47h62" stroke="#fff8d6" stroke-opacity=".8" stroke-width="4" stroke-linecap="round" filter="url(#plateGlow)"/>
+    <path d="M46 38v43M64 38v43M82 38v43" stroke="#111827" stroke-opacity=".34" stroke-width="3"/>
+    <circle cx="38" cy="53" r="5" fill="#f8fbff" fill-opacity=".74"/>
+    <circle cx="90" cy="53" r="5" fill="#f8fbff" fill-opacity=".74"/>
+    <circle cx="38" cy="70" r="5" fill="#30384d"/>
+    <circle cx="90" cy="70" r="5" fill="#30384d"/>
+    <path d="M27 86h74" stroke="#ffd166" stroke-opacity=".68" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>

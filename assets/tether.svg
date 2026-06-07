@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Tether">
+  <defs>
+    <linearGradient id="pole" x1="18" x2="110" y1="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#dffcff"/>
+      <stop offset=".28" stop-color="#8fa2c4"/>
+      <stop offset=".54" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#5d6684"/>
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="45%" r="55%">
+      <stop stop-color="#ffffff"/>
+      <stop offset=".42" stop-color="#a985ff"/>
+      <stop offset="1" stop-color="#3d2f78"/>
+    </radialGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M25 64h78" stroke="#080d19" stroke-width="21"/>
+    <path d="M25 64h78" stroke="url(#pole)" stroke-width="13"/>
+    <path d="M33 64h18M58 64h20M86 64h11" stroke="#58e2ff" stroke-opacity=".78" stroke-width="6"/>
+    <path d="M53 52v24M80 52v24" stroke="#101524" stroke-opacity=".7" stroke-width="4"/>
+    <path d="M23 41h20c8 0 14 6 14 14v18c0 8-6 14-14 14H23c-8 0-14-6-14-14V55c0-8 6-14 14-14Z" fill="#101524" stroke="#eaf6ff" stroke-opacity=".38" stroke-width="3"/>
+    <path d="M85 41h20c8 0 14 6 14 14v18c0 8-6 14-14 14H85c-8 0-14-6-14-14V55c0-8 6-14 14-14Z" fill="#101524" stroke="#eaf6ff" stroke-opacity=".38" stroke-width="3"/>
+    <circle cx="36" cy="64" r="13" fill="url(#core)" stroke="#f8fbff" stroke-opacity=".45" stroke-width="2" filter="url(#glow)"/>
+    <circle cx="92" cy="64" r="13" fill="url(#core)" stroke="#f8fbff" stroke-opacity=".45" stroke-width="2" filter="url(#glow)"/>
+    <path d="M20 95h32M76 95h32" stroke="#ffd166" stroke-opacity=".8" stroke-width="6"/>
+  </g>
+</svg>

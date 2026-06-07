@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Vacuum gadget">
+  <defs>
+    <linearGradient id="vacuumBody" x1="24" y1="30" x2="92" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f9fff7"/>
+      <stop offset=".46" stop-color="#58e2ff"/>
+      <stop offset="1" stop-color="#7d6bff"/>
+    </linearGradient>
+    <linearGradient id="vacuumHandle" x1="34" y1="82" x2="70" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#ff73ad"/>
+    </linearGradient>
+    <filter id="vacuumGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <path d="M22 50c0-10 8-18 18-18h34c13 0 24 11 24 24v4h12c8 0 14 6 14 14s-6 14-14 14H82c-15 0-28-8-35-20H40c-10 0-18-8-18-18Z" fill="url(#vacuumBody)" stroke="#171b2c" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M45 67 30 104c-2 6 2 12 8 12h16c5 0 9-3 10-8l10-35" fill="url(#vacuumHandle)" stroke="#171b2c" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M89 57h24c7 0 12 5 12 12s-5 12-12 12H89" fill="#10182c" stroke="#171b2c" stroke-width="5"/>
+  <path d="M91 59c8 3 8 18 0 21" fill="none" stroke="#58e2ff" stroke-width="5" stroke-linecap="round" filter="url(#vacuumGlow)"/>
+  <circle cx="48" cy="49" r="10" fill="#fff7da" stroke="#171b2c" stroke-width="4"/>
+  <circle cx="49" cy="49" r="4" fill="#58e2ff"/>
+</svg>
