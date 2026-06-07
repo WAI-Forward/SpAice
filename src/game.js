@@ -5,6 +5,8 @@
   const ctx = canvas.getContext("2d", { alpha: false });
   const healthValue = document.getElementById("healthValue");
   const healthFill = document.getElementById("healthFill");
+  const energyValue = document.getElementById("energyValue");
+  const energyFill = document.getElementById("energyFill");
   const scoreValue = document.getElementById("scoreValue");
   const difficultyValue = document.getElementById("difficultyValue");
   const currentBodyLabel = document.getElementById("currentBodyLabel");
@@ -35,6 +37,11 @@
   const zoomInput = document.getElementById("zoomInput");
   const zoomValue = document.getElementById("zoomValue");
   const surfaceCameraRotationInput = document.getElementById("surfaceCameraRotationInput");
+  const saveGameForm = document.getElementById("saveGameForm");
+  const saveGameNameInput = document.getElementById("saveGameNameInput");
+  const loadGameForm = document.getElementById("loadGameForm");
+  const loadGameNameInput = document.getElementById("loadGameNameInput");
+  const saveGameStatus = document.getElementById("saveGameStatus");
   const controlBindingsList = document.getElementById("controlBindingsList");
   const resetControlsButton = document.getElementById("resetControlsButton");
   const socialPanel = document.getElementById("socialPanel");
@@ -69,13 +76,13 @@
   const deathLeaderboardButton = document.getElementById("deathLeaderboardButton");
   const deathLeaderboardStatus = document.getElementById("deathLeaderboardStatus");
   const playAgainButton = document.getElementById("playAgainButton");
-  const pauseScreen = document.getElementById("pauseScreen");
   let lastClientErrorReportAt = -Infinity;
 
   installClientErrorReporting();
 
   const keys = new Set();
   const settingsStorageKey = "spaice.settings";
+  const manualSaveStoragePrefix = "spaice.manualSave.";
   const defaultControlBindings = {
     up: "KeyW",
     down: "KeyS",
@@ -107,7 +114,6 @@
   let settingsOpen = false;
   let pendingControlRemap = null;
   let gamePaused = false;
-  let pausedAt = 0;
 
   syncControlBindings();
 
@@ -194,6 +200,8 @@
     radius: 34,
     health: 100,
     maxHealth: 100,
+    energy: 100,
+    maxEnergy: 100,
     hitCooldown: 0,
     hitFlash: 0,
     landed: null,
@@ -213,6 +221,7 @@
   const fighters = [];
   const rivalProjectiles = [];
   const playerLasers = [];
+  const launcherMissiles = [];
   const structures = [];
   const healthPickups = [];
   const techPickups = [];
@@ -254,9 +263,13 @@
   const fighterShieldMaxCharge = 3;
   const structureMaxHealthByType = {
     "plating-block": 150,
+    battery: 120,
     accumulator: 120,
+    "shield-generator": 130,
     "communication-relay": 120,
+    jet: 120,
     tether: 130,
+    "missile-launcher": 125,
     turret: 110
   };
   const structureRambotDamage = 34;
@@ -269,6 +282,24 @@
   const spannerStrikeDamage = 18;
   const spannerStrikeCooldown = 1.25;
   const spannerTechBonusChance = 0.75;
+  const playerBaseEnergyRegen = 6.5;
+  const landedEnergyRegenShare = 0.58;
+  const suctionEnergyDrain = 12;
+  const spannerRepairEnergyDrain = 8.5;
+  const spannerDismantleEnergyDrain = 10;
+  const spannerStrikeEnergyCost = 7;
+  const jetpackBoostEnergyDrain = 20;
+  const jetpackBoostThrustMultiplier = 1.42;
+  const jetpackBoostSpeedMultiplier = 1.38;
+  const playerBaseMaxEnergy = 100;
+  const playerMaxEnergyCap = 260;
+  const playerMaxEnergyMassScale = 0.55;
+  const playerMaxEnergyCountScale = 0.015;
+  const turretEnergyCost = 8;
+  const accumulatorBurstCost = 6;
+  const accumulatorBurstInterval = 2.4;
+  const accumulatorBurstDuration = 0.62;
+  const batteryEnergyRegenBonus = 4.2;
   const healthPickupHeal = 8;
   const healthPickupLifetime = 18;
   const techPickupLifetime = 28;
@@ -370,11 +401,25 @@
       label: "laser rifle"
     }
   };
+  playerWeaponDefaults.energyCost = 8;
+  weaponDefinitions["laser-rifle"].energyCost = 12;
   const turretLaserSpeed = 760;
   const turretLaserDamage = 24;
   const turretLaserKnockback = 210;
   const turretShootCooldown = 2.2;
   const turretRange = 560;
+  const missileLauncherRange = 1120;
+  const missileLauncherClusterRadius = 210;
+  const missileLauncherMinClusterSize = 2;
+  const missileLauncherProductionTime = 9.5;
+  const missileLauncherLockDuration = 0.62;
+  const missileLauncherEnergyCost = 16;
+  const launcherMissileSpeed = 520;
+  const launcherMissileTurnRate = 3.8;
+  const launcherMissileLife = 5.8;
+  const launcherMissileDamage = 58;
+  const launcherMissileAoERadius = 185;
+  const launcherMissileKnockback = 320;
   const structurePlacementTierThreshold = 500;
   const structureSurfaceOffset = 18;
   const structurePlacementLeeway = 72;
@@ -382,10 +427,22 @@
   const platingBlockHeight = 28;
   const accumulatorRange = 680;
   const accumulatorForce = 620;
-  const tetherGive = 46;
+  const shieldGeneratorFieldPadding = 98;
+  const shieldGeneratorActiveDuration = 0.5;
+  const shieldGeneratorProjectileCost = 4.5;
+  const shieldGeneratorLightningCost = 7;
+  const shieldGeneratorRocketCost = 9;
+  const shieldGeneratorMobCost = 8;
+  const shieldGeneratorMobCooldown = 0.16;
+  const shieldGeneratorMobMinBounceSpeed = 155;
+  const tetherGiveRadiusScale = 0.85;
+  const tetherMinGive = 32;
+  const tetherMaxGive = 220;
   const tetherSpring = 34;
   const tetherDamping = 9.5;
   const tetherMaxAcceleration = 760;
+  const jetEnergyDrain = 9;
+  const jetThrust = 620;
   const defaultToolId = "suction-gadget";
   const techTypes = [
     { key: "suction", label: "Suction Tech", color: "#58e2ff" },
@@ -456,6 +513,15 @@
       icon: "assets/plating-block.svg"
     },
     {
+      id: "battery",
+      name: "Battery",
+      category: "structures",
+      description: "A charged surface cell that increases its host body's energy recovery.",
+      cost: { energy: 5, plating: 3 },
+      structureType: "battery",
+      icon: "assets/battery.svg"
+    },
+    {
       id: "accumulator",
       name: "Accumulator",
       category: "structures",
@@ -474,6 +540,24 @@
       icon: "assets/turret.svg"
     },
     {
+      id: "missile-launcher",
+      name: "Missile launcher",
+      category: "structures",
+      description: "A plated launcher that fabricates guided missiles and fires them at clustered mobs.",
+      cost: { plating: 5, weapon: 7, propulsion: 5, target: 4 },
+      structureType: "missile-launcher",
+      icon: "assets/missile-launcher.svg"
+    },
+    {
+      id: "shield-generator",
+      name: "Shield generator",
+      category: "structures",
+      description: "A shield-tech dome that blocks hostile fire and bounces mobs away from its host body while spending body energy.",
+      cost: { plating: 4, shield: 5, energy: 3 },
+      structureType: "shield-generator",
+      icon: "assets/shield-generator.svg"
+    },
+    {
       id: "communication-relay",
       name: "Communication relay",
       category: "structures",
@@ -481,6 +565,15 @@
       cost: { plating: 3, communication: 3 },
       structureType: "communication-relay",
       icon: "assets/communication-relay.svg"
+    },
+    {
+      id: "jet",
+      name: "Jet",
+      category: "structures",
+      description: "A surface thruster that pushes its host body forward with W or reverses with S while you are landed there.",
+      cost: { plating: 4, propulsion: 5, energy: 2 },
+      structureType: "jet",
+      icon: "assets/jet.svg"
     },
     {
       id: "tether",
@@ -538,7 +631,9 @@
     scoredBodyMass: 0,
     bestScoredBodyMass: 0,
     scoredBodies: 0,
-    bestScoredBodies: 0
+    bestScoredBodies: 0,
+    absorbedParticleMass: 0,
+    absorbedParticleCount: 0
   };
   const runState = {
     active: false,
@@ -879,6 +974,7 @@
   function setSettingsOpen(open) {
     settingsOpen = Boolean(open);
     pendingControlRemap = null;
+    setGamePaused(settingsOpen);
 
     if (settingsPanel) {
       settingsPanel.classList.toggle("is-open", settingsOpen);
@@ -1229,6 +1325,7 @@
       select: 0.06,
       laser: 0.08,
       turret: 0.12,
+      lock: 0.12,
       enemyLaser: 0.18,
       fighter: 0.12,
       hit: 0.18,
@@ -1279,6 +1376,9 @@
       playNoise({ duration: 0.06, gain: 0.014 * volume, frequency: 2300, q: 2.2 });
     } else if (name === "turret") {
       playTone({ frequency: 760, endFrequency: 1120, duration: 0.07, gain: 0.025 * volume, type: "sawtooth" });
+    } else if (name === "lock") {
+      playTone({ frequency: 1180, endFrequency: 1420, duration: 0.08, gain: 0.022 * volume, type: "square" });
+      playTone({ frequency: 1620, endFrequency: 1320, duration: 0.08, gain: 0.018 * volume, delay: 0.075, type: "triangle" });
     } else if (name === "enemyLaser") {
       playTone({ frequency: 520, endFrequency: 360, duration: 0.11, gain: 0.024 * volume, type: "square" });
       playNoise({ duration: 0.08, gain: 0.012 * volume, frequency: 1600, q: 1.6 });
@@ -1664,11 +1764,15 @@
   }
 
   function isSuctionEquipped() {
-    return equippedToolId === defaultToolId && !areToolsDisabled();
+    return equippedToolId === defaultToolId;
+  }
+
+  function canUseSuctionControls() {
+    return isSuctionEquipped() && !areToolsDisabled() && hasPlayerEnergy();
   }
 
   function isSpannerEquipped() {
-    return equippedToolId === "spanner" && !areToolsDisabled();
+    return equippedToolId === "spanner" && !areToolsDisabled() && hasPlayerEnergy();
   }
 
   function weaponByToolId(toolId) {
@@ -2092,7 +2196,11 @@
     pendingTetherAnchor = null;
     setBuildMenuOpen(false);
     resetMouseButtons();
-    maybeNotifyText("Choose a dwarf moon, moon, planet, or plate surface for the " + recipe.name.toLowerCase() + ".");
+    if (recipe.structureType === "tether") {
+      maybeNotifyText("Choose a boulder or larger body for the first tether anchor.");
+    } else {
+      maybeNotifyText("Choose a dwarf moon, moon, planet, or plate surface for the " + recipe.name.toLowerCase() + ".");
+    }
   }
 
   function cancelStructurePlacement() {
@@ -2273,15 +2381,9 @@
 
   function setGamePaused(paused) {
     gamePaused = Boolean(paused) && runState.active && !deathState.active;
-    pausedAt = gamePaused ? performance.now() : 0;
     keys.clear();
     jumpQueued = false;
     resetMouseButtons();
-
-    if (pauseScreen) {
-      pauseScreen.classList.toggle("is-open", gamePaused);
-      pauseScreen.setAttribute("aria-hidden", gamePaused ? "false" : "true");
-    }
 
     if (!gamePaused) {
       lastTime = performance.now();
@@ -2335,6 +2437,7 @@
     fighters.length = 0;
     rivalProjectiles.length = 0;
     playerLasers.length = 0;
+    launcherMissiles.length = 0;
     structures.length = 0;
     healthPickups.length = 0;
     techPickups.length = 0;
@@ -2373,10 +2476,161 @@
     lifeStats.bestScoredBodyMass = 0;
     lifeStats.scoredBodies = 0;
     lifeStats.bestScoredBodies = 0;
+    lifeStats.absorbedParticleMass = 0;
+    lifeStats.absorbedParticleCount = 0;
   }
 
   function sanitizePlayerName(name) {
     return String(name || "").trim().replace(/\s+/g, " ").slice(0, 32);
+  }
+
+  function sanitizeManualSaveName(name) {
+    return String(name || "").replace(/[^\w .:'-]/g, "").trim().replace(/\s+/g, " ").slice(0, 32);
+  }
+
+  function manualSaveStorageKey(name) {
+    return manualSaveStoragePrefix + sanitizeManualSaveName(name).toLowerCase();
+  }
+
+  function setManualSaveStatus(message, state) {
+    if (!saveGameStatus) {
+      return;
+    }
+
+    saveGameStatus.textContent = message || "";
+    saveGameStatus.classList.toggle("is-success", state === "success");
+    saveGameStatus.classList.toggle("is-error", state === "error");
+  }
+
+  function buildRunSnapshot() {
+    return {
+      active: runState.active,
+      difficulty: runState.difficultyId,
+      lifeStats: {
+        elapsed: Math.max(0, (performance.now() - lifeStats.startedAt) / 1000),
+        maxMass: lifeStats.maxMass,
+        maxTierName: lifeStats.maxTierName,
+        mobsDefeated: lifeStats.mobsDefeated,
+        techCollected: lifeStats.techCollected,
+        mobScore: lifeStats.mobScore,
+        currentScore: lifeStats.currentScore,
+        bestScore: lifeStats.bestScore,
+        bodyScore: lifeStats.bodyScore,
+        bestBodyScore: lifeStats.bestBodyScore,
+        scoredBodyMass: lifeStats.scoredBodyMass,
+        bestScoredBodyMass: lifeStats.bestScoredBodyMass,
+        scoredBodies: lifeStats.scoredBodies,
+        bestScoredBodies: lifeStats.bestScoredBodies,
+        absorbedParticleMass: lifeStats.absorbedParticleMass,
+        absorbedParticleCount: lifeStats.absorbedParticleCount
+      }
+    };
+  }
+
+  function applyRunSnapshot(snapshot) {
+    const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+    const stats = source.lifeStats && typeof source.lifeStats === "object" ? source.lifeStats : {};
+    const elapsed = Math.max(0, finiteOr(stats.elapsed, 0));
+
+    if (source.difficulty && difficultyDefinitions[source.difficulty]) {
+      applyDifficulty(source.difficulty);
+    }
+
+    lifeStats.startedAt = performance.now() - elapsed * 1000;
+    lifeStats.maxMass = Math.max(1, finiteOr(stats.maxMass, lifeStats.maxMass));
+    lifeStats.maxTierName = typeof stats.maxTierName === "string" && stats.maxTierName ? stats.maxTierName : lifeStats.maxTierName;
+    lifeStats.mobsDefeated = Math.max(0, Math.floor(finiteOr(stats.mobsDefeated, lifeStats.mobsDefeated)));
+    lifeStats.techCollected = Math.max(0, Math.floor(finiteOr(stats.techCollected, lifeStats.techCollected)));
+    lifeStats.mobScore = Math.max(0, finiteOr(stats.mobScore, lifeStats.mobScore));
+    lifeStats.currentScore = Math.max(0, finiteOr(stats.currentScore, lifeStats.currentScore));
+    lifeStats.bestScore = Math.max(0, finiteOr(stats.bestScore, lifeStats.bestScore));
+    lifeStats.bodyScore = Math.max(0, finiteOr(stats.bodyScore, lifeStats.bodyScore));
+    lifeStats.bestBodyScore = Math.max(0, finiteOr(stats.bestBodyScore, lifeStats.bestBodyScore));
+    lifeStats.scoredBodyMass = Math.max(0, finiteOr(stats.scoredBodyMass, lifeStats.scoredBodyMass));
+    lifeStats.bestScoredBodyMass = Math.max(0, finiteOr(stats.bestScoredBodyMass, lifeStats.bestScoredBodyMass));
+    lifeStats.scoredBodies = Math.max(0, Math.floor(finiteOr(stats.scoredBodies, lifeStats.scoredBodies)));
+    lifeStats.bestScoredBodies = Math.max(0, Math.floor(finiteOr(stats.bestScoredBodies, lifeStats.bestScoredBodies)));
+    lifeStats.absorbedParticleMass = Math.max(0, finiteOr(stats.absorbedParticleMass, lifeStats.absorbedParticleMass));
+    lifeStats.absorbedParticleCount = Math.max(0, Math.floor(finiteOr(stats.absorbedParticleCount, lifeStats.absorbedParticleCount)));
+  }
+
+  function saveManualGame() {
+    const name = sanitizeManualSaveName(saveGameNameInput && saveGameNameInput.value);
+
+    if (!name) {
+      setManualSaveStatus("Enter a save name.", "error");
+      return;
+    }
+    if (!runState.active || deathState.active) {
+      setManualSaveStatus("Start a live run before saving.", "error");
+      return;
+    }
+
+    try {
+      updateLifeStats();
+      const payload = buildPersistentPayload(true);
+      payload.run = buildRunSnapshot();
+      payload.manualSave = {
+        version: 1,
+        name,
+        savedAt: Date.now()
+      };
+
+      window.localStorage.setItem(manualSaveStorageKey(name), JSON.stringify(payload));
+      if (saveGameNameInput) {
+        saveGameNameInput.value = name;
+      }
+      if (loadGameNameInput) {
+        loadGameNameInput.value = name;
+      }
+      setManualSaveStatus('Saved "' + name + '".', "success");
+      maybeNotifyText('Saved "' + name + '".');
+    } catch (error) {
+      console.warn("SpAice manual save failed.", error);
+      setManualSaveStatus("Could not save this game.", "error");
+    }
+  }
+
+  function loadManualGame() {
+    const name = sanitizeManualSaveName(loadGameNameInput && loadGameNameInput.value);
+
+    if (!name) {
+      setManualSaveStatus("Enter a save name.", "error");
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(manualSaveStorageKey(name));
+      const payload = raw ? JSON.parse(raw) : null;
+
+      if (!payload || typeof payload !== "object" || !payload.player || !payload.world) {
+        setManualSaveStatus('No save named "' + name + '".', "error");
+        return;
+      }
+
+      resetLocalPlayerState();
+      resetLocalWorldState();
+      resetLifeStats();
+      resetDeathState();
+      runState.active = true;
+      applyPersistentPayload(Object.assign({ ok: true }, payload), { includePlayer: true });
+      applyRunSnapshot(payload.run);
+      runState.active = true;
+      persistence.saveTimer = persistenceSaveInterval;
+      persistence.pollTimer = persistencePollInterval;
+      setDifficultyScreenOpen(false);
+      setSettingsOpen(false);
+      resetMouseButtons();
+      lastTime = performance.now();
+      updateHud();
+      void savePersistentState({ includeWorld: true });
+      connectMultiplayer();
+      setManualSaveStatus('Loaded "' + name + '".', "success");
+      maybeNotifyText('Loaded "' + name + '".');
+    } catch (error) {
+      console.warn("SpAice manual load failed.", error);
+      setManualSaveStatus("Could not load this save.", "error");
+    }
   }
 
   function resetLocalPlayerState() {
@@ -2391,6 +2645,8 @@
     player.radius = 34;
     player.health = 100;
     player.maxHealth = 100;
+    player.energy = playerBaseMaxEnergy;
+    player.maxEnergy = playerBaseMaxEnergy;
     player.hitCooldown = 0;
     player.hitFlash = 0;
     player.landed = null;
@@ -4628,6 +4884,7 @@
     }
 
     const maxHealth = clamp(finiteOr(snapshot.maxHealth, 100), 1, 100);
+    const maxEnergy = clamp(finiteOr(snapshot.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
     const equippedTool = toolCatalog.some((tool) => tool.id === snapshot.equippedTool) ? snapshot.equippedTool : defaultToolId;
     const toolMode = ["pull", "push", "hold", "fire", "idle"].includes(snapshot.toolMode) ? snapshot.toolMode : "idle";
     return {
@@ -4640,6 +4897,8 @@
       radius: finiteOr(snapshot.radius, 34),
       health: clamp(finiteOr(snapshot.health, maxHealth), 0, maxHealth),
       maxHealth,
+      energy: clamp(finiteOr(snapshot.energy, maxEnergy), 0, maxEnergy),
+      maxEnergy,
       landed: normalizeLandingSnapshot(snapshot.landed),
       walkCycle: finiteOr(snapshot.walkCycle, snapshot.landed && snapshot.landed.walkCycle),
       cameraRoll: finiteOr(snapshot.cameraRoll, 0),
@@ -4716,11 +4975,11 @@
         toSnapshot && toSnapshot.player,
         progress,
         lead,
-        { angleKeys: ["cameraRoll", "aimAngle"], scalarKeys: ["radius", "health", "maxHealth", "walkCycle"] }
+        { angleKeys: ["cameraRoll", "aimAngle"], scalarKeys: ["radius", "health", "maxHealth", "energy", "maxEnergy", "walkCycle"] }
       ),
       world: {
         particles: interpolateRemoteEntityList(fromWorld.particles, toWorld.particles, progress, lead, {
-          scalarKeys: ["mass", "radius"]
+          scalarKeys: ["mass", "radius", "energy", "maxEnergy"]
         }).map(refreshInterpolatedBody),
         alienoids: interpolateRemoteEntityList(fromWorld.alienoids, toWorld.alienoids, progress, lead, {
           angleKeys: ["rotation"],
@@ -4752,7 +5011,7 @@
         }),
         structures: interpolateRemoteEntityList(fromWorld.structures, toWorld.structures, progress, lead, {
           angleKeys: ["angle", "linkedAngle", "aimAngle"],
-          scalarKeys: ["x2", "y2", "deploy", "health", "maxHealth", "disabledTimer", "flash", "restLength", "linkedSurfaceOffset"]
+          scalarKeys: ["x2", "y2", "deploy", "thrustAmount", "thrustDirection", "health", "maxHealth", "disabledTimer", "flash", "restLength", "linkedSurfaceOffset", "burstTimer", "burstCooldown", "missileCharge", "lockTimer", "beepTimer", "targetX", "targetY", "targetCount"]
         }),
         rivalProjectiles: interpolateRemoteEntityList(fromWorld.rivalProjectiles, toWorld.rivalProjectiles, progress, lead, {
           scalarKeys: ["radius", "length", "life", "maxLife"]
@@ -4845,6 +5104,7 @@
     body.mass = Math.max(1, finiteOr(body.mass, 1));
     body.radius = radiusFromMass(body.mass);
     body.tier = tierForMass(body.mass);
+    normalizeBodyEnergy(body);
     return body;
   }
 
@@ -5029,7 +5289,7 @@
 
     const aim = getAim();
     const funnel = getFunnel(aim);
-    const suctionActive = isSuctionEquipped() && isGadgetButtonPressed();
+    const suctionActive = canUseSuctionControls() && isGadgetButtonPressed();
 
     for (const remote of multiplayer.remoteUniverses.values()) {
       const snapshot = displaySnapshotFor(remote);
@@ -5310,8 +5570,10 @@
     const toolMode = areToolsDisabled()
       ? "idle"
       : isWeaponTool(equippedToolId)
-      ? mouse.left ? "fire" : "idle"
-      : mouse.middle ? "hold" : mouse.left ? "pull" : mouse.right ? "push" : "idle";
+      ? mouse.left && hasPlayerEnergy() ? "fire" : "idle"
+      : canUseSuctionControls()
+      ? mouse.middle ? "hold" : mouse.left ? "pull" : mouse.right ? "push" : "idle"
+      : "idle";
     const payload = {
       playerId: player.id,
       player: {
@@ -5324,6 +5586,8 @@
         radius: player.radius,
         health: player.health,
         maxHealth: player.maxHealth,
+        energy: player.energy,
+        maxEnergy: player.maxEnergy,
         score: Math.max(1, Math.round(lifeStats.bestScore || lifeStats.currentScore || 1)),
         difficulty: runState.difficultyId,
         tech: serializeTechInventory(),
@@ -5402,7 +5666,7 @@
       return;
     }
 
-    if (Array.isArray(snapshot.starDust) && snapshot.starDust.length) {
+    if (Array.isArray(snapshot.starDust)) {
       starDust.length = 0;
       starDust.push(...snapshot.starDust.map(normalizeStarSnapshot).filter(Boolean));
     }
@@ -5411,7 +5675,7 @@
       applyDifficulty(snapshot.difficulty);
     }
 
-    if (Array.isArray(snapshot.particles) && snapshot.particles.length) {
+    if (Array.isArray(snapshot.particles)) {
       particles.length = 0;
       particles.push(...snapshot.particles.map(normalizeParticleSnapshot).filter(Boolean));
     }
@@ -5513,8 +5777,10 @@
     player.vx = finiteOr(snapshot.vx, 0);
     player.vy = finiteOr(snapshot.vy, 0);
     player.radius = finiteOr(snapshot.radius, player.radius);
-    player.health = clamp(finiteOr(snapshot.health, player.health), 0, player.maxHealth);
     player.maxHealth = clamp(finiteOr(snapshot.maxHealth, player.maxHealth), 1, 100);
+    player.health = clamp(finiteOr(snapshot.health, player.health), 0, player.maxHealth);
+    player.maxEnergy = clamp(finiteOr(snapshot.maxEnergy, player.maxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
+    player.energy = clamp(finiteOr(snapshot.energy, player.maxEnergy), 0, player.maxEnergy);
     if (snapshot.difficulty && difficultyDefinitions[snapshot.difficulty]) {
       applyDifficulty(snapshot.difficulty);
     }
@@ -5535,6 +5801,8 @@
       vy: particle.vy,
       mass: particle.mass,
       radius: particle.radius,
+      energy: particle.energy,
+      maxEnergy: particle.maxEnergy,
       color: particle.color,
       textureSeed: particle.textureSeed,
       wobble: particle.wobble,
@@ -5754,7 +6022,17 @@
       restLength: structure.restLength,
       aimAngle: structure.aimAngle,
       deploy: structure.deploy,
+      thrustAmount: structure.thrustAmount,
+      thrustDirection: structure.thrustDirection,
       shootCooldown: structure.shootCooldown,
+      burstTimer: structure.burstTimer,
+      burstCooldown: structure.burstCooldown,
+      missileCharge: structure.missileCharge,
+      lockTimer: structure.lockTimer,
+      beepTimer: structure.beepTimer,
+      targetX: structure.targetX,
+      targetY: structure.targetY,
+      targetCount: structure.targetCount,
       health: structure.health,
       maxHealth: structure.maxHealth,
       disabledTimer: structure.disabledTimer,
@@ -5780,7 +6058,7 @@
     const mass = Math.max(1, finiteOr(snapshot.mass, 1));
     const tier = tierForMass(mass);
     const fallbackId = nextParticleId;
-    return {
+    const particle = {
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
       x: finiteOr(snapshot.x, 0),
       y: finiteOr(snapshot.y, 0),
@@ -5789,11 +6067,15 @@
       mass,
       radius: radiusFromMass(mass),
       tier,
+      energy: finiteOr(snapshot.energy, Number.NaN),
+      maxEnergy: finiteOr(snapshot.maxEnergy, Number.NaN),
       textureSeed: finiteOr(snapshot.textureSeed, Math.random() * 1000),
       color: normalizeColorSnapshot(snapshot.color, randomParticleColor()),
       wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
       pulse: finiteOr(snapshot.pulse, randomRange(0.8, 1.25))
     };
+    normalizeBodyEnergy(particle);
+    return particle;
   }
 
   function normalizeRivalSnapshot(snapshot) {
@@ -6044,7 +6326,17 @@
       restLength: Math.max(0, finiteOr(snapshot.restLength, 0)),
       aimAngle: finiteOr(snapshot.aimAngle, angle),
       deploy: clamp(finiteOr(snapshot.deploy, 0), 0, 1),
+      thrustAmount: clamp(finiteOr(snapshot.thrustAmount, 0), 0, 1),
+      thrustDirection: finiteOr(snapshot.thrustDirection, 1) < 0 ? -1 : 1,
       shootCooldown: finiteOr(snapshot.shootCooldown, randomRange(0.2, 0.8)),
+      burstTimer: Math.max(0, finiteOr(snapshot.burstTimer, 0)),
+      burstCooldown: Math.max(0, finiteOr(snapshot.burstCooldown, randomRange(0.4, accumulatorBurstInterval))),
+      missileCharge: clamp(finiteOr(snapshot.missileCharge, type === "missile-launcher" ? randomRange(0, 0.45) : 0), 0, 1),
+      lockTimer: Math.max(0, finiteOr(snapshot.lockTimer, 0)),
+      beepTimer: Math.max(0, finiteOr(snapshot.beepTimer, 0)),
+      targetX: finiteOr(snapshot.targetX, 0),
+      targetY: finiteOr(snapshot.targetY, 0),
+      targetCount: Math.max(0, Math.floor(finiteOr(snapshot.targetCount, 0))),
       health: clamp(finiteOr(snapshot.health, structureMaxHealth(type)), 0, structureMaxHealth(type)),
       maxHealth: clamp(finiteOr(snapshot.maxHealth, structureMaxHealth(type)), 1, structureMaxHealth(type)),
       disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
@@ -6149,7 +6441,7 @@
     const angle = randomRange(0, Math.PI * 2);
     const speed = randomRange(5, 36);
     const tier = tierForMass(mass);
-    return {
+    const particle = {
       id: nextParticleId++,
       x,
       y,
@@ -6163,6 +6455,8 @@
       wobble: randomRange(0, Math.PI * 2),
       pulse: randomRange(0.8, 1.25)
     };
+    normalizeBodyEnergy(particle);
+    return particle;
   }
 
   function randomAmbientParticleMass() {
@@ -6929,8 +7223,19 @@
     return particle && particle.tier.threshold >= structurePlacementTierThreshold;
   }
 
+  function structurePlacementThresholdForType(type) {
+    if (type === "tether") {
+      return thresholdForTierName("boulder");
+    }
+    return structurePlacementTierThreshold;
+  }
+
+  function isStructureHostBodyForType(particle, type) {
+    return particle && particle.tier.threshold >= structurePlacementThresholdForType(type);
+  }
+
   function isKnownStructureType(type) {
-    return type === "turret" || type === "accumulator" || type === "plating-block" || type === "communication-relay" || type === "tether";
+    return type === "turret" || type === "missile-launcher" || type === "accumulator" || type === "shield-generator" || type === "plating-block" || type === "battery" || type === "communication-relay" || type === "jet" || type === "tether";
   }
 
   function hasCommunicationRelay() {
@@ -6945,11 +7250,23 @@
     if (structure.type === "plating-block") {
       return 48;
     }
+    if (structure.type === "battery") {
+      return 42;
+    }
     if (structure.type === "accumulator") {
       return 44;
     }
+    if (structure.type === "shield-generator") {
+      return 50;
+    }
+    if (structure.type === "missile-launcher") {
+      return 52;
+    }
     if (structure.type === "communication-relay") {
       return 52;
+    }
+    if (structure.type === "jet") {
+      return 46;
     }
     if (structure.type === "tether") {
       return 42;
@@ -7005,11 +7322,146 @@
     if (type === "plating-block") {
       return surfaceOffset + platingBlockHeight * 0.5;
     }
+    if (type === "battery") {
+      return surfaceOffset + 15;
+    }
+    if (type === "shield-generator") {
+      return surfaceOffset + 20;
+    }
+    if (type === "missile-launcher") {
+      return surfaceOffset + 22;
+    }
+    if (type === "jet") {
+      return surfaceOffset + 18;
+    }
     if (type === "tether") {
       return surfaceOffset + 14;
     }
 
     return surfaceOffset + structureSurfaceOffset;
+  }
+
+  function maxEnergyForBody(body) {
+    if (!isStructureHostBody(body)) {
+      return 0;
+    }
+
+    return Math.round(80 + Math.sqrt(Math.max(1, body.mass)) * 4.2);
+  }
+
+  function batteryCountForBody(bodyId) {
+    let count = 0;
+    for (const structure of structures) {
+      if (structure.type === "battery" && structure.bodyId === bodyId && structure.health > 0 && !isStructureDisabled(structure)) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  function energyRegenForBody(body) {
+    if (!isStructureHostBody(body)) {
+      return 0;
+    }
+
+    return 2.2 + Math.sqrt(Math.max(1, body.mass)) * 0.075 + batteryCountForBody(body.id) * batteryEnergyRegenBonus;
+  }
+
+  function normalizeBodyEnergy(body) {
+    if (!body) {
+      return;
+    }
+
+    const maxEnergy = maxEnergyForBody(body);
+    if (maxEnergy <= 0) {
+      body.maxEnergy = 0;
+      body.energy = 0;
+      return;
+    }
+
+    const previousMax = Math.max(0, finiteOr(body.maxEnergy, 0));
+    const previousEnergy = Number.isFinite(Number(body.energy)) ? finiteOr(body.energy, maxEnergy) : maxEnergy;
+    body.maxEnergy = maxEnergy;
+    body.energy = previousMax > 0
+      ? clamp(previousEnergy, 0, maxEnergy)
+      : maxEnergy;
+  }
+
+  function spendBodyEnergy(body, amount) {
+    normalizeBodyEnergy(body);
+    const cost = Math.max(0, finiteOr(amount, 0));
+    if (!body || cost <= 0) {
+      return true;
+    }
+    if (body.energy < cost) {
+      return false;
+    }
+
+    body.energy = Math.max(0, body.energy - cost);
+    return true;
+  }
+
+  function canSpendBodyEnergy(body, amount) {
+    normalizeBodyEnergy(body);
+    return Boolean(body) && finiteOr(body.energy, 0) >= Math.max(0, finiteOr(amount, 0));
+  }
+
+  function playerEnergyPct() {
+    return clamp(player.energy / Math.max(1, player.maxEnergy), 0, 1);
+  }
+
+  function targetPlayerMaxEnergy() {
+    const absorbedMass = Math.max(0, finiteOr(lifeStats.absorbedParticleMass, 0));
+    const absorbedCount = Math.max(0, finiteOr(lifeStats.absorbedParticleCount, 0));
+    return clamp(
+      playerBaseMaxEnergy + Math.sqrt(absorbedMass) * playerMaxEnergyMassScale + absorbedCount * playerMaxEnergyCountScale,
+      playerBaseMaxEnergy,
+      playerMaxEnergyCap
+    );
+  }
+
+  function recordPlayerAbsorption(absorber, absorbed) {
+    if (!absorber || !absorbed || !isGrowthMatter(absorbed)) {
+      return;
+    }
+
+    const scoredIds = connectedScoredBodyIds();
+    if (!scoredIds.has(absorber.id)) {
+      return;
+    }
+
+    lifeStats.absorbedParticleMass += Math.max(0, finiteOr(absorbed.mass, 0));
+    lifeStats.absorbedParticleCount += 1;
+  }
+
+  function hasPlayerEnergy(amount = 0.05) {
+    return player.energy > Math.max(0, amount);
+  }
+
+  function spendPlayerEnergy(amount) {
+    const cost = Math.max(0, finiteOr(amount, 0));
+    if (cost <= 0) {
+      return true;
+    }
+    if (player.energy < cost) {
+      player.energy = 0;
+      return false;
+    }
+
+    player.energy -= cost;
+    return true;
+  }
+
+  function drainPlayerEnergy(rate, dt) {
+    return spendPlayerEnergy(Math.max(0, finiteOr(rate, 0)) * Math.max(0, finiteOr(dt, 0)));
+  }
+
+  function notifyEnergyDepleted() {
+    maybeNotifyText("Energy depleted.", { groupKey: "energy-depleted" });
+  }
+
+  function isJetpackBoostPressed() {
+    return keys.has("ShiftLeft") || keys.has("ShiftRight");
   }
 
   function isMappedBody(particle) {
@@ -7076,7 +7528,7 @@
     let bestScore = Infinity;
 
     for (const body of particles) {
-      if (!isStructureHostBody(body)) {
+      if (!isStructureHostBodyForType(body, structureType)) {
         continue;
       }
 
@@ -7137,12 +7589,12 @@
     }
 
     const body = bodyById(placement.bodyId);
-    if (!isStructureHostBody(body)) {
+    const recipe = recipeById(activePlacementRecipeId);
+    if (!isStructureHostBodyForType(body, recipe && recipe.structureType)) {
       return Object.assign({}, placement, { valid: false, body: null });
     }
 
     const surfaceOffset = surfaceExtensionAtAngle(body, placement.angle);
-    const recipe = recipeById(activePlacementRecipeId);
     const centerOffset = structureCenterOffset(recipe && recipe.structureType, surfaceOffset);
     return Object.assign({}, placement, {
       valid: true,
@@ -7170,7 +7622,17 @@
       restLength: linkedPlacement ? Math.hypot(linkedPlacement.x - placement.x, linkedPlacement.y - placement.y) : 0,
       aimAngle: placement.angle,
       deploy: 0,
+      thrustAmount: 0,
+      thrustDirection: 1,
       shootCooldown: randomRange(0.2, 0.8),
+      burstTimer: 0,
+      burstCooldown: randomRange(0.4, accumulatorBurstInterval),
+      missileCharge: 0,
+      lockTimer: 0,
+      beepTimer: 0,
+      targetX: placement.x,
+      targetY: placement.y,
+      targetCount: 0,
       health: structureMaxHealth(recipe.structureType),
       maxHealth: structureMaxHealth(recipe.structureType),
       disabledTimer: 0,
@@ -7183,7 +7645,7 @@
   function applyTetherSurfaceConstraint(structure) {
     const firstBody = bodyById(structure.bodyId);
     const secondBody = bodyById(structure.linkedBodyId);
-    if (!isStructureHostBody(firstBody) || !isStructureHostBody(secondBody) || firstBody.id === secondBody.id) {
+    if (!isStructureHostBodyForType(firstBody, "tether") || !isStructureHostBodyForType(secondBody, "tether") || firstBody.id === secondBody.id) {
       return false;
     }
 
@@ -7231,7 +7693,9 @@
 
     const placement = currentStructurePlacement();
     if (!placement.valid) {
-      maybeNotifyText("Structures need a dwarf moon, moon, planet, or plate surface.");
+      maybeNotifyText(recipe.structureType === "tether"
+        ? "Tethers need boulder-sized or larger bodies."
+        : "Structures need a dwarf moon, moon, planet, or plate surface.");
       return false;
     }
 
@@ -7529,7 +7993,7 @@
   }
 
   function updateLandedGadgetThrust(dt) {
-    if (!isSuctionEquipped() || !player.landed || (!mouse.left && !mouse.right)) {
+    if (!canUseSuctionControls() || !player.landed || (!mouse.left && !mouse.right)) {
       return;
     }
 
@@ -7551,6 +8015,49 @@
     if (speed > maxSpeed) {
       body.vx = (body.vx / speed) * maxSpeed;
       body.vy = (body.vy / speed) * maxSpeed;
+    }
+  }
+
+  function updateEnergySystems(dt) {
+    for (const body of particles) {
+      normalizeBodyEnergy(body);
+      if (body.maxEnergy > 0 && body.energy < body.maxEnergy) {
+        body.energy = Math.min(body.maxEnergy, body.energy + energyRegenForBody(body) * dt);
+      }
+    }
+
+    const targetMaxEnergy = targetPlayerMaxEnergy();
+    player.maxEnergy = clamp(finiteOr(player.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
+    if (player.maxEnergy < targetMaxEnergy) {
+      const growthRate = 0.32 + Math.sqrt(Math.max(0, finiteOr(lifeStats.absorbedParticleMass, 0))) * 0.0025;
+      player.maxEnergy = Math.min(targetMaxEnergy, player.maxEnergy + growthRate * dt);
+    }
+    player.energy = clamp(finiteOr(player.energy, player.maxEnergy), 0, player.maxEnergy);
+    if (player.energy >= player.maxEnergy) {
+      return;
+    }
+
+    let regen = playerBaseEnergyRegen;
+    if (player.landed) {
+      const landedBody = bodyById(player.landed.bodyId);
+      if (landedBody) {
+        regen += energyRegenForBody(landedBody) * landedEnergyRegenShare;
+      }
+    }
+
+    player.energy = Math.min(player.maxEnergy, player.energy + regen * dt);
+  }
+
+  function updateToolEnergyUsage(dt) {
+    if (areToolsDisabled() || buildMenuOpen) {
+      return;
+    }
+
+    if (isSuctionEquipped() && isGadgetButtonPressed()) {
+      if (!drainPlayerEnergy(suctionEnergyDrain, dt)) {
+        resetMouseButtons();
+        notifyEnergyDepleted();
+      }
     }
   }
 
@@ -7588,16 +8095,18 @@
     if (localX || localY) {
       const local = normalize(localX, localY);
       const world = cameraLocalToWorld(local.x, local.y);
-      const suctionActive = isSuctionEquipped() && isGadgetButtonPressed();
+      const suctionActive = canUseSuctionControls() && isGadgetButtonPressed();
+      const boosting = !suctionActive && isJetpackBoostPressed() && drainPlayerEnergy(jetpackBoostEnergyDrain, dt);
       const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
-      const thrust = 640 * (suctionActive ? 0.56 : 1) * weaponSlowFactor;
+      const thrust = 640 * (suctionActive ? 0.56 : 1) * (boosting ? jetpackBoostThrustMultiplier : 1) * weaponSlowFactor;
       player.vx += world.x * thrust * dt;
       player.vy += world.y * thrust * dt;
     }
 
     const speed = length(player.vx, player.vy);
     const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
-    const maxSpeed = ((isSuctionEquipped() && isGadgetButtonPressed()) ? 275 : 430) * weaponSlowFactor;
+    const boostSpeed = isJetpackBoostPressed() && hasPlayerEnergy() ? jetpackBoostSpeedMultiplier : 1;
+    const maxSpeed = ((canUseSuctionControls() && isGadgetButtonPressed()) ? 275 : 430 * boostSpeed) * weaponSlowFactor;
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
@@ -7611,6 +8120,10 @@
   }
 
   function applyGadgetForces(target, aim, funnel, dt, options = {}) {
+    const controlsEnabled = canUseSuctionControls();
+    const leftActive = controlsEnabled && mouse.left;
+    const middleActive = controlsEnabled && mouse.middle;
+    const rightActive = controlsEnabled && mouse.right;
     const toTargetX = target.x - player.x;
     const toTargetY = target.y - player.y;
     const forward = toTargetX * aim.world.x + toTargetY * aim.world.y;
@@ -7625,7 +8138,7 @@
     const pushResponse = bodyPushResponse(target);
     const captureInFunnel = options.captureInFunnel !== false;
 
-    if (mouse.middle && inCone) {
+    if (middleActive && inCone) {
       const holdX = player.x + aim.world.x * gadgetHoldReach;
       const holdY = player.y + aim.world.y * gadgetHoldReach;
       const toHoldX = holdX - target.x;
@@ -7654,11 +8167,11 @@
       return;
     }
 
-    if (mouse.left || mouse.right) {
+    if (leftActive || rightActive) {
       target.gadgetStabilized = false;
     }
 
-    if (mouse.left && inCone) {
+    if (leftActive && inCone) {
       const pull = normalize(toMouthX, toMouthY);
       const coneStrength = clamp(1 - side / Math.max(1, coneWidth), 0, 1);
       const distanceStrength = clamp(1 - mouthDist / 620, 0.16, 1);
@@ -7678,7 +8191,7 @@
       }
     }
 
-    if (mouse.right && forward > -20 && forward < 470 && side < coneWidth * 0.9) {
+    if (rightActive && forward > -20 && forward < 470 && side < coneWidth * 0.9) {
       const blastFalloff = clamp(1 - Math.max(0, forward) / 520, 0.22, 1);
       const sidePush = normalize(sideX, sideY);
       const force = 1450 * currentGadgetBlowFactor() * blastFalloff * pushResponse;
@@ -7730,6 +8243,9 @@
   }
 
   function resolveFunnelBucket(target, aim, dt) {
+    const controlsEnabled = canUseSuctionControls();
+    const leftActive = controlsEnabled && mouse.left;
+    const rightActive = controlsEnabled && mouse.right;
     const normal = { x: -aim.world.y, y: aim.world.x };
     const relX = target.x - player.x;
     const relY = target.y - player.y;
@@ -7790,16 +8306,16 @@
       Math.abs(state.y) < cupHalf + radius * 0.25;
 
     if (insideCup || touchedBucket) {
-      const damping = Math.pow(mouse.right ? 0.72 : 0.18, dt);
+      const damping = Math.pow(rightActive ? 0.72 : 0.18, dt);
       state.vx *= damping;
       state.vy *= damping;
 
-      if (!mouse.right) {
+      if (!rightActive) {
         state.vx += (funnelShape.captureX - state.x) * 7.5 * dt;
         state.vy += -state.y * 8.5 * dt;
       }
 
-      if (mouse.left) {
+      if (leftActive) {
         state.vx += (funnelShape.captureX - state.x) * 6.5 * dt;
         state.vy += -state.y * 6.5 * dt;
       }
@@ -7822,7 +8338,7 @@
     const aim = getAim();
     const funnel = getFunnel(aim);
     const landedBodyId = player.landed ? player.landed.bodyId : null;
-    const suctionActive = isSuctionEquipped();
+    const suctionActive = canUseSuctionControls();
 
     spawnTimer -= dt;
     while (particles.length < targetParticles && spawnTimer <= 0) {
@@ -7928,6 +8444,27 @@
     return isUfoBeamCargo(a) || isUfoBeamCargo(b);
   }
 
+  function areBodiesDirectlyTethered(a, b) {
+    if (!a || !b || a.id === b.id) {
+      return false;
+    }
+
+    for (const structure of structures) {
+      if (
+        structure.type === "tether" &&
+        structure.health > 0 &&
+        (
+          (structure.bodyId === a.id && structure.linkedBodyId === b.id) ||
+          (structure.bodyId === b.id && structure.linkedBodyId === a.id)
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   function canAbsorbBody(absorber, absorbed) {
     if (isProtectedStrategicBody(absorbed)) {
       return false;
@@ -7945,6 +8482,10 @@
   }
 
   function absorbingCollisionPair(a, b) {
+    if (areBodiesDirectlyTethered(a, b)) {
+      return null;
+    }
+
     if (canAbsorbBody(a, b) && (!canAbsorbBody(b, a) || a.mass >= b.mass)) {
       return { absorber: a, absorbed: b };
     }
@@ -8004,12 +8545,17 @@
             continue;
           }
 
+          recordPlayerAbsorption(absorbingPair.absorber, absorbingPair.absorbed);
           const mass = absorbingPair.absorber.mass + absorbingPair.absorbed.mass;
           const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;
           const tier = tierForMass(mass);
           const graduated = tier.threshold > previousTier.threshold;
           const visualSource = graduated ? dominantMergeBody(a, b) : absorbingPair.absorber;
           const color = graduated ? mixColor(a.color, b.color, a.mass, b.mass) : absorbingPair.absorber.color;
+          normalizeBodyEnergy(a);
+          normalizeBodyEnergy(b);
+          const storedEnergy = clamp(finiteOr(a.energy, 0), 0, Math.max(1, finiteOr(a.maxEnergy, 0)))
+            + clamp(finiteOr(b.energy, 0), 0, Math.max(1, finiteOr(b.maxEnergy, 0)));
           const merged = {
             id: graduated ? nextParticleId++ : visualSource.id,
             x: (a.x * a.mass + b.x * b.mass) / mass,
@@ -8026,6 +8572,8 @@
             wobble: graduated ? randomRange(0, Math.PI * 2) : visualSource.wobble,
             pulse: graduated ? randomRange(0.8, 1.25) : visualSource.pulse
           };
+          normalizeBodyEnergy(merged);
+          merged.energy = clamp(storedEnergy, 0, merged.maxEnergy || 0);
 
           if (player.landed && (player.landed.bodyId === a.id || player.landed.bodyId === b.id)) {
             player.landed.bodyId = merged.id;
@@ -8101,7 +8649,7 @@
   function updateHealthPickups(dt) {
     const aim = getAim();
     const funnel = getFunnel(aim);
-    const suctionActive = isSuctionEquipped();
+    const suctionActive = canUseSuctionControls();
 
     for (let i = healthPickups.length - 1; i >= 0; i -= 1) {
       const pickup = healthPickups[i];
@@ -8153,7 +8701,7 @@
   function updateTechPickups(dt) {
     const aim = getAim();
     const funnel = getFunnel(aim);
-    const suctionActive = isSuctionEquipped();
+    const suctionActive = canUseSuctionControls();
 
     for (let i = techPickups.length - 1; i >= 0; i -= 1) {
       const pickup = techPickups[i];
@@ -8570,6 +9118,11 @@
       return false;
     }
 
+    if (!drainPlayerEnergy(spannerRepairEnergyDrain, dt)) {
+      notifyEnergyDepleted();
+      return false;
+    }
+
     if (repairStructure(target, currentSpannerRepairRate() * dt)) {
       const color = { r: 102, g: 224, b: 184 };
       if (Math.random() < dt * 9) {
@@ -8654,6 +9207,11 @@
       return false;
     }
 
+    if (!drainPlayerEnergy(spannerDismantleEnergyDrain, dt)) {
+      notifyEnergyDepleted();
+      return false;
+    }
+
     const maxHealth = Math.max(1, finiteOr(target.maxHealth, structureMaxHealth(target.type)));
     const health = clamp(finiteOr(target.health, maxHealth), 0, maxHealth);
     target.maxHealth = maxHealth;
@@ -8726,6 +9284,11 @@
       return false;
     }
 
+    if (!spendPlayerEnergy(spannerStrikeEnergyCost)) {
+      notifyEnergyDepleted();
+      return false;
+    }
+
     const target = findSpannerStrikeTarget();
     toolFireCooldown = currentSpannerStrikeCooldown();
     if (!target) {
@@ -8767,6 +9330,11 @@
     const weapon = equippedWeapon();
 
     if (areToolsDisabled() || buildMenuOpen || !weapon || !mouse.left || toolFireCooldown > 0) {
+      return;
+    }
+
+    if (!spendPlayerEnergy(finiteOr(weapon.energyCost, playerWeaponDefaults.energyCost))) {
+      notifyEnergyDepleted();
       return;
     }
 
@@ -9149,6 +9717,50 @@
     };
   }
 
+  function segmentCircleIntersection(cx, cy, radius, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const fx = ax - cx;
+    const fy = ay - cy;
+    const a = dx * dx + dy * dy;
+
+    if (a <= 0.000001) {
+      return fx * fx + fy * fy <= radius * radius ? { x: ax, y: ay, t: 0 } : null;
+    }
+
+    const b = 2 * (fx * dx + fy * dy);
+    const c = fx * fx + fy * fy - radius * radius;
+    const discriminant = b * b - 4 * a * c;
+
+    if (discriminant < 0) {
+      return null;
+    }
+
+    const root = Math.sqrt(discriminant);
+    const t1 = (-b - root) / (2 * a);
+    const t2 = (-b + root) / (2 * a);
+    let t = Number.POSITIVE_INFINITY;
+
+    if (t1 >= 0 && t1 <= 1) {
+      t = t1;
+    }
+    if (t2 >= 0 && t2 <= 1 && t2 < t) {
+      t = t2;
+    }
+    if (!Number.isFinite(t) && c <= 0) {
+      t = 0;
+    }
+    if (!Number.isFinite(t)) {
+      return null;
+    }
+
+    return {
+      x: ax + dx * t,
+      y: ay + dy * t,
+      t
+    };
+  }
+
   function findBlockingLandableBody(ax, ay, bx, by, padding, ignoredBodyId) {
     let nearest = null;
 
@@ -9171,6 +9783,178 @@
     }
 
     return nearest;
+  }
+
+  function shieldGeneratorRadius(body) {
+    if (!body) {
+      return 0;
+    }
+
+    return body.radius + shieldGeneratorFieldPadding + Math.min(240, body.radius * 0.18);
+  }
+
+  function projectileShieldCost(projectile) {
+    if (projectile && projectile.rocket) {
+      return shieldGeneratorRocketCost;
+    }
+    if (projectile && projectile.lightning) {
+      return shieldGeneratorLightningCost;
+    }
+    return shieldGeneratorProjectileCost;
+  }
+
+  function activateShieldGeneratorBlock(structure, body, cost, hitX, hitY, color, radiusScale) {
+    if (!structure || !body || structure.health <= 0 || isStructureDisabled(structure)) {
+      return false;
+    }
+    if (!spendBodyEnergy(body, cost)) {
+      return false;
+    }
+
+    structure.deploy = 1;
+    structure.burstTimer = shieldGeneratorActiveDuration;
+    structure.flash = Math.max(structure.flash || 0, 0.16);
+    sparks.push({
+      x: Number.isFinite(hitX) ? hitX : structure.x,
+      y: Number.isFinite(hitY) ? hitY : structure.y,
+      radius: shieldGeneratorRadius(body) * (radiusScale || 0.16),
+      color: color || { r: 119, g: 167, b: 255 },
+      life: 0.24,
+      maxLife: 0.24
+    });
+    playSound("shield", { throttleKey: "shieldGenerator" });
+    return true;
+  }
+
+  function findProjectileShieldBlocker(ax, ay, bx, by, padding, projectile) {
+    let nearest = null;
+    const cost = projectileShieldCost(projectile);
+
+    for (const structure of structures) {
+      if (structure.type !== "shield-generator" || structure.health <= 0 || isStructureDisabled(structure)) {
+        continue;
+      }
+
+      const body = bodyById(structure.bodyId);
+      if (!isStructureHostBody(body) || !canSpendBodyEnergy(body, cost)) {
+        continue;
+      }
+
+      const radius = shieldGeneratorRadius(body) + padding;
+      const hit = segmentCircleIntersection(body.x, body.y, radius, ax, ay, bx, by);
+      if (!hit || (nearest && hit.t >= nearest.t)) {
+        continue;
+      }
+
+      nearest = {
+        structure,
+        body,
+        cost,
+        x: hit.x,
+        y: hit.y,
+        t: hit.t
+      };
+    }
+
+    return nearest;
+  }
+
+  function tickMobShieldImpactCooldowns(mob, dt) {
+    if (!mob.shieldImpactCooldowns) {
+      return;
+    }
+
+    for (const structureId of Object.keys(mob.shieldImpactCooldowns)) {
+      const remaining = finiteOr(mob.shieldImpactCooldowns[structureId], 0) - dt;
+      if (remaining > 0) {
+        mob.shieldImpactCooldowns[structureId] = remaining;
+      } else {
+        delete mob.shieldImpactCooldowns[structureId];
+      }
+    }
+  }
+
+  function shieldImpactCooldownFor(mob, structure) {
+    return mob.shieldImpactCooldowns ? finiteOr(mob.shieldImpactCooldowns[structure.id], 0) : 0;
+  }
+
+  function markShieldImpact(mob, structure) {
+    if (!mob.shieldImpactCooldowns) {
+      mob.shieldImpactCooldowns = {};
+    }
+    mob.shieldImpactCooldowns[structure.id] = shieldGeneratorMobCooldown;
+  }
+
+  function resolveShieldGeneratorMobCollisions(dt) {
+    for (const mob of allCombatMobs()) {
+      tickMobShieldImpactCooldowns(mob, dt);
+      if (mob.health <= 0) {
+        continue;
+      }
+
+      for (const structure of structures) {
+        if (structure.type !== "shield-generator" || structure.health <= 0 || isStructureDisabled(structure)) {
+          continue;
+        }
+
+        const body = bodyById(structure.bodyId);
+        if (!isStructureHostBody(body)) {
+          continue;
+        }
+
+        const dx = mob.x - body.x;
+        const dy = mob.y - body.y;
+        const rawDist = Math.hypot(dx, dy);
+        const dist = rawDist || 1;
+        const shieldRadius = shieldGeneratorRadius(body);
+        const hitDistance = shieldRadius + mob.radius;
+        if (dist >= hitDistance) {
+          continue;
+        }
+
+        const cooldown = shieldImpactCooldownFor(mob, structure);
+        const nx = rawDist ? dx / dist : Math.cos(structure.angle);
+        const ny = rawDist ? dy / dist : Math.sin(structure.angle);
+        const speed = Math.hypot(mob.vx, mob.vy);
+        const cost = shieldGeneratorMobCost * clamp(0.65 + speed / 520, 0.65, 1.8);
+
+        if (cooldown <= 0) {
+          if (!activateShieldGeneratorBlock(structure, body, cost, body.x + nx * shieldRadius, body.y + ny * shieldRadius, { r: 119, g: 167, b: 255 }, 0.2)) {
+            continue;
+          }
+          markShieldImpact(mob, structure);
+        }
+
+        if (mob.landed) {
+          mob.landed = null;
+          mob.residentTier = null;
+        }
+
+        const overlap = hitDistance - dist;
+        mob.x += nx * overlap;
+        mob.y += ny * overlap;
+
+        const relVx = mob.vx - body.vx;
+        const relVy = mob.vy - body.vy;
+        const incoming = relVx * nx + relVy * ny;
+        if (incoming < 0) {
+          mob.vx -= incoming * 1.72 * nx;
+          mob.vy -= incoming * 1.72 * ny;
+        }
+
+        const outwardSpeed = (mob.vx - body.vx) * nx + (mob.vy - body.vy) * ny;
+        if (outwardSpeed < shieldGeneratorMobMinBounceSpeed) {
+          const boost = shieldGeneratorMobMinBounceSpeed - outwardSpeed;
+          mob.vx += nx * boost;
+          mob.vy += ny * boost;
+        }
+
+        body.vx -= nx * clamp((speed + shieldGeneratorMobMinBounceSpeed) / Math.max(80, body.mass), 0.4, 10);
+        body.vy -= ny * clamp((speed + shieldGeneratorMobMinBounceSpeed) / Math.max(80, body.mass), 0.4, 10);
+        knockMob(mob, nx, ny, 70 + speed * 0.14);
+        break;
+      }
+    }
   }
 
   function hasClearShotAtCombatTarget(rival, target) {
@@ -9259,6 +10043,303 @@
 
     playSound("turret");
     turret.shootCooldown = turretShootCooldown;
+  }
+
+  function launcherCanSeeMob(structure, mob) {
+    const normalX = Math.cos(structure.angle);
+    const normalY = Math.sin(structure.angle);
+    const aboveSurface = (mob.x - structure.x) * normalX + (mob.y - structure.y) * normalY;
+    return aboveSurface > -mob.radius * 0.25;
+  }
+
+  function findMobCluster(originX, originY, maxRange, options) {
+    const settings = options || {};
+    const sourceStructure = settings.structure || null;
+    const preferredX = Number.isFinite(settings.preferredX) ? settings.preferredX : Number.NaN;
+    const preferredY = Number.isFinite(settings.preferredY) ? settings.preferredY : Number.NaN;
+    const minCount = Math.max(1, Math.floor(finiteOr(settings.minCount, missileLauncherMinClusterSize)));
+    const clusterRadius = Math.max(40, finiteOr(settings.clusterRadius, missileLauncherClusterRadius));
+    const mobs = allCombatMobs().filter((mob) => {
+      if (!mob || mob.health <= 0) {
+        return false;
+      }
+      if (sourceStructure && !launcherCanSeeMob(sourceStructure, mob)) {
+        return false;
+      }
+      return Math.hypot(mob.x - originX, mob.y - originY) <= maxRange + clusterRadius;
+    });
+    let best = null;
+    let bestScore = -Infinity;
+
+    for (const anchor of mobs) {
+      const members = [];
+      for (const mob of mobs) {
+        if (Math.hypot(mob.x - anchor.x, mob.y - anchor.y) <= clusterRadius) {
+          members.push(mob);
+        }
+      }
+      if (members.length < minCount) {
+        continue;
+      }
+
+      let x = 0;
+      let y = 0;
+      let vx = 0;
+      let vy = 0;
+      let healthWeight = 0;
+      for (const mob of members) {
+        const weight = clamp(finiteOr(mob.health, 1) / Math.max(1, finiteOr(mob.maxHealth, mob.health || 1)), 0.35, 1.25);
+        x += mob.x * weight;
+        y += mob.y * weight;
+        vx += finiteOr(mob.vx, 0) * weight;
+        vy += finiteOr(mob.vy, 0) * weight;
+        healthWeight += weight;
+      }
+      x /= Math.max(0.001, healthWeight);
+      y /= Math.max(0.001, healthWeight);
+      vx /= Math.max(0.001, healthWeight);
+      vy /= Math.max(0.001, healthWeight);
+
+      const distance = Math.hypot(x - originX, y - originY);
+      if (distance > maxRange + clusterRadius * 0.35) {
+        continue;
+      }
+      if (sourceStructure && !hasClearShotAtMob(sourceStructure.x, sourceStructure.y, { x, y, radius: 22 }, sourceStructure.bodyId)) {
+        continue;
+      }
+
+      let spread = 0;
+      for (const mob of members) {
+        spread += Math.hypot(mob.x - x, mob.y - y);
+      }
+      spread /= members.length;
+
+      const preferredDistance = Number.isFinite(preferredX) && Number.isFinite(preferredY)
+        ? Math.hypot(x - preferredX, y - preferredY)
+        : 0;
+      const score = members.length * 1000 - spread * 1.35 - distance * 0.18 - preferredDistance * 0.48;
+      if (score > bestScore) {
+        bestScore = score;
+        best = {
+          x,
+          y,
+          vx,
+          vy,
+          count: members.length,
+          radius: clusterRadius,
+          members
+        };
+      }
+    }
+
+    return best;
+  }
+
+  function fireLauncherMissile(structure, cluster) {
+    const leadTime = clamp(Math.hypot(cluster.x - structure.x, cluster.y - structure.y) / launcherMissileSpeed, 0, 1.2);
+    const targetX = cluster.x + finiteOr(cluster.vx, 0) * leadTime * 0.36;
+    const targetY = cluster.y + finiteOr(cluster.vy, 0) * leadTime * 0.36;
+    const aim = normalize(targetX - structure.x, targetY - structure.y);
+    const color = { r: 255, g: 184, b: 88 };
+    const muzzleDistance = 48;
+
+    launcherMissiles.push({
+      x: structure.x + aim.x * muzzleDistance,
+      y: structure.y + aim.y * muzzleDistance,
+      vx: aim.x * launcherMissileSpeed,
+      vy: aim.y * launcherMissileSpeed,
+      radius: 11,
+      length: 58,
+      color,
+      life: launcherMissileLife,
+      maxLife: launcherMissileLife,
+      damage: launcherMissileDamage,
+      rocket: true,
+      targetX,
+      targetY,
+      targetCount: cluster.count,
+      ignoredBodyId: structure.bodyId
+    });
+
+    structure.missileCharge = 0;
+    structure.lockTimer = 0;
+    structure.beepTimer = 0;
+    structure.targetX = targetX;
+    structure.targetY = targetY;
+    structure.targetCount = cluster.count;
+    structure.deploy = 1;
+    structure.aimAngle = Math.atan2(aim.y, aim.x);
+
+    sparks.push({
+      x: structure.x + aim.x * muzzleDistance,
+      y: structure.y + aim.y * muzzleDistance,
+      radius: 42,
+      color,
+      life: 0.24,
+      maxLife: 0.24
+    });
+    playSound("missile");
+  }
+
+  function updateMissileLauncher(structure, dt) {
+    const body = bodyById(structure.bodyId);
+    structure.missileCharge = clamp(finiteOr(structure.missileCharge, 0) + dt / missileLauncherProductionTime, 0, 1);
+    structure.lockTimer = Math.max(0, finiteOr(structure.lockTimer, 0) - dt);
+    structure.beepTimer = Math.max(0, finiteOr(structure.beepTimer, 0) - dt);
+
+    const ready = structure.missileCharge >= 1;
+    if (!ready) {
+      structure.targetCount = 0;
+      structure.deploy = clamp((structure.deploy || 0) + dt * 1.2, 0, 0.58 + structure.missileCharge * 0.28);
+      structure.aimAngle += clamp(shortestAngleDelta(structure.aimAngle, structure.angle), -1.7 * dt, 1.7 * dt);
+      return;
+    }
+
+    const cluster = findMobCluster(structure.x, structure.y, missileLauncherRange, { structure });
+    if (!cluster) {
+      structure.targetCount = 0;
+      structure.lockTimer = 0;
+      structure.deploy = clamp((structure.deploy || 0) + dt * 1.6, 0, 0.9);
+      structure.aimAngle += clamp(shortestAngleDelta(structure.aimAngle, structure.angle), -1.9 * dt, 1.9 * dt);
+      return;
+    }
+
+    structure.targetX = cluster.x;
+    structure.targetY = cluster.y;
+    structure.targetCount = cluster.count;
+    const targetAngle = Math.atan2(cluster.y - structure.y, cluster.x - structure.x);
+    structure.aimAngle += clamp(shortestAngleDelta(structure.aimAngle, targetAngle), -3.4 * dt, 3.4 * dt);
+    structure.deploy = clamp((structure.deploy || 0) + dt * 3.4, 0, 1);
+
+    if (structure.lockTimer <= 0) {
+      structure.lockTimer = missileLauncherLockDuration;
+      structure.beepTimer = 0;
+      playSound("lock", { throttleKey: "launcherLock:" + structure.id, throttle: 0.08 });
+      return;
+    }
+
+    if (structure.beepTimer <= 0) {
+      structure.beepTimer = 0.2;
+      playSound("lock", { throttleKey: "launcherBeep:" + structure.id, throttle: 0.08, volume: 0.82 });
+    }
+
+    if (structure.lockTimer <= dt * 1.05 && canSpendBodyEnergy(body, missileLauncherEnergyCost)) {
+      spendBodyEnergy(body, missileLauncherEnergyCost);
+      fireLauncherMissile(structure, cluster);
+    }
+  }
+
+  function explodeLauncherMissile(missile, x, y) {
+    const color = missile.color || { r: 255, g: 184, b: 88 };
+    let hits = 0;
+
+    for (const mob of allCombatMobs()) {
+      if (!mob || mob.health <= 0) {
+        continue;
+      }
+      const dist = Math.hypot(mob.x - x, mob.y - y);
+      const edgeDistance = Math.max(0, dist - mob.radius * 0.45);
+      if (edgeDistance > launcherMissileAoERadius) {
+        continue;
+      }
+
+      const falloff = 1 - edgeDistance / launcherMissileAoERadius;
+      const nx = dist > 0 ? (mob.x - x) / dist : randomRange(-1, 1);
+      const ny = dist > 0 ? (mob.y - y) / dist : randomRange(-1, 1);
+      knockMob(mob, nx, ny, launcherMissileKnockback * (0.32 + falloff * 0.68));
+      damageMob(mob, launcherMissileDamage * (0.42 + falloff * 0.58), color, mobName(mob) + " caught in a missile blast.");
+      hits += 1;
+    }
+
+    sparks.push({
+      x,
+      y,
+      radius: launcherMissileAoERadius * 0.68,
+      color,
+      life: 0.38,
+      maxLife: 0.38
+    });
+    sparks.push({
+      x,
+      y,
+      radius: launcherMissileAoERadius * 1.08,
+      color: { r: 255, g: 115, b: 173 },
+      life: 0.28,
+      maxLife: 0.28
+    });
+    playSound(hits > 0 ? "mobDestroyed" : "hit", { throttleKey: "launcherExplosion" });
+  }
+
+  function updateLauncherMissiles(dt) {
+    for (let i = launcherMissiles.length - 1; i >= 0; i -= 1) {
+      const missile = launcherMissiles[i];
+      const previousX = missile.x;
+      const previousY = missile.y;
+      missile.life = Math.max(0, finiteOr(missile.life, launcherMissileLife) - dt);
+
+      const cluster = findMobCluster(missile.x, missile.y, 760, {
+        minCount: 1,
+        clusterRadius: missileLauncherClusterRadius,
+        preferredX: missile.targetX,
+        preferredY: missile.targetY
+      });
+      if (cluster) {
+        const leadTime = clamp(Math.hypot(cluster.x - missile.x, cluster.y - missile.y) / launcherMissileSpeed, 0, 0.8);
+        missile.targetX = cluster.x + finiteOr(cluster.vx, 0) * leadTime * 0.4;
+        missile.targetY = cluster.y + finiteOr(cluster.vy, 0) * leadTime * 0.4;
+        missile.targetCount = cluster.count;
+      }
+
+      const desiredAngle = Math.atan2(missile.targetY - missile.y, missile.targetX - missile.x);
+      const speed = Math.max(launcherMissileSpeed * 0.45, Math.hypot(missile.vx, missile.vy) || launcherMissileSpeed);
+      const currentAngle = Math.atan2(missile.vy, missile.vx);
+      const angle = currentAngle + clamp(shortestAngleDelta(currentAngle, desiredAngle), -launcherMissileTurnRate * dt, launcherMissileTurnRate * dt);
+      const targetSpeed = launcherMissileSpeed * (missile.life > launcherMissileLife - 0.24 ? 0.74 : 1);
+      const nextSpeed = speed + (targetSpeed - speed) * (1 - Math.pow(0.05, dt));
+      missile.vx = Math.cos(angle) * nextSpeed;
+      missile.vy = Math.sin(angle) * nextSpeed;
+      missile.x += missile.vx * dt;
+      missile.y += missile.vy * dt;
+
+      const travel = Math.hypot(missile.x - previousX, missile.y - previousY);
+      const sweptLength = Math.max(missile.radius, travel + missile.radius);
+      const dir = normalize(missile.vx, missile.vy);
+      const tailX = missile.x - dir.x * sweptLength;
+      const tailY = missile.y - dir.y * sweptLength;
+      let shouldExplode = Math.hypot(missile.x - missile.targetX, missile.y - missile.targetY) < 34;
+
+      for (const mob of allCombatMobs()) {
+        if (!mob || mob.health <= 0) {
+          continue;
+        }
+        const dist = distanceToSegment(mob.x, mob.y, tailX, tailY, missile.x, missile.y);
+        if (dist < mob.radius + missile.radius) {
+          shouldExplode = true;
+          break;
+        }
+      }
+
+      const blocker = findBlockingLandableBody(tailX, tailY, missile.x, missile.y, missile.radius * 0.85, missile.ignoredBodyId);
+      if (blocker) {
+        missile.x = blocker.x;
+        missile.y = blocker.y;
+        shouldExplode = true;
+      }
+
+      if (shouldExplode || missile.life <= 0) {
+        explodeLauncherMissile(missile, missile.x, missile.y);
+        launcherMissiles.splice(i, 1);
+      } else if (Math.random() < dt * 16) {
+        sparks.push({
+          x: missile.x - dir.x * randomRange(8, 22),
+          y: missile.y - dir.y * randomRange(8, 22),
+          radius: randomRange(10, 22),
+          color: missile.color,
+          life: 0.14,
+          maxLife: 0.14
+        });
+      }
+    }
   }
 
   function damageStructure(structure, damage, color) {
@@ -9356,37 +10437,61 @@
       return;
     }
 
+    structure.burstTimer = Math.max(0, finiteOr(structure.burstTimer, 0) - dt);
+    structure.burstCooldown = Math.max(0, finiteOr(structure.burstCooldown, accumulatorBurstInterval) - dt);
+
+    if (structure.burstTimer <= 0 && structure.burstCooldown <= 0) {
+      if (spendBodyEnergy(body, accumulatorBurstCost)) {
+        structure.burstTimer = accumulatorBurstDuration;
+        structure.burstCooldown = accumulatorBurstInterval;
+        sparks.push({
+          x: structure.x,
+          y: structure.y,
+          radius: 62,
+          color: { r: 88, g: 226, b: 255 },
+          life: 0.24,
+          maxLife: 0.24
+        });
+      } else {
+        structure.burstCooldown = 0.6;
+      }
+    }
+
     let strongestPull = 0;
     const range = accumulatorRange + Math.min(260, body.radius * 0.9);
+    const burstProgress = clamp(structure.burstTimer / accumulatorBurstDuration, 0, 1);
+    const wave = Math.sin((1 - burstProgress) * Math.PI);
 
-    for (const particle of particles) {
-      if (particle.id === body.id || !canAccumulatorPullParticle(particle) || !canAbsorbBody(body, particle)) {
-        continue;
+    if (structure.burstTimer > 0) {
+      for (const particle of particles) {
+        if (particle.id === body.id || !canAccumulatorPullParticle(particle) || !canAbsorbBody(body, particle)) {
+          continue;
+        }
+
+        const toBodyX = body.x - particle.x;
+        const toBodyY = body.y - particle.y;
+        const dist = Math.hypot(toBodyX, toBodyY) || 1;
+        if (dist > range + particle.radius) {
+          continue;
+        }
+
+        const rawPull = clamp(1 - Math.max(0, dist - body.radius) / range, 0.02, 1);
+        const pull = Math.pow(rawPull, 1.32) * (0.55 + wave * 0.9);
+        const deployPull = 0.34 + clamp(structure.deploy || 0, 0, 1) * 0.66;
+        const massResistance = clamp(1 / Math.pow(Math.max(1, particle.mass), 0.18), 0.26, 1);
+        const force = accumulatorForce * 2.15 * pull * deployPull * massResistance;
+
+        particle.vx += (toBodyX / dist) * force * dt;
+        particle.vy += (toBodyY / dist) * force * dt;
+        strongestPull = Math.max(strongestPull, pull);
       }
-
-      const toBodyX = body.x - particle.x;
-      const toBodyY = body.y - particle.y;
-      const dist = Math.hypot(toBodyX, toBodyY) || 1;
-      if (dist > range + particle.radius) {
-        continue;
-      }
-
-      const rawPull = clamp(1 - Math.max(0, dist - body.radius) / range, 0.02, 1);
-      const pull = Math.pow(rawPull, 1.72);
-      const deployPull = 0.34 + clamp(structure.deploy || 0, 0, 1) * 0.66;
-      const massResistance = clamp(1 / Math.pow(Math.max(1, particle.mass), 0.18), 0.26, 1);
-      const force = accumulatorForce * pull * deployPull * massResistance;
-
-      particle.vx += (toBodyX / dist) * force * dt;
-      particle.vy += (toBodyY / dist) * force * dt;
-      strongestPull = Math.max(strongestPull, pull);
     }
 
     const targetDeploy = strongestPull > 0 ? 0.36 + strongestPull * 0.64 : 0;
     structure.deploy += (targetDeploy - (structure.deploy || 0)) * (1 - Math.pow(0.04, dt));
     structure.deploy = clamp(structure.deploy, 0, 1);
 
-    if (strongestPull > 0 && Math.random() < dt * (0.75 + strongestPull * 2.4)) {
+    if (structure.burstTimer > 0 && Math.random() < dt * (1.2 + strongestPull * 3.2)) {
       sparks.push({
         x: structure.x + randomRange(-12, 12),
         y: structure.y + randomRange(-12, 12),
@@ -9396,6 +10501,37 @@
         maxLife: 0.18
       });
     }
+  }
+
+  function updateShieldGenerator(structure, dt) {
+    const body = bodyById(structure.bodyId);
+    if (!body || !isStructureHostBody(body)) {
+      return;
+    }
+
+    structure.burstTimer = Math.max(0, finiteOr(structure.burstTimer, 0) - dt);
+    const hasPower = canSpendBodyEnergy(body, Math.min(1, shieldGeneratorProjectileCost));
+    const targetDeploy = hasPower ? 0.72 : 0.16;
+    structure.deploy += (targetDeploy - (structure.deploy || 0)) * (1 - Math.pow(0.04, dt));
+    structure.deploy = clamp(structure.deploy, 0, 1);
+
+    if (hasPower && structure.burstTimer > 0 && Math.random() < dt * 4.2) {
+      const radius = shieldGeneratorRadius(body);
+      const angle = randomRange(0, Math.PI * 2);
+      sparks.push({
+        x: body.x + Math.cos(angle) * radius,
+        y: body.y + Math.sin(angle) * radius,
+        radius: 28,
+        color: { r: 119, g: 167, b: 255 },
+        life: 0.18,
+        maxLife: 0.18
+      });
+    }
+  }
+
+  function tetherGiveForBodies(firstBody, secondBody) {
+    const averageRadius = (Math.max(1, finiteOr(firstBody && firstBody.radius, 1)) + Math.max(1, finiteOr(secondBody && secondBody.radius, 1))) * 0.5;
+    return clamp(averageRadius * tetherGiveRadiusScale, tetherMinGive, tetherMaxGive);
   }
 
   function updateTether(structure, dt) {
@@ -9412,7 +10548,8 @@
     const ny = dy / currentLength;
     const restLength = Math.max(80, finiteOr(structure.restLength, currentLength));
     const stretch = currentLength - restLength;
-    const giveError = Math.abs(stretch) > tetherGive ? stretch - Math.sign(stretch) * tetherGive : 0;
+    const give = tetherGiveForBodies(firstBody, secondBody);
+    const giveError = Math.abs(stretch) > give ? stretch - Math.sign(stretch) * give : 0;
     const relativeVelocity = (secondBody.vx - firstBody.vx) * nx + (secondBody.vy - firstBody.vy) * ny;
     const totalMass = Math.max(1, firstBody.mass + secondBody.mass);
     const firstShare = clamp(secondBody.mass / totalMass, 0.1, 0.9);
@@ -9448,6 +10585,57 @@
     }
   }
 
+  function updateJet(structure, dt) {
+    const body = bodyById(structure.bodyId);
+    const landedHere = player.landed && body && player.landed.bodyId === body.id;
+    const forward = landedHere && isMovementKeyPressed("up");
+    const reverse = landedHere && isMovementKeyPressed("down");
+    const direction = forward === reverse ? 0 : (forward ? 1 : -1);
+
+    structure.deploy = clamp((structure.deploy || 0) + dt * 3.6, 0, 1);
+
+    if (!body || !isStructureHostBody(body) || !direction || buildMenuOpen) {
+      structure.thrustAmount = Math.max(0, finiteOr(structure.thrustAmount, 0) - dt * 4.5);
+      return;
+    }
+
+    const energyCost = jetEnergyDrain * dt;
+    if (!spendBodyEnergy(body, energyCost)) {
+      structure.thrustAmount = Math.max(0, finiteOr(structure.thrustAmount, 0) - dt * 4.5);
+      notifyEnergyDepleted();
+      return;
+    }
+
+    const nx = Math.cos(structure.angle);
+    const ny = Math.sin(structure.angle);
+    const massDamping = clamp(1 / Math.pow(Math.max(1, body.mass / 150), 0.42), 0.08, 1.1);
+    const thrust = jetThrust * massDamping * clamp(structure.deploy || 0, 0.2, 1);
+
+    body.vx += nx * direction * thrust * dt;
+    body.vy += ny * direction * thrust * dt;
+
+    const maxSpeed = 150 + massDamping * 210;
+    const speed = Math.hypot(body.vx, body.vy);
+    if (speed > maxSpeed) {
+      body.vx = (body.vx / speed) * maxSpeed;
+      body.vy = (body.vy / speed) * maxSpeed;
+    }
+
+    structure.thrustAmount += (1 - finiteOr(structure.thrustAmount, 0)) * (1 - Math.pow(0.02, dt));
+    structure.thrustDirection = direction;
+
+    if (Math.random() < dt * 2.8) {
+      sparks.push({
+        x: structure.x - nx * direction * 28 + randomRange(-8, 8),
+        y: structure.y - ny * direction * 28 + randomRange(-8, 8),
+        radius: 18 + randomRange(0, 18),
+        color: { r: 169, g: 133, b: 255 },
+        life: 0.14,
+        maxLife: 0.14
+      });
+    }
+  }
+
   function updateStructures(dt) {
     for (let i = structures.length - 1; i >= 0; i -= 1) {
       const structure = structures[i];
@@ -9472,6 +10660,7 @@
 
       if (structure.health <= 0 || isStructureDisabled(structure)) {
         structure.deploy = clamp((structure.deploy || 0) - dt * 2.1, 0, 1);
+        structure.thrustAmount = Math.max(0, finiteOr(structure.thrustAmount, 0) - dt * 4.5);
         continue;
       }
 
@@ -9480,8 +10669,33 @@
         continue;
       }
 
+      if (structure.type === "battery") {
+        structure.deploy = clamp((structure.deploy || 0) + dt * 3.4, 0, 1);
+        if (Math.random() < dt * 0.7) {
+          sparks.push({
+            x: structure.x + randomRange(-10, 10),
+            y: structure.y + randomRange(-10, 10),
+            radius: 16,
+            color: { r: 157, g: 255, b: 122 },
+            life: 0.16,
+            maxLife: 0.16
+          });
+        }
+        continue;
+      }
+
       if (structure.type === "accumulator") {
         updateAccumulator(structure, dt);
+        continue;
+      }
+
+      if (structure.type === "shield-generator") {
+        updateShieldGenerator(structure, dt);
+        continue;
+      }
+
+      if (structure.type === "missile-launcher") {
+        updateMissileLauncher(structure, dt);
         continue;
       }
 
@@ -9500,6 +10714,11 @@
         continue;
       }
 
+      if (structure.type === "jet") {
+        updateJet(structure, dt);
+        continue;
+      }
+
       if (structure.type === "tether") {
         updateTether(structure, dt);
         continue;
@@ -9515,7 +10734,8 @@
         structure.deploy = clamp(structure.deploy + dt * 2.8, 0, 1);
 
         const dist = Math.hypot(target.x - structure.x, target.y - structure.y);
-        if (structure.deploy > 0.72 && structure.shootCooldown <= 0) {
+        const hostBody = bodyById(structure.bodyId);
+        if (structure.deploy > 0.72 && structure.shootCooldown <= 0 && spendBodyEnergy(hostBody, turretEnergyCost)) {
           fireTurretLaser(structure, target, dist);
         }
       } else {
@@ -9545,6 +10765,13 @@
       const tailX = projectile.x - dirX * sweptLength;
       const tailY = projectile.y - dirY * sweptLength;
       const hitRadius = projectile.radius * (projectile.rocket ? 1.65 : 1);
+
+      const shieldBlocker = findProjectileShieldBlocker(tailX, tailY, projectile.x, projectile.y, hitRadius, projectile);
+      if (shieldBlocker && activateShieldGeneratorBlock(shieldBlocker.structure, shieldBlocker.body, shieldBlocker.cost, shieldBlocker.x, shieldBlocker.y, projectile.color, projectile.rocket ? 0.24 : 0.16)) {
+        rivalProjectiles.splice(i, 1);
+        continue;
+      }
+
       let hitStructure = false;
       if (projectile.rocket || projectile.lightning) {
         for (const structure of structures) {
@@ -9816,6 +11043,7 @@
   function updateBodyAfterMassChange(body, previousTier) {
     body.radius = radiusFromMass(body.mass);
     body.tier = tierForMass(body.mass);
+    normalizeBodyEnergy(body);
     body.textureSeed += 0.09;
 
     if (body.tier !== previousTier) {
@@ -11266,6 +12494,46 @@
     } else {
       drawPlanetBody(particle, radius);
     }
+
+    drawBodyEnergyMeter(particle, radius);
+  }
+
+  function drawBodyEnergyMeter(particle, radius) {
+    if (!isStructureHostBody(particle)) {
+      return;
+    }
+
+    normalizeBodyEnergy(particle);
+    const maxEnergy = Math.max(1, finiteOr(particle.maxEnergy, maxEnergyForBody(particle)));
+    const pct = clamp(finiteOr(particle.energy, maxEnergy) / maxEnergy, 0, 1);
+    const meterRadius = clamp(radius * 0.18, 14, 34);
+
+    ctx.save();
+    ctx.translate(particle.x, particle.y);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "rgba(3, 8, 24, 0.54)";
+    ctx.beginPath();
+    ctx.arc(0, 0, meterRadius + 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+    ctx.lineWidth = Math.max(3, meterRadius * 0.22);
+    ctx.beginPath();
+    ctx.arc(0, 0, meterRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = pct > 0.35 ? "#9dff7a" : "#f5d65b";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(0, 0, meterRadius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(248, 251, 255, 0.92)";
+    ctx.font = Math.max(13, meterRadius * 0.66) + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("⚡", 0, 1);
+    ctx.restore();
   }
 
   function drawHealthPickup(pickup, time) {
@@ -12406,6 +13674,88 @@
     ctx.restore();
   }
 
+  function drawMissileLauncher(structure, time, alpha, valid) {
+    const deploy = clamp(structure.deploy || 0, 0, 1);
+    const charge = clamp(finiteOr(structure.missileCharge, valid === false ? 0.35 : 1), 0, 1);
+    const locking = finiteOr(structure.targetCount, 0) >= missileLauncherMinClusterSize && charge >= 1;
+    const baseRotation = structure.angle + Math.PI / 2;
+    const barrelAngle = Number.isFinite(Number(structure.aimAngle)) ? structure.aimAngle : structure.angle;
+    const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 255, g: 184, b: 88 };
+    const pulse = 0.72 + Math.sin(time * 0.011 + (structure.wobble || 0)) * 0.18;
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(structure.x, structure.y);
+    ctx.rotate(baseRotation);
+
+    ctx.fillStyle = "rgba(7, 11, 24, 0.84)";
+    ctx.strokeStyle = "rgba(235, 246, 255, 0.32)";
+    ctx.lineWidth = 3;
+    roundRectPath(-34, 8, 68, 20, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(198, 207, 224, 0.92)";
+    ctx.strokeStyle = "rgba(10, 14, 27, 0.82)";
+    roundRectPath(-26, -12 - deploy * 7, 52, 28 + deploy * 8, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = colorString(accent, 0.16 + charge * 0.36);
+    ctx.beginPath();
+    ctx.arc(0, -2 - deploy * 6, 12 + charge * 8 + pulse * 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    const railBaseX = structure.x + Math.cos(structure.angle) * (12 + deploy * 8);
+    const railBaseY = structure.y + Math.sin(structure.angle) * (12 + deploy * 8);
+    const railLength = 36 + deploy * 32;
+
+    ctx.save();
+    ctx.globalAlpha *= alpha * (0.72 + deploy * 0.28);
+    ctx.translate(railBaseX, railBaseY);
+    ctx.rotate(barrelAngle);
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(10, 14, 27, 0.94)";
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.moveTo(0, -5);
+    ctx.lineTo(railLength, -5);
+    ctx.moveTo(0, 5);
+    ctx.lineTo(railLength, 5);
+    ctx.stroke();
+    ctx.strokeStyle = colorString(accent, 0.68 + charge * 0.24);
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    if (charge > 0.08) {
+      ctx.fillStyle = "rgba(19, 25, 39, 0.96)";
+      ctx.strokeStyle = colorString(accent, 0.6 + charge * 0.32);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(railLength * charge - 10, -12);
+      ctx.lineTo(railLength * charge + 12, 0);
+      ctx.lineTo(railLength * charge - 10, 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (locking) {
+      ctx.save();
+      ctx.globalAlpha *= alpha * (0.28 + pulse * 0.16);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = colorString(accent, 0.9);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(structure.x, structure.y, 58 + Math.sin(time * 0.018) * 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   function drawPlatingBlock(structure, time, alpha, valid) {
     const deploy = Number.isFinite(Number(structure.deploy)) ? clamp(Number(structure.deploy), 0, 1) : 0.72;
     const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 255, g: 209, b: 102 };
@@ -12455,6 +13805,58 @@
     ctx.restore();
   }
 
+  function drawBattery(structure, time, alpha, valid) {
+    const deploy = clamp(structure.deploy || 0, 0, 1);
+    const pulse = 1 + Math.sin(time * 0.008 + (structure.wobble || 0)) * 0.05;
+    const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 157, g: 255, b: 122 };
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(structure.x, structure.y);
+    ctx.rotate(structure.angle + Math.PI / 2);
+
+    ctx.fillStyle = "rgba(6, 10, 24, 0.86)";
+    ctx.strokeStyle = "rgba(235, 246, 255, 0.32)";
+    ctx.lineWidth = 3;
+    roundRectPath(-28, -19, 56, 38, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(235, 246, 255, 0.88)";
+    roundRectPath(-10, -25, 20, 7, 3);
+    ctx.fill();
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const fillHeight = 24 * deploy;
+    const fill = ctx.createLinearGradient(0, 13, 0, -13);
+    fill.addColorStop(0, colorString(accent, 0.42));
+    fill.addColorStop(1, colorString(accent, 0.94));
+    ctx.fillStyle = fill;
+    roundRectPath(-18, 13 - fillHeight, 36, fillHeight, 5);
+    ctx.fill();
+
+    ctx.strokeStyle = colorString(accent, 0.5 + deploy * 0.32);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, (24 + deploy * 10) * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = "#f8fbff";
+    ctx.beginPath();
+    ctx.moveTo(4, -13);
+    ctx.lineTo(-6, 1);
+    ctx.lineTo(2, 1);
+    ctx.lineTo(-4, 14);
+    ctx.lineTo(12, -4);
+    ctx.lineTo(3, -4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+
   function drawAccumulator(structure, time, alpha, valid) {
     const deploy = clamp(structure.deploy || 0, 0, 1);
     const pulse = 1 + Math.sin(time * 0.007 + (structure.wobble || 0)) * 0.05;
@@ -12464,6 +13866,18 @@
     ctx.globalAlpha *= alpha;
     ctx.translate(structure.x, structure.y);
     ctx.rotate(structure.angle + Math.PI / 2);
+
+    const burstProgress = clamp(finiteOr(structure.burstTimer, 0) / accumulatorBurstDuration, 0, 1);
+    if (burstProgress > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = colorString(accent, 0.12 + burstProgress * 0.42);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -2, 24 + (1 - burstProgress) * 42, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     ctx.fillStyle = "rgba(6, 10, 24, 0.82)";
     ctx.strokeStyle = "rgba(235, 246, 255, 0.34)";
@@ -12500,6 +13914,87 @@
     ctx.fillStyle = colorString(accent, 0.92);
     ctx.beginPath();
     ctx.arc(0, -2, 6 + deploy * 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawShieldGenerator(structure, time, alpha, valid) {
+    const deploy = clamp(structure.deploy || 0, 0, 1);
+    const active = clamp(finiteOr(structure.burstTimer, 0) / shieldGeneratorActiveDuration, 0, 1);
+    const pulse = 1 + Math.sin(time * 0.007 + (structure.wobble || 0)) * 0.05;
+    const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 119, g: 167, b: 255 };
+    const body = bodyById(structure.bodyId);
+
+    if (body && valid !== false) {
+      const radius = shieldGeneratorRadius(body);
+      ctx.save();
+      ctx.globalAlpha *= alpha;
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = colorString(accent, 0.08 + deploy * 0.1 + active * 0.38);
+      ctx.lineWidth = 2 + active * 7;
+      ctx.beginPath();
+      ctx.arc(body.x, body.y, radius + active * 9, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = colorString({ r: 248, g: 251, b: 255 }, (0.04 + active * 0.18) * deploy);
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 2; i += 1) {
+        ctx.beginPath();
+        ctx.arc(body.x, body.y, radius - 8 - i * 13 + Math.sin(time * 0.003 + i) * 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(structure.x, structure.y);
+    ctx.rotate(structure.angle + Math.PI / 2);
+
+    ctx.fillStyle = "rgba(6, 10, 24, 0.84)";
+    ctx.strokeStyle = "rgba(235, 246, 255, 0.34)";
+    ctx.lineWidth = 3;
+    roundRectPath(-31, 8, 62, 18, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    const shellGradient = ctx.createLinearGradient(-24, -24, 24, 18);
+    shellGradient.addColorStop(0, "#f8fbff");
+    shellGradient.addColorStop(0.48, "#93a4c0");
+    shellGradient.addColorStop(1, "#273149");
+    ctx.fillStyle = shellGradient;
+    ctx.strokeStyle = "rgba(8, 12, 23, 0.82)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-25, 8);
+    ctx.quadraticCurveTo(-20, -25 - deploy * 5, 0, -30 - deploy * 8);
+    ctx.quadraticCurveTo(20, -25 - deploy * 5, 25, 8);
+    ctx.lineTo(16, 18);
+    ctx.lineTo(-16, 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = colorString(accent, 0.36 + deploy * 0.34 + active * 0.26);
+    ctx.lineWidth = 3 + active * 2;
+    for (let i = 0; i < 3; i += 1) {
+      const radius = (10 + i * 8 + deploy * 6 + active * 5) * pulse;
+      ctx.beginPath();
+      ctx.arc(0, -4, radius, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.stroke();
+    }
+    ctx.fillStyle = colorString(accent, 0.25 + deploy * 0.45 + active * 0.3);
+    ctx.beginPath();
+    ctx.arc(0, -4, (13 + deploy * 7 + active * 6) * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = colorString(accent, 0.94);
+    ctx.beginPath();
+    ctx.arc(0, -4, 6 + active * 2, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
@@ -12555,6 +14050,77 @@
     ctx.beginPath();
     ctx.arc(0, -35 - deploy * 14, 7, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawJet(structure, time, alpha, valid) {
+    const deploy = clamp(structure.deploy || 0, 0, 1);
+    const thrust = clamp(finiteOr(structure.thrustAmount, 0), 0, 1);
+    const thrustDirection = finiteOr(structure.thrustDirection, 1) < 0 ? -1 : 1;
+    const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 169, g: 133, b: 255 };
+    const flicker = 0.82 + Math.sin(time * 0.034 + (structure.wobble || 0)) * 0.18;
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(structure.x, structure.y);
+    ctx.rotate(structure.angle + Math.PI / 2);
+
+    ctx.fillStyle = "rgba(6, 10, 24, 0.84)";
+    ctx.strokeStyle = "rgba(235, 246, 255, 0.34)";
+    ctx.lineWidth = 3;
+    roundRectPath(-30, 9, 60, 18, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    const shellGradient = ctx.createLinearGradient(-24, -24, 24, 18);
+    shellGradient.addColorStop(0, "#f8fbff");
+    shellGradient.addColorStop(0.5, "#8d98ad");
+    shellGradient.addColorStop(1, "#252d42");
+    ctx.fillStyle = shellGradient;
+    ctx.strokeStyle = "rgba(8, 12, 23, 0.82)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-24, 12);
+    ctx.lineTo(-17, -17 - deploy * 5);
+    ctx.quadraticCurveTo(0, -28 - deploy * 8, 17, -17 - deploy * 5);
+    ctx.lineTo(24, 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = colorString(accent, 0.28 + deploy * 0.36);
+    ctx.beginPath();
+    ctx.ellipse(0, -7, 13 + deploy * 3, 8 + deploy * 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(10, 14, 27, 0.9)";
+    ctx.beginPath();
+    ctx.ellipse(0, 15, 19, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = colorString(accent, 0.72);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (thrust > 0.02) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.scale(1, thrustDirection);
+      const flameLength = (24 + thrust * 48) * flicker;
+      const flameWidth = 13 + thrust * 10;
+      const flame = ctx.createLinearGradient(0, 18, 0, 18 + flameLength);
+      flame.addColorStop(0, "rgba(248, 251, 255, " + (0.78 * thrust) + ")");
+      flame.addColorStop(0.28, colorString({ r: 88, g: 226, b: 255 }, 0.72 * thrust));
+      flame.addColorStop(1, colorString(accent, 0));
+      ctx.fillStyle = flame;
+      ctx.beginPath();
+      ctx.moveTo(-flameWidth, 15);
+      ctx.quadraticCurveTo(-flameWidth * 0.35, 24 + flameLength * 0.34, 0, 18 + flameLength);
+      ctx.quadraticCurveTo(flameWidth * 0.35, 24 + flameLength * 0.34, flameWidth, 15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
 
     ctx.restore();
   }
@@ -12673,12 +14239,20 @@
   function drawStructure(structure, time, alpha, valid) {
     if (structure.type === "plating-block") {
       drawPlatingBlock(structure, time, alpha, valid);
+    } else if (structure.type === "battery") {
+      drawBattery(structure, time, alpha, valid);
     } else if (structure.type === "accumulator") {
       drawAccumulator(structure, time, alpha, valid);
+    } else if (structure.type === "shield-generator") {
+      drawShieldGenerator(structure, time, alpha, valid);
     } else if (structure.type === "communication-relay") {
       drawCommunicationRelay(structure, time, alpha, valid);
+    } else if (structure.type === "jet") {
+      drawJet(structure, time, alpha, valid);
     } else if (structure.type === "tether") {
       drawTether(structure, time, alpha, valid);
+    } else if (structure.type === "missile-launcher") {
+      drawMissileLauncher(structure, time, alpha, valid);
     } else {
       drawTurret(structure, time, alpha, valid);
     }
@@ -12803,6 +14377,10 @@
 
     for (const laser of playerLasers) {
       drawRivalProjectile(laser);
+    }
+
+    for (const missile of launcherMissiles) {
+      drawRivalProjectile(missile);
     }
 
     drawStructures(time);
@@ -13514,7 +15092,7 @@
   }
 
   function drawGadgetField(aim) {
-    if (!isSuctionEquipped() || !isGadgetButtonPressed()) {
+    if (!canUseSuctionControls() || !isGadgetButtonPressed()) {
       return;
     }
 
@@ -14158,16 +15736,38 @@
 
   function drawPlayerHealthBar() {
     const pct = clamp(player.health / player.maxHealth, 0, 1);
+    const energyPct = playerEnergyPct();
     const barWidth = 74;
-    const barY = height / 2 - 86 * cameraZoom;
+    const barHeight = 8;
+    const barX = width / 2 - barWidth / 2;
+    const healthY = height / 2 - 86 * cameraZoom;
+    const iconX = barX - 11;
 
     ctx.save();
+    ctx.font = "13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(255, 132, 146, 0.96)";
+    ctx.fillText("♥", iconX, healthY + barHeight * 0.5);
+
     ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
-    roundRectPath(width / 2 - barWidth / 2, barY, barWidth, 8, 4);
+    roundRectPath(barX, healthY, barWidth, barHeight, 4);
     ctx.fill();
     ctx.fillStyle = pct > 0.55 ? "#61f59a" : pct > 0.28 ? "#f5d65b" : "#ff6262";
-    roundRectPath(width / 2 - barWidth / 2, barY, barWidth * pct, 8, 4);
+    roundRectPath(barX, healthY, barWidth * pct, barHeight, 4);
     ctx.fill();
+
+    if (energyPct < 0.995) {
+      const energyY = height / 2 + 82 * cameraZoom;
+      ctx.fillStyle = "rgba(157, 255, 122, 0.96)";
+      ctx.fillText("⚡", iconX, energyY + barHeight * 0.5);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
+      roundRectPath(barX, energyY, barWidth, barHeight, 4);
+      ctx.fill();
+      ctx.fillStyle = energyPct > 0.35 ? "#9dff7a" : "#f5d65b";
+      roundRectPath(barX, energyY, barWidth * energyPct, barHeight, 4);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -14494,6 +16094,11 @@
     const healthPct = Math.round(clamp(player.health / player.maxHealth, 0, 1) * 100);
     healthValue.textContent = "HP: " + healthPct + "%";
     healthFill.style.width = healthPct + "%";
+    if (energyValue && energyFill) {
+      const energyPct = Math.round(playerEnergyPct() * 100);
+      energyValue.textContent = "EP: " + Math.round(player.energy) + "/" + Math.round(player.maxEnergy);
+      energyFill.style.width = energyPct + "%";
+    }
     updateDifficultyUi();
     if (scoreValue) {
       scoreValue.textContent = Math.max(0, Math.round(lifeStats.bestScore || lifeStats.currentScore || 0)) + " pts";
@@ -14556,10 +16161,27 @@
       return;
     }
 
+    if (gamePaused) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      drawBackground();
+      drawParticles(now);
+      drawRemoteUniverses(now);
+      drawRivals(now);
+      drawPlayer(now);
+      drawVignette();
+      drawMapOverlay();
+      updateHud();
+      requestAnimationFrame(tick);
+      return;
+    }
+
     updateLifeStats();
+    updateToolDisable(dt);
+    updateEnergySystems(dt);
+    updateToolEnergyUsage(dt);
     updatePlayer(dt);
     updateGadgetAim(dt);
-    updateToolDisable(dt);
     updateEquippedTool(dt);
     updateLandedGadgetThrust(dt);
     updateMobSpawns(dt);
@@ -14574,6 +16196,8 @@
     updateFighters(dt);
     updateStructures(dt);
     updatePlayerLasers(dt);
+    updateLauncherMissiles(dt);
+    resolveShieldGeneratorMobCollisions(dt);
     resolveMobBodyCollisions();
     damageMobsWithProjectiles();
     resolveRemoteBodyPlayerCollisions();
@@ -14650,6 +16274,20 @@
   if (surfaceCameraRotationInput) {
     surfaceCameraRotationInput.addEventListener("change", function () {
       applySurfaceCameraRotationSetting(surfaceCameraRotationInput.checked);
+    });
+  }
+
+  if (saveGameForm) {
+    saveGameForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      saveManualGame();
+    });
+  }
+
+  if (loadGameForm) {
+    loadGameForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      loadManualGame();
     });
   }
 
@@ -15015,9 +16653,14 @@
       setSocialPanelOpen(false);
       return;
     }
+    if (event.code === "Escape" && !event.repeat && !isEditableEventTarget(event)) {
+      event.preventDefault();
+      setSettingsOpen(true);
+      return;
+    }
 
     const controlCodes = [controlCodeFor("rollLeft"), controlCodeFor("rollRight"), controlCodeFor("land")];
-    if (movementControlCodes.has(event.code) || controlCodes.includes(event.code)) {
+    if (movementControlCodes.has(event.code) || controlCodes.includes(event.code) || event.code === "ShiftLeft" || event.code === "ShiftRight") {
       event.preventDefault();
       if (event.code === controlCodeFor("land") && !event.repeat) {
         toggleLanding();
@@ -15059,6 +16702,12 @@
       } else if (event.button === 2) {
         cancelStructurePlacement();
       }
+      return;
+    }
+
+    if (areToolsDisabled()) {
+      event.preventDefault();
+      resetMouseButtons();
       return;
     }
 

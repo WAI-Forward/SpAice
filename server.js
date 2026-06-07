@@ -1242,7 +1242,8 @@ function normalizePlayerSnapshot(playerId, snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
   const tools = normalizeToolInventory(source.tools);
   const equippedTool = tools.includes(source.equippedTool) ? source.equippedTool : tools[0];
-  const toolMode = ["pull", "push", "fire", "idle"].includes(source.toolMode) ? source.toolMode : "idle";
+  const toolMode = ["pull", "push", "hold", "fire", "idle"].includes(source.toolMode) ? source.toolMode : "idle";
+  const maxEnergy = Number.isFinite(Number(source.maxEnergy)) ? clampNumber(source.maxEnergy, 1, 260) : 100;
 
   return {
     id: playerId,
@@ -1254,6 +1255,8 @@ function normalizePlayerSnapshot(playerId, snapshot) {
     radius: clampNumber(source.radius, 8, 120),
     health: clampNumber(source.health, 0, 100),
     maxHealth: clampNumber(source.maxHealth, 1, 100),
+    energy: Number.isFinite(Number(source.energy)) ? clampNumber(source.energy, 0, maxEnergy) : maxEnergy,
+    maxEnergy,
     tech: normalizeTechInventory(source.tech),
     tools,
     toolUpgrades: normalizeToolUpgrades(source.toolUpgrades),
@@ -1317,6 +1320,8 @@ function normalizeParticle(source) {
     vy: clampNumber(source.vy, -1200, 1200),
     mass: clampNumber(source.mass, 1, 100000000),
     radius: clampNumber(source.radius, 1, 5000),
+    energy: clampNumber(source.energy, 0, 1000000),
+    maxEnergy: clampNumber(source.maxEnergy, 0, 1000000),
     color: normalizeColor(source.color),
     textureSeed: clampNumber(source.textureSeed, -1000000, 1000000),
     wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
@@ -1574,12 +1579,12 @@ function normalizeStructure(source) {
     return null;
   }
 
-  const type = source.type === "turret" || source.type === "accumulator" || source.type === "plating-block" || source.type === "communication-relay" || source.type === "tether" ? source.type : null;
+  const type = source.type === "turret" || source.type === "missile-launcher" || source.type === "accumulator" || source.type === "shield-generator" || source.type === "plating-block" || source.type === "battery" || source.type === "communication-relay" || source.type === "jet" || source.type === "tether" ? source.type : null;
   if (!type) {
     return null;
   }
 
-  const structureMaxHealth = type === "plating-block" ? 150 : type === "tether" ? 130 : type === "accumulator" || type === "communication-relay" ? 120 : 110;
+  const structureMaxHealth = type === "plating-block" ? 150 : type === "tether" || type === "shield-generator" ? 130 : type === "missile-launcher" ? 125 : type === "accumulator" || type === "battery" || type === "communication-relay" || type === "jet" ? 120 : 110;
   const maxHealth = Number.isFinite(Number(source.maxHealth))
     ? clampNumber(source.maxHealth, 1, 200)
     : structureMaxHealth;
@@ -1603,7 +1608,17 @@ function normalizeStructure(source) {
     restLength: Number.isFinite(Number(source.restLength)) ? clampNumber(source.restLength, 0, 1000000) : 0,
     aimAngle: clampNumber(source.aimAngle, -Math.PI * 16, Math.PI * 16),
     deploy: clampNumber(source.deploy, 0, 1),
+    thrustAmount: clampNumber(source.thrustAmount, 0, 1),
+    thrustDirection: Number(source.thrustDirection) < 0 ? -1 : 1,
     shootCooldown: clampNumber(source.shootCooldown, 0, 60),
+    burstTimer: clampNumber(source.burstTimer, 0, 60),
+    burstCooldown: clampNumber(source.burstCooldown, 0, 60),
+    missileCharge: clampNumber(source.missileCharge, 0, 1),
+    lockTimer: clampNumber(source.lockTimer, 0, 10),
+    beepTimer: clampNumber(source.beepTimer, 0, 10),
+    targetX: Number.isFinite(Number(source.targetX)) ? clampNumber(source.targetX, -1000000, 1000000) : 0,
+    targetY: Number.isFinite(Number(source.targetY)) ? clampNumber(source.targetY, -1000000, 1000000) : 0,
+    targetCount: Math.max(0, Math.floor(Number(source.targetCount) || 0)),
     health,
     maxHealth,
     disabledTimer: clampNumber(source.disabledTimer, 0, 20),

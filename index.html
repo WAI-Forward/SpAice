@@ -19,6 +19,15 @@
           <div class="hud__progress-fill hud__health-fill" id="healthFill"></div>
         </div>
       </div>
+      <div class="hud__progress hud__energy">
+        <div class="hud__progress-row">
+          <span>Energy</span>
+          <strong id="energyValue">EP: 100/100</strong>
+        </div>
+        <div class="hud__progress-track" aria-hidden="true">
+          <div class="hud__progress-fill hud__energy-fill" id="energyFill"></div>
+        </div>
+      </div>
       <div class="hud__score" aria-label="Run score">
         <span id="difficultyValue">Medium</span>
         <strong id="scoreValue">0 pts</strong>
@@ -107,6 +116,18 @@
               <span>Rotate camera on surfaces</span>
               <input id="surfaceCameraRotationInput" type="checkbox">
             </label>
+          </div>
+          <div class="settings-panel__group settings-panel__group--saves">
+            <div class="settings-panel__section-title">Saves</div>
+            <form class="settings-panel__save-form" id="saveGameForm">
+              <input id="saveGameNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Save name">
+              <button class="settings-panel__save-action" id="saveGameButton" type="submit">Save</button>
+            </form>
+            <form class="settings-panel__save-form" id="loadGameForm">
+              <input id="loadGameNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Save name">
+              <button class="settings-panel__save-action" id="loadGameButton" type="submit">Load</button>
+            </form>
+            <p class="settings-panel__save-status" id="saveGameStatus" aria-live="polite"></p>
           </div>
           <div class="settings-panel__group settings-panel__group--controls">
             <div class="settings-panel__section-title">Controls</div>
@@ -202,12 +223,6 @@
           <p class="death-screen__leaderboard-status" id="deathLeaderboardStatus" aria-live="polite"></p>
         </form>
         <button class="death-screen__button" id="playAgainButton" type="button">Play again</button>
-      </div>
-    </section>
-    <section class="pause-screen" id="pauseScreen" aria-label="Game paused" aria-hidden="true">
-      <div class="pause-screen__panel">
-        <h1>Game paused</h1>
-        <p>Press P to continue</p>
       </div>
     </section>
     <div class="notifications" id="notifications" aria-live="polite"></div>
