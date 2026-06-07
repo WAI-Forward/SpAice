@@ -1261,7 +1261,32 @@ body {
   gap: 8px;
 }
 
-.settings-panel__save-form input {
+.settings-panel__auth-form {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-panel__auth-actions,
+.settings-panel__account {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-panel__account span {
+  min-width: 0;
+  overflow: hidden;
+  color: #dffcff;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-panel__save-form input,
+.settings-panel__auth-form input {
   min-width: 0;
   height: 34px;
   padding: 0 10px;
@@ -1274,8 +1299,58 @@ body {
   font-weight: 850;
 }
 
-.settings-panel__save-form input::placeholder {
+.settings-panel__save-form input::placeholder,
+.settings-panel__auth-form input::placeholder {
   color: rgba(232, 241, 255, 0.48);
+}
+
+.settings-panel__save-list {
+  min-height: 42px;
+  max-height: 150px;
+  display: grid;
+  gap: 7px;
+  overflow-y: auto;
+}
+
+.settings-panel__save-empty {
+  margin: 0;
+  color: rgba(232, 241, 255, 0.58);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.settings-panel__save-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.settings-panel__save-item strong,
+.settings-panel__save-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-panel__save-item strong {
+  color: #f8fbff;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.settings-panel__save-item span {
+  color: rgba(232, 241, 255, 0.58);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
 }
 
 .settings-panel__save-status {

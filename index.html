@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SpAice Particle Collector</title>
+    <title>Clusternauts Particle Collector</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <canvas id="game" aria-label="SpAice particle collector game"></canvas>
+    <canvas id="game" aria-label="Clusternauts particle collector game"></canvas>
 
     <div class="hud" aria-live="polite">
       <div class="hud__progress hud__health">
@@ -119,14 +119,23 @@
           </div>
           <div class="settings-panel__group settings-panel__group--saves">
             <div class="settings-panel__section-title">Saves</div>
+            <form class="settings-panel__auth-form" id="accountLoginForm">
+              <input id="accountUsernameInput" type="text" autocomplete="username" maxlength="24" placeholder="Username">
+              <input id="accountPasswordInput" type="password" autocomplete="current-password" maxlength="72" placeholder="Password">
+              <div class="settings-panel__auth-actions">
+                <button class="settings-panel__save-action" id="accountLoginButton" type="submit">Log in</button>
+                <button class="settings-panel__save-action" id="accountSignupButton" type="button">Sign up</button>
+              </div>
+            </form>
+            <div class="settings-panel__account" id="accountSignedIn" hidden>
+              <span id="accountNameValue">Signed in</span>
+              <button class="settings-panel__save-action" id="accountLogoutButton" type="button">Log out</button>
+            </div>
             <form class="settings-panel__save-form" id="saveGameForm">
               <input id="saveGameNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Save name">
               <button class="settings-panel__save-action" id="saveGameButton" type="submit">Save</button>
             </form>
-            <form class="settings-panel__save-form" id="loadGameForm">
-              <input id="loadGameNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Save name">
-              <button class="settings-panel__save-action" id="loadGameButton" type="submit">Load</button>
-            </form>
+            <div class="settings-panel__save-list" id="savedGameList" aria-label="Saved games"></div>
             <p class="settings-panel__save-status" id="saveGameStatus" aria-live="polite"></p>
           </div>
           <div class="settings-panel__group settings-panel__group--controls">

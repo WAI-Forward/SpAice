@@ -37,10 +37,20 @@
   const zoomInput = document.getElementById("zoomInput");
   const zoomValue = document.getElementById("zoomValue");
   const surfaceCameraRotationInput = document.getElementById("surfaceCameraRotationInput");
+  const accountLoginForm = document.getElementById("accountLoginForm");
+  const accountUsernameInput = document.getElementById("accountUsernameInput");
+  const accountPasswordInput = document.getElementById("accountPasswordInput");
+  const accountLoginButton = document.getElementById("accountLoginButton");
+  const accountSignupButton = document.getElementById("accountSignupButton");
+  const accountSignedIn = document.getElementById("accountSignedIn");
+  const accountNameValue = document.getElementById("accountNameValue");
+  const accountLogoutButton = document.getElementById("accountLogoutButton");
   const saveGameForm = document.getElementById("saveGameForm");
   const saveGameNameInput = document.getElementById("saveGameNameInput");
+  const saveGameButton = document.getElementById("saveGameButton");
   const loadGameForm = document.getElementById("loadGameForm");
   const loadGameNameInput = document.getElementById("loadGameNameInput");
+  const savedGameList = document.getElementById("savedGameList");
   const saveGameStatus = document.getElementById("saveGameStatus");
   const controlBindingsList = document.getElementById("controlBindingsList");
   const resetControlsButton = document.getElementById("resetControlsButton");
@@ -81,8 +91,13 @@
   installClientErrorReporting();
 
   const keys = new Set();
-  const settingsStorageKey = "spaice.settings";
-  const manualSaveStoragePrefix = "spaice.manualSave.";
+  const settingsStorageKey = "clusternauts.settings";
+  const legacySettingsStorageKey = "spaice.settings";
+  const manualSaveStoragePrefix = "clusternauts.manualSave.";
+  const legacyManualSaveStoragePrefix = "spaice.manualSave.";
+  const accountSessionStorageKey = "clusternauts.accountSession";
+  const playerIdStorageKey = "clusternauts.playerId";
+  const legacyPlayerIdStorageKey = "spaice.playerId";
   const defaultControlBindings = {
     up: "KeyW",
     down: "KeyS",
@@ -114,6 +129,13 @@
   let settingsOpen = false;
   let pendingControlRemap = null;
   let gamePaused = false;
+  const accountState = {
+    token: "",
+    username: "",
+    saves: [],
+    busy: false,
+    savesLoading: false
+  };
 
   syncControlBindings();
 
@@ -156,7 +178,7 @@
     }, details || {});
 
     if (window.console && console.error) {
-      console.error("[SpAice client error]", payload);
+      console.error("[Clusternauts client error]", payload);
     }
 
     if (!window.fetch) {
@@ -187,6 +209,9 @@
   }
 
   function isMoving() {
+    if (isVacuumHoldActive()) {
+      return false;
+    }
     return Object.keys(movementKeyAliases).some(isMovementKeyPressed);
   }
 
@@ -471,7 +496,7 @@
       id: defaultToolId,
       name: "Vacuum gadget",
       category: "tools",
-      description: "Your default matter-moving gadget. Left click sucks objects inward, right click blows them away, and middle click holds them steady at reach.",
+      description: "Your default matter-moving gadget. Left click sucks objects inward, right click blows them away, and middle click steadies objects at reach while anchoring you in place.",
       cost: {},
       unlockToolId: defaultToolId,
       icon: "assets/vacuum-gadget.svg"
@@ -715,7 +740,8 @@
   const gadgetForceReach = 560;
   const gadgetHoldReach = gadgetForceReach * 0.5;
   const gadgetStabilizedBreakSpeed = 18;
-  const soundPreferenceKey = "spaice.sound.enabled";
+  const soundPreferenceKey = "clusternauts.sound.enabled";
+  const legacySoundPreferenceKey = "spaice.sound.enabled";
   const soundState = {
     enabled: readSoundPreference(),
     context: null,
@@ -748,6 +774,7 @@
   let activeBuildFilter = "all";
   let selectedBuildRecipeId = buildRecipes[0] ? buildRecipes[0].id : null;
   let unlockedToolIds = [defaultToolId];
+  let hotbarToolIds = [defaultToolId];
   let equippedToolId = defaultToolId;
   let toolUpgradeLevels = createDefaultToolUpgradeLevels();
   let toolFireCooldown = 0;
@@ -801,6 +828,60 @@
     return Math.max(min, Math.min(max, value));
   }
 
+  function readMigratedLocalStorage(currentKey, legacyKey) {
+    const current = window.localStorage.getItem(currentKey);
+    if (current !== null) {
+      return current;
+    }
+
+    const legacy = legacyKey ? window.localStorage.getItem(legacyKey) : null;
+    if (legacy !== null) {
+      window.localStorage.setItem(currentKey, legacy);
+    }
+    return legacy;
+  }
+
+  function removeMigratedLocalStorage(currentKey, legacyKey) {
+    window.localStorage.removeItem(currentKey);
+    if (legacyKey) {
+      window.localStorage.removeItem(legacyKey);
+    }
+  }
+
+  function readStoredAccountSession() {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(accountSessionStorageKey) || "null");
+      if (!stored || typeof stored !== "object") {
+        return null;
+      }
+      const token = typeof stored.token === "string" ? stored.token : "";
+      const username = sanitizeAccountUsername(stored.username);
+      return token && username ? { token, username } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeStoredAccountSession() {
+    try {
+      if (!accountState.token || !accountState.username) {
+        window.localStorage.removeItem(accountSessionStorageKey);
+        return;
+      }
+
+      window.localStorage.setItem(accountSessionStorageKey, JSON.stringify({
+        token: accountState.token,
+        username: accountState.username
+      }));
+    } catch {
+      // Local storage can be unavailable in private or locked-down browser contexts.
+    }
+  }
+
+  function sanitizeAccountUsername(name) {
+    return String(name || "").toLowerCase().replace(/[^\w.-]/g, "").slice(0, 24);
+  }
+
   function readGameSettings() {
     const defaults = {
       uiScale: 1,
@@ -810,7 +891,7 @@
     };
 
     try {
-      const stored = JSON.parse(window.localStorage.getItem(settingsStorageKey) || "null");
+      const stored = JSON.parse(readMigratedLocalStorage(settingsStorageKey, legacySettingsStorageKey) || "null");
       if (!stored || typeof stored !== "object") {
         return defaults;
       }
@@ -991,6 +1072,7 @@
       setBuildMenuOpen(false);
       setSocialPanelOpen(false);
       resetMouseButtons();
+      void refreshAccountSaves();
     }
 
     renderControlBindings();
@@ -1044,6 +1126,10 @@
 
   function isGadgetButtonPressed() {
     return mouse.left || mouse.middle || mouse.right;
+  }
+
+  function isVacuumHoldActive() {
+    return canUseSuctionControls() && mouse.middle;
   }
 
   function rotatePoint(x, y, angle) {
@@ -1148,7 +1234,7 @@
 
   function readSoundPreference() {
     try {
-      return window.localStorage.getItem(soundPreferenceKey) !== "off";
+      return readMigratedLocalStorage(soundPreferenceKey, legacySoundPreferenceKey) !== "off";
     } catch (error) {
       return true;
     }
@@ -1805,6 +1891,10 @@
     return unlockedToolIds.includes(toolId);
   }
 
+  function isToolEquipped(toolId) {
+    return hotbarToolIds.includes(toolId);
+  }
+
   function currentSpannerRepairRate() {
     return spannerRepairRate * toolUpgradeFactor("spanner", "repair-speed");
   }
@@ -1846,7 +1936,7 @@
 
   function buildRecipeActionText(recipe) {
     if (isRecipeUnlocked(recipe)) {
-      return recipe.unlockToolId === equippedToolId ? "Equipped" : "Equip";
+      return isToolEquipped(recipe.unlockToolId) ? "Unequip" : "Equip";
     }
 
     if (isStructureRecipe(recipe)) {
@@ -2114,9 +2204,9 @@
     }
 
     toolHotbar.textContent = "";
-    toolHotbar.classList.toggle("is-visible", unlockedToolIds.length > 1);
+    toolHotbar.classList.toggle("is-visible", hotbarToolIds.length > 0 && (unlockedToolIds.length > 1 || buildMenuOpen));
 
-    unlockedToolIds.forEach((toolId, index) => {
+    hotbarToolIds.forEach((toolId, index) => {
       const tool = toolById(toolId);
       const slot = document.createElement("button");
       const key = document.createElement("span");
@@ -2138,7 +2228,7 @@
   }
 
   function selectTool(toolId) {
-    if (!hasTool(toolId)) {
+    if (!isToolEquipped(toolId)) {
       return;
     }
 
@@ -2150,20 +2240,59 @@
   }
 
   function cycleTool(direction) {
-    if (unlockedToolIds.length < 2) {
+    if (hotbarToolIds.length < 2) {
       return;
     }
 
-    const currentIndex = Math.max(0, unlockedToolIds.indexOf(equippedToolId));
-    const nextIndex = (currentIndex + direction + unlockedToolIds.length) % unlockedToolIds.length;
-    selectTool(unlockedToolIds[nextIndex]);
+    const currentIndex = Math.max(0, hotbarToolIds.indexOf(equippedToolId));
+    const nextIndex = (currentIndex + direction + hotbarToolIds.length) % hotbarToolIds.length;
+    selectTool(hotbarToolIds[nextIndex]);
+  }
+
+  function equipTool(toolId) {
+    if (!hasTool(toolId)) {
+      return;
+    }
+
+    if (!isToolEquipped(toolId)) {
+      hotbarToolIds.push(toolId);
+    }
+    selectTool(toolId);
+  }
+
+  function unequipTool(toolId) {
+    if (!isToolEquipped(toolId)) {
+      return;
+    }
+
+    hotbarToolIds = hotbarToolIds.filter((equippedId) => equippedId !== toolId);
+    if (equippedToolId === toolId) {
+      equippedToolId = hotbarToolIds[0] || null;
+      toolFireCooldown = Math.min(toolFireCooldown, (equippedWeapon() || playerWeaponDefaults).cooldown);
+    }
+
+    updateToolHotbar();
+    renderBuildMenu();
+    playSound("select");
+  }
+
+  function toggleToolEquip(toolId) {
+    if (!hasTool(toolId)) {
+      return;
+    }
+
+    if (isToolEquipped(toolId)) {
+      unequipTool(toolId);
+    } else {
+      equipTool(toolId);
+    }
   }
 
   function unlockTool(toolId) {
     if (!hasTool(toolId)) {
       unlockedToolIds.push(toolId);
     }
-    selectTool(toolId);
+    equipTool(toolId);
   }
 
   function spendRecipeCost(recipe) {
@@ -2221,7 +2350,7 @@
 
     if (isRecipeUnlocked(recipe)) {
       if (recipe.unlockToolId) {
-        selectTool(recipe.unlockToolId);
+        toggleToolEquip(recipe.unlockToolId);
       }
       return;
     }
@@ -2304,6 +2433,7 @@
 
     buildMenu.classList.toggle("is-open", buildMenuOpen);
     buildMenu.setAttribute("aria-hidden", buildMenuOpen ? "false" : "true");
+    updateToolHotbar();
   }
 
   function serializeTechInventory() {
@@ -2318,17 +2448,23 @@
     return unlockedToolIds.filter((toolId, index) => toolCatalog.some((tool) => tool.id === toolId) && unlockedToolIds.indexOf(toolId) === index);
   }
 
+  function serializeEquippedToolInventory() {
+    return hotbarToolIds.filter((toolId, index) => hasTool(toolId) && hotbarToolIds.indexOf(toolId) === index);
+  }
+
   function serializeToolUpgrades() {
     return normalizeToolUpgrades(toolUpgradeLevels);
   }
 
-  function applyToolInventory(tools, equipped) {
+  function applyToolInventory(tools, equipped, equippedTools) {
     const validTools = Array.isArray(tools)
       ? tools.filter((toolId, index) => toolCatalog.some((tool) => tool.id === toolId) && tools.indexOf(toolId) === index)
       : [];
 
     unlockedToolIds = validTools.includes(defaultToolId) ? validTools : [defaultToolId].concat(validTools);
-    equippedToolId = unlockedToolIds.includes(equipped) ? equipped : unlockedToolIds[0];
+    const hotbarSource = Array.isArray(equippedTools) ? equippedTools : unlockedToolIds;
+    hotbarToolIds = hotbarSource.filter((toolId, index) => hasTool(toolId) && hotbarSource.indexOf(toolId) === index);
+    equippedToolId = hotbarToolIds.includes(equipped) ? equipped : hotbarToolIds[0] || null;
     updateToolHotbar();
     renderBuildMenu();
   }
@@ -2492,6 +2628,10 @@
     return manualSaveStoragePrefix + sanitizeManualSaveName(name).toLowerCase();
   }
 
+  function legacyManualSaveStorageKey(name) {
+    return legacyManualSaveStoragePrefix + sanitizeManualSaveName(name).toLowerCase();
+  }
+
   function setManualSaveStatus(message, state) {
     if (!saveGameStatus) {
       return;
@@ -2500,6 +2640,232 @@
     saveGameStatus.textContent = message || "";
     saveGameStatus.classList.toggle("is-success", state === "success");
     saveGameStatus.classList.toggle("is-error", state === "error");
+  }
+
+  function accountAuthHeaders() {
+    return accountState.token ? { Authorization: "Bearer " + accountState.token } : {};
+  }
+
+  function isAccountSignedIn() {
+    return Boolean(accountState.token && accountState.username);
+  }
+
+  function setAccountBusy(busy) {
+    accountState.busy = Boolean(busy);
+    updateAccountUi();
+  }
+
+  function updateAccountUi() {
+    const signedIn = isAccountSignedIn();
+
+    if (accountLoginForm) {
+      accountLoginForm.hidden = signedIn;
+    }
+    if (accountSignedIn) {
+      accountSignedIn.hidden = !signedIn;
+    }
+    if (accountNameValue) {
+      accountNameValue.textContent = signedIn ? accountState.username : "Signed out";
+    }
+    if (accountLoginButton) {
+      accountLoginButton.disabled = accountState.busy;
+    }
+    if (accountSignupButton) {
+      accountSignupButton.disabled = accountState.busy;
+    }
+    if (accountLogoutButton) {
+      accountLogoutButton.disabled = accountState.busy;
+    }
+    if (saveGameButton) {
+      saveGameButton.disabled = !signedIn || accountState.busy;
+      saveGameButton.textContent = signedIn ? "Save" : "Log in";
+    }
+
+    renderSavedGames();
+  }
+
+  function renderSavedGames() {
+    if (!savedGameList) {
+      return;
+    }
+
+    savedGameList.textContent = "";
+
+    if (!isAccountSignedIn()) {
+      const empty = document.createElement("p");
+      empty.className = "settings-panel__save-empty";
+      empty.textContent = "Log in to save and load worlds.";
+      savedGameList.append(empty);
+      return;
+    }
+
+    if (accountState.savesLoading) {
+      const loading = document.createElement("p");
+      loading.className = "settings-panel__save-empty";
+      loading.textContent = "Loading saves...";
+      savedGameList.append(loading);
+      return;
+    }
+
+    if (!accountState.saves.length) {
+      const empty = document.createElement("p");
+      empty.className = "settings-panel__save-empty";
+      empty.textContent = "No saved worlds yet.";
+      savedGameList.append(empty);
+      return;
+    }
+
+    for (const save of accountState.saves) {
+      const row = document.createElement("div");
+      const details = document.createElement("div");
+      const name = document.createElement("strong");
+      const meta = document.createElement("span");
+      const button = document.createElement("button");
+      row.className = "settings-panel__save-item";
+      name.textContent = save.name || "Saved world";
+      meta.textContent = saveMetadataText(save);
+      button.className = "settings-panel__save-action";
+      button.type = "button";
+      button.dataset.saveId = save.id || "";
+      button.textContent = "Load";
+      details.append(name, meta);
+      row.append(details, button);
+      savedGameList.append(row);
+    }
+  }
+
+  function saveMetadataText(save) {
+    const parts = [];
+    if (save && save.difficulty) {
+      parts.push(difficultyLabel(save.difficulty));
+    }
+    if (save && Number.isFinite(Number(save.score))) {
+      parts.push(Math.max(1, Math.round(Number(save.score))).toLocaleString() + " pts");
+    }
+    if (save && save.savedAt) {
+      parts.push(new Date(save.savedAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" }));
+    }
+    return parts.join(" / ");
+  }
+
+  async function bootstrapAccountSession() {
+    const stored = readStoredAccountSession();
+    if (!stored) {
+      updateAccountUi();
+      return;
+    }
+
+    accountState.token = stored.token;
+    accountState.username = stored.username;
+    updateAccountUi();
+
+    try {
+      const data = await fetchPersistentJson("/api/auth/session", {
+        headers: accountAuthHeaders()
+      });
+      applyAccountSession(data);
+      await refreshAccountSaves();
+    } catch (error) {
+      accountState.token = "";
+      accountState.username = "";
+      accountState.saves = [];
+      writeStoredAccountSession();
+      updateAccountUi();
+      console.warn("Clusternauts account session unavailable.", error);
+    }
+  }
+
+  function applyAccountSession(data) {
+    const account = data && data.account && typeof data.account === "object" ? data.account : {};
+    accountState.token = typeof data.sessionToken === "string" ? data.sessionToken : accountState.token;
+    accountState.username = sanitizeAccountUsername(account.username || accountState.username);
+    writeStoredAccountSession();
+    updateAccountUi();
+  }
+
+  async function submitAccountAuth(createNew) {
+    if (accountState.busy) {
+      return;
+    }
+
+    const username = sanitizeAccountUsername(accountUsernameInput && accountUsernameInput.value);
+    const password = accountPasswordInput ? accountPasswordInput.value : "";
+    if (!username || username.length < 3) {
+      setManualSaveStatus("Enter a username with at least 3 characters.", "error");
+      return;
+    }
+    if (password.length < 6) {
+      setManualSaveStatus("Enter a password with at least 6 characters.", "error");
+      return;
+    }
+
+    setAccountBusy(true);
+    try {
+      const data = await fetchPersistentJson(createNew ? "/api/auth/signup" : "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          password,
+          playerId: player.id
+        })
+      });
+      applyAccountSession(data);
+      if (accountPasswordInput) {
+        accountPasswordInput.value = "";
+      }
+      await refreshAccountSaves();
+      setManualSaveStatus(createNew ? "Account created." : "Logged in.", "success");
+    } catch (error) {
+      setManualSaveStatus(error instanceof Error ? error.message.replace(/^Request failed \d+:?\s*/, "") : "Account request failed.", "error");
+    } finally {
+      setAccountBusy(false);
+    }
+  }
+
+  async function logoutAccount() {
+    if (!isAccountSignedIn() || accountState.busy) {
+      return;
+    }
+
+    setAccountBusy(true);
+    try {
+      await fetchPersistentJson("/api/auth/logout", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, accountAuthHeaders()),
+        body: JSON.stringify({ sessionToken: accountState.token })
+      });
+    } catch (error) {
+      console.warn("Clusternauts logout failed.", error);
+    } finally {
+      accountState.token = "";
+      accountState.username = "";
+      accountState.saves = [];
+      writeStoredAccountSession();
+      setManualSaveStatus("Logged out.", "success");
+      setAccountBusy(false);
+    }
+  }
+
+  async function refreshAccountSaves() {
+    if (!isAccountSignedIn() || accountState.savesLoading) {
+      return;
+    }
+
+    accountState.savesLoading = true;
+    renderSavedGames();
+    try {
+      const data = await fetchPersistentJson("/api/saves", {
+        headers: accountAuthHeaders()
+      });
+      accountState.saves = Array.isArray(data.saves) ? data.saves : [];
+    } catch (error) {
+      setManualSaveStatus("Could not load saved games.", "error");
+      console.warn("Clusternauts save list failed.", error);
+    } finally {
+      accountState.savesLoading = false;
+      updateAccountUi();
+    }
   }
 
   function buildRunSnapshot() {
@@ -2554,9 +2920,13 @@
     lifeStats.absorbedParticleCount = Math.max(0, Math.floor(finiteOr(stats.absorbedParticleCount, lifeStats.absorbedParticleCount)));
   }
 
-  function saveManualGame() {
+  async function saveManualGame() {
     const name = sanitizeManualSaveName(saveGameNameInput && saveGameNameInput.value);
 
+    if (!isAccountSignedIn()) {
+      setManualSaveStatus("Create an account or log in to save.", "error");
+      return;
+    }
     if (!name) {
       setManualSaveStatus("Enter a save name.", "error");
       return;
@@ -2570,41 +2940,45 @@
       updateLifeStats();
       const payload = buildPersistentPayload(true);
       payload.run = buildRunSnapshot();
-      payload.manualSave = {
-        version: 1,
-        name,
-        savedAt: Date.now()
-      };
-
-      window.localStorage.setItem(manualSaveStorageKey(name), JSON.stringify(payload));
+      const data = await fetchPersistentJson("/api/saves", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, accountAuthHeaders()),
+        body: JSON.stringify({ name, payload })
+      });
+      accountState.saves = Array.isArray(data.saves) ? data.saves : accountState.saves;
       if (saveGameNameInput) {
         saveGameNameInput.value = name;
       }
-      if (loadGameNameInput) {
-        loadGameNameInput.value = name;
-      }
+      renderSavedGames();
       setManualSaveStatus('Saved "' + name + '".', "success");
       maybeNotifyText('Saved "' + name + '".');
     } catch (error) {
-      console.warn("SpAice manual save failed.", error);
+      console.warn("Clusternauts manual save failed.", error);
       setManualSaveStatus("Could not save this game.", "error");
     }
   }
 
-  function loadManualGame() {
-    const name = sanitizeManualSaveName(loadGameNameInput && loadGameNameInput.value);
+  async function loadManualGame(saveId) {
+    const cleanSaveId = String(saveId || "").trim();
 
-    if (!name) {
-      setManualSaveStatus("Enter a save name.", "error");
+    if (!isAccountSignedIn()) {
+      setManualSaveStatus("Log in to load saved games.", "error");
+      return;
+    }
+    if (!cleanSaveId) {
+      setManualSaveStatus("Choose a saved game.", "error");
       return;
     }
 
     try {
-      const raw = window.localStorage.getItem(manualSaveStorageKey(name));
-      const payload = raw ? JSON.parse(raw) : null;
+      const data = await fetchPersistentJson("/api/saves/" + encodeURIComponent(cleanSaveId), {
+        headers: accountAuthHeaders()
+      });
+      const payload = data && data.payload;
+      const saveName = data && data.save && data.save.name ? data.save.name : "saved world";
 
       if (!payload || typeof payload !== "object" || !payload.player || !payload.world) {
-        setManualSaveStatus('No save named "' + name + '".', "error");
+        setManualSaveStatus("Could not load this save.", "error");
         return;
       }
 
@@ -2625,10 +2999,10 @@
       updateHud();
       void savePersistentState({ includeWorld: true });
       connectMultiplayer();
-      setManualSaveStatus('Loaded "' + name + '".', "success");
-      maybeNotifyText('Loaded "' + name + '".');
+      setManualSaveStatus('Loaded "' + saveName + '".', "success");
+      maybeNotifyText('Loaded "' + saveName + '".');
     } catch (error) {
-      console.warn("SpAice manual load failed.", error);
+      console.warn("Clusternauts manual load failed.", error);
       setManualSaveStatus("Could not load this save.", "error");
     }
   }
@@ -2660,7 +3034,7 @@
       techInventory[tech.key] = 0;
     }
 
-    applyToolInventory([defaultToolId], defaultToolId);
+    applyToolInventory([defaultToolId], defaultToolId, [defaultToolId]);
     applyToolUpgrades(null);
     updateTechUi();
   }
@@ -2679,22 +3053,21 @@
 
   function clearStoredNetworkIdentity() {
     try {
-      localStorage.removeItem("spaice.playerId");
+      removeMigratedLocalStorage(playerIdStorageKey, legacyPlayerIdStorageKey);
     } catch {
       // Local storage can be unavailable in private or restricted browser modes.
     }
   }
 
   function initializeNetworkIdentity() {
-    const storageKey = "spaice.playerId";
     let playerId = "";
 
     try {
-      playerId = localStorage.getItem(storageKey) || "";
+      playerId = readMigratedLocalStorage(playerIdStorageKey, legacyPlayerIdStorageKey) || "";
 
       if (!playerId) {
         playerId = "player-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
-        localStorage.setItem(storageKey, playerId);
+        localStorage.setItem(playerIdStorageKey, playerId);
       }
     } catch {
       playerId = "player-" + Math.random().toString(36).slice(2, 10);
@@ -2720,7 +3093,7 @@
     } catch (error) {
       persistence.online = false;
       persistence.storage = "none";
-      console.warn("SpAice persistence unavailable.", error);
+      console.warn("Clusternauts persistence unavailable.", error);
     } finally {
       persistence.loadInFlight = false;
     }
@@ -2820,7 +3193,7 @@
         renderLeaderboard();
       }
     } catch (error) {
-      console.warn("SpAice leaderboard unavailable.", error);
+      console.warn("Clusternauts leaderboard unavailable.", error);
     } finally {
       leaderboard.refreshInFlight = false;
     }
@@ -2867,7 +3240,7 @@
       deathState.leaderboardSubmitted = true;
       return true;
     } catch (error) {
-      console.warn("SpAice leaderboard submit failed.", error);
+      console.warn("Clusternauts leaderboard submit failed.", error);
       leaderboard.submittedDeathKey = "";
       return false;
     } finally {
@@ -3242,7 +3615,7 @@
         });
       }
     } catch (error) {
-      console.warn("SpAice death reset cleanup failed.", error);
+      console.warn("Clusternauts death reset cleanup failed.", error);
     }
 
     try {
@@ -3272,7 +3645,7 @@
       void refreshLeaderboard(true);
       updateHud();
     } catch (error) {
-      console.warn("SpAice death reset failed.", error);
+      console.warn("Clusternauts death reset failed.", error);
       deathState.resetInFlight = false;
     } finally {
       if (playAgainButton) {
@@ -4885,8 +5258,9 @@
 
     const maxHealth = clamp(finiteOr(snapshot.maxHealth, 100), 1, 100);
     const maxEnergy = clamp(finiteOr(snapshot.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
-    const equippedTool = toolCatalog.some((tool) => tool.id === snapshot.equippedTool) ? snapshot.equippedTool : defaultToolId;
+    const equippedTool = toolCatalog.some((tool) => tool.id === snapshot.equippedTool) ? snapshot.equippedTool : null;
     const toolMode = ["pull", "push", "hold", "fire", "idle"].includes(snapshot.toolMode) ? snapshot.toolMode : "idle";
+    const activeToolMode = equippedTool ? toolMode : "idle";
     return {
       id: typeof snapshot.id === "string" ? snapshot.id : "",
       name: typeof snapshot.name === "string" ? snapshot.name : "Player",
@@ -4905,8 +5279,8 @@
       hasCommunicationRelay: Boolean(snapshot.hasCommunicationRelay),
       aimAngle: finiteOr(snapshot.aimAngle, finiteOr(snapshot.aimLocalAngle, 0) - finiteOr(snapshot.cameraRoll, 0)),
       equippedTool,
-      toolMode,
-      toolActive: Boolean(snapshot.toolActive || toolMode !== "idle"),
+      toolMode: activeToolMode,
+      toolActive: Boolean(equippedTool && (snapshot.toolActive || activeToolMode !== "idle")),
       moving: Boolean(snapshot.moving),
       crouching: Boolean(snapshot.crouching)
     };
@@ -5592,6 +5966,7 @@
         difficulty: runState.difficultyId,
         tech: serializeTechInventory(),
         tools: serializeToolInventory(),
+        equippedTools: serializeEquippedToolInventory(),
         toolUpgrades: serializeToolUpgrades(),
         equippedTool: equippedToolId,
         landed: player.landed,
@@ -5785,7 +6160,7 @@
       applyDifficulty(snapshot.difficulty);
     }
     applyTechInventory(snapshot.tech);
-    applyToolInventory(snapshot.tools, snapshot.equippedTool);
+    applyToolInventory(snapshot.tools, snapshot.equippedTool, snapshot.equippedTools);
     applyToolUpgrades(snapshot.toolUpgrades);
     player.landed = normalizeLandingSnapshot(snapshot.landed);
     player.walkCycle = finiteOr(snapshot.walkCycle, player.landed ? player.landed.walkCycle : player.walkCycle);
@@ -7971,12 +8346,13 @@
     const asteroidWalkMultiplier = body.tier.name === "asteroid" ? 0.78 : 1;
     const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
     const walkSpeed = (isMovementKeyPressed("down") ? 68 : 128) * asteroidWalkMultiplier * weaponSlowFactor;
+    const vacuumHoldActive = isVacuumHoldActive();
     let walkDirection = 0;
 
-    if (isMovementKeyPressed("left")) {
+    if (!vacuumHoldActive && isMovementKeyPressed("left")) {
       walkDirection -= 1;
     }
-    if (isMovementKeyPressed("right")) {
+    if (!vacuumHoldActive && isMovementKeyPressed("right")) {
       walkDirection += 1;
     }
 
@@ -8063,6 +8439,7 @@
 
   function updatePlayer(dt) {
     player.weaponSlow = Math.max(0, finiteOr(player.weaponSlow, 0) - weaponSlowDecay * dt);
+    const vacuumHoldActive = isVacuumHoldActive();
 
     if (player.landed) {
       updateLandedPlayer(dt);
@@ -8092,7 +8469,7 @@
       cameraRoll += 1.9 * dt;
     }
 
-    if (localX || localY) {
+    if (!vacuumHoldActive && (localX || localY)) {
       const local = normalize(localX, localY);
       const world = cameraLocalToWorld(local.x, local.y);
       const suctionActive = canUseSuctionControls() && isGadgetButtonPressed();
@@ -8106,7 +8483,7 @@
     const speed = length(player.vx, player.vy);
     const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
     const boostSpeed = isJetpackBoostPressed() && hasPlayerEnergy() ? jetpackBoostSpeedMultiplier : 1;
-    const maxSpeed = ((canUseSuctionControls() && isGadgetButtonPressed()) ? 275 : 430 * boostSpeed) * weaponSlowFactor;
+    const maxSpeed = vacuumHoldActive ? 0 : ((canUseSuctionControls() && isGadgetButtonPressed()) ? 275 : 430 * boostSpeed) * weaponSlowFactor;
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
@@ -12506,30 +12883,44 @@
     normalizeBodyEnergy(particle);
     const maxEnergy = Math.max(1, finiteOr(particle.maxEnergy, maxEnergyForBody(particle)));
     const pct = clamp(finiteOr(particle.energy, maxEnergy) / maxEnergy, 0, 1);
-    const meterRadius = clamp(radius * 0.18, 14, 34);
+    const meterRadius = clamp(radius * 0.24, 20, 44);
+    const ringWidth = Math.max(5, meterRadius * 0.24);
 
     ctx.save();
     ctx.translate(particle.x, particle.y);
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "rgba(3, 8, 24, 0.54)";
+    ctx.globalCompositeOperation = "lighter";
+    const halo = ctx.createRadialGradient(0, 0, meterRadius * 0.2, 0, 0, meterRadius + 14);
+    halo.addColorStop(0, pct > 0.35 ? "rgba(157, 255, 122, 0.36)" : "rgba(245, 214, 91, 0.34)");
+    halo.addColorStop(0.55, pct > 0.35 ? "rgba(88, 226, 255, 0.16)" : "rgba(255, 115, 173, 0.14)");
+    halo.addColorStop(1, "rgba(88, 226, 255, 0)");
+    ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(0, 0, meterRadius + 4, 0, Math.PI * 2);
+    ctx.arc(0, 0, meterRadius + 14, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
-    ctx.lineWidth = Math.max(3, meterRadius * 0.22);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "rgba(3, 8, 24, 0.68)";
+    ctx.beginPath();
+    ctx.arc(0, 0, meterRadius + 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.lineWidth = ringWidth;
     ctx.beginPath();
     ctx.arc(0, 0, meterRadius, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.strokeStyle = pct > 0.35 ? "#9dff7a" : "#f5d65b";
+    ctx.shadowColor = pct > 0.35 ? "rgba(157, 255, 122, 0.72)" : "rgba(245, 214, 91, 0.68)";
+    ctx.shadowBlur = 10;
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.arc(0, 0, meterRadius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
     ctx.stroke();
 
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "rgba(248, 251, 255, 0.92)";
-    ctx.font = Math.max(13, meterRadius * 0.66) + "px sans-serif";
+    ctx.font = "900 " + Math.max(16, meterRadius * 0.7) + "px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("⚡", 0, 1);
@@ -15001,6 +15392,10 @@
   }
 
   function drawRemoteTool(remotePlayer, aimAngle, bob, time) {
+    if (!remotePlayer.equippedTool) {
+      return;
+    }
+
     ctx.save();
     ctx.translate(0, bob);
     ctx.rotate(aimAngle);
@@ -15577,6 +15972,10 @@
   }
 
   function drawGadget(aim, time) {
+    if (!equippedToolId) {
+      return;
+    }
+
     if (isWeaponTool(equippedToolId)) {
       drawLaserPistol(aim, time, equippedToolId);
       return;
@@ -16277,17 +16676,47 @@
     });
   }
 
+  if (accountLoginForm) {
+    accountLoginForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      void submitAccountAuth(false);
+    });
+  }
+
+  if (accountSignupButton) {
+    accountSignupButton.addEventListener("click", function () {
+      void submitAccountAuth(true);
+    });
+  }
+
+  if (accountLogoutButton) {
+    accountLogoutButton.addEventListener("click", function () {
+      void logoutAccount();
+    });
+  }
+
   if (saveGameForm) {
     saveGameForm.addEventListener("submit", function (event) {
       event.preventDefault();
-      saveManualGame();
+      void saveManualGame();
     });
   }
 
   if (loadGameForm) {
     loadGameForm.addEventListener("submit", function (event) {
       event.preventDefault();
-      loadManualGame();
+      void loadManualGame(loadGameNameInput && loadGameNameInput.value);
+    });
+  }
+
+  if (savedGameList) {
+    savedGameList.addEventListener("click", function (event) {
+      const button = closestEventTarget(event, "button[data-save-id]");
+      if (!button || !button.dataset.saveId) {
+        return;
+      }
+
+      void loadManualGame(button.dataset.saveId);
     });
   }
 
@@ -16616,9 +17045,9 @@
 
     if (!event.repeat && /^Digit[1-9]$/.test(event.code)) {
       const slot = Number(event.code.slice(5)) - 1;
-      if (unlockedToolIds[slot]) {
+      if (hotbarToolIds[slot]) {
         event.preventDefault();
-        selectTool(unlockedToolIds[slot]);
+        selectTool(hotbarToolIds[slot]);
         return;
       }
     }
@@ -16779,7 +17208,7 @@
     if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle")) {
       return;
     }
-    if (unlockedToolIds.length < 2) {
+    if (hotbarToolIds.length < 2) {
       return;
     }
 
@@ -16802,7 +17231,9 @@
     resetLifeStats();
     setDifficultyScreenOpen(true);
     void refreshLeaderboard(true);
+    void bootstrapAccountSession();
     updateOnlineUi();
+    updateAccountUi();
 
     if (!starDust.length) {
       seedStarDust();

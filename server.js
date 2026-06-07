@@ -20,6 +20,7 @@ const signalTimeoutMs = 15000;
 const randomSignalCooldownMs = 45000;
 const randomSignalIntervalMs = 10 * 60 * 1000;
 const randomOverlapLifetimeMs = 120000;
+const sessionLifetimeMs = 1000 * 60 * 60 * 24 * 14;
 const techKeys = ["suction", "weapon", "plating", "energy", "repair", "target", "propulsion", "shield", "communication"];
 const toolKeys = ["suction-gadget", "laser-pistol", "laser-rifle", "spanner"];
 const toolUpgradeKeys = {
@@ -33,7 +34,10 @@ const memoryPersistence = {
   worlds: new Map(),
   players: new Map(),
   profiles: new Map(),
-  leaderboard: []
+  leaderboard: [],
+  accounts: new Map(),
+  sessions: new Map(),
+  accountSaves: new Map()
 };
 let dbPoolPromise = null;
 const sockets = new Set();
@@ -44,7 +48,7 @@ const overlaps = new Map();
 const playerCooldowns = new Map();
 let nextOverlapNumber = 1;
 const playerInteractionChoices = new Set(["trade", "truce", "team"]);
-const multiplayerDebugEnabled = process.env.SPAICE_MULTIPLAYER_DEBUG === "1";
+const multiplayerDebugEnabled = process.env.CLUSTERNAUTS_MULTIPLAYER_DEBUG === "1";
 
 function logMultiplayer(event, details) {
   if (!multiplayerDebugEnabled) {
@@ -53,13 +57,13 @@ function logMultiplayer(event, details) {
 
   const stamp = new Date().toISOString();
   const payload = details && typeof details === "object" ? ` ${JSON.stringify(details)}` : "";
-  console.log(`[SpAice multiplayer ${stamp}] ${event}${payload}`);
+  console.log(`[Clusternauts multiplayer ${stamp}] ${event}${payload}`);
 }
 
-function logSpAiceError(event, details) {
+function logClusternautsError(event, details) {
   const stamp = new Date().toISOString();
   const payload = details && typeof details === "object" ? ` ${JSON.stringify(details)}` : "";
-  console.error(`[SpAice error ${stamp}] ${event}${payload}`);
+  console.error(`[Clusternauts error ${stamp}] ${event}${payload}`);
 }
 
 const mimeTypes = {
@@ -139,6 +143,16 @@ function sendFile(response, filePath) {
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
+  if (url.pathname.startsWith("/api/auth/")) {
+    void handleAuthRequest(request, response, url);
+    return;
+  }
+
+  if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) {
+    void handleAccountSaveRequest(request, response, url);
+    return;
+  }
+
   if (url.pathname === "/api/bootstrap" || url.pathname.startsWith("/api/players/") || url.pathname.startsWith("/api/friends/")) {
     void handleSocialRequest(request, response, url);
     return;
@@ -177,6 +191,114 @@ const server = http.createServer((request, response) => {
   sendFile(response, filePath);
 });
 
+async function handleAuthRequest(request, response, url) {
+  try {
+    if (request.method === "GET" && url.pathname === "/api/auth/session") {
+      const session = await requireAccountSession(request);
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        account: publicAccount(session.account)
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/signup") {
+      const body = await readJsonBody(request);
+      const result = await createAccountSession(body, true);
+      writeJson(response, 200, result);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/login") {
+      const body = await readJsonBody(request);
+      const result = await createAccountSession(body, false);
+      writeJson(response, 200, result);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/logout") {
+      const token = extractSessionToken(request) || sanitizeDebugText((await readJsonBody(request))?.sessionToken, 200);
+      if (token) {
+        await deleteAccountSession(token);
+      }
+      writeJson(response, 200, { ok: true, serverTime: Date.now() });
+      return;
+    }
+
+    writeJson(response, 404, { ok: false, message: "Auth endpoint not found." });
+  } catch (error) {
+    const status = error && Number.isFinite(error.status) ? error.status : 500;
+    logClusternautsError("auth request error", {
+      method: request.method,
+      path: url.pathname,
+      message: error instanceof Error ? error.message : "unknown error"
+    });
+    writeJson(response, status, {
+      ok: false,
+      message: error instanceof Error ? error.message : "Account request failed."
+    });
+  }
+}
+
+async function handleAccountSaveRequest(request, response, url) {
+  try {
+    const session = await requireAccountSession(request);
+
+    if (request.method === "GET" && url.pathname === "/api/saves") {
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        saves: await listAccountSaves(session.account.username)
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/saves") {
+      const body = await readJsonBody(request);
+      const saved = await saveAccountGame(session.account.username, body);
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        save: saved.metadata,
+        saves: await listAccountSaves(session.account.username)
+      });
+      return;
+    }
+
+    const saveId = sanitizeText(url.pathname.slice("/api/saves/".length), 80);
+    if (request.method === "GET" && saveId) {
+      const save = await getAccountSave(session.account.username, saveId);
+      if (!save) {
+        writeJson(response, 404, { ok: false, message: "Save not found." });
+        return;
+      }
+
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        save: save.metadata,
+        payload: save.payload
+      });
+      return;
+    }
+
+    writeJson(response, 404, { ok: false, message: "Save endpoint not found." });
+  } catch (error) {
+    const status = error && Number.isFinite(error.status) ? error.status : 500;
+    logClusternautsError("save request error", {
+      method: request.method,
+      path: url.pathname,
+      message: error instanceof Error ? error.message : "unknown error",
+      stack: error instanceof Error ? error.stack : ""
+    });
+    writeJson(response, status, {
+      ok: false,
+      message: error instanceof Error ? error.message : "Save request failed."
+    });
+  }
+}
+
 async function handleWorldRequest(request, response, url) {
   try {
     if (request.method === "GET" && url.pathname === "/api/world/state") {
@@ -200,7 +322,7 @@ async function handleWorldRequest(request, response, url) {
 
     writeJson(response, 404, { ok: false, message: "World endpoint not found." });
   } catch (error) {
-    logSpAiceError("world request error", {
+    logClusternautsError("world request error", {
       method: request.method,
       path: url.pathname,
       message: error instanceof Error ? error.message : "unknown error",
@@ -222,10 +344,10 @@ async function handleClientErrorRequest(request, response) {
 
     const body = await readJsonBody(request);
     const report = sanitizeClientErrorReport(body);
-    logSpAiceError("client error", report);
+    logClusternautsError("client error", report);
     writeJson(response, 200, { ok: true });
   } catch (error) {
-    logSpAiceError("client error report failed", {
+    logClusternautsError("client error report failed", {
       message: error instanceof Error ? error.message : "unknown error"
     });
     writeJson(response, 500, { ok: false, message: "Client error report failed." });
@@ -258,7 +380,7 @@ async function handleLeaderboardRequest(request, response, url) {
 
     writeJson(response, 404, { ok: false, message: "Leaderboard endpoint not found." });
   } catch (error) {
-    logSpAiceError("leaderboard request error", {
+    logClusternautsError("leaderboard request error", {
       method: request.method,
       path: url.pathname,
       message: error instanceof Error ? error.message : "unknown error",
@@ -320,7 +442,7 @@ async function handleResetRequest(request, response, url) {
 
     writeJson(response, 404, { ok: false, message: "Reset endpoint not found." });
   } catch (error) {
-    logSpAiceError("reset request error", {
+    logClusternautsError("reset request error", {
       method: request.method,
       path: url.pathname,
       message: error instanceof Error ? error.message : "unknown error",
@@ -449,7 +571,7 @@ async function handleSocialRequest(request, response, url) {
 
     writeJson(response, 404, { ok: false, message: "Social endpoint not found." });
   } catch (error) {
-    logSpAiceError("social request error", {
+    logClusternautsError("social request error", {
       method: request.method,
       path: url.pathname,
       message: error instanceof Error ? error.message : "unknown error",
@@ -777,6 +899,425 @@ async function saveLeaderboardEntry(source) {
   return entry;
 }
 
+async function createAccountSession(body, createNew) {
+  const username = sanitizeAccountUsername(body && body.username);
+  const password = typeof (body && body.password) === "string" ? body.password : "";
+  const playerId = sanitizeText(body && body.playerId, 80);
+
+  if (!username || username.length < 3) {
+    throwHttpError(400, "Username must be at least 3 characters.");
+  }
+  if (password.length < 6) {
+    throwHttpError(400, "Password must be at least 6 characters.");
+  }
+
+  let account = await getAccount(username);
+  if (createNew) {
+    if (account) {
+      throwHttpError(409, "That username is already taken.");
+    }
+    account = await createAccount(username, password, playerId);
+  } else if (!account || !(await verifyPassword(password, account.password))) {
+    throwHttpError(401, "Username or password is incorrect.");
+  }
+
+  if (!account.linkedPlayerId && playerId) {
+    account.linkedPlayerId = playerId;
+  }
+  account.lastLoginAt = Date.now();
+  await saveAccount(account);
+
+  const token = randomToken(32);
+  await saveAccountSession({
+    tokenHash: hashToken(token),
+    username: account.username,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + sessionLifetimeMs
+  });
+
+  return {
+    ok: true,
+    serverTime: Date.now(),
+    sessionToken: token,
+    account: publicAccount(account)
+  };
+}
+
+async function createAccount(username, password, playerId) {
+  return {
+    username,
+    password: await hashPassword(password),
+    linkedPlayerId: playerId || "",
+    createdAt: Date.now(),
+    lastLoginAt: Date.now()
+  };
+}
+
+async function getAccount(username) {
+  const cleanUsername = sanitizeAccountUsername(username);
+  if (!cleanUsername) {
+    return null;
+  }
+
+  const pool = await getDbPool();
+  if (!pool) {
+    return normalizeAccount(memoryPersistence.accounts.get(cleanUsername));
+  }
+
+  await ensureDatabaseSchema(pool);
+  const result = await pool.query("SELECT state FROM spaice_account WHERE username = $1", [cleanUsername]);
+  return normalizeAccount(result.rows[0] && result.rows[0].state);
+}
+
+async function saveAccount(account) {
+  const normalized = normalizeAccount(account);
+  if (!normalized) {
+    return null;
+  }
+
+  const pool = await getDbPool();
+  if (!pool) {
+    memoryPersistence.accounts.set(normalized.username, normalized);
+    return normalized;
+  }
+
+  await ensureDatabaseSchema(pool);
+  await pool.query(
+    `INSERT INTO spaice_account (username, state, updated_at)
+     VALUES ($1, $2::jsonb, now())
+     ON CONFLICT (username) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
+    [normalized.username, JSON.stringify(normalized)]
+  );
+  return normalized;
+}
+
+async function saveAccountSession(session) {
+  const normalized = normalizeAccountSession(session);
+  if (!normalized) {
+    return null;
+  }
+
+  const pool = await getDbPool();
+  if (!pool) {
+    memoryPersistence.sessions.set(normalized.tokenHash, normalized);
+    return normalized;
+  }
+
+  await ensureDatabaseSchema(pool);
+  await pool.query(
+    `INSERT INTO spaice_account_session (token_hash, username, state, expires_at, created_at)
+     VALUES ($1, $2, $3::jsonb, to_timestamp($4 / 1000.0), now())
+     ON CONFLICT (token_hash) DO UPDATE SET state = EXCLUDED.state, expires_at = EXCLUDED.expires_at`,
+    [normalized.tokenHash, normalized.username, JSON.stringify(normalized), normalized.expiresAt]
+  );
+  return normalized;
+}
+
+async function requireAccountSession(request) {
+  const token = extractSessionToken(request);
+  if (!token) {
+    throwHttpError(401, "Log in to use saved games.");
+  }
+
+  const tokenHash = hashToken(token);
+  const pool = await getDbPool();
+  let session = null;
+
+  if (!pool) {
+    session = normalizeAccountSession(memoryPersistence.sessions.get(tokenHash));
+    if (session && session.expiresAt <= Date.now()) {
+      memoryPersistence.sessions.delete(tokenHash);
+      session = null;
+    }
+  } else {
+    await ensureDatabaseSchema(pool);
+    await pool.query("DELETE FROM spaice_account_session WHERE expires_at <= now()");
+    const result = await pool.query("SELECT state FROM spaice_account_session WHERE token_hash = $1", [tokenHash]);
+    session = normalizeAccountSession(result.rows[0] && result.rows[0].state);
+  }
+
+  if (!session || session.expiresAt <= Date.now()) {
+    throwHttpError(401, "Session expired. Log in again.");
+  }
+
+  const account = await getAccount(session.username);
+  if (!account) {
+    throwHttpError(401, "Account no longer exists.");
+  }
+
+  return { session, account };
+}
+
+async function deleteAccountSession(token) {
+  const tokenHash = hashToken(token);
+  const pool = await getDbPool();
+  if (!pool) {
+    memoryPersistence.sessions.delete(tokenHash);
+    return;
+  }
+
+  await ensureDatabaseSchema(pool);
+  await pool.query("DELETE FROM spaice_account_session WHERE token_hash = $1", [tokenHash]);
+}
+
+async function listAccountSaves(username) {
+  const cleanUsername = sanitizeAccountUsername(username);
+  const pool = await getDbPool();
+
+  if (!pool) {
+    const saves = memoryPersistence.accountSaves.get(cleanUsername) || new Map();
+    return Array.from(saves.values())
+      .map((save) => normalizeAccountSave(save))
+      .filter(Boolean)
+      .map((save) => save.metadata)
+      .sort(compareAccountSaveMetadata);
+  }
+
+  await ensureDatabaseSchema(pool);
+  const result = await pool.query(
+    `SELECT state
+     FROM spaice_account_save
+     WHERE username = $1
+     ORDER BY updated_at DESC
+     LIMIT 80`,
+    [cleanUsername]
+  );
+  return result.rows
+    .map((row) => normalizeAccountSave(row.state))
+    .filter(Boolean)
+    .map((save) => save.metadata)
+    .sort(compareAccountSaveMetadata);
+}
+
+async function saveAccountGame(username, body) {
+  const cleanUsername = sanitizeAccountUsername(username);
+  const name = sanitizeManualSaveName(body && body.name) || "Saved world";
+  const sourcePayload = body && body.payload && typeof body.payload === "object" ? body.payload : {};
+  const sourcePlayerId = sanitizeText(sourcePayload.playerId, 80);
+
+  if (!sourcePayload.player || !sourcePayload.world) {
+    throwHttpError(400, "Save data is missing world state.");
+  }
+
+  const savedAt = Date.now();
+  const id = "save-" + randomToken(10);
+  const payload = {
+    playerId: sourcePlayerId,
+    player: normalizePlayerSnapshot(sourcePlayerId, sourcePayload.player),
+    world: normalizeWorldState(sourcePayload.world),
+    run: normalizeRunSnapshot(sourcePayload.run),
+    manualSave: {
+      version: 1,
+      name,
+      savedAt
+    }
+  };
+  const save = normalizeAccountSave({
+    metadata: {
+      id,
+      username: cleanUsername,
+      name,
+      difficulty: payload.run.difficulty || payload.world.difficulty || payload.player.difficulty || "medium",
+      score: payload.player.score || 1,
+      savedAt,
+      createdAt: savedAt
+    },
+    payload
+  });
+
+  const pool = await getDbPool();
+  if (!pool) {
+    if (!memoryPersistence.accountSaves.has(cleanUsername)) {
+      memoryPersistence.accountSaves.set(cleanUsername, new Map());
+    }
+    memoryPersistence.accountSaves.get(cleanUsername).set(save.metadata.id, save);
+    return save;
+  }
+
+  await ensureDatabaseSchema(pool);
+  await pool.query(
+    `INSERT INTO spaice_account_save (id, username, name, state, created_at, updated_at)
+     VALUES ($1, $2, $3, $4::jsonb, now(), now())
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, state = EXCLUDED.state, updated_at = now()`,
+    [save.metadata.id, cleanUsername, save.metadata.name, JSON.stringify(save)]
+  );
+  return save;
+}
+
+async function getAccountSave(username, saveId) {
+  const cleanUsername = sanitizeAccountUsername(username);
+  const cleanSaveId = sanitizeText(saveId, 80);
+  const pool = await getDbPool();
+
+  if (!pool) {
+    const saves = memoryPersistence.accountSaves.get(cleanUsername);
+    return normalizeAccountSave(saves && saves.get(cleanSaveId));
+  }
+
+  await ensureDatabaseSchema(pool);
+  const result = await pool.query("SELECT state FROM spaice_account_save WHERE id = $1 AND username = $2", [
+    cleanSaveId,
+    cleanUsername
+  ]);
+  return normalizeAccountSave(result.rows[0] && result.rows[0].state);
+}
+
+function normalizeAccount(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  const username = sanitizeAccountUsername(source.username);
+  const password = source.password && typeof source.password === "object" ? source.password : null;
+  if (!username || !password || !password.hash || !password.salt) {
+    return null;
+  }
+
+  return {
+    username,
+    password: {
+      hash: sanitizeDebugText(password.hash, 256),
+      salt: sanitizeDebugText(password.salt, 128)
+    },
+    linkedPlayerId: sanitizeText(source.linkedPlayerId, 80),
+    createdAt: clampNumber(source.createdAt, 0, Date.now()) || Date.now(),
+    lastLoginAt: clampNumber(source.lastLoginAt, 0, Date.now()) || Date.now()
+  };
+}
+
+function normalizeAccountSession(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  const tokenHash = sanitizeDebugText(source.tokenHash, 128);
+  const username = sanitizeAccountUsername(source.username);
+  if (!tokenHash || !username) {
+    return null;
+  }
+
+  return {
+    tokenHash,
+    username,
+    createdAt: clampNumber(source.createdAt, 0, Date.now()) || Date.now(),
+    expiresAt: clampNumber(source.expiresAt, 0, Date.now() + sessionLifetimeMs) || 0
+  };
+}
+
+function normalizeAccountSave(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  const metadata = source.metadata && typeof source.metadata === "object" ? source.metadata : {};
+  const payload = source.payload && typeof source.payload === "object" ? source.payload : {};
+  const id = sanitizeText(metadata.id, 80);
+  const username = sanitizeAccountUsername(metadata.username);
+  const name = sanitizeManualSaveName(metadata.name) || "Saved world";
+  if (!id || !username || !payload.player || !payload.world) {
+    return null;
+  }
+
+  return {
+    metadata: {
+      id,
+      username,
+      name,
+      difficulty: sanitizeText(metadata.difficulty, 16) || "medium",
+      score: Math.max(1, Math.round(clampNumber(metadata.score, 1, 1000000000))),
+      savedAt: clampNumber(metadata.savedAt, 0, Date.now()) || Date.now(),
+      createdAt: clampNumber(metadata.createdAt, 0, Date.now()) || Date.now()
+    },
+    payload
+  };
+}
+
+function normalizeRunSnapshot(source) {
+  const snapshot = source && typeof source === "object" ? source : {};
+  const stats = snapshot.lifeStats && typeof snapshot.lifeStats === "object" ? snapshot.lifeStats : {};
+
+  return {
+    active: snapshot.active !== false,
+    difficulty: sanitizeText(snapshot.difficulty, 16) || "medium",
+    lifeStats: {
+      elapsed: clampNumber(stats.elapsed, 0, Number.MAX_SAFE_INTEGER),
+      maxMass: clampNumber(stats.maxMass, 1, 1000000000),
+      maxTierName: sanitizeText(stats.maxTierName, 32) || "particle",
+      mobsDefeated: Math.max(0, Math.floor(clampNumber(stats.mobsDefeated, 0, 1000000))),
+      techCollected: Math.max(0, Math.floor(clampNumber(stats.techCollected, 0, 1000000))),
+      mobScore: clampNumber(stats.mobScore, 0, 1000000000),
+      currentScore: clampNumber(stats.currentScore, 0, 1000000000),
+      bestScore: clampNumber(stats.bestScore, 0, 1000000000),
+      bodyScore: clampNumber(stats.bodyScore, 0, 1000000000),
+      bestBodyScore: clampNumber(stats.bestBodyScore, 0, 1000000000),
+      scoredBodyMass: clampNumber(stats.scoredBodyMass, 0, 1000000000),
+      bestScoredBodyMass: clampNumber(stats.bestScoredBodyMass, 0, 1000000000),
+      scoredBodies: Math.max(0, Math.floor(clampNumber(stats.scoredBodies, 0, 1000000))),
+      bestScoredBodies: Math.max(0, Math.floor(clampNumber(stats.bestScoredBodies, 0, 1000000))),
+      absorbedParticleMass: clampNumber(stats.absorbedParticleMass, 0, 1000000000),
+      absorbedParticleCount: Math.max(0, Math.floor(clampNumber(stats.absorbedParticleCount, 0, 1000000)))
+    }
+  };
+}
+
+function compareAccountSaveMetadata(a, b) {
+  return b.savedAt - a.savedAt || String(a.name).localeCompare(String(b.name));
+}
+
+function publicAccount(account) {
+  const normalized = normalizeAccount(account);
+  return normalized
+    ? {
+        username: normalized.username,
+        linkedPlayerId: normalized.linkedPlayerId,
+        createdAt: normalized.createdAt
+      }
+    : null;
+}
+
+function extractSessionToken(request) {
+  const authorization = String(request.headers.authorization || "");
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match ? sanitizeDebugText(match[1], 200) : "";
+}
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function randomToken(byteCount) {
+  return crypto.randomBytes(byteCount).toString("base64url");
+}
+
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = await scryptHex(password, salt);
+  return { salt, hash };
+}
+
+async function verifyPassword(password, record) {
+  if (!record || !record.salt || !record.hash) {
+    return false;
+  }
+
+  const hash = await scryptHex(password, record.salt);
+  const expected = Buffer.from(record.hash, "hex");
+  const actual = Buffer.from(hash, "hex");
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+function scryptHex(password, salt) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(String(password || ""), String(salt || ""), 32, (error, key) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(key.toString("hex"));
+    });
+  });
+}
+
 function normalizeLeaderboardEntry(source) {
   const snapshot = source && typeof source === "object" ? source : {};
   const stats = snapshot.stats && typeof snapshot.stats === "object" ? snapshot.stats : {};
@@ -1041,7 +1582,7 @@ async function createDbPool() {
   const connectionString = readDatabaseAddress();
 
   if (!connectionString) {
-    console.warn("SpAice persistence is using memory: no database address found.");
+    console.warn("Clusternauts persistence is using memory: no database address found.");
     return null;
   }
 
@@ -1054,19 +1595,19 @@ async function createDbPool() {
       connectionTimeoutMillis: 3000
     });
     await pool.query("SELECT 1");
-    console.log("SpAice persistence connected to PostgreSQL.");
+    console.log("Clusternauts persistence connected to PostgreSQL.");
     return pool;
   } catch (error) {
     console.warn(
-      `SpAice persistence is using memory: ${error instanceof Error ? error.message : "PostgreSQL unavailable."}`
+      `Clusternauts persistence is using memory: ${error instanceof Error ? error.message : "PostgreSQL unavailable."}`
     );
     return null;
   }
 }
 
 function readDatabaseAddress() {
-  if (process.env.SPAICE_DATABASE_URL || process.env.DATABASE_URL) {
-    return normalizeDatabaseAddress(process.env.SPAICE_DATABASE_URL || process.env.DATABASE_URL);
+  if (process.env.CLUSTERNAUTS_DATABASE_URL || process.env.DATABASE_URL) {
+    return normalizeDatabaseAddress(process.env.CLUSTERNAUTS_DATABASE_URL || process.env.DATABASE_URL);
   }
 
   const configPath = path.join(root, "data", "db-uri.json");
@@ -1078,7 +1619,7 @@ function readDatabaseAddress() {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     const key =
-      process.env.SPAICE_DB_TARGET === "prod" || process.env.NODE_ENV === "production"
+      process.env.CLUSTERNAUTS_DB_TARGET === "prod" || process.env.NODE_ENV === "production"
         ? "prod_address"
         : "dev_address";
     return normalizeDatabaseAddress(config[key]);
@@ -1125,6 +1666,32 @@ async function ensureDatabaseSchema(pool) {
       score double precision NOT NULL,
       state jsonb NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS spaice_account (
+      username text PRIMARY KEY,
+      state jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS spaice_account_session (
+      token_hash text PRIMARY KEY,
+      username text NOT NULL,
+      state jsonb NOT NULL,
+      expires_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS spaice_account_save (
+      id text PRIMARY KEY,
+      username text NOT NULL,
+      name text NOT NULL,
+      state jsonb NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
 }
@@ -1223,6 +1790,7 @@ function normalizeWorldState(snapshot) {
       ? source.rivalProjectiles.map(normalizeProjectile).filter(Boolean).slice(0, 160)
       : [],
     starDust: Array.isArray(source.starDust) ? source.starDust.map(normalizeStar).filter(Boolean).slice(0, 360) : [],
+    difficulty: sanitizeText(source.difficulty, 16) || "medium",
     nextParticleId: Math.max(1, Math.floor(Number(source.nextParticleId) || 1)),
     nextAlienoidId: Math.max(1, Math.floor(Number(source.nextAlienoidId) || Number(source.nextRivalId) || 1)),
     nextUfoId: Math.max(1, Math.floor(Number(source.nextUfoId) || 1)),
@@ -1241,8 +1809,10 @@ function normalizeWorldState(snapshot) {
 function normalizePlayerSnapshot(playerId, snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
   const tools = normalizeToolInventory(source.tools);
-  const equippedTool = tools.includes(source.equippedTool) ? source.equippedTool : tools[0];
+  const equippedTools = normalizeEquippedToolInventory(source.equippedTools, tools);
+  const equippedTool = equippedTools.includes(source.equippedTool) ? source.equippedTool : equippedTools[0] || null;
   const toolMode = ["pull", "push", "hold", "fire", "idle"].includes(source.toolMode) ? source.toolMode : "idle";
+  const activeToolMode = equippedTool ? toolMode : "idle";
   const maxEnergy = Number.isFinite(Number(source.maxEnergy)) ? clampNumber(source.maxEnergy, 1, 260) : 100;
 
   return {
@@ -1257,8 +1827,11 @@ function normalizePlayerSnapshot(playerId, snapshot) {
     maxHealth: clampNumber(source.maxHealth, 1, 100),
     energy: Number.isFinite(Number(source.energy)) ? clampNumber(source.energy, 0, maxEnergy) : maxEnergy,
     maxEnergy,
+    score: Math.max(1, Math.round(clampNumber(source.score, 1, 1000000000))),
+    difficulty: sanitizeText(source.difficulty, 16) || "medium",
     tech: normalizeTechInventory(source.tech),
     tools,
+    equippedTools,
     toolUpgrades: normalizeToolUpgrades(source.toolUpgrades),
     equippedTool,
     landed: normalizeLanding(source.landed),
@@ -1267,8 +1840,8 @@ function normalizePlayerSnapshot(playerId, snapshot) {
     hasCommunicationRelay: Boolean(source.hasCommunicationRelay),
     aimAngle: Number.isFinite(Number(source.aimAngle)) ? clampNumber(source.aimAngle, -Math.PI * 16, Math.PI * 16) : 0,
     aimLocalAngle: Number.isFinite(Number(source.aimLocalAngle)) ? clampNumber(source.aimLocalAngle, -Math.PI * 16, Math.PI * 16) : 0,
-    toolMode,
-    toolActive: Boolean(source.toolActive || toolMode !== "idle"),
+    toolMode: activeToolMode,
+    toolActive: Boolean(equippedTool && (source.toolActive || activeToolMode !== "idle")),
     moving: Boolean(source.moving),
     crouching: Boolean(source.crouching),
     savedAt: Date.now()
@@ -1305,6 +1878,12 @@ function normalizeToolInventory(source) {
   const tools = Array.isArray(source) ? source : [];
   const validTools = tools.filter((tool, index) => toolKeys.includes(tool) && tools.indexOf(tool) === index);
   return validTools.includes("suction-gadget") ? validTools : ["suction-gadget"].concat(validTools);
+}
+
+function normalizeEquippedToolInventory(source, ownedTools) {
+  const owned = Array.isArray(ownedTools) ? ownedTools : normalizeToolInventory(null);
+  const tools = Array.isArray(source) ? source : owned;
+  return tools.filter((tool, index) => toolKeys.includes(tool) && owned.includes(tool) && tools.indexOf(tool) === index);
 }
 
 function normalizeParticle(source) {
@@ -1740,6 +2319,22 @@ function sanitizeText(value, maxLength) {
   return value.replace(/[^\w .:'-]/g, "").trim().slice(0, maxLength);
 }
 
+function sanitizeAccountUsername(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.toLowerCase().replace(/[^\w.-]/g, "").slice(0, 24);
+}
+
+function sanitizeManualSaveName(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.replace(/[^\w .:'-]/g, "").trim().replace(/\s+/g, " ").slice(0, 32);
+}
+
 function sanitizeDebugText(value, maxLength) {
   if (typeof value !== "string") {
     return "";
@@ -1761,6 +2356,12 @@ function sanitizeClientErrorReport(body) {
     href: sanitizeDebugText(report.href, 500),
     timestamp: sanitizeDebugText(report.timestamp, 40)
   };
+}
+
+function throwHttpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  throw error;
 }
 
 server.on("upgrade", (request, socket) => {
@@ -1822,7 +2423,7 @@ server.on("upgrade", (request, socket) => {
     if (isExpectedWsDisconnectError(error)) {
       logMultiplayer("ws socket disconnected", details);
     } else {
-      logSpAiceError("ws socket error", details);
+      logClusternautsError("ws socket error", details);
     }
     handleSocketClose(client, "error");
   });
@@ -1848,7 +2449,7 @@ function handleSocketData(client, chunk) {
       client.fragmentedMessageParts = [frame.payload];
       client.fragmentedMessageBytes = frame.payload.length;
       if (client.fragmentedMessageBytes > maxJsonBodyBytes) {
-        logSpAiceError("ws message too large", {
+        logClusternautsError("ws message too large", {
           playerId: client.playerId || null,
           bytes: client.fragmentedMessageBytes
         });
@@ -1877,7 +2478,7 @@ function handleSocketData(client, chunk) {
       client.fragmentedMessageParts.push(frame.payload);
       client.fragmentedMessageBytes += frame.payload.length;
       if (client.fragmentedMessageBytes > maxJsonBodyBytes) {
-        logSpAiceError("ws message too large", {
+        logClusternautsError("ws message too large", {
           playerId: client.playerId || null,
           bytes: client.fragmentedMessageBytes
         });
@@ -1903,7 +2504,7 @@ function processWsTextMessage(client, payload) {
   try {
     const message = JSON.parse(payload.toString("utf8"));
     void handleSocketMessage(client, message).catch((error) => {
-      logSpAiceError("ws message handler failed", {
+      logClusternautsError("ws message handler failed", {
         playerId: client.playerId || null,
         messageType: message && typeof message === "object" ? message.type || null : null,
         message: error instanceof Error ? error.message : "handler failed",
@@ -1912,7 +2513,7 @@ function processWsTextMessage(client, payload) {
       sendWsJson(client, { type: "error", message: "Server failed to process multiplayer message." });
     });
   } catch (error) {
-    logSpAiceError("ws invalid json", {
+    logClusternautsError("ws invalid json", {
       playerId: client.playerId || null,
       message: error instanceof Error ? error.message : "parse failed"
     });
@@ -2047,7 +2648,7 @@ function sendWsJson(client, payload) {
       if (isExpectedWsDisconnectError(error)) {
         logMultiplayer("ws send disconnected", details);
       } else {
-        logSpAiceError("ws send failed", details);
+        logClusternautsError("ws send failed", details);
       }
       handleSocketClose(client, "send failed");
     });
@@ -2061,7 +2662,7 @@ function sendWsJson(client, payload) {
     if (isExpectedWsDisconnectError(error)) {
       logMultiplayer("ws send disconnected", details);
     } else {
-      logSpAiceError("ws send failed", details);
+      logClusternautsError("ws send failed", details);
     }
     handleSocketClose(client, "send failed");
   }
@@ -2978,34 +3579,34 @@ setInterval(() => {
 
 server.on("error", (error) => {
   if (error && error.code === "EADDRINUSE") {
-    console.error(`[SpAice server] Port ${port} is already in use. Stop the other npm start window, or run with a different PORT.`);
+    console.error(`[Clusternauts server] Port ${port} is already in use. Stop the other npm start window, or run with a different PORT.`);
     return;
   }
 
   if (error && error.code === "EACCES") {
-    console.error(`[SpAice server] Permission denied while binding ${host}:${port}. Check Windows Firewall or run from a terminal with permission to accept network connections.`);
+    console.error(`[Clusternauts server] Permission denied while binding ${host}:${port}. Check Windows Firewall or run from a terminal with permission to accept network connections.`);
     return;
   }
 
-  console.error("[SpAice server] Server error:", error);
+  console.error("[Clusternauts server] Server error:", error);
 });
 
 process.on("uncaughtExceptionMonitor", (error) => {
-  logSpAiceError("uncaught exception", {
+  logClusternautsError("uncaught exception", {
     message: error instanceof Error ? error.message : "unknown error",
     stack: error instanceof Error ? error.stack : ""
   });
 });
 
 process.on("unhandledRejection", (reason) => {
-  logSpAiceError("unhandled rejection", {
+  logClusternautsError("unhandled rejection", {
     message: reason instanceof Error ? reason.message : String(reason),
     stack: reason instanceof Error ? reason.stack : ""
   });
 });
 
 server.listen(port, host, () => {
-  console.log("SpAice is running at:");
+  console.log("Clusternauts is running at:");
   for (const advertisedHost of advertisedHosts) {
     console.log(`  http://${advertisedHost}:${port}`);
   }
