@@ -4,6 +4,22 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Clusternauts Particle Collector</title>
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <script>
+      window.CLUSTERNAUTS_CRAZYGAMES_SDK_READY = (async function () {
+        if (!window.CrazyGames || !window.CrazyGames.SDK) {
+          return null;
+        }
+
+        try {
+          await window.CrazyGames.SDK.init();
+          return window.CrazyGames.SDK;
+        } catch (error) {
+          console.warn("CrazyGames SDK initialization skipped.", error);
+          return null;
+        }
+      }());
+    </script>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -107,9 +123,9 @@
           <div class="settings-panel__group">
             <label class="settings-panel__range" for="zoomInput">
               <span>Zoom level</span>
-              <output id="zoomValue" for="zoomInput">100%</output>
+              <output id="zoomValue" for="zoomInput">62%</output>
             </label>
-            <input id="zoomInput" type="range" min="62" max="175" step="1" value="100">
+            <input id="zoomInput" type="range" min="0" max="200" step="1" value="100">
           </div>
           <div class="settings-panel__group">
             <label class="settings-panel__check" for="surfaceCameraRotationInput">
@@ -169,8 +185,8 @@
       </div>
     </section>
     <section class="command-panel" id="commandPanel" aria-label="Command console" aria-hidden="true">
-      <input id="commandInput" type="text" autocomplete="off" spellcheck="false" placeholder="/tp player">
-      <div class="command-panel__hint" id="commandHint">Tab completes player names</div>
+      <input id="commandInput" type="password" autocomplete="off" spellcheck="false" placeholder="Password">
+      <div class="command-panel__hint" id="commandHint">Type password to unlock commands</div>
     </section>
     <section class="player-interaction" id="playerInteractionPanel" aria-label="Player interaction choices" aria-hidden="true">
       <div class="player-interaction__name" id="playerInteractionName">Contact</div>

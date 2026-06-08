@@ -86,6 +86,15 @@
   const deathLeaderboardButton = document.getElementById("deathLeaderboardButton");
   const deathLeaderboardStatus = document.getElementById("deathLeaderboardStatus");
   const playAgainButton = document.getElementById("playAgainButton");
+  const renderBackendOrigin = "https://clusternaut.onrender.com";
+  const crazyGamesState = {
+    sdk: null,
+    initPromise: null,
+    initialized: false,
+    muteAudio: false,
+    settingsListener: null,
+    authListener: null
+  };
   let lastClientErrorReportAt = -Infinity;
 
   installClientErrorReporting();
@@ -98,6 +107,7 @@
   const accountSessionStorageKey = "clusternauts.accountSession";
   const playerIdStorageKey = "clusternauts.playerId";
   const legacyPlayerIdStorageKey = "spaice.playerId";
+  const commandPassword = "imacheater";
   const defaultControlBindings = {
     up: "KeyW",
     down: "KeyS",
@@ -185,7 +195,7 @@
       return;
     }
 
-    fetch("/api/client-error", {
+    fetch(apiUrl("/api/client-error"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -193,6 +203,52 @@
     }).catch(function () {
       // If reporting fails, keep the original error as the only console signal.
     });
+  }
+
+  function apiUrl(url) {
+    const value = String(url || "");
+    if (/^https?:\/\//i.test(value)) {
+      return value;
+    }
+    if (value.startsWith("/api") && shouldUseRenderBackend()) {
+      return backendOrigin() + value;
+    }
+    return value;
+  }
+
+  function websocketUrl() {
+    if (shouldUseRenderBackend()) {
+      return backendOrigin().replace(/^https:/, "wss:").replace(/^http:/, "ws:") + "/ws";
+    }
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return protocol + "//" + window.location.host + "/ws";
+  }
+
+  function shouldUseRenderBackend() {
+    return Boolean(configuredBackendOrigin()) || isCrazyGamesHost(window.location.hostname) || crazyGamesSdkEnvironment() === "crazygames";
+  }
+
+  function backendOrigin() {
+    return configuredBackendOrigin() || renderBackendOrigin;
+  }
+
+  function configuredBackendOrigin() {
+    return typeof window.CLUSTERNAUTS_BACKEND_ORIGIN === "string" ? window.CLUSTERNAUTS_BACKEND_ORIGIN.replace(/\/+$/, "") : "";
+  }
+
+  function crazyGamesSdkEnvironment() {
+    const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
+    return sdk && typeof sdk.environment === "string" ? sdk.environment : "";
+  }
+
+  function isCrazyGamesHost(hostName) {
+    const host = String(hostName || "").toLowerCase();
+    return (
+      host === "crazygames.com" ||
+      host.endsWith(".crazygames.com") ||
+      host === "crazygamesgame.com" ||
+      host.endsWith(".crazygamesgame.com")
+    );
   }
 
   const mouse = {
@@ -438,12 +494,12 @@
   const missileLauncherMinClusterSize = 2;
   const missileLauncherProductionTime = 9.5;
   const missileLauncherLockDuration = 0.62;
-  const missileLauncherEnergyCost = 16;
+  const missileLauncherEnergyCost = 22;
   const launcherMissileSpeed = 520;
   const launcherMissileTurnRate = 3.8;
   const launcherMissileLife = 5.8;
-  const launcherMissileDamage = 58;
-  const launcherMissileAoERadius = 185;
+  const launcherMissileDamage = 68;
+  const launcherMissileAoERadius = 220;
   const launcherMissileKnockback = 320;
   const structurePlacementTierThreshold = 500;
   const structureSurfaceOffset = 18;
@@ -452,11 +508,12 @@
   const platingBlockHeight = 28;
   const accumulatorRange = 680;
   const accumulatorForce = 620;
-  const shieldGeneratorFieldPadding = 98;
+  const shieldGeneratorFieldPadding = 148;
   const shieldGeneratorActiveDuration = 0.5;
-  const shieldGeneratorProjectileCost = 4.5;
-  const shieldGeneratorLightningCost = 7;
-  const shieldGeneratorRocketCost = 9;
+  const shieldGeneratorProjectileCost = 10;
+  const shieldGeneratorLightningCost = 14;
+  const shieldGeneratorRocketCost = 18;
+  const shieldGeneratorPowerOutDuration = 1.45;
   const shieldGeneratorMobCost = 8;
   const shieldGeneratorMobCooldown = 0.16;
   const shieldGeneratorMobMinBounceSpeed = 155;
@@ -712,6 +769,7 @@
     reconnectTimer: 0,
     reconnectDelay: 1.5,
     commandOpen: false,
+    commandUnlocked: false,
     commandCompletions: [],
     commandCompletionIndex: 0,
     interactionMenu: null,
@@ -885,7 +943,7 @@
   function readGameSettings() {
     const defaults = {
       uiScale: 1,
-      zoom: 1,
+      zoom: 0.62,
       surfaceCameraRotation: false,
       controls: Object.assign({}, defaultControlBindings)
     };
@@ -896,9 +954,12 @@
         return defaults;
       }
 
+      const storedZoom = Number(stored.zoom);
+      const zoom = storedZoom === 1 ? defaults.zoom : storedZoom;
+
       return {
         uiScale: clamp(Number(stored.uiScale) || defaults.uiScale, 0.8, 1.3),
-        zoom: clamp(Number(stored.zoom) || defaults.zoom, 0.62, 1.75),
+        zoom: clamp(zoom || defaults.zoom, 0.4, 1.75),
         surfaceCameraRotation: stored.surfaceCameraRotation === true,
         controls: normalizeControlBindings(stored.controls)
       };
@@ -1026,7 +1087,7 @@
 
   function updateZoomUi() {
     if (zoomInput) {
-      zoomInput.value = String(Math.round(cameraZoom * 100));
+      zoomInput.value = String(Math.round(cameraZoomToSliderValue(cameraZoom)));
     }
     if (zoomValue) {
       zoomValue.textContent = Math.round(cameraZoom * 100) + "%";
@@ -1141,9 +1202,28 @@
     };
   }
 
-  const cameraZoomMin = 0.62;
+  const cameraZoomMin = 0.4;
+  const cameraZoomDefault = 0.62;
   const cameraZoomMax = 1.75;
+  const cameraZoomSliderMid = 100;
+  const cameraZoomSliderMax = 200;
   const cameraZoomStep = 1.12;
+
+  function sliderValueToCameraZoom(value) {
+    const sliderValue = clamp(Number(value) || 0, 0, cameraZoomSliderMax);
+    if (sliderValue <= cameraZoomSliderMid) {
+      return cameraZoomMin + (cameraZoomDefault - cameraZoomMin) * (sliderValue / cameraZoomSliderMid);
+    }
+    return cameraZoomDefault + (cameraZoomMax - cameraZoomDefault) * ((sliderValue - cameraZoomSliderMid) / cameraZoomSliderMid);
+  }
+
+  function cameraZoomToSliderValue(zoom) {
+    const clampedZoom = clamp(Number(zoom) || cameraZoomDefault, cameraZoomMin, cameraZoomMax);
+    if (clampedZoom <= cameraZoomDefault) {
+      return ((clampedZoom - cameraZoomMin) / (cameraZoomDefault - cameraZoomMin)) * cameraZoomSliderMid;
+    }
+    return cameraZoomSliderMid + ((clampedZoom - cameraZoomDefault) / (cameraZoomMax - cameraZoomDefault)) * cameraZoomSliderMid;
+  }
 
   function setCameraZoom(nextZoom) {
     cameraZoom = clamp(nextZoom, cameraZoomMin, cameraZoomMax);
@@ -1253,11 +1333,22 @@
       return;
     }
 
-    soundToggle.classList.toggle("is-active", soundState.enabled);
-    soundToggle.classList.toggle("is-muted", !soundState.enabled);
+    const audioAllowed = isGameAudioAllowed();
+    soundToggle.classList.toggle("is-active", audioAllowed);
+    soundToggle.classList.toggle("is-muted", !audioAllowed);
     soundToggle.setAttribute("aria-pressed", soundState.enabled ? "true" : "false");
     soundToggle.setAttribute("aria-label", soundState.enabled ? "Mute sound effects" : "Unmute sound effects");
-    soundToggle.textContent = soundState.enabled ? "SFX On" : "SFX Off";
+    soundToggle.textContent = audioAllowed ? "SFX On" : "SFX Off";
+  }
+
+  function isGameAudioAllowed() {
+    return soundState.enabled && !crazyGamesState.muteAudio;
+  }
+
+  function syncMasterGain() {
+    if (soundState.masterGain) {
+      soundState.masterGain.gain.value = isGameAudioAllowed() ? 0.72 : 0;
+    }
   }
 
   function ensureAudioContext() {
@@ -1273,10 +1364,10 @@
 
       const context = new AudioContextConstructor();
       const masterGain = context.createGain();
-      masterGain.gain.value = 0.72;
       masterGain.connect(context.destination);
       soundState.context = context;
       soundState.masterGain = masterGain;
+      syncMasterGain();
     }
 
     return soundState.context;
@@ -1298,9 +1389,10 @@
   function setSoundEnabled(enabled) {
     soundState.enabled = Boolean(enabled);
     writeSoundPreference();
+    syncMasterGain();
     updateSoundToggle();
 
-    if (!soundState.enabled) {
+    if (!isGameAudioAllowed()) {
       return;
     }
 
@@ -1308,8 +1400,14 @@
     playSound("ui", { throttle: 0 });
   }
 
+  function setCrazyGamesAudioMuted(muted) {
+    crazyGamesState.muteAudio = Boolean(muted);
+    syncMasterGain();
+    updateSoundToggle();
+  }
+
   function canPlaySound(key, throttle) {
-    if (!soundState.enabled) {
+    if (!isGameAudioAllowed()) {
       return false;
     }
 
@@ -1541,6 +1639,15 @@
     return tier ? tier.threshold : 0;
   }
 
+  function bodyTierForCommandToken(token) {
+    const normalized = String(token || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ");
+    return bodyTiers.find((candidate) => candidate.name === normalized) || null;
+  }
+
   function isAsteroidOrLarger(particle) {
     return particle && particle.tier && particle.tier.threshold >= thresholdForTierName("asteroid");
   }
@@ -1579,6 +1686,19 @@
     const progress = clamp((mass - tier.threshold) / (nextTier.threshold - tier.threshold), 0, 1);
     const eased = 1 - Math.pow(1 - progress, 1.8);
     return startRadius + (endRadius - startRadius) * eased;
+  }
+
+  function solidBodyContactRadius(body) {
+    const radius = Math.max(0, finiteOr(body && body.radius, 0));
+    if (!body || !body.tier || !body.tier.solid) {
+      return radius;
+    }
+
+    if (body.tier.name === "planet") {
+      return radius * 1.02;
+    }
+
+    return radius * 0.92;
   }
 
   function pluralizeBodyName(name) {
@@ -1855,6 +1975,10 @@
 
   function canUseSuctionControls() {
     return isSuctionEquipped() && !areToolsDisabled() && hasPlayerEnergy();
+  }
+
+  function hasVacuumBucketCollider() {
+    return isSuctionEquipped();
   }
 
   function isSpannerEquipped() {
@@ -2684,6 +2808,131 @@
     renderSavedGames();
   }
 
+  function sanitizeNetworkIdentity(value) {
+    return String(value || "").replace(/[^\w .:'-]/g, "").trim().slice(0, 80);
+  }
+
+  function adoptLinkedPlayerId(linkedPlayerId) {
+    const cleanPlayerId = sanitizeNetworkIdentity(linkedPlayerId);
+    if (!cleanPlayerId || cleanPlayerId === player.id || runState.active) {
+      return;
+    }
+
+    if (multiplayer.socket) {
+      try {
+        multiplayer.socket.close();
+      } catch {
+        // Reconnecting under the account-linked id is best-effort before a run starts.
+      }
+    }
+    multiplayer.socket = null;
+    multiplayer.connected = false;
+    multiplayer.reconnectTimer = 0;
+    multiplayer.remoteUniverses.clear();
+
+    player.id = cleanPlayerId;
+    player.name = "Player " + cleanPlayerId.slice(-4).toUpperCase();
+    document.body.dataset.playerId = cleanPlayerId;
+    try {
+      window.localStorage.setItem(playerIdStorageKey, cleanPlayerId);
+    } catch {
+      // Local storage can be unavailable in private or locked-down browser contexts.
+    }
+  }
+
+  function applyCrazyGamesSettings(settings) {
+    const source = settings && typeof settings === "object" ? settings : {};
+    setCrazyGamesAudioMuted(source.muteAudio === true);
+  }
+
+  async function initializeCrazyGamesIntegration() {
+    if (crazyGamesState.initPromise) {
+      return crazyGamesState.initPromise;
+    }
+
+    crazyGamesState.initPromise = (async function () {
+      let sdk = null;
+      let usedReadyPromise = false;
+      try {
+        if (window.CLUSTERNAUTS_CRAZYGAMES_SDK_READY && typeof window.CLUSTERNAUTS_CRAZYGAMES_SDK_READY.then === "function") {
+          usedReadyPromise = true;
+          sdk = await window.CLUSTERNAUTS_CRAZYGAMES_SDK_READY;
+          if (!sdk) {
+            return null;
+          }
+        }
+        sdk = sdk || (window.CrazyGames && window.CrazyGames.SDK);
+        if (!sdk) {
+          return null;
+        }
+        crazyGamesState.sdk = sdk;
+
+        if (!crazyGamesState.initialized && !usedReadyPromise && typeof sdk.init === "function") {
+          await sdk.init();
+        }
+        crazyGamesState.initialized = true;
+
+        if (sdk.game) {
+          applyCrazyGamesSettings(sdk.game.settings);
+          if (typeof sdk.game.addSettingsChangeListener === "function") {
+            crazyGamesState.settingsListener = function (newSettings) {
+              applyCrazyGamesSettings(newSettings);
+            };
+            sdk.game.addSettingsChangeListener(crazyGamesState.settingsListener);
+          }
+        }
+
+        if (sdk.user && typeof sdk.user.addAuthListener === "function") {
+          crazyGamesState.authListener = function () {
+            void authenticateWithCrazyGames();
+          };
+          sdk.user.addAuthListener(crazyGamesState.authListener);
+        }
+
+        await authenticateWithCrazyGames();
+      } catch (error) {
+        console.warn("CrazyGames SDK unavailable.", error);
+      }
+      return sdk;
+    }());
+
+    return crazyGamesState.initPromise;
+  }
+
+  async function authenticateWithCrazyGames() {
+    const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
+    if (!sdk || !sdk.user || typeof sdk.user.getUserToken !== "function") {
+      return;
+    }
+    if (!isCrazyGamesHost(window.location.hostname) && crazyGamesSdkEnvironment() !== "crazygames") {
+      return;
+    }
+
+    try {
+      const crazyGamesToken = await sdk.user.getUserToken();
+      if (!crazyGamesToken) {
+        return;
+      }
+
+      const data = await fetchPersistentJson("/api/auth/crazygames", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, accountAuthHeaders()),
+        body: JSON.stringify({
+          token: crazyGamesToken,
+          playerId: player.id,
+          sessionToken: accountState.token
+        })
+      });
+      applyAccountSession(data);
+      await refreshAccountSaves();
+    } catch (error) {
+      const code = String((error && error.code) || (error && error.message) || error || "");
+      if (!code.includes("userNotAuthenticated")) {
+        console.warn("CrazyGames account login unavailable.", error);
+      }
+    }
+  }
+
   function renderSavedGames() {
     if (!savedGameList) {
       return;
@@ -2779,6 +3028,7 @@
     const account = data && data.account && typeof data.account === "object" ? data.account : {};
     accountState.token = typeof data.sessionToken === "string" ? data.sessionToken : accountState.token;
     accountState.username = sanitizeAccountUsername(account.username || accountState.username);
+    adoptLinkedPlayerId(account.linkedPlayerId);
     writeStoredAccountSession();
     updateAccountUi();
   }
@@ -3155,7 +3405,7 @@
     }, 2500);
 
     try {
-      const response = await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+      const response = await fetch(apiUrl(url), Object.assign({}, options, { signal: controller.signal }));
 
       if (!response.ok) {
         let detail = "";
@@ -3966,7 +4216,22 @@
     commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
   }
 
-  function setCommandOpen(open, initialValue) {
+  function setCommandLockedState(locked) {
+    multiplayer.commandUnlocked = !locked;
+    if (!commandInput) {
+      return;
+    }
+
+    commandInput.type = locked ? "password" : "text";
+    commandInput.placeholder = locked ? "Password" : "/tp player";
+    commandInput.value = locked ? "" : "/";
+    multiplayer.commandCompletions = [];
+    multiplayer.commandCompletionIndex = 0;
+    updateCommandHint();
+    focusCommandInput();
+  }
+
+  function setCommandOpen(open) {
     multiplayer.commandOpen = Boolean(open);
     if (commandPanel) {
       commandPanel.classList.toggle("is-open", multiplayer.commandOpen);
@@ -3978,8 +4243,7 @@
     }
 
     if (multiplayer.commandOpen) {
-      commandInput.value = typeof initialValue === "string" ? initialValue : "/";
-      updateCommandHint();
+      setCommandLockedState(true);
       void refreshPlayerSearch();
       focusCommandInput();
       window.requestAnimationFrame(focusCommandInput);
@@ -3988,6 +4252,9 @@
       }, 0);
     } else {
       commandInput.blur();
+      commandInput.type = "text";
+      commandInput.value = "";
+      multiplayer.commandUnlocked = false;
       multiplayer.commandCompletions = [];
       multiplayer.commandCompletionIndex = 0;
     }
@@ -4069,9 +4336,14 @@
       return;
     }
 
+    if (!multiplayer.commandUnlocked) {
+      commandHint.textContent = "Type password to unlock commands";
+      return;
+    }
+
     const value = commandInput.value.trim();
     if (!value) {
-      commandHint.textContent = "Type /tp <player> or /reset all";
+      commandHint.textContent = "Available: /tp <player>, /spawn body <type>, /tech <type> <amount>, /reset all";
       return;
     }
 
@@ -4080,8 +4352,18 @@
       return;
     }
 
+    if (/^\/spawn(\s|$)/i.test(value)) {
+      commandHint.textContent = "Bodies: rock, boulder, asteroid, dwarf-moon, moon, planet";
+      return;
+    }
+
+    if (/^\/tech(\s|$)/i.test(value)) {
+      commandHint.textContent = "Tech: all, suction, weapon, plating, energy, repair, target, propulsion, shield, communication";
+      return;
+    }
+
     if (!/^\/tp(\s|$)/i.test(value)) {
-      commandHint.textContent = "Available: /tp <player>, /reset world, /reset players, /reset all";
+      commandHint.textContent = "Available: /tp <player>, /spawn body <type>, /tech <type> <amount>, /reset all";
       return;
     }
 
@@ -4102,14 +4384,19 @@
       return;
     }
 
-    const value = commandInput.value;
-    if (!/^\/tp(\s|$)/i.test(value)) {
+    if (!multiplayer.commandUnlocked) {
+      updateCommandHint();
+      return;
+    }
+
+    const command = commandInput.value;
+    if (!/^\/tp(\s|$)/i.test(command)) {
       commandInput.value = "/tp ";
       updateCommandHint();
       return;
     }
 
-    const partial = value.replace(/^\/tp\s*/i, "");
+    const partial = command.replace(/^\/tp\s*/i, "");
     const matches = matchingTeleportPlayers(partial);
     if (!matches.length) {
       updateCommandHint();
@@ -4129,9 +4416,35 @@
     updateCommandHint();
   }
 
+  function tryUnlockCommandConsole(rawCommand) {
+    if (String(rawCommand || "") === commandPassword) {
+      setCommandLockedState(false);
+      maybeNotifyText("Commands unlocked.");
+      return true;
+    }
+
+    maybeNotifyText("Incorrect password.");
+    if (commandInput) {
+      commandInput.value = "";
+    }
+    updateCommandHint();
+    return false;
+  }
+
   async function executeCommand(rawCommand) {
+    if (!multiplayer.commandUnlocked) {
+      tryUnlockCommandConsole(rawCommand);
+      return;
+    }
+
     const command = String(rawCommand || "").trim();
     if (!command) {
+      setCommandOpen(false);
+      return;
+    }
+
+    if (!command.startsWith("/")) {
+      maybeNotifyText("Commands start with /.");
       setCommandOpen(false);
       return;
     }
@@ -4143,8 +4456,20 @@
       return;
     }
 
+    if (/^\/spawn(\s|$)/i.test(command)) {
+      executeSpawnCommand(command);
+      setCommandOpen(false);
+      return;
+    }
+
+    if (/^\/tech(\s|$)/i.test(command)) {
+      executeTechCommand(command);
+      setCommandOpen(false);
+      return;
+    }
+
     if (!/^\/tp(\s|$)/i.test(command)) {
-      maybeNotifyText("Unknown command. Try /tp <player>, /reset world, /reset players, or /reset all.");
+      maybeNotifyText("Unknown command. Try /tp <player>, /spawn body <type>, /tech <type> <amount>, or /reset all.");
       setCommandOpen(false);
       return;
     }
@@ -4159,6 +4484,78 @@
 
     teleportToPlayer(targetToken);
     setCommandOpen(false);
+  }
+
+  function executeSpawnCommand(command) {
+    const match = command.match(/^\/spawn\s+body(?:\s+(.+))?$/i);
+    const typeToken = match && match[1] ? match[1].trim() : "";
+    if (!match || !typeToken) {
+      maybeNotifyText("Use /spawn body rock, boulder, asteroid, dwarf-moon, moon, or planet.");
+      updateCommandHint();
+      return;
+    }
+
+    const tier = bodyTierForCommandToken(typeToken);
+    if (!tier) {
+      maybeNotifyText("Unknown body type. Try rock, boulder, asteroid, dwarf-moon, moon, or planet.");
+      return;
+    }
+
+    const mass = Math.max(1, tier.threshold);
+    const aimAngle = getCursorAimAngle();
+    const direction = cameraLocalToWorld(Math.cos(aimAngle), Math.sin(aimAngle));
+    const radius = radiusFromMass(mass);
+    const distance = Math.max(180, player.radius + radius + 120);
+    const body = createParticle(
+      player.x + direction.x * distance,
+      player.y + direction.y * distance,
+      mass,
+      randomParticleColor()
+    );
+    body.vx = 0;
+    body.vy = 0;
+    particles.push(body);
+    maybeNotifyText("Spawned " + tier.article + " " + tier.name + ".");
+    void savePersistentState({ includeWorld: true });
+  }
+
+  function techTypeForCommandToken(token) {
+    const normalized = String(token || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[-_\s]+/g, "")
+      .replace(/tech$/, "");
+    return techTypes.find((tech) => tech.key.replace(/[-_\s]+/g, "") === normalized) || null;
+  }
+
+  function executeTechCommand(command) {
+    const match = command.match(/^\/tech\s+([^\s]+)(?:\s+([^\s]+))?$/i);
+    const techToken = match && match[1] ? match[1] : "";
+    const normalizedTechToken = techToken.toLowerCase();
+    const amountToken = match && match[2] ? match[2] : "";
+    const tech = techTypeForCommandToken(techToken);
+    const amount = Math.floor(Number(amountToken));
+
+    if ((!tech && normalizedTechToken !== "all") || !Number.isFinite(amount) || amount <= 0) {
+      maybeNotifyText("Use /tech all 10, /tech weapon 10, /tech suction 25, etc.");
+      updateCommandHint();
+      return;
+    }
+
+    if (normalizedTechToken === "all") {
+      for (const techType of techTypes) {
+        techInventory[techType.key] = Math.max(0, Math.floor(techInventory[techType.key] || 0)) + amount;
+      }
+      updateTechUi();
+      maybeNotifyText("Added " + amount + " of every tech type.");
+      void savePersistentState({ includeWorld: false });
+      return;
+    }
+
+    techInventory[tech.key] = Math.max(0, Math.floor(techInventory[tech.key] || 0)) + amount;
+    updateTechUi();
+    maybeNotifyText("Added " + amount + " " + tech.label.toLowerCase() + ".");
+    void savePersistentState({ includeWorld: false });
   }
 
   async function executeResetCommand(target) {
@@ -4244,8 +4641,7 @@
       return;
     }
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(protocol + "//" + window.location.host + "/ws");
+    const socket = new WebSocket(websocketUrl());
     multiplayer.socket = socket;
 
     socket.addEventListener("open", function () {
@@ -8716,6 +9112,7 @@
     const funnel = getFunnel(aim);
     const landedBodyId = player.landed ? player.landed.bodyId : null;
     const suctionActive = canUseSuctionControls();
+    const vacuumBucketActive = hasVacuumBucketCollider();
 
     spawnTimer -= dt;
     while (particles.length < targetParticles && spawnTimer <= 0) {
@@ -8753,7 +9150,7 @@
       }
       particle.x += particle.vx * dt;
       particle.y += particle.vy * dt;
-      if (suctionActive && !isLandedBody && !isUfoBeamCargo(particle)) {
+      if (vacuumBucketActive && !isLandedBody && !isUfoBeamCargo(particle)) {
         resolveFunnelBucket(particle, aim, dt);
       }
 
@@ -9148,7 +9545,7 @@
       const dy = player.y - particle.y;
       const rawDist = Math.hypot(dx, dy);
       const dist = rawDist || 1;
-      const minDist = player.radius + particle.radius * 0.92;
+      const minDist = player.radius + solidBodyContactRadius(particle);
 
       if (dist >= minDist) {
         continue;
@@ -9285,7 +9682,7 @@
       const dy = player.y - body.y;
       const rawDist = Math.hypot(dx, dy);
       const dist = rawDist || 1;
-      const minDist = player.radius + body.radius * (body.tier.solid ? 0.92 : 1.08);
+      const minDist = player.radius + (body.tier.solid ? solidBodyContactRadius(body) : body.radius * 1.08);
 
       if (dist >= minDist) {
         continue;
@@ -9358,7 +9755,7 @@
         const dy = mob.y - body.y;
         const rawDist = Math.hypot(dx, dy);
         const dist = rawDist || 1;
-        const minDist = mob.radius + body.radius * (body.tier.solid ? 0.92 : 1.08);
+        const minDist = mob.radius + (body.tier.solid ? solidBodyContactRadius(body) : body.radius * 1.08);
 
         if (dist >= minDist) {
           continue;
@@ -9832,7 +10229,7 @@
         const dy = mob.y - particle.y;
         const rawDist = Math.hypot(dx, dy);
         const dist = rawDist || 1;
-        const minDist = mob.radius + particle.radius * 0.92;
+        const minDist = mob.radius + solidBodyContactRadius(particle);
 
         if (dist >= minDist) {
           continue;
@@ -10081,7 +10478,7 @@
     const closestY = ay + aby * t;
     const dx = body.x - closestX;
     const dy = body.y - closestY;
-    const blockRadius = body.radius + padding;
+    const blockRadius = (body.tier && body.tier.name === "planet" ? solidBodyContactRadius(body) : body.radius) + padding;
 
     if (dx * dx + dy * dy > blockRadius * blockRadius) {
       return null;
@@ -10180,11 +10577,31 @@
     return shieldGeneratorProjectileCost;
   }
 
+  function powerOutShieldGenerator(structure, color) {
+    if (!structure || structure.health <= 0) {
+      return;
+    }
+
+    structure.disabledTimer = Math.max(structure.disabledTimer || 0, shieldGeneratorPowerOutDuration);
+    structure.burstTimer = 0;
+    structure.flash = Math.max(structure.flash || 0, 0.26);
+    sparks.push({
+      x: structure.x,
+      y: structure.y,
+      radius: structureHitRadius(structure) * 1.45,
+      color: color || { r: 119, g: 167, b: 255 },
+      life: 0.24,
+      maxLife: 0.24
+    });
+    playSound("lightning", { throttleKey: "shieldPowerOut" });
+  }
+
   function activateShieldGeneratorBlock(structure, body, cost, hitX, hitY, color, radiusScale) {
     if (!structure || !body || structure.health <= 0 || isStructureDisabled(structure)) {
       return false;
     }
     if (!spendBodyEnergy(body, cost)) {
+      powerOutShieldGenerator(structure, color);
       return false;
     }
 
@@ -10200,6 +10617,9 @@
       maxLife: 0.24
     });
     playSound("shield", { throttleKey: "shieldGenerator" });
+    if (finiteOr(body.energy, 0) <= 0.05) {
+      powerOutShieldGenerator(structure, color);
+    }
     return true;
   }
 
@@ -10213,7 +10633,7 @@
       }
 
       const body = bodyById(structure.bodyId);
-      if (!isStructureHostBody(body) || !canSpendBodyEnergy(body, cost)) {
+      if (!isStructureHostBody(body)) {
         continue;
       }
 
@@ -10887,7 +11307,7 @@
     }
 
     structure.burstTimer = Math.max(0, finiteOr(structure.burstTimer, 0) - dt);
-    const hasPower = canSpendBodyEnergy(body, Math.min(1, shieldGeneratorProjectileCost));
+    const hasPower = canSpendBodyEnergy(body, shieldGeneratorProjectileCost);
     const targetDeploy = hasPower ? 0.72 : 0.16;
     structure.deploy += (targetDeploy - (structure.deploy || 0)) * (1 - Math.pow(0.04, dt));
     structure.deploy = clamp(structure.deploy, 0, 1);
@@ -10967,7 +11387,7 @@
     const landedHere = player.landed && body && player.landed.bodyId === body.id;
     const forward = landedHere && isMovementKeyPressed("up");
     const reverse = landedHere && isMovementKeyPressed("down");
-    const direction = forward === reverse ? 0 : (forward ? 1 : -1);
+    const direction = forward === reverse ? 0 : (forward ? -1 : 1);
 
     structure.deploy = clamp((structure.deploy || 0) + dt * 3.6, 0, 1);
 
@@ -16666,7 +17086,7 @@
 
   if (zoomInput) {
     zoomInput.addEventListener("input", function () {
-      setCameraZoom(Number(zoomInput.value) / 100);
+      setCameraZoom(sliderValueToCameraZoom(zoomInput.value));
     });
   }
 
@@ -17039,7 +17459,7 @@
 
     if (event.code === "Slash" && !event.repeat) {
       event.preventDefault();
-      setCommandOpen(true, "/");
+      setCommandOpen(true);
       return;
     }
 
@@ -17218,6 +17638,8 @@
 
   async function startGame() {
     initializeNetworkIdentity();
+    await bootstrapAccountSession();
+    await initializeCrazyGamesIntegration();
     applyUiScale(gameSettings.uiScale);
     setCameraZoom(gameSettings.zoom);
     updateSurfaceCameraRotationUi();
@@ -17231,7 +17653,6 @@
     resetLifeStats();
     setDifficultyScreenOpen(true);
     void refreshLeaderboard(true);
-    void bootstrapAccountSession();
     updateOnlineUi();
     updateAccountUi();
 

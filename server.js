@@ -1,6 +1,7 @@
 "use strict";
 
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -21,6 +22,7 @@ const randomSignalCooldownMs = 45000;
 const randomSignalIntervalMs = 10 * 60 * 1000;
 const randomOverlapLifetimeMs = 120000;
 const sessionLifetimeMs = 1000 * 60 * 60 * 24 * 14;
+const crazyGamesPublicKeyUrl = "https://sdk.crazygames.com/publicKey.json";
 const techKeys = ["suction", "weapon", "plating", "energy", "repair", "target", "propulsion", "shield", "communication"];
 const toolKeys = ["suction-gadget", "laser-pistol", "laser-rifle", "spanner"];
 const toolUpgradeKeys = {
@@ -49,6 +51,10 @@ const playerCooldowns = new Map();
 let nextOverlapNumber = 1;
 const playerInteractionChoices = new Set(["trade", "truce", "team"]);
 const multiplayerDebugEnabled = process.env.CLUSTERNAUTS_MULTIPLAYER_DEBUG === "1";
+const crazyGamesPublicKeyCache = {
+  publicKey: "",
+  expiresAt: 0
+};
 
 function logMultiplayer(event, details) {
   if (!multiplayerDebugEnabled) {
@@ -143,6 +149,18 @@ function sendFile(response, filePath) {
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
+  if (url.pathname.startsWith("/api/")) {
+    applyCorsHeaders(request, response);
+
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, {
+        "Cache-Control": "no-store"
+      });
+      response.end();
+      return;
+    }
+  }
+
   if (url.pathname.startsWith("/api/auth/")) {
     void handleAuthRequest(request, response, url);
     return;
@@ -213,6 +231,13 @@ async function handleAuthRequest(request, response, url) {
     if (request.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readJsonBody(request);
       const result = await createAccountSession(body, false);
+      writeJson(response, 200, result);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/crazygames") {
+      const body = await readJsonBody(request);
+      const result = await createCrazyGamesAccountSession(request, body);
       writeJson(response, 200, result);
       return;
     }
@@ -943,6 +968,58 @@ async function createAccountSession(body, createNew) {
   };
 }
 
+async function createCrazyGamesAccountSession(request, body) {
+  const crazyGamesToken = sanitizeDebugText(body && body.token, 5000);
+  const playerId = sanitizeText(body && body.playerId, 80);
+
+  if (!crazyGamesToken) {
+    throwHttpError(400, "Missing CrazyGames user token.");
+  }
+
+  const crazyGamesUser = await verifyCrazyGamesUserToken(crazyGamesToken);
+  let account = null;
+  const linkedAccount = await getAccountByCrazyGamesId(crazyGamesUser.userId);
+  const existingSessionToken = extractSessionToken(request) || sanitizeDebugText(body && body.sessionToken, 200);
+
+  if (existingSessionToken) {
+    try {
+      account = (await requireAccountSession({ headers: { authorization: `Bearer ${existingSessionToken}` } })).account;
+    } catch {
+      account = null;
+    }
+  }
+
+  if (account && linkedAccount && account.username !== linkedAccount.username) {
+    throwHttpError(409, "This CrazyGames account is already linked to another game account.");
+  }
+
+  account = account || linkedAccount || (await createCrazyGamesAccount(crazyGamesUser, playerId));
+  account.crazyGamesId = crazyGamesUser.userId;
+  account.crazyGamesUsername = crazyGamesUser.username;
+  account.crazyGamesProfilePictureUrl = crazyGamesUser.profilePictureUrl;
+  if (!account.linkedPlayerId && playerId) {
+    account.linkedPlayerId = playerId;
+  }
+  account.lastLoginAt = Date.now();
+  await saveAccount(account);
+  await linkCrazyGamesPlayerProfile(account.linkedPlayerId, crazyGamesUser);
+
+  const token = randomToken(32);
+  await saveAccountSession({
+    tokenHash: hashToken(token),
+    username: account.username,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + sessionLifetimeMs
+  });
+
+  return {
+    ok: true,
+    serverTime: Date.now(),
+    sessionToken: token,
+    account: publicAccount(account)
+  };
+}
+
 async function createAccount(username, password, playerId) {
   return {
     username,
@@ -951,6 +1028,45 @@ async function createAccount(username, password, playerId) {
     createdAt: Date.now(),
     lastLoginAt: Date.now()
   };
+}
+
+async function createCrazyGamesAccount(crazyGamesUser, playerId) {
+  let username = crazyGamesAccountUsername(crazyGamesUser.userId);
+  const existing = await getAccount(username);
+  if (existing && existing.crazyGamesId !== crazyGamesUser.userId) {
+    username = "cg-" + hashToken(crazyGamesUser.userId + ":" + Date.now()).slice(0, 20);
+  }
+
+  return {
+    username,
+    password: await hashPassword(randomToken(32)),
+    linkedPlayerId: playerId || "",
+    crazyGamesId: crazyGamesUser.userId,
+    crazyGamesUsername: crazyGamesUser.username,
+    crazyGamesProfilePictureUrl: crazyGamesUser.profilePictureUrl,
+    createdAt: Date.now(),
+    lastLoginAt: Date.now()
+  };
+}
+
+function crazyGamesAccountUsername(crazyGamesId) {
+  return "cg-" + hashToken(crazyGamesId).slice(0, 20);
+}
+
+async function linkCrazyGamesPlayerProfile(playerId, crazyGamesUser) {
+  const cleanPlayerId = sanitizeText(playerId, 80);
+  if (!cleanPlayerId) {
+    return;
+  }
+
+  const profile = await ensurePlayerProfile(cleanPlayerId);
+  if (!profile) {
+    return;
+  }
+
+  profile.crazyGamesId = crazyGamesUser.userId;
+  profile.crazyGamesUsername = crazyGamesUser.username;
+  await saveProfile(profile);
 }
 
 async function getAccount(username) {
@@ -966,6 +1082,30 @@ async function getAccount(username) {
 
   await ensureDatabaseSchema(pool);
   const result = await pool.query("SELECT state FROM spaice_account WHERE username = $1", [cleanUsername]);
+  return normalizeAccount(result.rows[0] && result.rows[0].state);
+}
+
+async function getAccountByCrazyGamesId(crazyGamesId) {
+  const cleanCrazyGamesId = sanitizeDebugText(crazyGamesId, 128);
+  if (!cleanCrazyGamesId) {
+    return null;
+  }
+
+  const pool = await getDbPool();
+  if (!pool) {
+    for (const account of memoryPersistence.accounts.values()) {
+      const normalized = normalizeAccount(account);
+      if (normalized && normalized.crazyGamesId === cleanCrazyGamesId) {
+        return normalized;
+      }
+    }
+    return null;
+  }
+
+  await ensureDatabaseSchema(pool);
+  const result = await pool.query("SELECT state FROM spaice_account WHERE state->>'crazyGamesId' = $1 LIMIT 1", [
+    cleanCrazyGamesId
+  ]);
   return normalizeAccount(result.rows[0] && result.rows[0].state);
 }
 
@@ -1180,6 +1320,9 @@ function normalizeAccount(source) {
       salt: sanitizeDebugText(password.salt, 128)
     },
     linkedPlayerId: sanitizeText(source.linkedPlayerId, 80),
+    crazyGamesId: sanitizeDebugText(source.crazyGamesId, 128),
+    crazyGamesUsername: sanitizeDebugText(source.crazyGamesUsername, 80),
+    crazyGamesProfilePictureUrl: sanitizeDebugText(source.crazyGamesProfilePictureUrl, 300),
     createdAt: clampNumber(source.createdAt, 0, Date.now()) || Date.now(),
     lastLoginAt: clampNumber(source.lastLoginAt, 0, Date.now()) || Date.now()
   };
@@ -1270,6 +1413,7 @@ function publicAccount(account) {
     ? {
         username: normalized.username,
         linkedPlayerId: normalized.linkedPlayerId,
+        crazyGamesLinked: Boolean(normalized.crazyGamesId),
         createdAt: normalized.createdAt
       }
     : null;
@@ -1415,6 +1559,8 @@ function normalizeProfile(source, fallbackPlayerId) {
     playerId,
     universeId: soloWorldId(playerId),
     publicName: sanitizeText(snapshot.publicName, 32) || createRandomPublicName(),
+    crazyGamesId: sanitizeDebugText(snapshot.crazyGamesId, 128),
+    crazyGamesUsername: sanitizeDebugText(snapshot.crazyGamesUsername, 80),
     friends,
     createdAt: clampNumber(snapshot.createdAt, 0, Date.now()) || Date.now(),
     lastSeenAt: clampNumber(snapshot.lastSeenAt, 0, Date.now()) || Date.now()
@@ -2356,6 +2502,156 @@ function sanitizeClientErrorReport(body) {
     href: sanitizeDebugText(report.href, 500),
     timestamp: sanitizeDebugText(report.timestamp, 40)
   };
+}
+
+async function verifyCrazyGamesUserToken(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) {
+    throwHttpError(401, "Invalid CrazyGames user token.");
+  }
+
+  let header = null;
+  let payload = null;
+  try {
+    header = decodeJwtJson(parts[0]);
+    payload = decodeJwtJson(parts[1]);
+  } catch {
+    throwHttpError(401, "Invalid CrazyGames user token.");
+  }
+
+  if (!header || header.alg !== "RS256") {
+    throwHttpError(401, "Unsupported CrazyGames token signature.");
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (Number.isFinite(Number(payload.exp)) && Number(payload.exp) <= nowSeconds) {
+    throwHttpError(401, "CrazyGames user token expired.");
+  }
+
+  const signingInput = Buffer.from(parts[0] + "." + parts[1]);
+  const signature = base64UrlToBuffer(parts[2]);
+  let publicKey = await getCrazyGamesPublicKey(false);
+  let verified = verifyRs256Signature(signingInput, signature, publicKey);
+
+  if (!verified) {
+    publicKey = await getCrazyGamesPublicKey(true);
+    verified = verifyRs256Signature(signingInput, signature, publicKey);
+  }
+
+  if (!verified) {
+    throwHttpError(401, "CrazyGames user token signature is invalid.");
+  }
+
+  const userId = sanitizeDebugText(payload.userId, 128);
+  if (!userId) {
+    throwHttpError(401, "CrazyGames user token is missing a user id.");
+  }
+
+  return {
+    userId,
+    gameId: sanitizeDebugText(payload.gameId, 80),
+    username: sanitizeDebugText(payload.username, 80),
+    profilePictureUrl: sanitizeDebugText(payload.profilePictureUrl, 300)
+  };
+}
+
+function verifyRs256Signature(signingInput, signature, publicKey) {
+  try {
+    return crypto.verify("RSA-SHA256", signingInput, publicKey, signature);
+  } catch {
+    return false;
+  }
+}
+
+function decodeJwtJson(segment) {
+  return JSON.parse(base64UrlToBuffer(segment).toString("utf8"));
+}
+
+function base64UrlToBuffer(segment) {
+  const value = String(segment || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = value + "=".repeat((4 - (value.length % 4)) % 4);
+  return Buffer.from(padded, "base64");
+}
+
+async function getCrazyGamesPublicKey(forceRefresh) {
+  if (!forceRefresh && crazyGamesPublicKeyCache.publicKey && crazyGamesPublicKeyCache.expiresAt > Date.now()) {
+    return crazyGamesPublicKeyCache.publicKey;
+  }
+
+  const data = await fetchJsonOverHttps(crazyGamesPublicKeyUrl, 3500);
+  const publicKey = data && typeof data.publicKey === "string" ? data.publicKey : "";
+  if (!publicKey) {
+    throwHttpError(503, "Could not load CrazyGames public key.");
+  }
+
+  crazyGamesPublicKeyCache.publicKey = publicKey;
+  crazyGamesPublicKeyCache.expiresAt = Date.now() + 5 * 60 * 1000;
+  return publicKey;
+}
+
+function fetchJsonOverHttps(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, { timeout: timeoutMs }, (response) => {
+      let body = "";
+
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > 100000) {
+          request.destroy(new Error("CrazyGames public key response too large."));
+        }
+      });
+      response.on("end", () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error("CrazyGames public key request failed with status " + response.statusCode + "."));
+          return;
+        }
+        try {
+          resolve(JSON.parse(body));
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+
+    request.on("timeout", () => request.destroy(new Error("CrazyGames public key request timed out.")));
+    request.on("error", reject);
+  });
+}
+
+function applyCorsHeaders(request, response) {
+  const allowedOrigin = allowedCorsOrigin(request.headers.origin);
+  if (!allowedOrigin) {
+    return;
+  }
+
+  response.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  response.setHeader("Access-Control-Max-Age", "600");
+  response.setHeader("Vary", "Origin");
+}
+
+function allowedCorsOrigin(origin) {
+  if (!origin) {
+    return "";
+  }
+
+  try {
+    const hostName = new URL(origin).hostname.toLowerCase();
+    return isCrazyGamesHostName(hostName) ? origin : "";
+  } catch {
+    return "";
+  }
+}
+
+function isCrazyGamesHostName(hostName) {
+  return (
+    hostName === "crazygames.com" ||
+    hostName.endsWith(".crazygames.com") ||
+    hostName === "crazygamesgame.com" ||
+    hostName.endsWith(".crazygamesgame.com")
+  );
 }
 
 function throwHttpError(status, message) {
