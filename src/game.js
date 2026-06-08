@@ -30,6 +30,7 @@
   const buildMenuList = document.getElementById("buildMenuList");
   const buildMenuDetail = document.getElementById("buildMenuDetail");
   const buildMenuStatus = document.getElementById("buildMenuStatus");
+  const buildMenuClose = document.getElementById("buildMenuClose");
   const toolHotbar = document.getElementById("toolHotbar");
   const onlineToggle = document.getElementById("onlineToggle");
   const onlineCount = document.getElementById("onlineCount");
@@ -2262,8 +2263,6 @@
       return;
     }
 
-    const iconFrame = document.createElement("div");
-    const icon = document.createElement("img");
     const category = document.createElement("span");
     const title = document.createElement("strong");
     const description = document.createElement("p");
@@ -2272,7 +2271,6 @@
     const action = document.createElement("button");
     const upgradeSection = createToolUpgradeSection(recipe);
 
-    iconFrame.className = "build-detail__icon";
     category.className = "build-detail__category";
     title.className = "build-detail__title";
     description.className = "build-detail__description";
@@ -2280,9 +2278,6 @@
     costList.className = "build-detail__cost";
     action.className = "build-detail__action";
 
-    icon.src = recipe.icon || "";
-    icon.alt = "";
-    icon.setAttribute("aria-hidden", "true");
     category.textContent = recipe.category === "tools" ? "Tool" : "Structure";
     title.textContent = recipe.name;
     description.textContent = recipe.description;
@@ -2292,8 +2287,6 @@
     action.dataset.recipeId = recipe.id;
     action.textContent = buildRecipeActionText(recipe);
     action.disabled = !isBuildRecipeActionAvailable(recipe);
-
-    iconFrame.append(icon);
 
     if (!costEntries.length) {
       const status = document.createElement("div");
@@ -2306,7 +2299,7 @@
       costList.append(createCostRow(techKey, amount));
     }
 
-    buildMenuDetail.append(iconFrame, category, title, description, costTitle, costList, action);
+    buildMenuDetail.append(category, title, description, costTitle, costList, action);
     if (upgradeSection) {
       buildMenuDetail.append(upgradeSection);
     }
@@ -17644,6 +17637,12 @@
 
       selectedBuildRecipeId = card.dataset.recipeId;
       renderBuildMenu();
+    });
+  }
+
+  if (buildMenuClose) {
+    buildMenuClose.addEventListener("click", function () {
+      setBuildMenuOpen(false);
     });
   }
 

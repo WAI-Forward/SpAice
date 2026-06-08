@@ -541,6 +541,7 @@ body {
 .build-menu {
   position: fixed;
   inset: 0;
+  z-index: 12;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -576,7 +577,7 @@ body {
 
 .build-menu__header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 13px;
@@ -598,6 +599,35 @@ body {
   color: rgba(223, 252, 255, 0.76);
 }
 
+.build-menu__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.build-menu__close {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fbff;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.build-menu__close:hover {
+  border-color: rgba(255, 115, 173, 0.48);
+  background: rgba(255, 115, 173, 0.13);
+}
+
 .build-menu__tabs {
   display: flex;
   gap: 6px;
@@ -607,7 +637,7 @@ body {
 .build-menu__body {
   min-height: 0;
   display: grid;
-  grid-template-columns: 210px minmax(280px, 1fr) 250px;
+  grid-template-columns: minmax(170px, 210px) minmax(260px, 1fr) minmax(220px, 250px);
   gap: 12px;
   align-items: stretch;
   overflow: hidden;
@@ -2348,6 +2378,27 @@ body {
     width: 46px;
     height: 46px;
   }
+
+  .build-menu {
+    padding: 14px;
+  }
+
+  .build-menu__panel {
+    width: min(760px, calc(100vw - 28px));
+    height: min(700px, calc(100vh - 28px));
+    max-height: calc(100vh - 28px);
+    padding: 12px;
+  }
+
+  .build-menu__body {
+    grid-template-columns: minmax(150px, 190px) minmax(240px, 1fr);
+    overflow-y: auto;
+  }
+
+  .build-menu__details {
+    grid-column: 1 / -1;
+    min-height: 0;
+  }
 }
 
 @media (max-width: 560px) {
@@ -2466,6 +2517,22 @@ body {
     padding: 12px;
   }
 
+  .build-menu__header {
+    gap: 10px;
+  }
+
+  .build-menu__header span {
+    font-size: 16px;
+  }
+
+  .build-menu__header strong {
+    max-width: 92px;
+    overflow: hidden;
+    text-align: right;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
   .build-menu__body {
     grid-template-columns: 1fr;
     overflow-y: auto;
@@ -2486,6 +2553,10 @@ body {
   .build-menu__grid {
     overflow: visible;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .build-menu__details {
+    grid-column: auto;
   }
 
   .tool-hotbar {
