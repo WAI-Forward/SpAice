@@ -16,8 +16,13 @@
   const leaderboardToggle = document.getElementById("leaderboardToggle");
   const leaderboardPanel = document.getElementById("leaderboardPanel");
   const leaderboardList = document.getElementById("leaderboardList");
+  const resourcesToggle = document.getElementById("resourcesToggle");
+  const buildToggle = document.getElementById("buildToggle");
+  const mapToggle = document.getElementById("mapToggle");
   const notifications = document.getElementById("notifications");
   const notificationGroups = new Map();
+  const techLedger = document.getElementById("techLedger");
+  const techLedgerTitle = techLedger ? techLedger.querySelector(".tech-ledger__title") : null;
   const techLedgerList = document.getElementById("techLedgerList");
   const buildMenu = document.getElementById("buildMenu");
   const buildMenuTabs = document.getElementById("buildMenuTabs");
@@ -42,6 +47,9 @@
   const accountPasswordInput = document.getElementById("accountPasswordInput");
   const accountLoginButton = document.getElementById("accountLoginButton");
   const accountSignupButton = document.getElementById("accountSignupButton");
+  const crazyGamesAccount = document.getElementById("crazyGamesAccount");
+  const crazyGamesAccountStatus = document.getElementById("crazyGamesAccountStatus");
+  const crazyGamesLoginButton = document.getElementById("crazyGamesLoginButton");
   const accountSignedIn = document.getElementById("accountSignedIn");
   const accountNameValue = document.getElementById("accountNameValue");
   const accountLogoutButton = document.getElementById("accountLogoutButton");
@@ -92,8 +100,12 @@
     initPromise: null,
     initialized: false,
     muteAudio: false,
+    gameplayActive: false,
+    gameplayEventsDisabled: false,
     settingsListener: null,
-    authListener: null
+    authListener: null,
+    authAvailable: true,
+    authPromptActive: false
   };
   let lastClientErrorReportAt = -Infinity;
 
@@ -116,7 +128,7 @@
     rollLeft: "KeyQ",
     rollRight: "KeyE",
     land: "Space",
-    build: "KeyB"
+    build: "KeyR"
   };
   const controlBindingLabels = [
     { action: "up", label: "Move up" },
@@ -139,12 +151,23 @@
   let settingsOpen = false;
   let pendingControlRemap = null;
   let gamePaused = false;
+  const compactHudBreakpoint = 900;
+  const compactHudHeightBreakpoint = 560;
+  let resourcesHudOpen = false;
+  let mapHudOpen = false;
+  const techLedgerDrag = {
+    active: false,
+    pointerId: null,
+    offsetX: 0,
+    offsetY: 0
+  };
   const accountState = {
     token: "",
     username: "",
     saves: [],
     busy: false,
-    savesLoading: false
+    savesLoading: false,
+    crazyGamesLinked: false
   };
 
   syncControlBindings();
@@ -225,7 +248,14 @@
   }
 
   function shouldUseRenderBackend() {
-    return Boolean(configuredBackendOrigin()) || isCrazyGamesHost(window.location.hostname) || crazyGamesSdkEnvironment() === "crazygames";
+    const hostName = String(window.location.hostname || "").toLowerCase();
+    if (configuredBackendOrigin()) {
+      return true;
+    }
+    if (isLocalDevelopmentHost(hostName)) {
+      return false;
+    }
+    return hostName !== renderBackendHost();
   }
 
   function backendOrigin() {
@@ -234,6 +264,18 @@
 
   function configuredBackendOrigin() {
     return typeof window.CLUSTERNAUTS_BACKEND_ORIGIN === "string" ? window.CLUSTERNAUTS_BACKEND_ORIGIN.replace(/\/+$/, "") : "";
+  }
+
+  function renderBackendHost() {
+    try {
+      return new URL(renderBackendOrigin).hostname.toLowerCase();
+    } catch {
+      return "clusternaut.onrender.com";
+    }
+  }
+
+  function isLocalDevelopmentHost(hostName) {
+    return hostName === "localhost" || hostName === "127.0.0.1" || hostName === "::1" || hostName === "";
   }
 
   function crazyGamesSdkEnvironment() {
@@ -249,6 +291,10 @@
       host === "crazygamesgame.com" ||
       host.endsWith(".crazygamesgame.com")
     );
+  }
+
+  function isCrazyGamesRuntime() {
+    return Boolean(window.CLUSTERNAUTS_CRAZYGAMES_BUILD) || isCrazyGamesHost(window.location.hostname) || crazyGamesSdkEnvironment() === "crazygames";
   }
 
   const mouse = {
@@ -804,6 +850,7 @@
     enabled: readSoundPreference(),
     context: null,
     masterGain: null,
+    unavailable: false,
     unlocked: false,
     lastPlayed: Object.create(null)
   };
@@ -914,7 +961,8 @@
       }
       const token = typeof stored.token === "string" ? stored.token : "";
       const username = sanitizeAccountUsername(stored.username);
-      return token && username ? { token, username } : null;
+      const crazyGamesLinked = stored.crazyGamesLinked === true;
+      return token && username ? { token, username, crazyGamesLinked } : null;
     } catch {
       return null;
     }
@@ -929,7 +977,8 @@
 
       window.localStorage.setItem(accountSessionStorageKey, JSON.stringify({
         token: accountState.token,
-        username: accountState.username
+        username: accountState.username,
+        crazyGamesLinked: accountState.crazyGamesLinked === true
       }));
     } catch {
       // Local storage can be unavailable in private or locked-down browser contexts.
@@ -989,6 +1038,15 @@
       if (typeof snapshot[action] === "string" && snapshot[action]) {
         controls[action] = snapshot[action];
       }
+    }
+
+    if (snapshot.build === "KeyB") {
+      for (const action of Object.keys(controls)) {
+        if (action !== "build" && controls[action] === defaultControlBindings.build) {
+          controls[action] = "KeyB";
+        }
+      }
+      controls.build = defaultControlBindings.build;
     }
 
     return controls;
@@ -1352,7 +1410,7 @@
   }
 
   function ensureAudioContext() {
-    if (!soundState.enabled) {
+    if (!soundState.enabled || soundState.unavailable) {
       return null;
     }
 
@@ -1362,12 +1420,21 @@
         return null;
       }
 
-      const context = new AudioContextConstructor();
-      const masterGain = context.createGain();
-      masterGain.connect(context.destination);
-      soundState.context = context;
-      soundState.masterGain = masterGain;
-      syncMasterGain();
+      try {
+        const context = new AudioContextConstructor();
+        const masterGain = context.createGain();
+        masterGain.connect(context.destination);
+        soundState.context = context;
+        soundState.masterGain = masterGain;
+        syncMasterGain();
+      } catch (error) {
+        soundState.unavailable = true;
+        soundState.context = null;
+        soundState.masterGain = null;
+        soundState.unlocked = false;
+        console.warn("Clusternauts audio unavailable.", error);
+        return null;
+      }
     }
 
     return soundState.context;
@@ -1440,32 +1507,37 @@
       return;
     }
 
-    const delay = Math.max(0, finiteOr(options.delay, 0));
-    const duration = Math.max(0.02, finiteOr(options.duration, 0.16));
-    const gainAmount = Math.max(0.0001, finiteOr(options.gain, 0.04));
-    const frequency = Math.max(1, finiteOr(options.frequency, 440));
-    const endFrequency = Math.max(1, finiteOr(options.endFrequency, frequency));
-    const attack = Math.max(0.002, Math.min(duration * 0.45, finiteOr(options.attack, 0.01)));
-    const start = context.currentTime + delay;
-    const end = start + duration;
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
+    try {
+      const delay = Math.max(0, finiteOr(options.delay, 0));
+      const duration = Math.max(0.02, finiteOr(options.duration, 0.16));
+      const gainAmount = Math.max(0.0001, finiteOr(options.gain, 0.04));
+      const frequency = Math.max(1, finiteOr(options.frequency, 440));
+      const endFrequency = Math.max(1, finiteOr(options.endFrequency, frequency));
+      const attack = Math.max(0.002, Math.min(duration * 0.45, finiteOr(options.attack, 0.01)));
+      const start = context.currentTime + delay;
+      const end = start + duration;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
 
-    oscillator.type = options.type || "sine";
-    oscillator.frequency.setValueAtTime(frequency, start);
-    oscillator.frequency.exponentialRampToValueAtTime(endFrequency, end);
-    if (Number.isFinite(options.detune)) {
-      oscillator.detune.setValueAtTime(options.detune, start);
+      oscillator.type = options.type || "sine";
+      oscillator.frequency.setValueAtTime(frequency, start);
+      oscillator.frequency.exponentialRampToValueAtTime(endFrequency, end);
+      if (Number.isFinite(options.detune) && oscillator.detune) {
+        oscillator.detune.setValueAtTime(options.detune, start);
+      }
+
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(gainAmount, start + attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, end);
+
+      oscillator.connect(gain);
+      connectSoundNode(gain);
+      oscillator.start(start);
+      oscillator.stop(end + 0.03);
+    } catch (error) {
+      soundState.unavailable = true;
+      console.warn("Clusternauts tone skipped.", error);
     }
-
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(gainAmount, start + attack);
-    gain.gain.exponentialRampToValueAtTime(0.0001, end);
-
-    oscillator.connect(gain);
-    connectSoundNode(gain);
-    oscillator.start(start);
-    oscillator.stop(end + 0.03);
   }
 
   function playNoise(options) {
@@ -1474,34 +1546,40 @@
       return;
     }
 
-    const delay = Math.max(0, finiteOr(options.delay, 0));
-    const duration = Math.max(0.02, finiteOr(options.duration, 0.18));
-    const gainAmount = Math.max(0.0001, finiteOr(options.gain, 0.04));
-    const start = context.currentTime + delay;
-    const end = start + duration;
-    const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate);
-    const data = buffer.getChannelData(0);
-    const source = context.createBufferSource();
-    const filter = context.createBiquadFilter();
-    const gain = context.createGain();
+    try {
+      const delay = Math.max(0, finiteOr(options.delay, 0));
+      const duration = Math.max(0.02, finiteOr(options.duration, 0.18));
+      const gainAmount = Math.max(0.0001, finiteOr(options.gain, 0.04));
+      const sampleRate = Math.max(1, finiteOr(context.sampleRate, 44100));
+      const start = context.currentTime + delay;
+      const end = start + duration;
+      const buffer = context.createBuffer(1, Math.ceil(sampleRate * duration), sampleRate);
+      const data = buffer.getChannelData(0);
+      const source = context.createBufferSource();
+      const filter = context.createBiquadFilter();
+      const gain = context.createGain();
 
-    for (let i = 0; i < data.length; i += 1) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 0.65);
+      for (let i = 0; i < data.length; i += 1) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 0.65);
+      }
+
+      source.buffer = buffer;
+      filter.type = options.filterType || "bandpass";
+      filter.frequency.setValueAtTime(Math.max(40, finiteOr(options.frequency, 900)), start);
+      filter.Q.setValueAtTime(Math.max(0.1, finiteOr(options.q, 1.4)), start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(gainAmount, start + Math.min(0.015, duration * 0.4));
+      gain.gain.exponentialRampToValueAtTime(0.0001, end);
+
+      source.connect(filter);
+      filter.connect(gain);
+      connectSoundNode(gain);
+      source.start(start);
+      source.stop(end + 0.03);
+    } catch (error) {
+      soundState.unavailable = true;
+      console.warn("Clusternauts noise skipped.", error);
     }
-
-    source.buffer = buffer;
-    filter.type = options.filterType || "bandpass";
-    filter.frequency.setValueAtTime(Math.max(40, finiteOr(options.frequency, 900)), start);
-    filter.Q.setValueAtTime(Math.max(0.1, finiteOr(options.q, 1.4)), start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(gainAmount, start + Math.min(0.015, duration * 0.4));
-    gain.gain.exponentialRampToValueAtTime(0.0001, end);
-
-    source.connect(filter);
-    filter.connect(gain);
-    connectSoundNode(gain);
-    source.start(start);
-    source.stop(end + 0.03);
   }
 
   function soundThrottleFor(name) {
@@ -2545,6 +2623,94 @@
     renderBuildMenu();
   }
 
+  function isCompactHudViewport() {
+    return window.innerWidth <= compactHudBreakpoint || window.innerHeight <= compactHudHeightBreakpoint;
+  }
+
+  function syncCompactHudControls() {
+    const compact = isCompactHudViewport();
+
+    if (techLedger) {
+      techLedger.classList.toggle("is-open", resourcesHudOpen);
+      techLedger.setAttribute("aria-hidden", resourcesHudOpen ? "false" : "true");
+    }
+
+    if (resourcesToggle) {
+      resourcesToggle.classList.toggle("is-active", resourcesHudOpen);
+      resourcesToggle.setAttribute("aria-expanded", resourcesHudOpen ? "true" : "false");
+    }
+
+    if (mapToggle) {
+      mapToggle.classList.toggle("is-active", compact && mapHudOpen);
+      mapToggle.setAttribute("aria-expanded", compact && mapHudOpen ? "true" : "false");
+    }
+  }
+
+  function setResourcesHudOpen(open) {
+    resourcesHudOpen = Boolean(open);
+    syncCompactHudControls();
+  }
+
+  function setMapHudOpen(open) {
+    mapHudOpen = Boolean(open);
+    syncCompactHudControls();
+  }
+
+  function clampTechLedgerPosition(left, top) {
+    if (!techLedger) {
+      return;
+    }
+
+    const rect = techLedger.getBoundingClientRect();
+    const margin = 8;
+    const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - rect.height - margin);
+
+    techLedger.style.left = clamp(left, margin, maxLeft) + "px";
+    techLedger.style.top = clamp(top, margin, maxTop) + "px";
+    techLedger.style.right = "auto";
+    techLedger.style.bottom = "auto";
+  }
+
+  function beginTechLedgerDrag(event) {
+    if (!techLedger || event.button > 0) {
+      return;
+    }
+
+    const rect = techLedger.getBoundingClientRect();
+    techLedgerDrag.active = true;
+    techLedgerDrag.pointerId = event.pointerId;
+    techLedgerDrag.offsetX = event.clientX - rect.left;
+    techLedgerDrag.offsetY = event.clientY - rect.top;
+    techLedger.classList.add("is-dragging");
+    techLedger.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  function updateTechLedgerDrag(event) {
+    if (!techLedgerDrag.active || techLedgerDrag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    clampTechLedgerPosition(event.clientX - techLedgerDrag.offsetX, event.clientY - techLedgerDrag.offsetY);
+    event.preventDefault();
+  }
+
+  function endTechLedgerDrag(event) {
+    if (!techLedgerDrag.active || techLedgerDrag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    techLedgerDrag.active = false;
+    techLedgerDrag.pointerId = null;
+    if (techLedger) {
+      techLedger.classList.remove("is-dragging");
+      if (techLedger.hasPointerCapture(event.pointerId)) {
+        techLedger.releasePointerCapture(event.pointerId);
+      }
+    }
+  }
+
   function setBuildMenuOpen(open) {
     buildMenuOpen = Boolean(open);
     if (buildMenuOpen) {
@@ -2557,6 +2723,11 @@
 
     buildMenu.classList.toggle("is-open", buildMenuOpen);
     buildMenu.setAttribute("aria-hidden", buildMenuOpen ? "false" : "true");
+    if (buildToggle) {
+      buildToggle.classList.toggle("is-active", buildMenuOpen);
+      buildToggle.setAttribute("aria-expanded", buildMenuOpen ? "true" : "false");
+      buildToggle.setAttribute("aria-label", buildMenuOpen ? "Close build menu" : "Open build menu");
+    }
     updateToolHotbar();
   }
 
@@ -2637,6 +2808,7 @@
       difficultyScreen.classList.toggle("is-open", Boolean(open));
       difficultyScreen.setAttribute("aria-hidden", open ? "false" : "true");
     }
+    updateCrazyGamesGameplayState(open ? "difficulty-screen-open" : "difficulty-screen-closed");
   }
 
   function setGamePaused(paused) {
@@ -2648,6 +2820,7 @@
     if (!gamePaused) {
       lastTime = performance.now();
     }
+    updateCrazyGamesGameplayState(gamePaused ? "pause" : "resume");
   }
 
   function applyDifficulty(id) {
@@ -2680,6 +2853,7 @@
     void refreshLeaderboard(true);
     await savePersistentState({ includeWorld: true });
     connectMultiplayer();
+    updateCrazyGamesGameplayState("run-start");
   }
 
   function resetLocalWorldState() {
@@ -2781,12 +2955,23 @@
 
   function updateAccountUi() {
     const signedIn = isAccountSignedIn();
+    const crazyGamesRuntime = isCrazyGamesRuntime();
 
     if (accountLoginForm) {
-      accountLoginForm.hidden = signedIn;
+      accountLoginForm.hidden = crazyGamesRuntime || signedIn;
+    }
+    if (crazyGamesAccount) {
+      crazyGamesAccount.hidden = !crazyGamesRuntime;
+    }
+    if (crazyGamesAccountStatus) {
+      crazyGamesAccountStatus.textContent = signedIn ? "Signed in with CrazyGames" : "Playing as guest";
+    }
+    if (crazyGamesLoginButton) {
+      crazyGamesLoginButton.hidden = !crazyGamesRuntime || signedIn || crazyGamesState.authAvailable === false;
+      crazyGamesLoginButton.disabled = accountState.busy || crazyGamesState.authPromptActive;
     }
     if (accountSignedIn) {
-      accountSignedIn.hidden = !signedIn;
+      accountSignedIn.hidden = crazyGamesRuntime || !signedIn;
     }
     if (accountNameValue) {
       accountNameValue.textContent = signedIn ? accountState.username : "Signed out";
@@ -2798,11 +2983,12 @@
       accountSignupButton.disabled = accountState.busy;
     }
     if (accountLogoutButton) {
+      accountLogoutButton.hidden = crazyGamesRuntime;
       accountLogoutButton.disabled = accountState.busy;
     }
     if (saveGameButton) {
-      saveGameButton.disabled = !signedIn || accountState.busy;
-      saveGameButton.textContent = signedIn ? "Save" : "Log in";
+      saveGameButton.disabled = (!signedIn && !crazyGamesRuntime) || accountState.busy;
+      saveGameButton.textContent = signedIn ? "Save" : crazyGamesRuntime ? "Save guest" : "Log in";
     }
 
     renderSavedGames();
@@ -2845,6 +3031,44 @@
     setCrazyGamesAudioMuted(source.muteAudio === true);
   }
 
+  function crazyGamesGameModule() {
+    const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
+    return sdk && sdk.game ? sdk.game : null;
+  }
+
+  function isDifficultyScreenOpen() {
+    return Boolean(difficultyScreen && difficultyScreen.classList.contains("is-open"));
+  }
+
+  function isCrazyGamesGameplayPlayable() {
+    return runState.active && !deathState.active && !gamePaused && !isDifficultyScreenOpen();
+  }
+
+  function updateCrazyGamesGameplayState(reason) {
+    setCrazyGamesGameplayActive(isCrazyGamesGameplayPlayable(), reason);
+  }
+
+  function setCrazyGamesGameplayActive(active, reason) {
+    const nextActive = Boolean(active);
+    if (crazyGamesState.gameplayEventsDisabled || crazyGamesState.gameplayActive === nextActive) {
+      return;
+    }
+
+    const game = crazyGamesGameModule();
+    const methodName = nextActive ? "gameplayStart" : "gameplayStop";
+    if (!game || typeof game[methodName] !== "function") {
+      return;
+    }
+
+    try {
+      game[methodName]();
+      crazyGamesState.gameplayActive = nextActive;
+    } catch (error) {
+      crazyGamesState.gameplayEventsDisabled = true;
+      console.warn("CrazyGames gameplay event unavailable.", { reason, error });
+    }
+  }
+
   async function initializeCrazyGamesIntegration() {
     if (crazyGamesState.initPromise) {
       return crazyGamesState.initPromise;
@@ -2863,6 +3087,8 @@
         }
         sdk = sdk || (window.CrazyGames && window.CrazyGames.SDK);
         if (!sdk) {
+          crazyGamesState.authAvailable = false;
+          updateAccountUi();
           return null;
         }
         crazyGamesState.sdk = sdk;
@@ -2883,6 +3109,14 @@
         }
 
         if (sdk.user && typeof sdk.user.addAuthListener === "function") {
+          if (typeof sdk.user.isUserAccountAvailable === "function") {
+            try {
+              crazyGamesState.authAvailable = await sdk.user.isUserAccountAvailable();
+            } catch {
+              crazyGamesState.authAvailable = true;
+            }
+            updateAccountUi();
+          }
           crazyGamesState.authListener = function () {
             void authenticateWithCrazyGames();
           };
@@ -2891,6 +3125,8 @@
 
         await authenticateWithCrazyGames();
       } catch (error) {
+        crazyGamesState.authAvailable = false;
+        updateAccountUi();
         console.warn("CrazyGames SDK unavailable.", error);
       }
       return sdk;
@@ -2911,6 +3147,7 @@
     try {
       const crazyGamesToken = await sdk.user.getUserToken();
       if (!crazyGamesToken) {
+        updateAccountUi();
         return;
       }
 
@@ -2925,11 +3162,56 @@
       });
       applyAccountSession(data);
       await refreshAccountSaves();
+      setManualSaveStatus("Signed in with CrazyGames.", "success");
     } catch (error) {
-      const code = String((error && error.code) || (error && error.message) || error || "");
-      if (!code.includes("userNotAuthenticated")) {
+      if (!isCrazyGamesUnauthenticatedError(error)) {
         console.warn("CrazyGames account login unavailable.", error);
       }
+    } finally {
+      updateAccountUi();
+    }
+  }
+
+  function isCrazyGamesUnauthenticatedError(error) {
+    const code = String((error && error.code) || (error && error.message) || error || "");
+    return code.includes("userNotAuthenticated") || code.includes("userCancelled");
+  }
+
+  function isCrazyGamesAlreadySignedInError(error) {
+    const code = String((error && error.code) || (error && error.message) || error || "");
+    return code.includes("userAlreadySignedIn");
+  }
+
+  async function promptCrazyGamesLogin() {
+    if (accountState.busy || crazyGamesState.authPromptActive) {
+      return;
+    }
+
+    crazyGamesState.authPromptActive = true;
+    setAccountBusy(true);
+    try {
+      await initializeCrazyGamesIntegration();
+      const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
+      if (!sdk || !sdk.user || typeof sdk.user.showAuthPrompt !== "function") {
+        crazyGamesState.authAvailable = false;
+        setManualSaveStatus("CrazyGames login is unavailable here.", "error");
+        return;
+      }
+
+      await sdk.user.showAuthPrompt();
+      await authenticateWithCrazyGames();
+    } catch (error) {
+      if (isCrazyGamesAlreadySignedInError(error)) {
+        await authenticateWithCrazyGames();
+      } else if (isCrazyGamesUnauthenticatedError(error)) {
+        setManualSaveStatus("Continuing as guest.", "success");
+      } else {
+        setManualSaveStatus("CrazyGames login did not complete.", "error");
+        console.warn("CrazyGames auth prompt failed.", error);
+      }
+    } finally {
+      crazyGamesState.authPromptActive = false;
+      setAccountBusy(false);
     }
   }
 
@@ -2943,7 +3225,9 @@
     if (!isAccountSignedIn()) {
       const empty = document.createElement("p");
       empty.className = "settings-panel__save-empty";
-      empty.textContent = "Log in to save and load worlds.";
+      empty.textContent = isCrazyGamesRuntime()
+        ? "Guest progress autosaves on this device. Sign in with CrazyGames for named saves."
+        : "Log in to save and load worlds.";
       savedGameList.append(empty);
       return;
     }
@@ -2998,6 +3282,15 @@
   }
 
   async function bootstrapAccountSession() {
+    if (isCrazyGamesRuntime()) {
+      accountState.token = "";
+      accountState.username = "";
+      accountState.saves = [];
+      accountState.crazyGamesLinked = false;
+      updateAccountUi();
+      return;
+    }
+
     const stored = readStoredAccountSession();
     if (!stored) {
       updateAccountUi();
@@ -3006,6 +3299,7 @@
 
     accountState.token = stored.token;
     accountState.username = stored.username;
+    accountState.crazyGamesLinked = stored.crazyGamesLinked === true;
     updateAccountUi();
 
     try {
@@ -3018,6 +3312,7 @@
       accountState.token = "";
       accountState.username = "";
       accountState.saves = [];
+      accountState.crazyGamesLinked = false;
       writeStoredAccountSession();
       updateAccountUi();
       console.warn("Clusternauts account session unavailable.", error);
@@ -3028,12 +3323,18 @@
     const account = data && data.account && typeof data.account === "object" ? data.account : {};
     accountState.token = typeof data.sessionToken === "string" ? data.sessionToken : accountState.token;
     accountState.username = sanitizeAccountUsername(account.username || accountState.username);
+    accountState.crazyGamesLinked = account.crazyGamesLinked === true;
     adoptLinkedPlayerId(account.linkedPlayerId);
     writeStoredAccountSession();
     updateAccountUi();
   }
 
   async function submitAccountAuth(createNew) {
+    if (isCrazyGamesRuntime()) {
+      await promptCrazyGamesLogin();
+      return;
+    }
+
     if (accountState.busy) {
       return;
     }
@@ -3074,6 +3375,11 @@
   }
 
   async function logoutAccount() {
+    if (isCrazyGamesRuntime()) {
+      setManualSaveStatus("Use your CrazyGames account menu to sign out.", "error");
+      return;
+    }
+
     if (!isAccountSignedIn() || accountState.busy) {
       return;
     }
@@ -3091,6 +3397,7 @@
       accountState.token = "";
       accountState.username = "";
       accountState.saves = [];
+      accountState.crazyGamesLinked = false;
       writeStoredAccountSession();
       setManualSaveStatus("Logged out.", "success");
       setAccountBusy(false);
@@ -3174,6 +3481,10 @@
     const name = sanitizeManualSaveName(saveGameNameInput && saveGameNameInput.value);
 
     if (!isAccountSignedIn()) {
+      if (isCrazyGamesRuntime()) {
+        await saveGuestProgress();
+        return;
+      }
       setManualSaveStatus("Create an account or log in to save.", "error");
       return;
     }
@@ -3208,11 +3519,34 @@
     }
   }
 
+  async function saveGuestProgress() {
+    if (!runState.active || deathState.active) {
+      setManualSaveStatus("Start a live run before saving.", "error");
+      return;
+    }
+
+    setAccountBusy(true);
+    try {
+      updateLifeStats();
+      await waitForPersistenceIdle();
+      await savePersistentState({ includeWorld: true });
+      await waitForPersistenceIdle();
+      if (!persistence.online) {
+        setManualSaveStatus("Could not save guest progress.", "error");
+        return;
+      }
+      setManualSaveStatus("Guest progress saved.", "success");
+      maybeNotifyText("Guest progress saved.");
+    } finally {
+      setAccountBusy(false);
+    }
+  }
+
   async function loadManualGame(saveId) {
     const cleanSaveId = String(saveId || "").trim();
 
     if (!isAccountSignedIn()) {
-      setManualSaveStatus("Log in to load saved games.", "error");
+      setManualSaveStatus(isCrazyGamesRuntime() ? "Guest progress loads automatically on startup." : "Log in to load saved games.", "error");
       return;
     }
     if (!cleanSaveId) {
@@ -3769,6 +4103,7 @@
     deathState.timer = 0;
     deathState.cause = cause || "Hull failure";
     deathState.stats = collectDeathStats();
+    updateCrazyGamesGameplayState("death");
     resetDeathLeaderboardForm();
     playSound("death", { throttle: 0.8 });
     keys.clear();
@@ -16812,10 +17147,15 @@
   }
 
   function drawMapOverlay() {
+    if (isCompactHudViewport() && !mapHudOpen) {
+      return;
+    }
+
     const margin = width <= 560 ? 10 : 16;
     const size = Math.round(clamp(Math.min(width, height) * (width <= 560 ? 0.34 : 0.31), width <= 560 ? 160 : 190, width <= 560 ? 228 : 292));
     const x = width - margin - size;
-    const y = Math.max(margin, height - margin - size);
+    const compactControlsClearance = isCompactHudViewport() ? 58 : 0;
+    const y = Math.max(margin, height - margin - compactControlsClearance - size);
     const centerX = x + size / 2;
     const centerY = y + size / 2;
     const mapRadius = size * 0.41;
@@ -17041,7 +17381,14 @@
     requestAnimationFrame(tick);
   }
 
-  window.addEventListener("resize", resize);
+  window.addEventListener("resize", function () {
+    resize();
+    syncCompactHudControls();
+    if (techLedger && techLedger.style.left && techLedger.style.top) {
+      const rect = techLedger.getBoundingClientRect();
+      clampTechLedgerPosition(rect.left, rect.top);
+    }
+  });
   window.addEventListener("pointerdown", unlockAudio, { once: true, capture: true });
   window.addEventListener("keydown", unlockAudio, { once: true, capture: true });
 
@@ -17115,6 +17462,12 @@
     });
   }
 
+  if (crazyGamesLoginButton) {
+    crazyGamesLoginButton.addEventListener("click", function () {
+      void promptCrazyGamesLogin();
+    });
+  }
+
   if (saveGameForm) {
     saveGameForm.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -17155,6 +17508,34 @@
     leaderboardToggle.addEventListener("click", function () {
       setLeaderboardOpen(!leaderboard.open);
     });
+  }
+
+  if (resourcesToggle) {
+    resourcesToggle.addEventListener("click", function () {
+      setResourcesHudOpen(!resourcesHudOpen);
+    });
+  }
+
+  if (buildToggle) {
+    buildToggle.addEventListener("click", function () {
+      setBuildMenuOpen(!buildMenuOpen);
+    });
+  }
+
+  if (mapToggle) {
+    mapToggle.addEventListener("click", function () {
+      setMapHudOpen(!mapHudOpen);
+    });
+  }
+
+  if (techLedgerTitle) {
+    techLedgerTitle.addEventListener("pointerdown", beginTechLedgerDrag);
+  }
+
+  if (techLedger) {
+    techLedger.addEventListener("pointermove", updateTechLedgerDrag);
+    techLedger.addEventListener("pointerup", endTechLedgerDrag);
+    techLedger.addEventListener("pointercancel", endTechLedgerDrag);
   }
 
   if (socialPanelClose) {
@@ -17455,6 +17836,11 @@
         adjustCameraZoom(-1);
         return;
       }
+      if (event.code === "KeyT" && !event.repeat) {
+        event.preventDefault();
+        setResourcesHudOpen(!resourcesHudOpen);
+        return;
+      }
     }
 
     if (event.code === "Slash" && !event.repeat) {
@@ -17540,7 +17926,7 @@
       return;
     }
 
-    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle")) {
+    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .compact-hud-toggles, .tech-ledger")) {
       return;
     }
 
@@ -17593,7 +17979,7 @@
       return;
     }
 
-    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle")) {
+    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .compact-hud-toggles, .tech-ledger")) {
       return;
     }
 
@@ -17625,7 +18011,7 @@
       return;
     }
 
-    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle")) {
+    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .compact-hud-toggles, .tech-ledger")) {
       return;
     }
     if (hotbarToolIds.length < 2) {
@@ -17639,7 +18025,9 @@
   async function startGame() {
     initializeNetworkIdentity();
     await bootstrapAccountSession();
-    await initializeCrazyGamesIntegration();
+    void initializeCrazyGamesIntegration().then(function () {
+      updateCrazyGamesGameplayState("sdk-ready");
+    });
     applyUiScale(gameSettings.uiScale);
     setCameraZoom(gameSettings.zoom);
     updateSurfaceCameraRotationUi();
@@ -17647,6 +18035,7 @@
     initializeTechUi();
     updateSoundToggle();
     resize();
+    syncCompactHudControls();
     seedStarDust();
     seedParticles();
     applyDifficulty(defaultDifficultyId);

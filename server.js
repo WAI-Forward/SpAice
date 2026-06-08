@@ -2626,7 +2626,7 @@ function applyCorsHeaders(request, response) {
   }
 
   response.setHeader("Access-Control-Allow-Origin", allowedOrigin);
-  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   response.setHeader("Access-Control-Max-Age", "600");
   response.setHeader("Vary", "Origin");
@@ -2638,7 +2638,11 @@ function allowedCorsOrigin(origin) {
   }
 
   try {
-    const hostName = new URL(origin).hostname.toLowerCase();
+    const parsedOrigin = new URL(origin);
+    const hostName = parsedOrigin.hostname.toLowerCase();
+    if (parsedOrigin.protocol !== "https:") {
+      return "";
+    }
     return isCrazyGamesHostName(hostName) ? origin : "";
   } catch {
     return "";
@@ -2650,7 +2654,9 @@ function isCrazyGamesHostName(hostName) {
     hostName === "crazygames.com" ||
     hostName.endsWith(".crazygames.com") ||
     hostName === "crazygamesgame.com" ||
-    hostName.endsWith(".crazygamesgame.com")
+    hostName.endsWith(".crazygamesgame.com") ||
+    hostName === "game-files.crazygames.com" ||
+    hostName.endsWith(".game-files.crazygames.com")
   );
 }
 

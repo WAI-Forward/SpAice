@@ -4,22 +4,6 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Clusternauts Particle Collector</title>
-    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
-    <script>
-      window.CLUSTERNAUTS_CRAZYGAMES_SDK_READY = (async function () {
-        if (!window.CrazyGames || !window.CrazyGames.SDK) {
-          return null;
-        }
-
-        try {
-          await window.CrazyGames.SDK.init();
-          return window.CrazyGames.SDK;
-        } catch (error) {
-          console.warn("CrazyGames SDK initialization skipped.", error);
-          return null;
-        }
-      }());
-    </script>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -44,10 +28,10 @@
           <div class="hud__progress-fill hud__energy-fill" id="energyFill"></div>
         </div>
       </div>
-      <div class="hud__score" aria-label="Run score">
+      <button class="hud__score hud__leaderboard-toggle" id="leaderboardToggle" type="button" aria-label="Show leaderboard" aria-controls="leaderboardPanel" aria-expanded="false">
         <span id="difficultyValue">Medium</span>
         <strong id="scoreValue">0 pts</strong>
-      </div>
+      </button>
       <div class="hud__body" aria-label="Body mass milestone">
         <span class="hud__body-label" id="currentBodyLabel">PARTICLE:</span>
         <div class="hud__body-meter">
@@ -58,9 +42,6 @@
         </div>
         <span class="hud__body-label hud__body-label--next" id="nextMilestoneLabel">ROCK</span>
       </div>
-      <button class="hud__leaderboard-toggle" id="leaderboardToggle" type="button" aria-controls="leaderboardPanel" aria-expanded="false">
-        Leaderboard
-      </button>
       <section class="leaderboard-panel" id="leaderboardPanel" aria-label="Leaderboard" aria-hidden="true">
         <div class="leaderboard-panel__header">
           <strong>Leaderboard</strong>
@@ -71,7 +52,24 @@
     </div>
 
     <div class="reticle" aria-hidden="true"></div>
-    <aside class="tech-ledger" aria-label="Technology resources">
+    <div class="compact-hud-toggles" aria-label="Compact HUD controls">
+      <button class="compact-hud-toggle" id="resourcesToggle" type="button" aria-label="Toggle technology resources" aria-controls="techLedger" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3 3.5 7.2 12 11.4l8.5-4.2L12 3Zm-6.2 8.1-2.3 1.1L12 16.6l8.5-4.4-2.3-1.1-6.2 3.1-6.2-3.1Zm0 5.2-2.3 1.1L12 21.8l8.5-4.4-2.3-1.1-6.2 3.1-6.2-3.1Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="buildToggle" type="button" aria-label="Open build menu" aria-controls="buildMenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9.7 3.5 4.1 9.1l2.4 2.4 1.5-1.5 2.1 2.1-6.8 6.8 2.7 2.7 6.8-6.8 2.1 2.1-1.5 1.5 2.4 2.4 5.6-5.6-2.4-2.4-1.5 1.5-2.1-2.1 2.1-2.1 1.4 1.4 2.2-2.2-6.7-6.7-2.2 2.2 1.4 1.4-2.1 2.1-2.1-2.1 1.5-1.5-2.2-2.2Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="mapToggle" type="button" aria-label="Toggle map" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 2.8a9.2 9.2 0 1 0 0 18.4 9.2 9.2 0 0 0 0-18.4Zm0 1.8a7.4 7.4 0 1 1 0 14.8 7.4 7.4 0 0 1 0-14.8Zm4.6 3.2-6.1 2.6-2.7 6 6.1-2.6 2.7-6Zm-4 4.8-1.7.7.7-1.7 1.7-.7-.7 1.7Z"/>
+        </svg>
+      </button>
+    </div>
+    <aside class="tech-ledger" id="techLedger" aria-label="Technology resources" aria-hidden="true">
       <div class="tech-ledger__title">Tech</div>
       <div class="tech-ledger__list" id="techLedgerList"></div>
     </aside>
@@ -143,6 +141,10 @@
                 <button class="settings-panel__save-action" id="accountSignupButton" type="button">Sign up</button>
               </div>
             </form>
+            <div class="settings-panel__crazy-account" id="crazyGamesAccount" hidden>
+              <span id="crazyGamesAccountStatus">Playing as guest</span>
+              <button class="settings-panel__save-action" id="crazyGamesLoginButton" type="button">Log in with CrazyGames</button>
+            </div>
             <div class="settings-panel__account" id="accountSignedIn" hidden>
               <span id="accountNameValue">Signed in</span>
               <button class="settings-panel__save-action" id="accountLogoutButton" type="button">Log out</button>
