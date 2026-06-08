@@ -3252,33 +3252,18 @@
       const row = document.createElement("div");
       const details = document.createElement("div");
       const name = document.createElement("strong");
-      const meta = document.createElement("span");
       const button = document.createElement("button");
       row.className = "settings-panel__save-item";
+      details.className = "settings-panel__save-details";
       name.textContent = save.name || "Saved world";
-      meta.textContent = saveMetadataText(save);
       button.className = "settings-panel__save-action";
       button.type = "button";
       button.dataset.saveId = save.id || "";
       button.textContent = "Load";
-      details.append(name, meta);
+      details.append(name);
       row.append(details, button);
       savedGameList.append(row);
     }
-  }
-
-  function saveMetadataText(save) {
-    const parts = [];
-    if (save && save.difficulty) {
-      parts.push(difficultyLabel(save.difficulty));
-    }
-    if (save && Number.isFinite(Number(save.score))) {
-      parts.push(Math.max(1, Math.round(Number(save.score))).toLocaleString() + " pts");
-    }
-    if (save && save.savedAt) {
-      parts.push(new Date(save.savedAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" }));
-    }
-    return parts.join(" / ");
   }
 
   async function bootstrapAccountSession() {

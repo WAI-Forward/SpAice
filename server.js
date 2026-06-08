@@ -23,6 +23,7 @@ const randomSignalIntervalMs = 10 * 60 * 1000;
 const randomOverlapLifetimeMs = 120000;
 const sessionLifetimeMs = 1000 * 60 * 60 * 24 * 14;
 const crazyGamesPublicKeyUrl = "https://sdk.crazygames.com/publicKey.json";
+const overlapRoomMaxPlayers = 4;
 const techKeys = ["suction", "weapon", "plating", "energy", "repair", "target", "propulsion", "shield", "communication"];
 const toolKeys = ["suction-gadget", "laser-pistol", "laser-rifle", "spanner"];
 const toolUpgradeKeys = {
@@ -1066,6 +1067,9 @@ async function linkCrazyGamesPlayerProfile(playerId, crazyGamesUser) {
 
   profile.crazyGamesId = crazyGamesUser.userId;
   profile.crazyGamesUsername = crazyGamesUser.username;
+  if (crazyGamesUser.username) {
+    profile.publicName = crazyGamesUser.username;
+  }
   await saveProfile(profile);
 }
 
@@ -1413,6 +1417,8 @@ function publicAccount(account) {
     ? {
         username: normalized.username,
         linkedPlayerId: normalized.linkedPlayerId,
+        crazyGamesUsername: normalized.crazyGamesUsername,
+        crazyGamesProfilePictureUrl: normalized.crazyGamesProfilePictureUrl,
         crazyGamesLinked: Boolean(normalized.crazyGamesId),
         createdAt: normalized.createdAt
       }
@@ -3026,6 +3032,25 @@ async function handleSocketMessage(client, message) {
     return;
   }
 
+  if (message.type === "room.create") {
+    logMultiplayer("room create received", {
+      playerId: client.playerId,
+      mode: sanitizeText(message.mode, 32)
+    });
+    handleRoomCreate(client, message);
+    return;
+  }
+
+  if (message.type === "room.join") {
+    logMultiplayer("room join received", {
+      playerId: client.playerId,
+      roomId: sanitizeText(message.roomId, 96),
+      mode: sanitizeText(message.mode, 32)
+    });
+    handleRoomJoin(client, message);
+    return;
+  }
+
   if (message.type === "interaction.choice") {
     logMultiplayer("interaction choice received", {
       fromPlayerId: client.playerId,
@@ -3066,7 +3091,7 @@ async function handleSocketMessage(client, message) {
 
   if (message.type === "overlap.leave") {
     logMultiplayer("overlap leave received", { playerId: client.playerId });
-    leaveClientOverlaps(client);
+    leaveClientOverlaps(client, true);
     return;
   }
 
@@ -3088,7 +3113,9 @@ async function handleSocketHello(client, message) {
   client.universeId = soloWorldId(playerId);
   client.profile = await ensurePlayerProfile(playerId);
   const helloName = sanitizeText(message.snapshot && message.snapshot.player && message.snapshot.player.name, 32);
-  if (helloName) {
+  if (client.profile.crazyGamesUsername) {
+    client.profile.publicName = client.profile.crazyGamesUsername;
+  } else if (helloName) {
     client.profile.publicName = helloName;
   }
   client.profile.lastSeenAt = Date.now();
@@ -3360,6 +3387,114 @@ async function handleFriendAccept(client, message) {
   startOverlap(participants, "friend");
 }
 
+function handleRoomCreate(client, message) {
+  const mode = normalizeRoomMode(message.mode);
+  const existingOverlap = findJoinableOverlapForPlayer(client.playerId);
+  const overlap = existingOverlap || startOverlap([client.playerId], mode);
+
+  if (!overlap) {
+    sendWsJson(client, { type: "error", message: "Could not create multiplayer room." });
+    return;
+  }
+
+  sendRoomState(overlap);
+}
+
+function handleRoomJoin(client, message) {
+  const roomId = sanitizeText(message.roomId, 96);
+  if (!roomId) {
+    sendWsJson(client, { type: "room.join.failed", roomId, reason: "missing-room", message: "Missing room id." });
+    return;
+  }
+
+  const overlap = overlaps.get(roomId);
+  if (!overlap || !isJoinableOverlapRoom(overlap)) {
+    sendWsJson(client, {
+      type: "room.join.failed",
+      roomId,
+      reason: "not-found",
+      message: "That multiplayer room is no longer available."
+    });
+    return;
+  }
+
+  if (!overlap.players.includes(client.playerId) && overlap.players.length >= overlapRoomMaxPlayers) {
+    sendWsJson(client, {
+      type: "room.join.failed",
+      roomId,
+      reason: "full",
+      message: "That multiplayer room is full."
+    });
+    sendRoomState(overlap);
+    return;
+  }
+
+  if (!overlap.players.includes(client.playerId)) {
+    overlap.players.push(client.playerId);
+  }
+  client.overlaps.add(overlap.id);
+  overlap.updatedAt = Date.now();
+
+  logMultiplayer("room join accepted", {
+    playerId: client.playerId,
+    roomId: overlap.id,
+    players: overlap.players
+  });
+
+  sendOverlapStart(overlap);
+  broadcastOverlapTransform(overlap);
+  sendRoomState(overlap);
+}
+
+function normalizeRoomMode(mode) {
+  const cleanMode = sanitizeText(mode, 32);
+  return cleanMode || "world-overlap";
+}
+
+function isJoinableOverlapRoom(overlap) {
+  return Boolean(overlap && (overlap.type === "world-overlap" || overlap.type === "friend"));
+}
+
+function findJoinableOverlapForPlayer(playerId) {
+  for (const overlap of overlaps.values()) {
+    if (!isJoinableOverlapRoom(overlap) || !overlap.players.includes(playerId)) {
+      continue;
+    }
+    return overlap;
+  }
+  return null;
+}
+
+function roomStateForOverlap(overlap) {
+  const playerCount = overlap && Array.isArray(overlap.players) ? overlap.players.length : 0;
+  return {
+    type: "room.state",
+    roomId: overlap ? overlap.id : "",
+    mode: "world-overlap",
+    maxPlayers: overlapRoomMaxPlayers,
+    playerCount,
+    isJoinable: Boolean(overlap && isJoinableOverlapRoom(overlap) && playerCount < overlapRoomMaxPlayers)
+  };
+}
+
+function sendRoomState(overlap) {
+  if (!overlap || !isJoinableOverlapRoom(overlap)) {
+    return;
+  }
+
+  const payload = roomStateForOverlap(overlap);
+  for (const playerId of overlap.players) {
+    const clients = clientsByPlayerId.get(playerId);
+    if (!clients) {
+      continue;
+    }
+
+    for (const client of clients) {
+      sendWsJson(client, payload);
+    }
+  }
+}
+
 async function handlePlayerInteractionChoice(client, message) {
   const targetPlayerId = sanitizeText(message.targetPlayerId, 80);
   const choice = sanitizeText(message.choice, 16);
@@ -3464,7 +3599,7 @@ function addToFriendOverlap(inviterId, targetId) {
       continue;
     }
 
-    if (overlap.players.length < 4) {
+    if (overlap.players.length < overlapRoomMaxPlayers) {
       overlap.players.push(targetId);
       return overlap.players.slice();
     }
@@ -3522,7 +3657,8 @@ function publicPresence(client) {
 
 function startOverlap(playerIds, type) {
   const uniquePlayers = playerIds.filter(uniqueOnly).filter((playerId) => firstOnlineClient(playerId));
-  if (uniquePlayers.length < 2) {
+  const overlapType = normalizeRoomMode(type);
+  if (uniquePlayers.length < 2 && overlapType !== "world-overlap") {
     logMultiplayer("overlap skipped", {
       type,
       requestedPlayers: playerIds,
@@ -3532,19 +3668,20 @@ function startOverlap(playerIds, type) {
     return null;
   }
 
-  const existingFriend = type === "friend" ? findFriendOverlap(uniquePlayers) : null;
+  const existingFriend = overlapType === "friend" ? findFriendOverlap(uniquePlayers) : null;
   const overlap =
     existingFriend ||
     {
       id: `overlap-${Date.now().toString(36)}-${nextOverlapNumber++}`,
-      type,
+      type: overlapType,
       players: [],
       createdAt: Date.now(),
+      updatedAt: Date.now(),
       baseAngle: Math.random() * Math.PI * 2
     };
 
   for (const playerId of uniquePlayers) {
-    if (!overlap.players.includes(playerId) && overlap.players.length < 4) {
+    if (!overlap.players.includes(playerId) && overlap.players.length < overlapRoomMaxPlayers) {
       overlap.players.push(playerId);
     }
   }
@@ -3552,17 +3689,29 @@ function startOverlap(playerIds, type) {
   overlaps.set(overlap.id, overlap);
   logMultiplayer("overlap started", {
     overlapId: overlap.id,
-    type,
+    type: overlap.type,
     players: overlap.players
   });
+  sendOverlapStart(overlap);
+
+  broadcastOverlapTransform(overlap);
+  sendRoomState(overlap);
+  return overlap;
+}
+
+function sendOverlapStart(overlap) {
   for (const playerId of overlap.players) {
-    const client = firstOnlineClient(playerId);
-    if (client) {
+    const clients = clientsByPlayerId.get(playerId);
+    if (!clients) {
+      continue;
+    }
+
+    for (const client of clients) {
       client.overlaps.add(overlap.id);
       sendWsJson(client, {
         type: "overlap.start",
         overlapId: overlap.id,
-        mode: type,
+        mode: overlap.type,
         phase: overlapPhase(overlap).phase,
         bubbleRadius,
         participants: overlap.players.map((participantId) => {
@@ -3572,9 +3721,6 @@ function startOverlap(playerIds, type) {
       });
     }
   }
-
-  broadcastOverlapTransform(overlap);
-  return overlap;
 }
 
 function findFriendOverlap(playerIds) {
@@ -3783,7 +3929,7 @@ function relayPlayerDeath(sender, message) {
   }
 }
 
-function leaveClientOverlaps(client) {
+function leaveClientOverlaps(client, explicitLeave = false) {
   for (const overlapId of Array.from(client.overlaps)) {
     const overlap = overlaps.get(overlapId);
     if (!overlap) {
@@ -3791,8 +3937,21 @@ function leaveClientOverlaps(client) {
       continue;
     }
 
-    if (overlap.type === "friend") {
+    if (isJoinableOverlapRoom(overlap)) {
       client.overlaps.delete(overlapId);
+      if (!explicitLeave && firstOnlineClient(client.playerId)) {
+        sendRoomState(overlap);
+        continue;
+      }
+
+      overlap.players = overlap.players.filter((playerId) => playerId !== client.playerId);
+      if (!overlap.players.length) {
+        endOverlap(overlapId, "empty");
+      } else {
+        sendOverlapStart(overlap);
+        broadcastOverlapTransform(overlap);
+        sendRoomState(overlap);
+      }
       continue;
     }
 

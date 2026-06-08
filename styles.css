@@ -1409,6 +1409,10 @@ body {
   background: rgba(255, 255, 255, 0.055);
 }
 
+.settings-panel__save-details {
+  min-width: 0;
+}
+
 .settings-panel__save-item strong,
 .settings-panel__save-item span {
   min-width: 0;
@@ -1418,6 +1422,7 @@ body {
 }
 
 .settings-panel__save-item strong {
+  display: block;
   color: #f8fbff;
   font-size: 12px;
   font-weight: 950;
