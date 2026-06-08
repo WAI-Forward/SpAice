@@ -1367,6 +1367,38 @@ body {
   gap: 8px;
 }
 
+.settings-panel__restart {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-panel__restart-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid rgba(255, 158, 191, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 158, 191, 0.08);
+}
+
+.settings-panel__restart-confirm[hidden] {
+  display: none;
+}
+
+.settings-panel__restart-confirm p {
+  margin: 0;
+  color: rgba(248, 251, 255, 0.86);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.settings-panel__restart-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
 .settings-panel__auth-form {
   display: grid;
   gap: 8px;
@@ -1512,6 +1544,16 @@ body {
 .settings-panel__reset:hover:not([disabled]) {
   border-color: rgba(88, 226, 255, 0.48);
   background: rgba(88, 226, 255, 0.14);
+}
+
+.settings-panel__save-action--danger {
+  border-color: rgba(255, 158, 191, 0.3);
+  color: #ffd7e4;
+}
+
+.settings-panel__save-action--danger:hover:not([disabled]) {
+  border-color: rgba(255, 158, 191, 0.58);
+  background: rgba(255, 158, 191, 0.14);
 }
 
 .settings-row__key.is-listening {

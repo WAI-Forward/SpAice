@@ -156,6 +156,17 @@
               <input id="saveGameNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Save name">
               <button class="settings-panel__save-action" id="saveGameButton" type="submit">Save</button>
             </form>
+            <div class="settings-panel__restart">
+              <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameButton" type="button">Restart game</button>
+              <div class="settings-panel__restart-confirm" id="restartGameConfirm" hidden>
+                <p id="restartGamePrompt">Save your current game before restarting?</p>
+                <div class="settings-panel__restart-actions">
+                  <button class="settings-panel__save-action" id="restartGameSaveFirstButton" type="button">Save first</button>
+                  <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameAnywayButton" type="button">Restart</button>
+                  <button class="settings-panel__save-action" id="restartGameCancelButton" type="button">Cancel</button>
+                </div>
+              </div>
+            </div>
             <div class="settings-panel__save-list" id="savedGameList" aria-label="Saved games"></div>
             <p class="settings-panel__save-status" id="saveGameStatus" aria-live="polite"></p>
           </div>

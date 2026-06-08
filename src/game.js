@@ -57,6 +57,12 @@
   const saveGameForm = document.getElementById("saveGameForm");
   const saveGameNameInput = document.getElementById("saveGameNameInput");
   const saveGameButton = document.getElementById("saveGameButton");
+  const restartGameButton = document.getElementById("restartGameButton");
+  const restartGameConfirm = document.getElementById("restartGameConfirm");
+  const restartGamePrompt = document.getElementById("restartGamePrompt");
+  const restartGameSaveFirstButton = document.getElementById("restartGameSaveFirstButton");
+  const restartGameAnywayButton = document.getElementById("restartGameAnywayButton");
+  const restartGameCancelButton = document.getElementById("restartGameCancelButton");
   const loadGameForm = document.getElementById("loadGameForm");
   const loadGameNameInput = document.getElementById("loadGameNameInput");
   const savedGameList = document.getElementById("savedGameList");
@@ -780,6 +786,7 @@
     stats: null,
     cause: "Unknown impact"
   };
+  let restartGameInFlight = false;
   const leaderboard = {
     open: false,
     entries: [],
@@ -915,8 +922,8 @@
 
   function resize() {
     dpr = Math.min(2, window.devicePixelRatio || 1);
-    width = window.innerWidth;
-    height = window.innerHeight;
+    width = viewportDimension("width");
+    height = viewportDimension("height");
     canvas.width = Math.max(1, Math.floor(width * dpr));
     canvas.height = Math.max(1, Math.floor(height * dpr));
     canvas.style.width = width + "px";
@@ -927,6 +934,29 @@
       mouse.x = width * 0.68;
       mouse.y = height * 0.43;
     }
+  }
+
+  function viewportDimension(axis) {
+    const isWidth = axis === "width";
+    const fallback = isWidth ? 1280 : 720;
+    const visualViewport = window.visualViewport;
+    const candidates = [
+      isWidth ? window.innerWidth : window.innerHeight,
+      visualViewport && (isWidth ? visualViewport.width : visualViewport.height),
+      document.documentElement && (isWidth ? document.documentElement.clientWidth : document.documentElement.clientHeight),
+      document.body && (isWidth ? document.body.clientWidth : document.body.clientHeight),
+      canvas && (isWidth ? canvas.clientWidth : canvas.clientHeight),
+      fallback
+    ];
+
+    for (const candidate of candidates) {
+      const value = Number(candidate);
+      if (Number.isFinite(value) && value > 0) {
+        return value;
+      }
+    }
+
+    return fallback;
   }
 
   function randomRange(min, max) {
@@ -2995,6 +3025,7 @@
       saveGameButton.disabled = (!signedIn && !crazyGamesRuntime) || accountState.busy;
       saveGameButton.textContent = signedIn ? "Save" : crazyGamesRuntime ? "Save guest" : "Log in";
     }
+    updateRestartGameUi();
 
     renderSavedGames();
   }
@@ -3472,19 +3503,18 @@
 
     if (!isAccountSignedIn()) {
       if (isCrazyGamesRuntime()) {
-        await saveGuestProgress();
-        return;
+        return await saveGuestProgress();
       }
       setManualSaveStatus("Create an account or log in to save.", "error");
-      return;
+      return false;
     }
     if (!name) {
       setManualSaveStatus("Enter a save name.", "error");
-      return;
+      return false;
     }
     if (!runState.active || deathState.active) {
       setManualSaveStatus("Start a live run before saving.", "error");
-      return;
+      return false;
     }
 
     try {
@@ -3503,16 +3533,18 @@
       renderSavedGames();
       setManualSaveStatus('Saved "' + name + '".', "success");
       maybeNotifyText('Saved "' + name + '".');
+      return true;
     } catch (error) {
       console.warn("Clusternauts manual save failed.", error);
       setManualSaveStatus("Could not save this game.", "error");
+      return false;
     }
   }
 
   async function saveGuestProgress() {
     if (!runState.active || deathState.active) {
       setManualSaveStatus("Start a live run before saving.", "error");
-      return;
+      return false;
     }
 
     setAccountBusy(true);
@@ -3523,13 +3555,122 @@
       await waitForPersistenceIdle();
       if (!persistence.online) {
         setManualSaveStatus("Could not save guest progress.", "error");
-        return;
+        return false;
       }
       setManualSaveStatus("Guest progress saved.", "success");
       maybeNotifyText("Guest progress saved.");
+      return true;
     } finally {
       setAccountBusy(false);
     }
+  }
+
+  function updateRestartGameUi() {
+    if (restartGameButton) {
+      restartGameButton.disabled = restartGameInFlight || accountState.busy;
+      restartGameButton.textContent = restartGameInFlight ? "Restarting..." : "Restart game";
+    }
+
+    const canSaveCurrentRun = runState.active && !deathState.active;
+    if (restartGamePrompt) {
+      restartGamePrompt.textContent = canSaveCurrentRun ? "Save your current game before restarting?" : "Start a new game?";
+    }
+    if (restartGameSaveFirstButton) {
+      restartGameSaveFirstButton.disabled = restartGameInFlight || accountState.busy || !canSaveCurrentRun;
+    }
+    if (restartGameAnywayButton) {
+      restartGameAnywayButton.disabled = restartGameInFlight || accountState.busy;
+      restartGameAnywayButton.textContent = canSaveCurrentRun ? "Restart" : "New game";
+    }
+    if (restartGameCancelButton) {
+      restartGameCancelButton.disabled = restartGameInFlight;
+    }
+  }
+
+  function setRestartGameConfirmOpen(open) {
+    if (restartGameConfirm) {
+      restartGameConfirm.hidden = !open;
+    }
+    updateRestartGameUi();
+  }
+
+  async function restartGameFromSettings() {
+    if (restartGameInFlight) {
+      return;
+    }
+
+    restartGameInFlight = true;
+    updateRestartGameUi();
+
+    const previousPlayerId = player.id;
+
+    try {
+      await waitForPersistenceIdle();
+      if (persistence.enabled && previousPlayerId) {
+        await fetchPersistentJson("/api/reset/life", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerId: previousPlayerId })
+        });
+      }
+    } catch (error) {
+      console.warn("Clusternauts restart cleanup failed.", error);
+    }
+
+    try {
+      if (multiplayer.socket) {
+        multiplayer.socket.onclose = null;
+        multiplayer.socket.onerror = null;
+        multiplayer.socket.close();
+      }
+      multiplayer.socket = null;
+      multiplayer.connected = false;
+      multiplayer.reconnectTimer = 0;
+      multiplayer.reconnectDelay = 1.5;
+      multiplayer.profile = null;
+      multiplayer.universeId = "";
+      multiplayer.remoteUniverses.clear();
+
+      clearStoredNetworkIdentity();
+      runState.active = false;
+      gamePaused = false;
+      resetLocalPlayerState();
+      resetLocalWorldState();
+      resetLifeStats();
+      resetDeathState();
+      initializeNetworkIdentity();
+      persistence.saveTimer = persistenceSaveInterval;
+      persistence.pollTimer = persistencePollInterval;
+      setRestartGameConfirmOpen(false);
+      setSettingsOpen(false);
+      setDifficultyScreenOpen(true);
+      resetMouseButtons();
+      lastTime = performance.now();
+      void refreshLeaderboard(true);
+      updateHud();
+      setManualSaveStatus("Choose a difficulty to start a new game.", "success");
+      maybeNotifyText("New game ready.");
+    } catch (error) {
+      console.warn("Clusternauts restart failed.", error);
+      setManualSaveStatus("Could not restart the game.", "error");
+    } finally {
+      restartGameInFlight = false;
+      updateRestartGameUi();
+    }
+  }
+
+  async function saveThenRestartGame() {
+    if (restartGameInFlight) {
+      return;
+    }
+
+    const saved = await saveManualGame();
+    if (!saved) {
+      setRestartGameConfirmOpen(true);
+      return;
+    }
+
+    await restartGameFromSettings();
   }
 
   async function loadManualGame(saveId) {
@@ -7568,8 +7709,10 @@
 
   function spawnParticleNearPlayer() {
     const angle = randomRange(0, Math.PI * 2);
-    const minDist = Math.min(width, height) * 0.38 + 150;
-    const maxDist = Math.max(width, height) * 0.74 + 420;
+    const spawnWidth = Math.max(640, finiteOr(width, 0));
+    const spawnHeight = Math.max(360, finiteOr(height, 0));
+    const minDist = Math.min(spawnWidth, spawnHeight) * 0.38 + 150;
+    const maxDist = Math.max(spawnWidth, spawnHeight) * 0.74 + 420;
     const dist = randomRange(minDist, maxDist);
     const drift = rotatePoint(randomRange(-44, 44), randomRange(-44, 44), angle + Math.PI / 2);
     const particle = createParticle(
@@ -9432,6 +9575,27 @@
     target.vy = player.vy + aim.world.y * resolvedState.vx + normal.y * resolvedState.vy;
   }
 
+  function isValidParticleState(particle) {
+    return Boolean(
+      particle &&
+      particle.tier &&
+      Number.isFinite(particle.x) &&
+      Number.isFinite(particle.y) &&
+      Number.isFinite(particle.vx) &&
+      Number.isFinite(particle.vy) &&
+      Number.isFinite(particle.mass) &&
+      Number.isFinite(particle.radius)
+    );
+  }
+
+  function pruneInvalidParticles() {
+    for (let i = particles.length - 1; i >= 0; i -= 1) {
+      if (!isValidParticleState(particles[i])) {
+        particles.splice(i, 1);
+      }
+    }
+  }
+
   function updateParticles(dt) {
     const aim = getAim();
     const funnel = getFunnel(aim);
@@ -9439,6 +9603,7 @@
     const suctionActive = canUseSuctionControls();
     const vacuumBucketActive = hasVacuumBucketCollider();
 
+    pruneInvalidParticles();
     spawnTimer -= dt;
     while (particles.length < targetParticles && spawnTimer <= 0) {
       spawnParticleNearPlayer();
@@ -17462,6 +17627,30 @@
     saveGameForm.addEventListener("submit", function (event) {
       event.preventDefault();
       void saveManualGame();
+    });
+  }
+
+  if (restartGameButton) {
+    restartGameButton.addEventListener("click", function () {
+      setRestartGameConfirmOpen(true);
+    });
+  }
+
+  if (restartGameSaveFirstButton) {
+    restartGameSaveFirstButton.addEventListener("click", function () {
+      void saveThenRestartGame();
+    });
+  }
+
+  if (restartGameAnywayButton) {
+    restartGameAnywayButton.addEventListener("click", function () {
+      void restartGameFromSettings();
+    });
+  }
+
+  if (restartGameCancelButton) {
+    restartGameCancelButton.addEventListener("click", function () {
+      setRestartGameConfirmOpen(false);
     });
   }
 
