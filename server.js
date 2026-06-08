@@ -2709,6 +2709,7 @@ server.on("upgrade", (request, socket) => {
     universeId: "",
     profile: null,
     lastSnapshot: null,
+    multiplayerOptIn: true,
     overlaps: new Set(),
     closed: false,
     fragmentedMessageParts: [],
@@ -3000,7 +3001,19 @@ async function handleSocketMessage(client, message) {
 
   if (message.type === "input") {
     client.lastSnapshot = message.snapshot && typeof message.snapshot === "object" ? message.snapshot : client.lastSnapshot;
+    if (Object.prototype.hasOwnProperty.call(message, "multiplayerOptIn")) {
+      client.multiplayerOptIn = message.multiplayerOptIn !== false;
+    }
     relayOverlapSnapshot(client);
+    return;
+  }
+
+  if (message.type === "multiplayer.optIn") {
+    client.multiplayerOptIn = message.enabled !== false;
+    if (!client.multiplayerOptIn) {
+      leaveClientOverlaps(client, true);
+    }
+    await sendClientBootstrap(client);
     return;
   }
 
@@ -3111,6 +3124,7 @@ async function handleSocketHello(client, message) {
 
   client.playerId = playerId;
   client.universeId = soloWorldId(playerId);
+  client.multiplayerOptIn = message.multiplayerOptIn !== false;
   client.profile = await ensurePlayerProfile(playerId);
   const helloName = sanitizeText(message.snapshot && message.snapshot.player && message.snapshot.player.name, 32);
   if (client.profile.crazyGamesUsername) {
@@ -3320,6 +3334,17 @@ async function handleFriendInvite(client, message) {
     return;
   }
 
+  const targetClient = firstOnlineClient(targetPlayerId);
+  if (!client.multiplayerOptIn || !targetClient || !targetClient.multiplayerOptIn) {
+    sendWsJson(client, {
+      type: "friend.invite.sent",
+      targetPlayerId,
+      online: false,
+      message: "Multiplayer is off."
+    });
+    return;
+  }
+
   if (!canRelayLinkPlayers(client.playerId, targetPlayerId)) {
     logMultiplayer("friend invite rejected", {
       fromPlayerId: client.playerId,
@@ -3365,6 +3390,12 @@ async function handleFriendAccept(client, message) {
     return;
   }
 
+  const fromClient = firstOnlineClient(fromPlayerId);
+  if (!client.multiplayerOptIn || !fromClient || !fromClient.multiplayerOptIn) {
+    sendWsJson(client, { type: "error", message: "Multiplayer is off." });
+    return;
+  }
+
   if (!canRelayLinkPlayers(client.playerId, fromPlayerId)) {
     logMultiplayer("friend accept rejected", {
       playerId: client.playerId,
@@ -3388,6 +3419,11 @@ async function handleFriendAccept(client, message) {
 }
 
 function handleRoomCreate(client, message) {
+  if (!client.multiplayerOptIn) {
+    sendWsJson(client, { type: "room.join.failed", roomId: "", reason: "disabled", message: "Multiplayer is off." });
+    return;
+  }
+
   const mode = normalizeRoomMode(message.mode);
   const existingOverlap = findJoinableOverlapForPlayer(client.playerId);
   const overlap = existingOverlap || startOverlap([client.playerId], mode);
@@ -3402,6 +3438,11 @@ function handleRoomCreate(client, message) {
 
 function handleRoomJoin(client, message) {
   const roomId = sanitizeText(message.roomId, 96);
+  if (!client.multiplayerOptIn) {
+    sendWsJson(client, { type: "room.join.failed", roomId, reason: "disabled", message: "Multiplayer is off." });
+    return;
+  }
+
   if (!roomId) {
     sendWsJson(client, { type: "room.join.failed", roomId, reason: "missing-room", message: "Missing room id." });
     return;
@@ -3452,7 +3493,11 @@ function normalizeRoomMode(mode) {
 }
 
 function isJoinableOverlapRoom(overlap) {
-  return Boolean(overlap && (overlap.type === "world-overlap" || overlap.type === "friend"));
+  return Boolean(overlap && isJoinableRoomMode(overlap.type));
+}
+
+function isJoinableRoomMode(mode) {
+  return mode === "world-overlap" || mode === "friend";
 }
 
 function findJoinableOverlapForPlayer(playerId) {
@@ -3656,8 +3701,13 @@ function publicPresence(client) {
 }
 
 function startOverlap(playerIds, type) {
-  const uniquePlayers = playerIds.filter(uniqueOnly).filter((playerId) => firstOnlineClient(playerId));
   const overlapType = normalizeRoomMode(type);
+  const uniquePlayers = playerIds
+    .filter(uniqueOnly)
+    .filter((playerId) => {
+      const client = firstOnlineClient(playerId);
+      return Boolean(client && (!isJoinableRoomMode(overlapType) || client.multiplayerOptIn));
+    });
   if (uniquePlayers.length < 2 && overlapType !== "world-overlap") {
     logMultiplayer("overlap skipped", {
       type,
@@ -3996,7 +4046,7 @@ function endOverlap(overlapId, reason) {
 
 function scanForRandomSignals() {
   const candidates = Array.from(sockets).filter((client) => {
-    if (!client.playerId || !client.profile || client.overlaps.size) {
+    if (!client.playerId || !client.profile || !client.multiplayerOptIn || client.overlaps.size) {
       return false;
     }
     return (playerCooldowns.get(client.playerId) || 0) <= Date.now();
