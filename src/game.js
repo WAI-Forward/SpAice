@@ -281,14 +281,17 @@
 
   function crazyGamesSdkEnvironment() {
     const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
-    return sdk && typeof sdk.environment === "string" ? sdk.environment : "";
+    return sdk && typeof sdk.environment === "string" ? sdk.environment.toLowerCase() : "";
   }
 
   function isCrazyGamesHost(hostName) {
-    const host = String(hostName || "").toLowerCase();
+    const host = String(hostName || "").toLowerCase().replace(/\.$/, "");
+    const parts = host.split(".").filter(Boolean);
+    const crazyGamesIndex = parts.indexOf("crazygames");
+    if (crazyGamesIndex !== -1 && crazyGamesIndex >= parts.length - 3) {
+      return true;
+    }
     return (
-      host === "crazygames.com" ||
-      host.endsWith(".crazygames.com") ||
       host === "crazygamesgame.com" ||
       host.endsWith(".crazygamesgame.com")
     );
@@ -1931,6 +1934,15 @@
     }
     const tag = target.tagName;
     return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  }
+
+  function isBrowserScrollKey(event) {
+    return event.code === "ArrowUp" || event.code === "ArrowDown" || event.code === "Space";
+  }
+
+  function isKeyboardControlEventTarget(event) {
+    const target = event.target;
+    return target instanceof HTMLElement && Boolean(target.closest("button, a[href], [role='button'], [role='link'], [role='menuitem'], [role='tab']"));
   }
 
   function techByKey(key) {
@@ -17730,6 +17742,10 @@
   });
 
   window.addEventListener("keydown", function (event) {
+    if (isBrowserScrollKey(event) && !settingsOpen && !isEditableEventTarget(event) && !isKeyboardControlEventTarget(event)) {
+      event.preventDefault();
+    }
+
     if (settingsOpen) {
       if (!isEditableEventTarget(event)) {
         event.preventDefault();

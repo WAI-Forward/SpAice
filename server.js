@@ -2662,13 +2662,16 @@ function allowedCorsOrigin(origin) {
 }
 
 function isCrazyGamesHostName(hostName) {
+  const host = String(hostName || "").toLowerCase().replace(/\.$/, "");
+  const parts = host.split(".").filter(Boolean);
+  const crazyGamesIndex = parts.indexOf("crazygames");
+  if (crazyGamesIndex !== -1 && crazyGamesIndex >= parts.length - 3) {
+    return true;
+  }
+
   return (
-    hostName === "crazygames.com" ||
-    hostName.endsWith(".crazygames.com") ||
-    hostName === "crazygamesgame.com" ||
-    hostName.endsWith(".crazygamesgame.com") ||
-    hostName === "game-files.crazygames.com" ||
-    hostName.endsWith(".game-files.crazygames.com")
+    host === "crazygamesgame.com" ||
+    host.endsWith(".crazygamesgame.com")
   );
 }
 
