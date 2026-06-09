@@ -922,6 +922,7 @@
     joinRequestedRoomId: "",
     lobby: null,
     lobbyLoadedSnapshot: null,
+    lobbyLoadedSaveName: "",
     lobbyCreatePending: false,
     lobbyJoinPending: "",
     lobbyRequestStartedAt: 0,
@@ -3081,7 +3082,9 @@
       return;
     }
 
-    const title = startMenu.titles[startMenu.view] || startMenu.titles.main;
+    const title = startMenu.view === "load" && isMultiplayerSaveLoadContext()
+      ? ["Multiplayer", "Load Save"]
+      : startMenu.titles[startMenu.view] || startMenu.titles.main;
     if (startMenuEyebrow) {
       startMenuEyebrow.textContent = title[0];
     }
@@ -3115,8 +3118,9 @@
     }
 
     startSavedGameList.textContent = "";
+    const lobbySaveMode = isMultiplayerSaveLoadContext();
     if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
-      const row = createStartMenuRow("Guest progress", "Continue", "continue-guest");
+      const row = createStartMenuRow("Guest progress", lobbySaveMode ? "Use" : "Continue", lobbySaveMode ? "load-lobby-guest" : "continue-guest");
       startSavedGameList.append(row);
       return;
     }
@@ -3145,7 +3149,6 @@
       return;
     }
 
-    const lobbySaveMode = Boolean(multiplayer.lobby && startMenu.history.includes("lobby"));
     for (const save of accountState.saves) {
       const row = createStartMenuRow(save.name || "Saved world", lobbySaveMode ? "Use" : "Load", lobbySaveMode ? "load-lobby-save" : "load-save");
       const button = row.querySelector("button");
@@ -3173,6 +3176,10 @@
     return row;
   }
 
+  function isMultiplayerSaveLoadContext() {
+    return Boolean(startMenu.history.includes("multiplayer") || startMenu.history.includes("lobby") || multiplayer.lobby);
+  }
+
   function handleStartMenuAction(action, sourceElement) {
     if (action === "back") {
       goBackStartMenu();
@@ -3198,12 +3205,20 @@
       void loadLobbySave(sourceElement && sourceElement.dataset.saveId);
       return;
     }
+    if (action === "load-lobby-guest") {
+      void loadLobbyGuestProgress();
+      return;
+    }
     if (action === "continue-guest") {
       void continueGuestProgress();
       return;
     }
     if (action === "multiplayer") {
       setStartMenuView("multiplayer");
+      return;
+    }
+    if (action === "multiplayer-load-game") {
+      setStartMenuView("load");
       return;
     }
     if (action === "create-lobby") {
@@ -3254,8 +3269,8 @@
 
   async function loadLobbySave(saveId) {
     const cleanSaveId = String(saveId || "").trim();
-    if (!multiplayer.lobby || !isLobbyHost()) {
-      setLobbyStatus("Create a lobby as host first.", "error");
+    if (multiplayer.lobby && !isLobbyHost()) {
+      setLobbyStatus("Only the host can load a save.", "error");
       return;
     }
     if (!isAccountSignedIn()) {
@@ -3286,12 +3301,46 @@
       applyRunSnapshot(payload.run);
       runState.active = false;
       multiplayer.lobbyLoadedSnapshot = payload;
-      setLobbyDifficulty(payload.run && payload.run.difficulty ? payload.run.difficulty : payload.world.difficulty || selectedLobbyDifficulty());
-      setStartMenuView("lobby", { push: false });
-      setLobbyStatus('Using "' + saveName + '".', "success");
+      multiplayer.lobbyLoadedSaveName = saveName;
+      setLoadedLobbyDifficulty(payload.run && payload.run.difficulty ? payload.run.difficulty : payload.world.difficulty || selectedLobbyDifficulty());
+      if (multiplayer.lobby) {
+        setStartMenuView("lobby", { push: false });
+        setLobbyStatus('Using "' + saveName + '".', "success");
+      } else {
+        createLobby({ loadedSnapshot: payload, loadedSaveName: saveName });
+      }
     } catch (error) {
       console.warn("Clusternauts lobby save load failed.", error);
       setLobbyStatus("Could not use this save.", "error");
+    }
+  }
+
+  async function loadLobbyGuestProgress() {
+    if (multiplayer.lobby && !isLobbyHost()) {
+      setLobbyStatus("Only the host can load a save.", "error");
+      return;
+    }
+
+    try {
+      resetLocalPlayerState();
+      resetLocalWorldState();
+      resetLifeStats();
+      resetDeathState();
+      await loadPersistentState();
+      runState.active = false;
+      const payload = buildPersistentPayload(true);
+      multiplayer.lobbyLoadedSnapshot = payload;
+      multiplayer.lobbyLoadedSaveName = "Guest progress";
+      setLoadedLobbyDifficulty(payload.run && payload.run.difficulty ? payload.run.difficulty : payload.world.difficulty || selectedLobbyDifficulty());
+      if (multiplayer.lobby) {
+        setStartMenuView("lobby", { push: false });
+        setLobbyStatus("Using guest progress.", "success");
+      } else {
+        createLobby({ loadedSnapshot: payload, loadedSaveName: "Guest progress" });
+      }
+    } catch (error) {
+      console.warn("Clusternauts lobby guest load failed.", error);
+      setLobbyStatus("Could not use guest progress.", "error");
     }
   }
 
@@ -3312,13 +3361,16 @@
     return Boolean(multiplayer.lobby && multiplayer.lobby.hostPlayerId === player.id);
   }
 
-  function createLobby() {
+  function createLobby(options) {
+    const loadedSnapshot = options && options.loadedSnapshot && typeof options.loadedSnapshot === "object" ? options.loadedSnapshot : null;
+    const loadedSaveName = loadedSnapshot ? String(options.loadedSaveName || "saved world") : "";
     setFriendJoinsEnabled(true, "lobby-create", { persist: true, notify: false, startRun: false });
     multiplayer.lobbyCreatePending = true;
     multiplayer.lobbyJoinPending = "";
-    multiplayer.lobbyLoadedSnapshot = null;
+    multiplayer.lobbyLoadedSnapshot = loadedSnapshot;
+    multiplayer.lobbyLoadedSaveName = loadedSaveName;
     multiplayer.lobbyRequestStartedAt = performance.now();
-    setLobbyStatus("Creating lobby...", "");
+    setLobbyStatus(loadedSnapshot ? 'Creating lobby from "' + loadedSaveName + '"...' : "Creating lobby...", "");
     setStartMenuView("lobby");
     connectMultiplayer();
     flushLobbyRequests("create-lobby");
@@ -3335,6 +3387,7 @@
     multiplayer.lobbyCreatePending = false;
     multiplayer.lobbyJoinPending = cleanCode;
     multiplayer.lobbyLoadedSnapshot = null;
+    multiplayer.lobbyLoadedSaveName = "";
     multiplayer.lobbyRequestStartedAt = performance.now();
     setLobbyStatus("Joining lobby...", "");
     setStartMenuView("lobby");
@@ -3394,6 +3447,18 @@
     });
   }
 
+  function setLoadedLobbyDifficulty(difficulty) {
+    if (!difficultyDefinitions[difficulty]) {
+      return;
+    }
+    if (multiplayer.lobby) {
+      setLobbyDifficulty(difficulty);
+      return;
+    }
+    applyDifficulty(difficulty);
+    renderLobby();
+  }
+
   function startLobby() {
     if (!multiplayer.lobby || !isLobbyHost()) {
       setLobbyStatus("Only the host can start.", "error");
@@ -3425,6 +3490,7 @@
     multiplayer.lobbyRequestStartedAt = 0;
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
+    multiplayer.lobbyLoadedSaveName = "";
     setLobbyStatus("", "");
     setStartMenuView("multiplayer", { push: false });
   }
@@ -3434,7 +3500,14 @@
     multiplayer.lobbyCreatePending = false;
     multiplayer.lobbyJoinPending = "";
     multiplayer.lobbyRequestStartedAt = 0;
-    setLobbyStatus(multiplayer.lobby.status === "started" ? "Shared world starting." : "", "success");
+    setLobbyStatus(
+      multiplayer.lobby.status === "started"
+        ? "Shared world starting."
+        : multiplayer.lobbyLoadedSnapshot
+        ? 'Using "' + (multiplayer.lobbyLoadedSaveName || "saved world") + '".'
+        : "",
+      multiplayer.lobby.status === "started" || multiplayer.lobbyLoadedSnapshot ? "success" : ""
+    );
     setStartMenuView("lobby", { push: false });
     updateLobbyCrazyGamesRoom("lobby-state");
     renderLobby();
@@ -3666,6 +3739,7 @@
     multiplayer.lobby = null;
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
+    multiplayer.lobbyLoadedSaveName = "";
 
     applyDifficulty(difficulty);
     resetLocalPlayerState();
