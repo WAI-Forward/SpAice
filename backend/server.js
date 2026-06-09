@@ -3137,6 +3137,11 @@ async function handleSocketMessage(client, message) {
     return;
   }
 
+  if (message.type === "party.tech.pickup") {
+    handlePartyTechPickup(client, message);
+    return;
+  }
+
   if (message.type === "anomaly.choice") {
     handleAnomalyChoice(client, message);
     return;
@@ -3855,6 +3860,7 @@ function handleLobbyStart(client, message) {
     pvpMode: "party-off",
     worldSnapshot: message.snapshot && typeof message.snapshot === "object" ? message.snapshot : client.lastSnapshot,
     playerSnapshots: new Map(),
+    claimedTechPickupIds: new Set(),
     createdAt: Date.now(),
     anomalyId: ""
   };
@@ -3955,6 +3961,34 @@ function handlePartyRespawn(client, message) {
     publicName: client.profile ? client.profile.publicName : client.playerId,
     snapshot
   }, client.playerId);
+}
+
+function handlePartyTechPickup(client, message) {
+  const session = partySessions.get(client.partySessionId);
+  if (!session || !session.players.includes(client.playerId)) {
+    return;
+  }
+
+  if (!session.claimedTechPickupIds) {
+    session.claimedTechPickupIds = new Set();
+  }
+
+  const pickupId = sanitizeText(String(message.pickupId || ""), 80);
+  const key = techKeys.includes(message.key) ? message.key : "";
+  if (!pickupId || !key || session.claimedTechPickupIds.has(pickupId)) {
+    return;
+  }
+
+  session.claimedTechPickupIds.add(pickupId);
+  relayToParty(session, {
+    type: "party.tech.claimed",
+    pickupId,
+    key,
+    claimedByPlayerId: client.playerId,
+    claimedByName: client.profile ? client.profile.publicName : client.playerId,
+    x: clampNumber(message.x, -1000000, 1000000),
+    y: clampNumber(message.y, -1000000, 1000000)
+  });
 }
 
 function leaveClientParty(client) {

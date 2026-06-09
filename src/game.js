@@ -9,6 +9,8 @@
   const energyFill = document.getElementById("energyFill");
   const scoreValue = document.getElementById("scoreValue");
   const difficultyValue = document.getElementById("difficultyValue");
+  const gameVitalsHud = document.getElementById("gameVitalsHud");
+  const touchLandButton = document.getElementById("touchLandButton");
   const currentBodyLabel = document.getElementById("currentBodyLabel");
   const nextMilestoneLabel = document.getElementById("nextMilestoneLabel");
   const nextMilestoneValue = document.getElementById("nextMilestoneValue");
@@ -16,9 +18,14 @@
   const leaderboardToggle = document.getElementById("leaderboardToggle");
   const leaderboardPanel = document.getElementById("leaderboardPanel");
   const leaderboardList = document.getElementById("leaderboardList");
+  const vitalsToggle = document.getElementById("vitalsToggle");
   const resourcesToggle = document.getElementById("resourcesToggle");
   const buildToggle = document.getElementById("buildToggle");
   const mapToggle = document.getElementById("mapToggle");
+  const touchJoystick = document.getElementById("touchJoystick");
+  const touchJoystickStick = document.getElementById("touchJoystickStick");
+  const touchFireJoystick = document.getElementById("touchFireJoystick");
+  const touchFireJoystickStick = document.getElementById("touchFireJoystickStick");
   const notifications = document.getElementById("notifications");
   const notificationGroups = new Map();
   const techLedger = document.getElementById("techLedger");
@@ -45,6 +52,7 @@
   const zoomInput = document.getElementById("zoomInput");
   const zoomValue = document.getElementById("zoomValue");
   const surfaceCameraRotationInput = document.getElementById("surfaceCameraRotationInput");
+  const touchScreenInput = document.getElementById("touchScreenInput");
   const multiplayerToggleInput = document.getElementById("multiplayerToggleInput");
   const multiplayerStatus = document.getElementById("multiplayerStatus");
   const multiplayerPanelStatus = document.getElementById("multiplayerPanelStatus");
@@ -109,6 +117,7 @@
   const menuZoomInput = document.getElementById("menuZoomInput");
   const menuZoomValue = document.getElementById("menuZoomValue");
   const menuSurfaceCameraRotationInput = document.getElementById("menuSurfaceCameraRotationInput");
+  const menuTouchScreenInput = document.getElementById("menuTouchScreenInput");
   const menuResetControlsButton = document.getElementById("menuResetControlsButton");
   const commandPanel = document.getElementById("commandPanel");
   const commandInput = document.getElementById("commandInput");
@@ -206,6 +215,7 @@
   let gamePaused = false;
   const compactHudBreakpoint = 900;
   const compactHudHeightBreakpoint = 560;
+  let vitalsHudOpen = false;
   let resourcesHudOpen = false;
   let mapHudOpen = false;
   const techLedgerDrag = {
@@ -393,9 +403,43 @@
     right: false,
     seen: false
   };
+  const gameplayPointerBlockSelector = ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .hud__land-action, .compact-hud-toggles, .touch-joystick, .tech-ledger";
+  const touchControlState = {
+    active: false,
+    pointerId: null,
+    fireButton: "",
+    fireReady: false,
+    aimX: 0,
+    aimY: -1,
+    toolsSuppressed: false,
+    lastTapAt: -Infinity,
+    lastTapX: 0,
+    lastTapY: 0,
+    suppressMouseUntil: -Infinity
+  };
+  const touchJoystickState = {
+    active: false,
+    pointerId: null,
+    moveX: 0,
+    moveY: 0,
+    boost: false,
+    lastTapAt: -Infinity,
+    lastTapX: 0,
+    lastTapY: 0
+  };
+  const touchMoveAxisThreshold = 0.26;
+  const touchDoubleTapWindow = 340;
+  const touchDoubleTapDistance = 56;
+
+  function isKeyboardMovementKeyPressed(direction) {
+    return movementKeyAliases[direction].some((code) => keys.has(code));
+  }
 
   function isMovementKeyPressed(direction) {
-    return movementKeyAliases[direction].some((code) => keys.has(code));
+    if (isKeyboardMovementKeyPressed(direction)) {
+      return true;
+    }
+    return isTouchMovementPressed(direction);
   }
 
   function isMoving() {
@@ -533,9 +577,11 @@
     easy: {
       id: "easy",
       label: "Easy",
-      mobIntervalScale: 1.45,
-      mobBatchScale: 0.72,
-      mobBonusChanceScale: 0.72,
+      mobIntervalScale: 0.82,
+      mobBatchScale: 1.12,
+      mobBonusChanceScale: 1.1,
+      mobDamageMultiplier: 0.62,
+      healthDropMultiplier: 1.45,
       techDropMultiplier: 1.45,
       bodyScoreMultiplier: 0.75,
       mobScoreMultiplier: 0.65
@@ -543,9 +589,11 @@
     medium: {
       id: "medium",
       label: "Medium",
-      mobIntervalScale: 1,
-      mobBatchScale: 1,
-      mobBonusChanceScale: 1,
+      mobIntervalScale: 0.72,
+      mobBatchScale: 1.24,
+      mobBonusChanceScale: 1.22,
+      mobDamageMultiplier: 0.82,
+      healthDropMultiplier: 1.2,
       techDropMultiplier: 1.15,
       bodyScoreMultiplier: 1,
       mobScoreMultiplier: 1
@@ -556,6 +604,8 @@
       mobIntervalScale: 0.62,
       mobBatchScale: 1.38,
       mobBonusChanceScale: 1.35,
+      mobDamageMultiplier: 1,
+      healthDropMultiplier: 1,
       techDropMultiplier: 1,
       bodyScoreMultiplier: 1.25,
       mobScoreMultiplier: 1.65
@@ -888,10 +938,18 @@
   };
   const multiplayerSnapshotInterval = 0.25;
   const partyInputInterval = 0.05;
+  const partyActiveInputInterval = 1 / 30;
   const partyWorldSnapshotInterval = 0.1;
+  const partyActiveWorldSnapshotInterval = 0.05;
   const partyRemotePredictionLead = 0.12;
   const partyRemotePredictionMax = 0.28;
+  const partyRemoteGadgetPredictionLead = 0.06;
+  const partyRemoteGadgetPredictionMax = 0.18;
   const partyRemoteBucketPadding = 12;
+  const partyGadgetCandidateLimit = 8;
+  const partyGadgetBucketLimit = 4;
+  const partyGadgetIntentAssistMs = 520;
+  const partyFollowerPredictionHoldMs = 420;
   const remoteSnapshotRenderDelay = multiplayerSnapshotInterval * 0.8;
   const remoteSnapshotExtrapolateLimit = multiplayerSnapshotInterval * 1.35;
   const remoteSnapshotBufferLimit = 6;
@@ -933,6 +991,8 @@
     partyHostUniverseId: "",
     partyPlayerSnapshots: new Map(),
     partyInputTimer: 0,
+    partyInputSeq: 0,
+    partyLastInputSnapshot: null,
     partySnapshotTimer: 0,
     partyRespawnInvulnerableTimer: 0,
     anomaly: null,
@@ -955,6 +1015,7 @@
     incomingInteractions: new Map(),
     remoteEmotes: new Map(),
     truces: new Set(),
+    claimedTechPickupIds: new Set(),
     trade: null
   };
   const bodyTiers = [
@@ -1005,6 +1066,8 @@
   let nextRocketId = 1;
   let nextFighterId = 1;
   let nextStructureId = 1;
+  let nextRivalProjectileId = 1;
+  let nextTechPickupId = 1;
   let jumpQueued = false;
   let buildMenuOpen = false;
   let activePlacementRecipeId = null;
@@ -1150,6 +1213,7 @@
       uiScale: 1,
       zoom: 0.62,
       surfaceCameraRotation: false,
+      touchScreen: shouldEnableTouchControlsByDefault(),
       controls: Object.assign({}, defaultControlBindings)
     };
 
@@ -1166,6 +1230,7 @@
         uiScale: clamp(Number(stored.uiScale) || defaults.uiScale, 0.8, 1.3),
         zoom: clamp(zoom || defaults.zoom, 0.4, 1.75),
         surfaceCameraRotation: stored.surfaceCameraRotation === true,
+        touchScreen: typeof stored.touchScreen === "boolean" ? stored.touchScreen : defaults.touchScreen,
         controls: normalizeControlBindings(stored.controls)
       };
     } catch (error) {
@@ -1179,6 +1244,7 @@
         uiScale: gameSettings.uiScale,
         zoom: gameSettings.zoom,
         surfaceCameraRotation: gameSettings.surfaceCameraRotation,
+        touchScreen: gameSettings.touchScreen,
         controls: gameSettings.controls
       }));
     } catch (error) {
@@ -1232,6 +1298,12 @@
   function isControlPressed(action) {
     const code = controlCodeFor(action);
     return Boolean(code && keys.has(code));
+  }
+
+  function shouldEnableTouchControlsByDefault() {
+    const hasTouchPoints = Number(navigator.maxTouchPoints || 0) > 0;
+    const coarsePointer = typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+    return Boolean(hasTouchPoints || coarsePointer || "ontouchstart" in window);
   }
 
   function formatControlCode(code) {
@@ -1329,6 +1401,23 @@
     }
   }
 
+  function updateTouchScreenUi() {
+    if (touchScreenInput) {
+      touchScreenInput.checked = Boolean(gameSettings.touchScreen);
+    }
+    if (menuTouchScreenInput) {
+      menuTouchScreenInput.checked = Boolean(gameSettings.touchScreen);
+    }
+    if (touchJoystick) {
+      touchJoystick.classList.toggle("is-enabled", Boolean(gameSettings.touchScreen));
+      touchJoystick.setAttribute("aria-hidden", gameSettings.touchScreen ? "false" : "true");
+    }
+    if (touchFireJoystick) {
+      touchFireJoystick.classList.toggle("is-enabled", Boolean(gameSettings.touchScreen));
+      touchFireJoystick.setAttribute("aria-hidden", gameSettings.touchScreen ? "false" : "true");
+    }
+  }
+
   function surfaceCameraRollForAngle(angle) {
     return gameSettings.surfaceCameraRotation ? cameraRollForSurfaceAngle(angle) : 0;
   }
@@ -1339,6 +1428,16 @@
     if (player.landed) {
       cameraRoll = surfaceCameraRollForAngle(player.landed.angle);
     }
+    writeGameSettings();
+  }
+
+  function applyTouchScreenSetting(enabled) {
+    gameSettings.touchScreen = Boolean(enabled);
+    updateTouchScreenUi();
+    if (!gameSettings.touchScreen) {
+      resetMouseButtons();
+    }
+    updateTouchLandButton();
     writeGameSettings();
   }
 
@@ -1446,6 +1545,432 @@
     mouse.left = false;
     mouse.middle = false;
     mouse.right = false;
+    resetTouchControlState();
+  }
+
+  function resetTouchControlState() {
+    resetTouchFireState();
+    resetTouchJoystickState();
+  }
+
+  function resetTouchFireState() {
+    touchControlState.active = false;
+    touchControlState.pointerId = null;
+    touchControlState.fireButton = "";
+    touchControlState.fireReady = false;
+    touchControlState.aimX = 0;
+    touchControlState.aimY = -1;
+    touchControlState.toolsSuppressed = false;
+    updateTouchFireJoystickUi();
+  }
+
+  function resetTouchJoystickState() {
+    touchJoystickState.active = false;
+    touchJoystickState.pointerId = null;
+    touchJoystickState.moveX = 0;
+    touchJoystickState.moveY = 0;
+    touchJoystickState.boost = false;
+    updateTouchJoystickUi();
+  }
+
+  function clearMouseButtonsOnly() {
+    mouse.left = false;
+    mouse.middle = false;
+    mouse.right = false;
+  }
+
+  function suppressTouchToolsUntilEnergyReturns() {
+    if (!gameSettings.touchScreen || !touchControlState.active) {
+      resetMouseButtons();
+      return;
+    }
+
+    touchControlState.toolsSuppressed = true;
+    clearMouseButtonsOnly();
+  }
+
+  function refreshTouchFireButtons() {
+    if (!touchControlState.active || !touchControlState.fireButton || !touchControlState.fireReady) {
+      clearMouseButtonsOnly();
+      return;
+    }
+    if (touchControlState.toolsSuppressed) {
+      clearMouseButtonsOnly();
+      return;
+    }
+    setTouchFireButton(touchControlState.fireButton);
+  }
+
+  function isTouchMovementPressed(direction) {
+    if (!gameSettings.touchScreen || !touchJoystickState.active) {
+      return false;
+    }
+
+    if (direction === "left") {
+      return touchJoystickState.moveX < -touchMoveAxisThreshold;
+    }
+    if (direction === "right") {
+      return touchJoystickState.moveX > touchMoveAxisThreshold;
+    }
+    if (direction === "up") {
+      return touchJoystickState.moveY < -touchMoveAxisThreshold;
+    }
+    if (direction === "down") {
+      return touchJoystickState.moveY > touchMoveAxisThreshold;
+    }
+    return false;
+  }
+
+  function touchLandedWalkDirection(body) {
+    if (!gameSettings.touchScreen || !touchJoystickState.active || !player.landed || !body) {
+      return 0;
+    }
+
+    const normal = {
+      x: Math.cos(player.landed.angle),
+      y: Math.sin(player.landed.angle)
+    };
+    const tangent = {
+      x: -normal.y,
+      y: normal.x
+    };
+    const aim = cameraLocalToWorld(touchJoystickState.moveX, touchJoystickState.moveY);
+    const tangentAmount = aim.x * tangent.x + aim.y * tangent.y;
+    if (Math.abs(tangentAmount) < touchMoveAxisThreshold) {
+      return 0;
+    }
+    return tangentAmount > 0 ? 1 : -1;
+  }
+
+  function updateTouchAimFromPointer(event) {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = event.clientX - rect.left;
+    mouse.y = event.clientY - rect.top;
+    mouse.seen = true;
+  }
+
+  function updateTouchAimFromVector(x, y) {
+    const distance = Math.hypot(x, y);
+    if (distance < 0.08) {
+      touchControlState.fireReady = false;
+      clearMouseButtonsOnly();
+      return;
+    }
+
+    const aimX = x / distance;
+    const aimY = y / distance;
+    const aimRadius = Math.max(120, Math.min(width, height) * 0.34);
+    touchControlState.fireReady = true;
+    touchControlState.aimX = aimX;
+    touchControlState.aimY = aimY;
+    mouse.x = width / 2 + aimX * aimRadius;
+    mouse.y = height / 2 + aimY * aimRadius;
+    mouse.seen = true;
+    refreshTouchFireButtons();
+  }
+
+  function isTouchJoystickPointer(event) {
+    return Boolean(isTouchGameplayPointer(event) && touchJoystick && (event.target === touchJoystick || touchJoystick.contains(event.target)));
+  }
+
+  function isTouchFireJoystickPointer(event) {
+    return Boolean(isTouchGameplayPointer(event) && touchFireJoystick && (event.target === touchFireJoystick || touchFireJoystick.contains(event.target)));
+  }
+
+  function updateTouchJoystickUi() {
+    if (!touchJoystickStick) {
+      return;
+    }
+
+    const travel = 37;
+    touchJoystickStick.style.transform = "translate(" +
+      (touchJoystickState.moveX * travel).toFixed(1) + "px, " +
+      (touchJoystickState.moveY * travel).toFixed(1) + "px)";
+    if (touchJoystick) {
+      touchJoystick.classList.toggle("is-active", touchJoystickState.active);
+      touchJoystick.classList.toggle("is-boosting", touchJoystickState.active && touchJoystickState.boost);
+    }
+  }
+
+  function updateTouchFireJoystickUi() {
+    if (!touchFireJoystickStick) {
+      return;
+    }
+
+    const travel = 37;
+    const x = touchControlState.fireReady ? touchControlState.aimX : 0;
+    const y = touchControlState.fireReady ? touchControlState.aimY : 0;
+    touchFireJoystickStick.style.transform = "translate(" +
+      (x * travel).toFixed(1) + "px, " +
+      (y * travel).toFixed(1) + "px)";
+    if (touchFireJoystick) {
+      touchFireJoystick.classList.toggle("is-active", touchControlState.active);
+    }
+  }
+
+  function updateTouchJoystickFromPointer(event) {
+    if (!touchJoystick) {
+      return;
+    }
+
+    const base = touchJoystick.querySelector(".touch-joystick__base");
+    const rect = (base || touchJoystick).getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.5);
+    const dx = event.clientX - centerX;
+    const dy = event.clientY - centerY;
+    const distance = Math.hypot(dx, dy);
+    const amount = clamp(distance / radius, 0, 1);
+
+    if (amount < 0.08) {
+      touchJoystickState.moveX = 0;
+      touchJoystickState.moveY = 0;
+    } else {
+      const normal = normalize(dx, dy);
+      touchJoystickState.moveX = normal.x * amount;
+      touchJoystickState.moveY = normal.y * amount;
+    }
+
+    updateTouchJoystickUi();
+  }
+
+  function updateTouchFireJoystickFromPointer(event) {
+    if (!touchFireJoystick) {
+      return;
+    }
+
+    const base = touchFireJoystick.querySelector(".touch-joystick__base");
+    const rect = (base || touchFireJoystick).getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.5);
+    const dx = event.clientX - centerX;
+    const dy = event.clientY - centerY;
+    const distance = Math.hypot(dx, dy);
+    const amount = clamp(distance / radius, 0, 1);
+
+    if (amount < 0.08) {
+      touchControlState.fireReady = false;
+      clearMouseButtonsOnly();
+    } else {
+      const normal = normalize(dx, dy);
+      updateTouchAimFromVector(normal.x * amount, normal.y * amount);
+    }
+
+    updateTouchFireJoystickUi();
+  }
+
+  function beginTouchJoystick(event) {
+    if (!isTouchJoystickPointer(event) || deathState.active || !runState.active || touchJoystickState.active) {
+      return false;
+    }
+
+    event.preventDefault();
+    touchControlState.suppressMouseUntil = performance.now() + 900;
+    const now = performance.now();
+    const tapDistance = Math.hypot(event.clientX - touchJoystickState.lastTapX, event.clientY - touchJoystickState.lastTapY);
+    const doubleTap = now - touchJoystickState.lastTapAt <= touchDoubleTapWindow && tapDistance <= touchDoubleTapDistance;
+    touchJoystickState.active = true;
+    touchJoystickState.pointerId = event.pointerId;
+    touchJoystickState.boost = doubleTap;
+    touchJoystickState.lastTapAt = now;
+    touchJoystickState.lastTapX = event.clientX;
+    touchJoystickState.lastTapY = event.clientY;
+    updateTouchJoystickFromPointer(event);
+
+    if (touchJoystick && touchJoystick.setPointerCapture) {
+      try {
+        touchJoystick.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture can fail if the browser already released the touch.
+      }
+    }
+
+    return true;
+  }
+
+  function updateTouchJoystick(event) {
+    if (!touchJoystickState.active || event.pointerId !== touchJoystickState.pointerId) {
+      return false;
+    }
+
+    event.preventDefault();
+    updateTouchJoystickFromPointer(event);
+    return true;
+  }
+
+  function endTouchJoystick(event) {
+    if (!touchJoystickState.active || event.pointerId !== touchJoystickState.pointerId) {
+      return false;
+    }
+
+    event.preventDefault();
+    resetTouchJoystickState();
+
+    if (touchJoystick && touchJoystick.releasePointerCapture) {
+      try {
+        touchJoystick.releasePointerCapture(event.pointerId);
+      } catch {
+        // Some browsers release capture before pointerup is delivered.
+      }
+    }
+
+    return true;
+  }
+
+  function beginTouchFireJoystick(event) {
+    if (!isTouchFireJoystickPointer(event) || deathState.active || !runState.active || touchControlState.active) {
+      return false;
+    }
+
+    event.preventDefault();
+    touchControlState.suppressMouseUntil = performance.now() + 900;
+    updateTouchAimFromPointer(event);
+
+    if (activePlacementRecipeId) {
+      confirmStructurePlacement();
+      return true;
+    }
+
+    if (areToolsDisabled()) {
+      resetMouseButtons();
+      return true;
+    }
+
+    if (handleCommunicationRelayClick()) {
+      resetMouseButtons();
+      return true;
+    }
+
+    const now = performance.now();
+    const tapDistance = Math.hypot(event.clientX - touchControlState.lastTapX, event.clientY - touchControlState.lastTapY);
+    const doubleTap = now - touchControlState.lastTapAt <= touchDoubleTapWindow && tapDistance <= touchDoubleTapDistance;
+    const fireButton = doubleTap ? "right" : "left";
+
+    touchControlState.active = true;
+    touchControlState.pointerId = event.pointerId;
+    touchControlState.fireButton = fireButton;
+    touchControlState.toolsSuppressed = false;
+    touchControlState.lastTapAt = now;
+    touchControlState.lastTapX = event.clientX;
+    touchControlState.lastTapY = event.clientY;
+    updateTouchFireJoystickFromPointer(event);
+
+    if (touchFireJoystick && touchFireJoystick.setPointerCapture) {
+      try {
+        touchFireJoystick.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture can fail if the browser already released the touch.
+      }
+    }
+
+    if (isSuctionEquipped() && touchControlState.fireReady) {
+      playSound(fireButton === "right" ? "gadgetBlow" : "gadgetSuck", { throttleKey: "gadget", throttle: 0.12 });
+    }
+
+    return true;
+  }
+
+  function updateTouchFireJoystick(event) {
+    if (!touchControlState.active || event.pointerId !== touchControlState.pointerId) {
+      return false;
+    }
+
+    event.preventDefault();
+    updateTouchFireJoystickFromPointer(event);
+    return true;
+  }
+
+  function endTouchFireJoystick(event) {
+    if (!touchControlState.active || event.pointerId !== touchControlState.pointerId) {
+      return false;
+    }
+
+    event.preventDefault();
+    clearMouseButtonsOnly();
+    resetTouchFireState();
+
+    if (touchFireJoystick && touchFireJoystick.releasePointerCapture) {
+      try {
+        touchFireJoystick.releasePointerCapture(event.pointerId);
+      } catch {
+        // Some browsers release capture before pointerup is delivered.
+      }
+    }
+
+    return true;
+  }
+
+  function isTouchGameplayPointer(event) {
+    return Boolean(gameSettings.touchScreen && event && event.pointerType === "touch");
+  }
+
+  function isGameplayPointerBlocked(event) {
+    return Boolean(closestEventTarget(event, gameplayPointerBlockSelector));
+  }
+
+  function shouldSuppressSyntheticMouseEvent() {
+    return Boolean(gameSettings.touchScreen && performance.now() < touchControlState.suppressMouseUntil);
+  }
+
+  function setTouchFireButton(button) {
+    mouse.left = button === "left";
+    mouse.middle = false;
+    mouse.right = button === "right";
+  }
+
+  function isTouchBoostPressed() {
+    return Boolean(gameSettings.touchScreen && touchJoystickState.active && touchJoystickState.boost);
+  }
+
+  function canShowTouchLandButton() {
+    return Boolean(gameSettings.touchScreen && runState.active && !deathState.active && (player.landed || findNearestLandableBody()));
+  }
+
+  function updateTouchLandButton() {
+    if (!touchLandButton) {
+      return;
+    }
+
+    const visible = canShowTouchLandButton();
+    touchLandButton.classList.toggle("is-visible", visible);
+    touchLandButton.hidden = !visible;
+    touchLandButton.textContent = player.landed ? "Take off" : "Land";
+    touchLandButton.setAttribute("aria-label", player.landed ? "Take off from body" : "Land on nearby body");
+  }
+
+  function beginTouchControl(event) {
+    if (beginTouchJoystick(event)) {
+      return;
+    }
+    if (beginTouchFireJoystick(event)) {
+      return;
+    }
+
+    if (!isTouchGameplayPointer(event) || deathState.active || !runState.active || isGameplayPointerBlocked(event)) {
+      return;
+    }
+    event.preventDefault();
+    touchControlState.suppressMouseUntil = performance.now() + 900;
+  }
+
+  function updateTouchControl(event) {
+    if (updateTouchJoystick(event)) {
+      return;
+    }
+    if (updateTouchFireJoystick(event)) {
+      return;
+    }
+  }
+
+  function endTouchControl(event) {
+    if (endTouchJoystick(event)) {
+      return;
+    }
+    if (endTouchFireJoystick(event)) {
+      return;
+    }
   }
 
   function isGadgetButtonPressed() {
@@ -2836,6 +3361,18 @@
 
   function syncCompactHudControls() {
     const compact = isCompactHudViewport();
+    const vitalsVisible = !compact || vitalsHudOpen;
+
+    if (gameVitalsHud) {
+      gameVitalsHud.classList.toggle("is-compact", compact);
+      gameVitalsHud.classList.toggle("is-compact-open", vitalsVisible);
+      gameVitalsHud.setAttribute("aria-hidden", vitalsVisible ? "false" : "true");
+    }
+
+    if (vitalsToggle) {
+      vitalsToggle.classList.toggle("is-active", compact && vitalsHudOpen);
+      vitalsToggle.setAttribute("aria-expanded", compact && vitalsHudOpen ? "true" : "false");
+    }
 
     if (techLedger) {
       techLedger.classList.toggle("is-open", resourcesHudOpen);
@@ -2851,6 +3388,11 @@
       mapToggle.classList.toggle("is-active", compact && mapHudOpen);
       mapToggle.setAttribute("aria-expanded", compact && mapHudOpen ? "true" : "false");
     }
+  }
+
+  function setVitalsHudOpen(open) {
+    vitalsHudOpen = Boolean(open);
+    syncCompactHudControls();
   }
 
   function setResourcesHudOpen(open) {
@@ -3002,6 +3544,14 @@
   function difficultyMobSpawnInterval(kind) {
     const interval = mobSpawnIntervals[kind] || 1;
     return Math.max(0.5, interval * activeDifficulty().mobIntervalScale);
+  }
+
+  function difficultyMobDamage(damage) {
+    return Math.max(0, finiteOr(damage, 0) * finiteOr(activeDifficulty().mobDamageMultiplier, 1));
+  }
+
+  function difficultyHealthDropChance(baseChance) {
+    return clamp(finiteOr(baseChance, 0) * finiteOr(activeDifficulty().healthDropMultiplier, 1), 0, 0.96);
   }
 
   function resetMobSpawnTimers() {
@@ -3407,12 +3957,12 @@
 
   function lobbyDifficultySummary(difficulty) {
     if (difficulty === "easy") {
-      return "Fewer mobs, more tech";
+      return "Fast mobs, softer hits";
     }
     if (difficulty === "hard") {
       return "More mobs";
     }
-    return "Balanced pressure";
+    return "Busy mobs, lighter hits";
   }
 
   function lobbyDifficultyDisplayText(difficulty) {
@@ -3736,6 +4286,8 @@
     multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
     multiplayer.partyPlayerSnapshots.clear();
     multiplayer.partyInputTimer = 0;
+    multiplayer.partyInputSeq = 0;
+    multiplayer.partyLastInputSnapshot = null;
     multiplayer.lobby = null;
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
@@ -3907,6 +4459,9 @@
     nextRocketId = 1;
     nextFighterId = 1;
     nextStructureId = 1;
+    nextRivalProjectileId = 1;
+    nextTechPickupId = 1;
+    multiplayer.claimedTechPickupIds.clear();
     spawnTimer = 0;
 
     resetMobSpawnTimers();
@@ -5929,14 +6484,17 @@
 
     deathState.resetInFlight = true;
     const spawnBody = findNearestProgressBody();
+    let spawnX = player.x + randomRange(-180, 180);
+    let spawnY = player.y + randomRange(-180, 180);
     if (spawnBody) {
       const angle = Math.atan2(player.y - spawnBody.y, player.x - spawnBody.x) || 0;
-      player.x = spawnBody.x + Math.cos(angle) * (spawnBody.radius + player.radius + 18);
-      player.y = spawnBody.y + Math.sin(angle) * (spawnBody.radius + player.radius + 18);
-    } else {
-      player.x += randomRange(-180, 180);
-      player.y += randomRange(-180, 180);
+      spawnX = spawnBody.x + Math.cos(angle) * (spawnBody.radius + player.radius + 18);
+      spawnY = spawnBody.y + Math.sin(angle) * (spawnBody.radius + player.radius + 18);
     }
+    resetLocalPlayerState();
+    resetLifeStats();
+    player.x = spawnX;
+    player.y = spawnY;
     player.vx = 0;
     player.vy = 0;
     player.health = player.maxHealth;
@@ -6911,6 +7469,11 @@
       return;
     }
 
+    if (message.type === "party.tech.claimed") {
+      applyTechPickupClaim(message);
+      return;
+    }
+
     if (message.type === "anomaly.ready") {
       showAnomalyPrompt(message);
       return;
@@ -7756,6 +8319,132 @@
     return !isFriendlyPartyPlayer(fromPlayerId);
   }
 
+  function collectPartyGadgetIntentIds(state) {
+    if (!state) {
+      return { candidateIds: [], bucketIds: [] };
+    }
+
+    const candidates = [];
+    const buckets = [];
+    for (const particle of particles) {
+      if (!partyGadgetCanAffectParticle(state, particle)) {
+        continue;
+      }
+
+      const probe = partyGadgetParticleProbe(state, particle, { padding: 42 });
+      if (probe.force || probe.bucket) {
+        candidates.push({ id: particle.id, score: probe.score });
+      }
+      if (probe.bucket) {
+        buckets.push({ id: particle.id, score: probe.score });
+      }
+    }
+
+    const byScore = (a, b) => a.score - b.score;
+    return {
+      candidateIds: candidates.sort(byScore).slice(0, partyGadgetCandidateLimit).map((entry) => entry.id),
+      bucketIds: buckets.sort(byScore).slice(0, partyGadgetBucketLimit).map((entry) => entry.id)
+    };
+  }
+
+  function buildLocalPartyGadgetSnapshot(playerSnapshot, seq) {
+    const state = localPartyGadgetState(playerSnapshot);
+    const mode = state ? state.mode : "idle";
+    const active = Boolean(state && state.active);
+    const ids = active || (state && state.landedBodyId && (state.left || state.right))
+      ? collectPartyGadgetIntentIds(state)
+      : { candidateIds: [], bucketIds: [] };
+
+    return {
+      seq,
+      active,
+      mode,
+      aimAngle: finiteOr(playerSnapshot && playerSnapshot.aimAngle, 0),
+      x: finiteOr(playerSnapshot && playerSnapshot.x, player.x),
+      y: finiteOr(playerSnapshot && playerSnapshot.y, player.y),
+      vx: finiteOr(playerSnapshot && playerSnapshot.vx, player.vx),
+      vy: finiteOr(playerSnapshot && playerSnapshot.vy, player.vy),
+      candidateIds: ids.candidateIds,
+      bucketIds: ids.bucketIds,
+      landedBodyId: state && state.landedBodyId ? state.landedBodyId : 0,
+      landedThrustDirection: state && state.landedBodyId && (state.left || state.right) ? (state.left ? 1 : -1) : 0
+    };
+  }
+
+  function buildPartyInputSnapshot(seq) {
+    const snapshot = buildPersistentPayload(false);
+    return {
+      player: snapshot.player,
+      gadget: buildLocalPartyGadgetSnapshot(snapshot.player, seq)
+    };
+  }
+
+  function partyInputMotionSharp(snapshot) {
+    const previous = multiplayer.partyLastInputSnapshot;
+    if (!snapshot || !previous || !snapshot.player || !previous.player) {
+      return false;
+    }
+
+    const currentPlayer = snapshot.player;
+    const previousPlayer = previous.player;
+    const distance = Math.hypot(
+      finiteOr(currentPlayer.x, 0) - finiteOr(previousPlayer.x, 0),
+      finiteOr(currentPlayer.y, 0) - finiteOr(previousPlayer.y, 0)
+    );
+    const velocityDelta = Math.hypot(
+      finiteOr(currentPlayer.vx, 0) - finiteOr(previousPlayer.vx, 0),
+      finiteOr(currentPlayer.vy, 0) - finiteOr(previousPlayer.vy, 0)
+    );
+    const aimDelta = Math.abs(shortestAngleDelta(
+      finiteOr(previous.gadget && previous.gadget.aimAngle, finiteOr(previousPlayer.aimAngle, 0)),
+      finiteOr(snapshot.gadget && snapshot.gadget.aimAngle, finiteOr(currentPlayer.aimAngle, 0))
+    ));
+    const modeChanged = (previous.gadget && previous.gadget.mode) !== (snapshot.gadget && snapshot.gadget.mode);
+
+    return modeChanged || aimDelta > 0.16 || distance > 70 || velocityDelta > 180;
+  }
+
+  function partyInputIntervalFor(snapshot) {
+    const gadget = snapshot && snapshot.gadget;
+    if ((gadget && (gadget.active || gadget.landedThrustDirection)) || partyInputMotionSharp(snapshot)) {
+      return partyActiveInputInterval;
+    }
+    return partyInputInterval;
+  }
+
+  function hasRecentPartyGadgetActivity() {
+    if (!isPartySessionActive()) {
+      return false;
+    }
+
+    const local = buildLocalPartyGadgetSnapshot(buildPersistentPayload(false).player, multiplayer.partyInputSeq + 1);
+    if (local.active || local.landedThrustDirection) {
+      return true;
+    }
+
+    if (!isPartyHost()) {
+      return false;
+    }
+
+    const now = performance.now();
+    for (const entry of multiplayer.partyPlayerSnapshots.values()) {
+      const snapshot = entry && entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : null;
+      const gadget = snapshot && snapshot.gadget && typeof snapshot.gadget === "object" ? snapshot.gadget : null;
+      const remotePlayer = snapshot && snapshot.player && typeof snapshot.player === "object" ? snapshot.player : null;
+      if (gadget && (gadget.active || gadget.landedThrustDirection) && now - finiteOr(entry.receivedAt, 0) <= partyGadgetIntentAssistMs) {
+        return true;
+      }
+      if (
+        remotePlayer &&
+        isPartyGadgetActiveMode(remotePlayer.toolMode) &&
+        now - finiteOr(entry.receivedAt, 0) <= partyGadgetIntentAssistMs
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function buildRealtimeSnapshot() {
     return buildPersistentPayload(true);
   }
@@ -7777,19 +8466,28 @@
 
     multiplayer.partyInputTimer -= dt;
     if (multiplayer.connected && isPartySessionActive() && multiplayer.partyInputTimer <= 0) {
-      multiplayer.partyInputTimer = partyInputInterval;
-      const snapshot = buildPersistentPayload(false);
+      const snapshot = buildPartyInputSnapshot(multiplayer.partyInputSeq + 1);
+      const inputInterval = partyInputIntervalFor(snapshot);
+      multiplayer.partyInputTimer = inputInterval;
+      multiplayer.partyInputSeq += 1;
+      multiplayer.partyLastInputSnapshot = snapshot;
       sendMultiplayer({
         type: "party.input",
-        snapshot: {
-          player: snapshot.player
-        }
+        snapshot
       });
     }
 
     multiplayer.snapshotTimer -= dt;
+    const snapshotInterval = isPartyHost() && hasRecentPartyGadgetActivity()
+      ? partyActiveWorldSnapshotInterval
+      : isPartyHost()
+      ? partyWorldSnapshotInterval
+      : multiplayerSnapshotInterval;
+    if (multiplayer.snapshotTimer > snapshotInterval) {
+      multiplayer.snapshotTimer = snapshotInterval;
+    }
     if (multiplayer.connected && multiplayer.snapshotTimer <= 0) {
-      multiplayer.snapshotTimer = isPartyHost() ? partyWorldSnapshotInterval : multiplayerSnapshotInterval;
+      multiplayer.snapshotTimer = snapshotInterval;
       const snapshot = isSharedWorldFollower() ? buildPersistentPayload(false) : buildRealtimeSnapshot();
       sendMultiplayer({
         type: "input",
@@ -8723,6 +9421,7 @@
         fighters: fighters.map(serializeFighter),
         structures: structures.map(serializeStructure),
         rivalProjectiles: rivalProjectiles.map(serializeProjectile),
+        techPickups: techPickups.map(serializeTechPickup),
         starDust: starDust.map(serializeStar),
         nextParticleId,
         nextAlienoidId: nextRivalId,
@@ -8733,6 +9432,8 @@
         nextRocketId,
         nextFighterId,
         nextStructureId,
+        nextRivalProjectileId,
+        nextTechPickupId,
         difficulty: runState.difficultyId,
         mobSpawnTimers: { ...mobSpawnTimers },
         mobDefeatsByKind: { ...mobDefeatsByKind }
@@ -8764,6 +9465,10 @@
     }
   }
 
+  function shouldSmoothWorldEntities(options) {
+    return Boolean(options && (options.smoothEntities || options.smoothParticles));
+  }
+
   function applyWorldSnapshot(snapshot, options) {
     if (!snapshot || typeof snapshot !== "object") {
       return;
@@ -8789,38 +9494,66 @@
 
     const alienoidSnapshots = Array.isArray(snapshot.alienoids) ? snapshot.alienoids : snapshot.rivals;
     if (Array.isArray(alienoidSnapshots)) {
-      rivals.length = 0;
-      rivals.push(...alienoidSnapshots.map(normalizeRivalSnapshot).filter(Boolean));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(rivals, alienoidSnapshots, normalizeRivalSnapshot);
+      } else {
+        rivals.length = 0;
+        rivals.push(...alienoidSnapshots.map(normalizeRivalSnapshot).filter(Boolean));
+      }
     }
 
     if (Array.isArray(snapshot.ufos)) {
-      ufos.length = 0;
-      ufos.push(...snapshot.ufos.map(normalizeUfoSnapshot).filter(Boolean));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(ufos, snapshot.ufos, normalizeUfoSnapshot);
+      } else {
+        ufos.length = 0;
+        ufos.push(...snapshot.ufos.map(normalizeUfoSnapshot).filter(Boolean));
+      }
     }
 
     if (Array.isArray(snapshot.rambots)) {
-      rambots.length = 0;
-      rambots.push(...snapshot.rambots.map(normalizeRambotSnapshot).filter(Boolean));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(rambots, snapshot.rambots, normalizeRambotSnapshot);
+      } else {
+        rambots.length = 0;
+        rambots.push(...snapshot.rambots.map(normalizeRambotSnapshot).filter(Boolean));
+      }
     }
 
     if (Array.isArray(snapshot.engineers)) {
-      engineers.length = 0;
-      engineers.push(...snapshot.engineers.map(normalizeEngineerSnapshot).filter(Boolean));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(engineers, snapshot.engineers, normalizeEngineerSnapshot);
+      } else {
+        engineers.length = 0;
+        engineers.push(...snapshot.engineers.map(normalizeEngineerSnapshot).filter(Boolean));
+      }
     }
 
     if (Array.isArray(snapshot.teslas)) {
-      teslas.length = 0;
-      teslas.push(...snapshot.teslas.map(normalizeTeslaSnapshot).filter(Boolean));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(teslas, snapshot.teslas, normalizeTeslaSnapshot);
+      } else {
+        teslas.length = 0;
+        teslas.push(...snapshot.teslas.map(normalizeTeslaSnapshot).filter(Boolean));
+      }
     }
 
     if (Array.isArray(snapshot.rockets)) {
-      rockets.length = 0;
-      rockets.push(...snapshot.rockets.map(normalizeRocketSnapshot).filter(Boolean));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(rockets, snapshot.rockets, normalizeRocketSnapshot);
+      } else {
+        rockets.length = 0;
+        rockets.push(...snapshot.rockets.map(normalizeRocketSnapshot).filter(Boolean));
+      }
     }
 
     if (Array.isArray(snapshot.fighters)) {
-      fighters.length = 0;
-      fighters.push(...snapshot.fighters.map(normalizeFighterSnapshot).filter(Boolean));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(fighters, snapshot.fighters, normalizeFighterSnapshot);
+      } else {
+        fighters.length = 0;
+        fighters.push(...snapshot.fighters.map(normalizeFighterSnapshot).filter(Boolean));
+      }
     }
 
     if (Array.isArray(snapshot.structures)) {
@@ -8829,8 +9562,22 @@
     }
 
     if (Array.isArray(snapshot.rivalProjectiles)) {
-      rivalProjectiles.length = 0;
-      rivalProjectiles.push(...snapshot.rivalProjectiles.map(normalizeProjectileSnapshot).filter(Boolean));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(rivalProjectiles, snapshot.rivalProjectiles, normalizeProjectileSnapshot, { snapDistance: 520 });
+      } else {
+        rivalProjectiles.length = 0;
+        rivalProjectiles.push(...snapshot.rivalProjectiles.map(normalizeProjectileSnapshot).filter(Boolean));
+      }
+    }
+
+    if (Array.isArray(snapshot.techPickups)) {
+      const pickupSnapshots = snapshot.techPickups.filter((pickup) => !multiplayer.claimedTechPickupIds.has(String(pickup && pickup.id)));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(techPickups, pickupSnapshots, normalizeTechPickupSnapshot, { snapDistance: 520 });
+      } else {
+        techPickups.length = 0;
+        techPickups.push(...pickupSnapshots.map(normalizeTechPickupSnapshot).filter(Boolean));
+      }
     }
 
     nextParticleId = Math.max(
@@ -8868,6 +9615,14 @@
     nextStructureId = Math.max(
       Number(snapshot.nextStructureId) || 1,
       structures.reduce((largest, structure) => Math.max(largest, structure.id + 1), 1)
+    );
+    nextRivalProjectileId = Math.max(
+      Number(snapshot.nextRivalProjectileId) || 1,
+      rivalProjectiles.reduce((largest, projectile) => Math.max(largest, finiteOr(projectile.id, 0) + 1), 1)
+    );
+    nextTechPickupId = Math.max(
+      Number(snapshot.nextTechPickupId) || 1,
+      techPickups.reduce((largest, pickup) => Math.max(largest, finiteOr(pickup.id, 0) + 1), 1)
     );
 
     applyMobSpawnTimers(snapshot.mobSpawnTimers);
@@ -8935,7 +9690,9 @@
       }
 
       const distance = Math.hypot(incoming.x - existing.x, incoming.y - existing.y);
-      const shouldSnap = distance > Math.max(900, incoming.radius * 5);
+      const predictedLocally = now < finiteOr(existing._partyPredictedUntil, 0);
+      const snapDistance = predictedLocally ? Math.max(1800, incoming.radius * 8) : Math.max(900, incoming.radius * 5);
+      const shouldSnap = distance > snapDistance;
       const displayX = shouldSnap ? incoming.x : existing.x;
       const displayY = shouldSnap ? incoming.y : existing.y;
       const displayVx = shouldSnap ? incoming.vx : existing.vx;
@@ -8946,6 +9703,9 @@
       existing.y = displayY;
       existing.vx = displayVx;
       existing.vy = displayVy;
+      if (shouldSnap) {
+        existing._partyPredictedUntil = 0;
+      }
       markParticleSmoothingTarget(existing, incoming, now);
       nextParticles.push(existing);
     }
@@ -8954,12 +9714,72 @@
     particles.push(...nextParticles);
   }
 
+  function applySmoothedEntitySnapshots(collection, snapshots, normalizeSnapshot, options) {
+    if (!Array.isArray(collection) || !Array.isArray(snapshots) || typeof normalizeSnapshot !== "function") {
+      return;
+    }
+
+    const normalized = snapshots.map(normalizeSnapshot).filter(Boolean);
+    const existingById = new Map();
+    for (const entity of collection) {
+      if (entity && entity.id !== undefined && entity.id !== null) {
+        existingById.set(String(entity.id), entity);
+      }
+    }
+
+    const now = performance.now();
+    const snapDistance = options && Number.isFinite(Number(options.snapDistance)) ? Number(options.snapDistance) : 900;
+    const nextEntities = [];
+    for (const incoming of normalized) {
+      const existing = existingById.get(String(incoming.id));
+      if (!existing) {
+        markEntitySmoothingTarget(incoming, incoming, now);
+        nextEntities.push(incoming);
+        continue;
+      }
+
+      const distance = Math.hypot(incoming.x - existing.x, incoming.y - existing.y);
+      const shouldSnap = distance > Math.max(snapDistance, finiteOr(incoming.radius, 1) * 5);
+      const displayX = shouldSnap ? incoming.x : existing.x;
+      const displayY = shouldSnap ? incoming.y : existing.y;
+      const displayVx = shouldSnap ? incoming.vx : existing.vx;
+      const displayVy = shouldSnap ? incoming.vy : existing.vy;
+
+      Object.assign(existing, incoming);
+      existing.x = displayX;
+      existing.y = displayY;
+      existing.vx = displayVx;
+      existing.vy = displayVy;
+      markEntitySmoothingTarget(existing, incoming, now);
+      nextEntities.push(existing);
+    }
+
+    collection.length = 0;
+    collection.push(...nextEntities);
+  }
+
   function markParticleSmoothingTarget(particle, target, receivedAt) {
     particle._partyTargetX = finiteOr(target.x, particle.x);
     particle._partyTargetY = finiteOr(target.y, particle.y);
     particle._partyTargetVx = finiteOr(target.vx, particle.vx);
     particle._partyTargetVy = finiteOr(target.vy, particle.vy);
     particle._partyTargetReceivedAt = receivedAt;
+  }
+
+  function markEntitySmoothingTarget(entity, target, receivedAt) {
+    entity._partyTargetX = finiteOr(target.x, entity.x);
+    entity._partyTargetY = finiteOr(target.y, entity.y);
+    entity._partyTargetVx = finiteOr(target.vx, entity.vx);
+    entity._partyTargetVy = finiteOr(target.vy, entity.vy);
+    entity._partyTargetReceivedAt = receivedAt;
+  }
+
+  function markFollowerPredictedParticle(particle, now) {
+    if (!particle) {
+      return;
+    }
+    const until = finiteOr(now, performance.now()) + partyFollowerPredictionHoldMs;
+    particle._partyPredictedUntil = Math.max(finiteOr(particle._partyPredictedUntil, 0), until);
   }
 
   function updateFollowerWorldSmoothing(dt) {
@@ -8988,15 +9808,115 @@
         particle.y = targetY;
         particle.vx = targetVx;
         particle.vy = targetVy;
+        particle._partyPredictedUntil = 0;
         continue;
       }
 
-      particle.vx += (targetVx - particle.vx) * velocityBlend;
-      particle.vy += (targetVy - particle.vy) * velocityBlend;
+      const predictedLocally = now < finiteOr(particle._partyPredictedUntil, 0);
+      const correctionScale = predictedLocally ? 0.42 : 1;
+      particle.vx += (targetVx - particle.vx) * velocityBlend * correctionScale;
+      particle.vy += (targetVy - particle.vy) * velocityBlend * correctionScale;
       particle.x += particle.vx * dt;
       particle.y += particle.vy * dt;
-      particle.x += (targetX - particle.x) * positionBlend;
-      particle.y += (targetY - particle.y) * positionBlend;
+      particle.x += (targetX - particle.x) * positionBlend * correctionScale;
+      particle.y += (targetY - particle.y) * positionBlend * correctionScale;
+    }
+
+    updateSmoothedEntityCollection(rivals, dt, { positionBlend, velocityBlend });
+    updateSmoothedEntityCollection(ufos, dt, { positionBlend, velocityBlend });
+    updateSmoothedEntityCollection(rambots, dt, { positionBlend, velocityBlend });
+    updateSmoothedEntityCollection(engineers, dt, { positionBlend, velocityBlend });
+    updateSmoothedEntityCollection(teslas, dt, { positionBlend, velocityBlend });
+    updateSmoothedEntityCollection(rockets, dt, { positionBlend, velocityBlend });
+    updateSmoothedEntityCollection(fighters, dt, { positionBlend, velocityBlend });
+    updateSmoothedEntityCollection(rivalProjectiles, dt, { positionBlend, velocityBlend, tickLife: true, maxAge: 0.12, snapDistance: 520 });
+    updateSmoothedEntityCollection(techPickups, dt, { positionBlend, velocityBlend, tickLife: true, tickRotation: true, maxAge: 0.18, snapDistance: 520 });
+  }
+
+  function updateFollowerGadgetPrediction(dt) {
+    if (!isSharedWorldFollower()) {
+      return;
+    }
+
+    const snapshot = buildPersistentPayload(false);
+    const state = localPartyGadgetState(snapshot.player);
+    if (!state) {
+      return;
+    }
+
+    const now = performance.now();
+    if (state.landedBodyId && (state.left || state.right)) {
+      const body = bodyById(state.landedBodyId);
+      const direction = state.left ? 1 : -1;
+      if (applyGadgetThrustToBody(body, state.aimWorld, direction, dt)) {
+        markFollowerPredictedParticle(body, now);
+      }
+    }
+
+    if (!state.active) {
+      return;
+    }
+
+    for (const particle of particles) {
+      if (!partyGadgetCanAffectParticle(state, particle)) {
+        continue;
+      }
+
+      const probe = partyGadgetParticleProbe(state, particle, { padding: 24 });
+      let predicted = false;
+      if (probe.force) {
+        predicted = applyActorGadgetForces(particle, state, dt) || predicted;
+      }
+      if (probe.bucket) {
+        resolveActorFunnelBucket(particle, state, dt);
+        predicted = true;
+      }
+      if (predicted) {
+        markFollowerPredictedParticle(particle, now);
+      }
+    }
+  }
+
+  function updateSmoothedEntityCollection(collection, dt, options) {
+    const positionBlend = options && Number.isFinite(Number(options.positionBlend)) ? Number(options.positionBlend) : 1 - Math.pow(0.00035, dt);
+    const velocityBlend = options && Number.isFinite(Number(options.velocityBlend)) ? Number(options.velocityBlend) : 1 - Math.pow(0.0015, dt);
+    const maxAge = options && Number.isFinite(Number(options.maxAge)) ? Number(options.maxAge) : 0.18;
+    const snapDistance = options && Number.isFinite(Number(options.snapDistance)) ? Number(options.snapDistance) : 900;
+    const now = performance.now();
+
+    for (const entity of collection) {
+      if (!Number.isFinite(entity._partyTargetX) || !Number.isFinite(entity._partyTargetY)) {
+        continue;
+      }
+
+      if (options && options.tickLife && Number.isFinite(Number(entity.life))) {
+        entity.life = Math.max(0, finiteOr(entity.life, 0) - dt);
+      }
+      if (options && options.tickRotation) {
+        entity.rotation = finiteOr(entity.rotation, 0) + (1.4 + Math.sin(finiteOr(entity.wobble, 0)) * 0.4) * dt;
+      }
+
+      const age = Math.max(0, Math.min(maxAge, (now - finiteOr(entity._partyTargetReceivedAt, now)) / 1000));
+      const targetVx = finiteOr(entity._partyTargetVx, entity.vx);
+      const targetVy = finiteOr(entity._partyTargetVy, entity.vy);
+      const targetX = finiteOr(entity._partyTargetX, entity.x) + targetVx * age;
+      const targetY = finiteOr(entity._partyTargetY, entity.y) + targetVy * age;
+      const error = Math.hypot(targetX - entity.x, targetY - entity.y);
+
+      if (error > Math.max(snapDistance, finiteOr(entity.radius, 1) * 5)) {
+        entity.x = targetX;
+        entity.y = targetY;
+        entity.vx = targetVx;
+        entity.vy = targetVy;
+        continue;
+      }
+
+      entity.vx += (targetVx - entity.vx) * velocityBlend;
+      entity.vy += (targetVy - entity.vy) * velocityBlend;
+      entity.x += entity.vx * dt;
+      entity.y += entity.vy * dt;
+      entity.x += (targetX - entity.x) * positionBlend;
+      entity.y += (targetY - entity.y) * positionBlend;
     }
   }
 
@@ -9192,6 +10112,22 @@
       cause: projectile.cause,
       lightning: Boolean(projectile.lightning),
       rocket: Boolean(projectile.rocket)
+    };
+  }
+
+  function serializeTechPickup(pickup) {
+    return {
+      id: pickup.id,
+      key: pickup.key,
+      x: pickup.x,
+      y: pickup.y,
+      vx: pickup.vx,
+      vy: pickup.vy,
+      radius: pickup.radius,
+      life: pickup.life,
+      maxLife: pickup.maxLife,
+      rotation: pickup.rotation,
+      wobble: pickup.wobble
     };
   }
 
@@ -9567,6 +10503,7 @@
     }
 
     return {
+      id: Math.max(1, Math.floor(finiteOr(snapshot.id, nextRivalProjectileId))),
       x: finiteOr(snapshot.x, 0),
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
@@ -9581,6 +10518,34 @@
       cause: typeof snapshot.cause === "string" ? snapshot.cause : "",
       lightning: Boolean(snapshot.lightning),
       rocket: Boolean(snapshot.rocket)
+    };
+  }
+
+  function normalizeTechPickupSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+
+    const tech = techTypes.find((candidate) => candidate.key === snapshot.key) || techTypes[0];
+    const id = Math.max(1, Math.floor(finiteOr(snapshot.id, nextTechPickupId)));
+    if (multiplayer.claimedTechPickupIds.has(String(id))) {
+      return null;
+    }
+
+    return {
+      id,
+      key: tech.key,
+      label: tech.label,
+      color: tech.color,
+      x: finiteOr(snapshot.x, 0),
+      y: finiteOr(snapshot.y, 0),
+      vx: finiteOr(snapshot.vx, 0),
+      vy: finiteOr(snapshot.vy, 0),
+      radius: finiteOr(snapshot.radius, 15),
+      life: clamp(finiteOr(snapshot.life, techPickupLifetime), 0, techPickupLifetime),
+      maxLife: Math.max(0.1, finiteOr(snapshot.maxLife, techPickupLifetime)),
+      rotation: finiteOr(snapshot.rotation, 0),
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
     };
   }
 
@@ -10073,6 +11038,7 @@
     const angle = randomRange(0, Math.PI * 2);
     const burst = randomRange(60, 132);
     return {
+      id: nextTechPickupId++,
       key: tech.key,
       label: tech.label,
       color: tech.color,
@@ -10093,7 +11059,7 @@
       return;
     }
 
-    const dropChance = rival.kind === "ufo" ? 0.55 : 0.45;
+    const dropChance = difficultyHealthDropChance(rival.kind === "ufo" ? 0.55 : 0.45);
     const count = Math.random() < dropChance ? 1 : 0;
 
     for (let i = 0; i < count; i += 1) {
@@ -10821,7 +11787,7 @@
   }
 
   function isJetpackBoostPressed() {
-    return keys.has("ShiftLeft") || keys.has("ShiftRight");
+    return keys.has("ShiftLeft") || keys.has("ShiftRight") || isTouchBoostPressed();
   }
 
   function isMappedBody(particle) {
@@ -11332,14 +12298,15 @@
     const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
     const walkSpeed = (isMovementKeyPressed("down") ? 68 : 128) * asteroidWalkMultiplier * weaponSlowFactor;
     const vacuumHoldActive = isVacuumHoldActive();
-    let walkDirection = 0;
+    let walkDirection = touchLandedWalkDirection(body);
 
-    if (!vacuumHoldActive && isMovementKeyPressed("left")) {
+    if (!vacuumHoldActive && isKeyboardMovementKeyPressed("left")) {
       walkDirection -= 1;
     }
-    if (!vacuumHoldActive && isMovementKeyPressed("right")) {
+    if (!vacuumHoldActive && isKeyboardMovementKeyPressed("right")) {
       walkDirection += 1;
     }
+    walkDirection = clamp(walkDirection, -1, 1);
 
     player.landed.walkSpeed = walkDirection * walkSpeed;
     if (walkDirection) {
@@ -11458,9 +12425,16 @@
       return;
     }
 
+    if (touchControlState.active) {
+      if (touchControlState.toolsSuppressed && hasPlayerEnergy()) {
+        touchControlState.toolsSuppressed = false;
+      }
+      refreshTouchFireButtons();
+    }
+
     if (isSuctionEquipped() && isGadgetButtonPressed()) {
       if (!drainPlayerEnergy(suctionEnergyDrain, dt)) {
-        resetMouseButtons();
+        suppressTouchToolsUntilEnergyReturns();
         notifyEnergyDepleted();
       }
     }
@@ -11538,6 +12512,235 @@
     }, dt, options);
   }
 
+  function isPartyGadgetActiveMode(mode) {
+    return mode === "pull" || mode === "push" || mode === "hold";
+  }
+
+  function normalizePartyGadgetMode(mode) {
+    if (mode !== "pull" && mode !== "push" && mode !== "hold" && mode !== "idle") {
+      return "idle";
+    }
+    return mode;
+  }
+
+  function normalizePartyGadgetIdList(list, limit) {
+    if (!Array.isArray(list)) {
+      return [];
+    }
+
+    const ids = [];
+    const seen = new Set();
+    for (const value of list) {
+      const id = Math.max(1, Math.floor(finiteOr(value, 0)));
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      ids.push(id);
+      if (ids.length >= limit) {
+        break;
+      }
+    }
+    return ids;
+  }
+
+  function partyGadgetIdSet(list, limit) {
+    return new Set(normalizePartyGadgetIdList(list, limit));
+  }
+
+  function partyGadgetHasCandidate(state, target) {
+    return Boolean(state && target && state.candidateIds && state.candidateIds.has(target.id));
+  }
+
+  function partyGadgetHasBucketTarget(state, target) {
+    return Boolean(state && target && state.bucketIds && state.bucketIds.has(target.id));
+  }
+
+  function actorFromPartyPlayerSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+    return {
+      id: typeof snapshot.id === "string" ? snapshot.id : player.id,
+      name: typeof snapshot.name === "string" ? snapshot.name : player.name,
+      x: finiteOr(snapshot.x, player.x),
+      y: finiteOr(snapshot.y, player.y),
+      vx: finiteOr(snapshot.vx, 0),
+      vy: finiteOr(snapshot.vy, 0),
+      radius: finiteOr(snapshot.radius, player.radius),
+      energy: finiteOr(snapshot.energy, player.energy),
+      maxEnergy: finiteOr(snapshot.maxEnergy, player.maxEnergy),
+      equippedTool: typeof snapshot.equippedTool === "string" ? snapshot.equippedTool : equippedToolId,
+      toolMode: normalizePartyGadgetMode(snapshot.toolMode),
+      landed: normalizeLandingSnapshot(snapshot.landed),
+      aimAngle: finiteOr(snapshot.aimAngle, 0)
+    };
+  }
+
+  function partyGadgetActorFromIntent(actor, gadget, receivedAt, options) {
+    const source = actor ? {
+      ...actor,
+      landed: actor.landed ? { ...actor.landed } : null
+    } : null;
+    if (!source) {
+      return null;
+    }
+
+    if (gadget && typeof gadget === "object") {
+      source.x = finiteOr(gadget.x, source.x);
+      source.y = finiteOr(gadget.y, source.y);
+      source.vx = finiteOr(gadget.vx, source.vx);
+      source.vy = finiteOr(gadget.vy, source.vy);
+    }
+
+    const now = performance.now();
+    const lead = clamp(
+      (now - finiteOr(receivedAt, now)) / 1000 + finiteOr(options && options.lead, 0),
+      0,
+      finiteOr(options && options.maxLead, 0)
+    );
+
+    source.x += finiteOr(source.vx, 0) * lead;
+    source.y += finiteOr(source.vy, 0) * lead;
+    return source;
+  }
+
+  function partyGadgetStateFromActor(actor, gadget, receivedAt, options) {
+    if (!actor || actor.equippedTool !== defaultToolId) {
+      return null;
+    }
+
+    const intent = gadget && typeof gadget === "object" ? gadget : null;
+    const mode = normalizePartyGadgetMode(intent && intent.mode ? intent.mode : actor.toolMode);
+    const active = isPartyGadgetActiveMode(mode) && actor.energy > 0 && (!intent || intent.active !== false);
+    const assistFresh = Boolean(
+      intent &&
+      Number.isFinite(Number(receivedAt)) &&
+      performance.now() - receivedAt <= partyGadgetIntentAssistMs
+    );
+    const aimAngle = finiteOr(intent && intent.aimAngle, actor.aimAngle);
+    const aimWorld = normalize(Math.cos(aimAngle), Math.sin(aimAngle));
+    const gadgetActor = partyGadgetActorFromIntent(actor, intent, receivedAt, {
+      lead: options && Number.isFinite(Number(options.lead)) ? options.lead : 0,
+      maxLead: options && Number.isFinite(Number(options.maxLead)) ? options.maxLead : 0
+    });
+    const candidateIds = assistFresh ? partyGadgetIdSet(intent.candidateIds, partyGadgetCandidateLimit) : new Set();
+    const bucketIds = assistFresh ? partyGadgetIdSet(intent.bucketIds, partyGadgetBucketLimit) : new Set();
+
+    return {
+      actor: gadgetActor,
+      aimWorld,
+      funnel: actorFunnel(gadgetActor, aimWorld),
+      left: active && mode === "pull",
+      middle: active && mode === "hold",
+      right: active && mode === "push",
+      suckFactor: finiteOr(options && options.suckFactor, 1),
+      blowFactor: finiteOr(options && options.blowFactor, 1),
+      bucketActive: true,
+      bucketPadding: finiteOr(options && options.bucketPadding, 0),
+      candidateIds,
+      bucketIds,
+      candidateReachPadding: candidateIds.size || bucketIds.size ? 120 : 0,
+      candidateSidePadding: candidateIds.size || bucketIds.size ? 46 : 0,
+      bucketAssistPadding: bucketIds.size ? 34 : 0,
+      landedBodyId: actor.landed ? actor.landed.bodyId : null,
+      mode,
+      active
+    };
+  }
+
+  function localPartyGadgetState(playerSnapshot) {
+    return partyGadgetStateFromActor(actorFromPartyPlayerSnapshot(playerSnapshot), null, performance.now(), {
+      suckFactor: currentGadgetSuckFactor(),
+      blowFactor: currentGadgetBlowFactor(),
+      bucketPadding: 0,
+      lead: 0,
+      maxLead: 0
+    });
+  }
+
+  function partyGadgetBucketContact(state, target, extraPadding) {
+    if (!state || !state.actor || !target) {
+      return false;
+    }
+
+    const actor = state.actor;
+    const aimWorld = state.aimWorld || { x: 1, y: 0 };
+    const normal = { x: -aimWorld.y, y: aimWorld.x };
+    const relX = target.x - actor.x;
+    const relY = target.y - actor.y;
+    const localX = relX * aimWorld.x + relY * aimWorld.y;
+    const localY = relX * normal.x + relY * normal.y;
+    const requestedBucketPadding = Math.max(0, finiteOr(state.bucketPadding, 0)) + Math.max(0, finiteOr(extraPadding, 0));
+    const bucketPadding = requestedBucketPadding > 0
+      ? clamp(target.radius * 0.35, 5, requestedBucketPadding)
+      : 0;
+    const radius = target.radius + bucketPadding;
+    const wallRadius = radius + funnelShape.wallThickness;
+    const backX = funnelShape.backX;
+    const backHalf = funnelShape.backHalf;
+    const rimX = funnelShape.rimX;
+    const rimHalf = funnelShape.rimHalf;
+
+    if (distanceToSegment(localX, localY, backX, -backHalf, rimX, -rimHalf) < wallRadius) {
+      return true;
+    }
+    if (distanceToSegment(localX, localY, backX, backHalf, rimX, rimHalf) < wallRadius) {
+      return true;
+    }
+    if (distanceToSegment(localX, localY, backX, -backHalf, backX, backHalf) < wallRadius) {
+      return true;
+    }
+    if (
+      localX < backX + radius &&
+      localX > backX - radius * 1.35 &&
+      Math.abs(localY) < backHalf + radius * 0.8
+    ) {
+      return true;
+    }
+
+    const cupHalf = funnelHalfAt(localX);
+    return (
+      localX > backX - radius * 0.35 &&
+      localX < rimX + radius * 0.55 &&
+      Math.abs(localY) < cupHalf + radius * 0.25
+    );
+  }
+
+  function partyGadgetParticleProbe(state, target, options) {
+    if (!state || !state.actor || !target) {
+      return { force: false, bucket: false, score: Infinity };
+    }
+
+    const actor = state.actor;
+    const aimWorld = state.aimWorld || { x: 1, y: 0 };
+    const toTargetX = target.x - actor.x;
+    const toTargetY = target.y - actor.y;
+    const forward = toTargetX * aimWorld.x + toTargetY * aimWorld.y;
+    const sideX = toTargetX - aimWorld.x * forward;
+    const sideY = toTargetY - aimWorld.y * forward;
+    const side = length(sideX, sideY);
+    const padding = Math.max(0, finiteOr(options && options.padding, 0));
+    const coneWidth = 64 + Math.max(0, forward) * 0.42;
+    const pullHoldRange = (state.left || state.middle) &&
+      forward > -80 - padding * 0.25 &&
+      forward < gadgetForceReach + target.radius + padding &&
+      side < coneWidth + target.radius + padding * 0.35;
+    const pushRange = state.right &&
+      forward > -28 - padding * 0.2 &&
+      forward < 470 + target.radius + padding &&
+      side < coneWidth * 0.9 + target.radius + padding * 0.35;
+    const bucket = partyGadgetBucketContact(state, target, padding);
+    const funnel = state.funnel || actorFunnel(actor, aimWorld);
+    const mouthDistance = Math.hypot(funnel.x - target.x, funnel.y - target.y);
+
+    return {
+      force: Boolean(pullHoldRange || pushRange),
+      bucket,
+      score: Math.min(Math.abs(forward - funnelShape.captureX) + side * 1.4, mouthDistance)
+    };
+  }
+
   function applyActorGadgetForces(target, state, dt, options = {}) {
     if (!state || !state.actor || !target) {
       return false;
@@ -11565,14 +12768,21 @@
     const mouthDist = length(toMouthX, toMouthY);
     const pushResponse = bodyPushResponse(target);
     const captureInFunnel = options.captureInFunnel !== false;
+    const candidateAssist = partyGadgetHasCandidate(state, target);
+    const bucketAssist = partyGadgetHasBucketTarget(state, target);
+    const reachAssist = candidateAssist || bucketAssist ? finiteOr(state.candidateReachPadding, 0) : 0;
+    const sideAssist = candidateAssist || bucketAssist ? finiteOr(state.candidateSidePadding, 0) : 0;
+    const bucketAssistPadding = bucketAssist ? finiteOr(state.bucketAssistPadding, 0) : 0;
+    const assistedConeWidth = coneWidth + sideAssist;
+    const assistedInCone = forward > -70 - reachAssist * 0.25 && forward < gadgetForceReach + reachAssist && side < assistedConeWidth;
 
-    if (middleActive && inCone) {
+    if (middleActive && (inCone || assistedInCone)) {
       const holdX = actor.x + aimWorld.x * gadgetHoldReach;
       const holdY = actor.y + aimWorld.y * gadgetHoldReach;
       const toHoldX = holdX - target.x;
       const toHoldY = holdY - target.y;
       const holdDistance = length(toHoldX, toHoldY);
-      const coneStrength = clamp(1 - side / Math.max(1, coneWidth), 0, 1);
+      const coneStrength = clamp(1 - side / Math.max(1, assistedConeWidth), 0, 1);
       const response = Math.max(0.22, pushResponse);
       const desiredSpeed = clamp(holdDistance * 5.4, 0, 520);
       const hold = normalize(toHoldX, toHoldY);
@@ -11599,15 +12809,15 @@
       target.gadgetStabilized = false;
     }
 
-    if (leftActive && inCone) {
+    if (leftActive && (inCone || assistedInCone)) {
       const pull = normalize(toMouthX, toMouthY);
-      const coneStrength = clamp(1 - side / Math.max(1, coneWidth), 0, 1);
-      const distanceStrength = clamp(1 - mouthDist / 620, 0.16, 1);
+      const coneStrength = clamp(1 - side / Math.max(1, assistedConeWidth), 0, 1);
+      const distanceStrength = clamp(1 - mouthDist / (620 + reachAssist), 0.16, 1);
       const force = 1180 * finiteOr(state.suckFactor, 1) * coneStrength * distanceStrength * pushResponse;
       target.vx += pull.x * force * dt;
       target.vy += pull.y * force * dt;
 
-      if (captureInFunnel && mouthDist < funnel.radius + target.radius * 2.2) {
+      if (captureInFunnel && mouthDist < funnel.radius + target.radius * 2.2 + bucketAssistPadding) {
         const cup = normalize(toMouthX, toMouthY);
         const ringTarget = Math.max(0, funnel.radius * 0.42 - target.radius * 0.22);
         const current = mouthDist || 1;
@@ -11619,8 +12829,8 @@
       }
     }
 
-    if (rightActive && forward > -20 && forward < 470 && side < coneWidth * 0.9) {
-      const blastFalloff = clamp(1 - Math.max(0, forward) / 520, 0.22, 1);
+    if (rightActive && forward > -20 - reachAssist * 0.25 && forward < 470 + reachAssist && side < coneWidth * 0.9 + sideAssist) {
+      const blastFalloff = clamp(1 - Math.max(0, forward) / (520 + reachAssist), 0.22, 1);
       const sidePush = normalize(sideX, sideY);
       const force = 1450 * finiteOr(state.blowFactor, 1) * blastFalloff * pushResponse;
       target.vx += (aimWorld.x * force + sidePush.x * 120 * pushResponse) * dt;
@@ -11710,7 +12920,9 @@
     const backHalf = funnelShape.backHalf;
     const rimX = funnelShape.rimX;
     const rimHalf = funnelShape.rimHalf;
-    const requestedBucketPadding = Math.max(0, finiteOr(state.bucketPadding, 0));
+    const requestedBucketPadding =
+      Math.max(0, finiteOr(state.bucketPadding, 0)) +
+      (partyGadgetHasBucketTarget(state, target) ? Math.max(0, finiteOr(state.bucketAssistPadding, 0)) : 0);
     const bucketPadding = requestedBucketPadding > 0
       ? clamp(target.radius * 0.35, 5, requestedBucketPadding)
       : 0;
@@ -11809,11 +13021,15 @@
       }
 
       const source = entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : {};
+      const gadget = source.gadget && typeof source.gadget === "object" ? source.gadget : null;
       const remotePlayer = predictPartyRemotePlayer(
         normalizeRemotePlayerSnapshot(source.player || source),
-        entry.receivedAt
+        entry.receivedAt,
+        gadget && gadget.active
+          ? { lead: partyRemoteGadgetPredictionLead, maxLead: partyRemoteGadgetPredictionMax }
+          : null
       );
-      const state = partyGadgetStateForPlayer(remotePlayer);
+      const state = partyGadgetStateForPlayer(remotePlayer, gadget, entry.receivedAt);
       if (state) {
         states.push(state);
       }
@@ -11821,7 +13037,7 @@
     return states;
   }
 
-  function predictPartyRemotePlayer(remotePlayer, receivedAt) {
+  function predictPartyRemotePlayer(remotePlayer, receivedAt, options) {
     if (!remotePlayer) {
       return null;
     }
@@ -11832,9 +13048,9 @@
     };
     const now = performance.now();
     const lead = clamp(
-      (now - finiteOr(receivedAt, now)) / 1000 + partyRemotePredictionLead,
+      (now - finiteOr(receivedAt, now)) / 1000 + finiteOr(options && options.lead, partyRemotePredictionLead),
       0,
-      partyRemotePredictionMax
+      finiteOr(options && options.maxLead, partyRemotePredictionMax)
     );
 
     if (predicted.landed) {
@@ -11863,31 +13079,12 @@
     return predicted;
   }
 
-  function partyGadgetStateForPlayer(remotePlayer) {
-    if (!remotePlayer || remotePlayer.equippedTool !== defaultToolId) {
-      return null;
-    }
-
-    const mode = remotePlayer.toolMode || "idle";
-    if (mode !== "pull" && mode !== "push" && mode !== "hold" && mode !== "idle") {
-      return null;
-    }
-
-    const canApplyForce = remotePlayer.energy > 0;
-    const aimWorld = normalize(Math.cos(remotePlayer.aimAngle), Math.sin(remotePlayer.aimAngle));
-    return {
-      actor: remotePlayer,
-      aimWorld,
-      funnel: actorFunnel(remotePlayer, aimWorld),
-      left: canApplyForce && mode === "pull",
-      middle: canApplyForce && mode === "hold",
-      right: canApplyForce && mode === "push",
-      suckFactor: 1,
-      blowFactor: 1,
-      bucketActive: true,
+  function partyGadgetStateForPlayer(remotePlayer, gadget, receivedAt) {
+    return partyGadgetStateFromActor(remotePlayer, gadget, receivedAt, {
       bucketPadding: partyRemoteBucketPadding,
-      landedBodyId: remotePlayer.landed ? remotePlayer.landed.bodyId : null
-    };
+      lead: gadget && gadget.active ? partyRemoteGadgetPredictionLead : 0,
+      maxLead: gadget && gadget.active ? partyRemoteGadgetPredictionMax : 0
+    });
   }
 
   function partyGadgetCanAffectParticle(state, particle) {
@@ -12361,24 +13558,13 @@
       pickup.y += pickup.vy * dt;
 
       if (playerCanCollectPickup(pickup)) {
-        techInventory[pickup.key] = Math.max(0, Math.floor(techInventory[pickup.key] || 0)) + 1;
-        lifeStats.techCollected += 1;
-        updateTechUi();
-        playSound("pickupTech");
-        maybeNotifyText("Gained 1 " + pickup.label, {
-          groupKey: "tech-gained:" + pickup.key,
-          format: function (count) {
-            return "Gained " + count + " " + pickup.label;
+        if (isPartySessionActive()) {
+          if (!requestTechPickupClaim(pickup)) {
+            continue;
           }
-        });
-        sparks.push({
-          x: pickup.x,
-          y: pickup.y,
-          radius: 42,
-          color: hslToRgb(330, 0.88, 0.64),
-          life: 0.28,
-          maxLife: 0.28
-        });
+        } else {
+          awardTechPickup(pickup);
+        }
         techPickups.splice(i, 1);
         continue;
       }
@@ -12389,6 +13575,116 @@
         techPickups.splice(i, 1);
       }
     }
+  }
+
+  function updateFollowerTechPickups() {
+    for (let i = techPickups.length - 1; i >= 0; i -= 1) {
+      const pickup = techPickups[i];
+      if (!pickup || multiplayer.claimedTechPickupIds.has(String(pickup.id))) {
+        techPickups.splice(i, 1);
+        continue;
+      }
+      if (playerCanCollectPickup(pickup)) {
+        if (!requestTechPickupClaim(pickup)) {
+          continue;
+        }
+        techPickups.splice(i, 1);
+        continue;
+      }
+
+      const fromPlayer = Math.hypot(pickup.x - player.x, pickup.y - player.y);
+      const cullDistance = Math.max(width, height) * 1.55 + 900;
+      if (pickup.life <= 0 || fromPlayer > cullDistance) {
+        techPickups.splice(i, 1);
+      }
+    }
+  }
+
+  function requestTechPickupClaim(pickup) {
+    if (!pickup || multiplayer.claimedTechPickupIds.has(String(pickup.id))) {
+      return false;
+    }
+    multiplayer.claimedTechPickupIds.add(String(pickup.id));
+    const sent = sendMultiplayer({
+      type: "party.tech.pickup",
+      pickupId: pickup.id,
+      key: pickup.key,
+      x: pickup.x,
+      y: pickup.y
+    });
+    if (!sent) {
+      multiplayer.claimedTechPickupIds.delete(String(pickup.id));
+    }
+    return sent;
+  }
+
+  function awardTechPickup(pickup) {
+    if (!pickup) {
+      return;
+    }
+    techInventory[pickup.key] = Math.max(0, Math.floor(techInventory[pickup.key] || 0)) + 1;
+    lifeStats.techCollected += 1;
+    updateTechUi();
+    playSound("pickupTech");
+    maybeNotifyText("Gained 1 " + pickup.label, {
+      groupKey: "tech-gained:" + pickup.key,
+      format: function (count) {
+        return "Gained " + count + " " + pickup.label;
+      }
+    });
+    sparks.push({
+      x: pickup.x,
+      y: pickup.y,
+      radius: 42,
+      color: hslToRgb(330, 0.88, 0.64),
+      life: 0.28,
+      maxLife: 0.28
+    });
+  }
+
+  function removeTechPickupById(pickupId) {
+    const id = String(pickupId || "");
+    if (!id) {
+      return null;
+    }
+    const index = techPickups.findIndex((pickup) => String(pickup.id) === id);
+    if (index < 0) {
+      return null;
+    }
+    const pickup = techPickups[index];
+    techPickups.splice(index, 1);
+    return pickup;
+  }
+
+  function applyTechPickupClaim(message) {
+    const pickupId = String(message && message.pickupId || "");
+    if (!pickupId) {
+      return;
+    }
+    const pickup = removeTechPickupById(pickupId) || techPickupFromClaim(message);
+    multiplayer.claimedTechPickupIds.add(pickupId);
+    if (message.claimedByPlayerId === player.id) {
+      awardTechPickup(pickup);
+    }
+  }
+
+  function techPickupFromClaim(message) {
+    const tech = techTypes.find((candidate) => candidate.key === (message && message.key)) || techTypes[0];
+    return {
+      id: Math.max(1, Math.floor(finiteOr(message && message.pickupId, nextTechPickupId))),
+      key: tech.key,
+      label: tech.label,
+      color: tech.color,
+      x: finiteOr(message && message.x, player.x),
+      y: finiteOr(message && message.y, player.y),
+      vx: 0,
+      vy: 0,
+      radius: 15,
+      life: 0,
+      maxLife: techPickupLifetime,
+      rotation: 0,
+      wobble: 0
+    };
   }
 
   function resolvePlayerBodyCollisions() {
@@ -13207,6 +14503,7 @@
     const laserColor = shadeColor(rival.color, 64);
 
     rivalProjectiles.push({
+      id: nextRivalProjectileId++,
       x: rival.x + aim.x * muzzleDistance,
       y: rival.y + aim.y * muzzleDistance,
       vx: aim.x * rivalProjectileSpeed + rival.vx * 0.18,
@@ -13216,7 +14513,7 @@
       color: laserColor,
       life: 2.2,
       maxLife: 2.2,
-      damage: rivalProjectileDamage,
+      damage: difficultyMobDamage(rivalProjectileDamage),
       toolDisable: 0,
       cause: "Alienoid laser",
       targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
@@ -13247,6 +14544,7 @@
     const muzzleDistance = tesla.radius + 12;
 
     rivalProjectiles.push({
+      id: nextRivalProjectileId++,
       x: tesla.x + aim.x * muzzleDistance,
       y: tesla.y + aim.y * muzzleDistance,
       vx: aim.x * 980 + tesla.vx * 0.08,
@@ -13256,7 +14554,7 @@
       color,
       life: 0.58,
       maxLife: 0.58,
-      damage: teslaLightningDamage,
+      damage: difficultyMobDamage(teslaLightningDamage),
       toolDisable: teslaToolDisableDuration,
       cause: "Tesla lightning",
       lightning: true,
@@ -13293,6 +14591,7 @@
     const muzzleDistance = rocket.radius + 18;
 
     rivalProjectiles.push({
+      id: nextRivalProjectileId++,
       x: rocket.x + aim.x * muzzleDistance + normalX * side * 17,
       y: rocket.y + aim.y * muzzleDistance + normalY * side * 17,
       vx: aim.x * satelliteMissileSpeed + rocket.vx * 0.12,
@@ -13302,7 +14601,7 @@
       color,
       life: 2.4,
       maxLife: 2.4,
-      damage: satelliteMissileDamage,
+      damage: difficultyMobDamage(satelliteMissileDamage),
       toolDisable: 0,
       cause: "Satellite missile",
       rocket: true,
@@ -13338,6 +14637,7 @@
 
     for (const side of [-1, 1]) {
       rivalProjectiles.push({
+        id: nextRivalProjectileId++,
         x: fighter.x + aim.x * (fighter.radius + 16) + normalX * side * 19,
         y: fighter.y + aim.y * (fighter.radius + 16) + normalY * side * 19,
         vx: aim.x * (rivalProjectileSpeed + 60) + fighter.vx * 0.14,
@@ -13347,7 +14647,7 @@
         color,
         life: 2.0,
         maxLife: 2.0,
-        damage: 9,
+        damage: difficultyMobDamage(9),
         toolDisable: 0,
         cause: "Fighter cannon",
         targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
@@ -14484,7 +15784,7 @@
           if (projectile.lightning) {
             disableStructure(structure, structureTeslaDisableDuration, projectile.color);
           } else {
-            damageStructure(structure, structureRocketDamage, projectile.color);
+            damageStructure(structure, difficultyMobDamage(structureRocketDamage), projectile.color);
           }
           rivalProjectiles.splice(i, 1);
           hitStructure = true;
@@ -14906,7 +16206,7 @@
 
     player.vx += dirX * 210 + ufo.vx * 0.38;
     player.vy += dirY * 210 + ufo.vy * 0.38;
-    damageLocalPlayer(ufoUndersideDamage, {
+    damageLocalPlayer(difficultyMobDamage(ufoUndersideDamage), {
       cause: "UFO underside",
       cooldown: 0.85,
       flash: 0.3
@@ -15084,7 +16384,7 @@
     if (target && !target.local && target.remote) {
       sendRemoteEntityEffect(target.remote, {
         entityType: "player",
-        damage: rambotImpactDamage,
+        damage: difficultyMobDamage(rambotImpactDamage),
         impulseX: nx * 360 + rambot.vx * 0.48,
         impulseY: ny * 360 + rambot.vy * 0.48,
         color: rambot.color
@@ -15096,7 +16396,7 @@
 
       player.vx += nx * 360 + rambot.vx * 0.48;
       player.vy += ny * 360 + rambot.vy * 0.48;
-      damageLocalPlayer(rambotImpactDamage, {
+      damageLocalPlayer(difficultyMobDamage(rambotImpactDamage), {
         cause: "Rambot charge",
         cooldown: 0.85,
         flash: 0.32
@@ -15182,7 +16482,7 @@
       rambot.impactCooldown = 0.95;
       rambot.recoverTimer = Math.max(rambot.recoverTimer, 0.58);
       rambot.chargeTimer = 0;
-      damageStructure(structure, structureRambotDamage + Math.max(0, speed - rambotImpactSpeed) * 0.045, rambot.color);
+      damageStructure(structure, difficultyMobDamage(structureRambotDamage + Math.max(0, speed - rambotImpactSpeed) * 0.045), rambot.color);
       break;
     }
   }
@@ -15531,7 +16831,7 @@
     if (target && !target.local && target.remote) {
       sendRemoteEntityEffect(target.remote, {
         entityType: "player",
-        damage: rocketImpactDamage,
+        damage: difficultyMobDamage(rocketImpactDamage),
         impulseX: nx * 420 + rocket.vx * 0.52,
         impulseY: ny * 420 + rocket.vy * 0.52,
         color: rocket.color
@@ -15543,7 +16843,7 @@
 
       player.vx += nx * 420 + rocket.vx * 0.52;
       player.vy += ny * 420 + rocket.vy * 0.52;
-      damageLocalPlayer(rocketImpactDamage, {
+      damageLocalPlayer(difficultyMobDamage(rocketImpactDamage), {
         cause: "Rocket ship",
         cooldown: 0.9,
         flash: 0.34
@@ -15680,7 +16980,7 @@
       rocket.volleyShots = 0;
       rocket.vx -= nx * 240;
       rocket.vy -= ny * 240;
-      damageStructure(structure, structureRocketDamage + Math.max(0, speed - rocketImpactSpeed) * 0.035, rocket.color);
+      damageStructure(structure, difficultyMobDamage(structureRocketDamage + Math.max(0, speed - rocketImpactSpeed) * 0.035), rocket.color);
       break;
     }
   }
@@ -19832,6 +21132,7 @@
     if (scoreValue) {
       scoreValue.textContent = Math.max(0, Math.round(lifeStats.bestScore || lifeStats.currentScore || 0)) + " pts";
     }
+    updateTouchLandButton();
 
     const progressBody = findNearestProgressBody() || largestParticle;
     const progressMass = progressBody ? progressBody.mass : largest;
@@ -19913,6 +21214,8 @@
     updateGadgetAim(dt);
     updateEquippedTool(dt);
     updateFollowerWorldSmoothing(dt);
+    updateFollowerGadgetPrediction(dt);
+    updateFollowerTechPickups();
     applyLandedSurfaceConstraint();
     resolveFollowerPlayerBodyCollisions();
     updateSparks(dt);
@@ -20225,6 +21528,18 @@
     });
   }
 
+  if (touchScreenInput) {
+    touchScreenInput.addEventListener("change", function () {
+      applyTouchScreenSetting(touchScreenInput.checked);
+    });
+  }
+
+  if (menuTouchScreenInput) {
+    menuTouchScreenInput.addEventListener("change", function () {
+      applyTouchScreenSetting(menuTouchScreenInput.checked);
+    });
+  }
+
   if (multiplayerToggleInput) {
     multiplayerToggleInput.addEventListener("change", function () {
       setFriendJoinsEnabled(multiplayerToggleInput.checked, "settings-toggle");
@@ -20329,6 +21644,21 @@
   if (leaderboardToggle) {
     leaderboardToggle.addEventListener("click", function () {
       setLeaderboardOpen(!leaderboard.open);
+    });
+  }
+
+  if (touchLandButton) {
+    touchLandButton.addEventListener("click", function (event) {
+      event.preventDefault();
+      resetMouseButtons();
+      toggleLanding();
+      updateTouchLandButton();
+    });
+  }
+
+  if (vitalsToggle) {
+    vitalsToggle.addEventListener("click", function () {
+      setVitalsHudOpen(!vitalsHudOpen);
     });
   }
 
@@ -20825,12 +22155,27 @@
     mouse.seen = true;
   });
 
+  window.addEventListener("pointerdown", beginTouchControl, { passive: false });
+  window.addEventListener("pointermove", updateTouchControl, { passive: false });
+  window.addEventListener("pointerup", endTouchControl, { passive: false });
+  window.addEventListener("pointercancel", endTouchControl, { passive: false });
+  window.addEventListener("selectstart", function (event) {
+    if (gameSettings.touchScreen && !isEditableEventTarget(event)) {
+      event.preventDefault();
+    }
+  });
+
   window.addEventListener("mousedown", function (event) {
+    if (shouldSuppressSyntheticMouseEvent()) {
+      event.preventDefault();
+      return;
+    }
+
     if (deathState.active || !runState.active) {
       return;
     }
 
-    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .compact-hud-toggles, .tech-ledger")) {
+    if (isGameplayPointerBlocked(event)) {
       return;
     }
 
@@ -20878,12 +22223,17 @@
   });
 
   window.addEventListener("mouseup", function (event) {
+    if (shouldSuppressSyntheticMouseEvent()) {
+      event.preventDefault();
+      return;
+    }
+
     if (deathState.active || !runState.active) {
       resetMouseButtons();
       return;
     }
 
-    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .compact-hud-toggles, .tech-ledger")) {
+    if (isGameplayPointerBlocked(event)) {
       return;
     }
 
@@ -20915,7 +22265,7 @@
       return;
     }
 
-    if (closestEventTarget(event, ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .compact-hud-toggles, .tech-ledger")) {
+    if (isGameplayPointerBlocked(event)) {
       return;
     }
     if (hotbarToolIds.length < 2) {
@@ -20932,6 +22282,7 @@
     applyUiScale(gameSettings.uiScale);
     setCameraZoom(gameSettings.zoom);
     updateSurfaceCameraRotationUi();
+    updateTouchScreenUi();
     renderControlBindings();
     initializeTechUi();
     updateSoundToggle();

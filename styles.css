@@ -16,6 +16,8 @@ body {
   height: 100%;
   margin: 0;
   overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 body {
@@ -25,6 +27,35 @@ body {
   cursor: crosshair;
   user-select: none;
   -webkit-user-select: none;
+}
+
+button,
+canvas,
+.hud,
+.compact-hud-toggles,
+.touch-joystick,
+.tool-hotbar,
+.tech-ledger,
+.build-menu,
+.social-panel,
+.signal-panel,
+.command-panel,
+.player-interaction,
+.trade-panel,
+.difficulty-screen,
+.death-screen {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea,
+select {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 #game {
@@ -293,6 +324,39 @@ body {
   outline-offset: 2px;
 }
 
+.hud__land-action {
+  display: none;
+  min-width: 112px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid rgba(88, 226, 255, 0.34);
+  border-radius: 8px;
+  background: rgba(88, 226, 255, 0.16);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(12px);
+  color: #dffcff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: inherit;
+  cursor: pointer;
+}
+
+.hud__land-action:hover,
+.hud__land-action:focus-visible {
+  border-color: rgba(255, 229, 111, 0.56);
+  background: rgba(255, 229, 111, 0.16);
+  color: #fff7c7;
+}
+
+.hud__land-action:focus-visible {
+  outline: 2px solid rgba(255, 229, 111, 0.72);
+  outline-offset: 2px;
+}
+
 .leaderboard-panel {
   position: absolute;
   top: 50px;
@@ -422,6 +486,10 @@ body {
   display: none;
 }
 
+#vitalsToggle {
+  display: none;
+}
+
 .compact-hud-toggle {
   width: 46px;
   height: 46px;
@@ -448,6 +516,91 @@ body {
 .compact-hud-toggle.is-active {
   border-color: rgba(88, 226, 255, 0.5);
   background: rgba(88, 226, 255, 0.14);
+}
+
+.touch-joystick {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 18;
+  zoom: var(--ui-scale);
+  display: none;
+  width: 132px;
+  height: 132px;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.touch-joystick--fire {
+  left: auto;
+  right: 12px;
+}
+
+.touch-joystick__base {
+  position: absolute;
+  inset: 0;
+  border: 3px solid rgba(223, 252, 255, 0.42);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(88, 226, 255, 0.1) 0 31%, transparent 32% 100%),
+    rgba(3, 8, 24, 0.74);
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 2px rgba(88, 226, 255, 0.18),
+    inset 0 0 32px rgba(88, 226, 255, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.touch-joystick__stick {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  margin: -29px 0 0 -29px;
+  border: 3px solid rgba(255, 245, 190, 0.72);
+  border-radius: 50%;
+  background: rgba(255, 229, 111, 0.32);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    0 0 22px rgba(255, 229, 111, 0.24);
+  transition: transform 90ms ease-out;
+}
+
+.touch-joystick__base--fire {
+  background:
+    radial-gradient(circle at center, rgba(255, 115, 173, 0.12) 0 31%, transparent 32% 100%),
+    rgba(3, 8, 24, 0.74);
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 2px rgba(255, 115, 173, 0.18),
+    inset 0 0 32px rgba(255, 115, 173, 0.1);
+}
+
+.touch-joystick__stick--fire {
+  border-color: rgba(255, 210, 232, 0.74);
+  background: rgba(255, 115, 173, 0.32);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    0 0 22px rgba(255, 115, 173, 0.24);
+}
+
+.touch-joystick.is-active .touch-joystick__stick {
+  transition: none;
+}
+
+.touch-joystick.is-boosting .touch-joystick__stick {
+  border-color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 229, 111, 0.48);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    0 0 30px rgba(255, 229, 111, 0.52);
+}
+
+@media (pointer: coarse) {
+  .touch-joystick.is-enabled {
+    display: block;
+  }
 }
 
 .tech-ledger {
@@ -561,9 +714,11 @@ body {
 
 .build-menu__panel {
   zoom: var(--ui-scale);
-  width: min(1040px, calc(100vw - 32px));
-  height: min(680px, calc(100vh - 40px));
-  max-height: calc(100vh - 40px);
+  width: min(1040px, calc((100vw - 32px) / var(--ui-scale)));
+  height: min(680px, calc((100vh - 40px) / var(--ui-scale)));
+  height: min(680px, calc((100dvh - 40px) / var(--ui-scale)));
+  max-height: calc((100vh - 40px) / var(--ui-scale));
+  max-height: calc((100dvh - 40px) / var(--ui-scale));
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   padding: 16px;
@@ -2278,7 +2433,7 @@ body {
 .difficulty-screen__panel,
 .death-screen__panel {
   zoom: var(--ui-scale);
-  width: min(460px, calc(100vw - 32px));
+  width: min(460px, calc((100vw - 32px) / var(--ui-scale)));
   padding: 28px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
@@ -2299,7 +2454,7 @@ body {
 }
 
 .difficulty-screen__panel {
-  width: min(760px, calc(100vw - 32px));
+  width: min(760px, calc((100vw - 32px) / var(--ui-scale)));
 }
 
 .start-menu {
@@ -2892,10 +3047,21 @@ body {
 
 @media (max-width: 900px), (max-height: 560px) {
   .hud {
-    top: 12px;
+    top: 70px;
     left: 12px;
     max-width: calc(100vw - 24px);
     gap: 6px;
+  }
+
+  .hud.is-compact:not(.is-compact-open) .hud__progress,
+  .hud.is-compact:not(.is-compact-open) .hud__score,
+  .hud.is-compact:not(.is-compact-open) .hud__body,
+  .hud.is-compact:not(.is-compact-open) .leaderboard-panel {
+    display: none;
+  }
+
+  .hud__land-action.is-visible {
+    display: inline-flex;
   }
 
   .hud__health {
@@ -2918,14 +3084,32 @@ body {
   }
 
   .compact-hud-toggles {
-    top: auto;
-    right: 12px;
-    bottom: 12px;
-    grid-template-columns: repeat(3, 46px);
+    top: 12px;
+    left: 118px;
+    right: auto;
+    bottom: auto;
+    grid-template-columns: repeat(4, 46px);
+  }
+
+  #vitalsToggle {
+    display: grid;
   }
 
   #mapToggle {
     display: grid;
+  }
+
+  .touch-joystick.is-enabled {
+    display: block;
+  }
+
+  .online-toggle {
+    left: 12px;
+    right: auto;
+    top: 12px;
+    bottom: auto;
+    min-width: 96px;
+    height: 46px;
   }
 
   .tech-ledger {
@@ -2937,9 +3121,9 @@ body {
   }
 
   .settings-toggle {
-    right: 174px;
-    top: auto;
-    bottom: 12px;
+    right: 12px;
+    top: 12px;
+    bottom: auto;
     width: 46px;
     height: 46px;
   }
@@ -2949,9 +3133,11 @@ body {
   }
 
   .build-menu__panel {
-    width: min(760px, calc(100vw - 28px));
-    height: min(700px, calc(100vh - 28px));
-    max-height: calc(100vh - 28px);
+    width: min(760px, calc((100vw - 28px) / var(--ui-scale)));
+    height: min(700px, calc((100vh - 28px) / var(--ui-scale)));
+    height: min(700px, calc((100dvh - 28px) / var(--ui-scale)));
+    max-height: calc((100vh - 28px) / var(--ui-scale));
+    max-height: calc((100dvh - 28px) / var(--ui-scale));
     padding: 12px;
   }
 
@@ -2968,7 +3154,7 @@ body {
 
 @media (max-width: 560px) {
   .hud {
-    top: 10px;
+    top: 118px;
     left: 10px;
     right: 10px;
     max-width: calc(100vw - 20px);
@@ -3077,8 +3263,12 @@ body {
   }
 
   .build-menu__panel {
-    height: calc(100vh - 24px);
-    max-height: calc(100vh - 24px);
+    width: calc((100vw - 24px) / var(--ui-scale));
+    height: calc((100vh - 24px) / var(--ui-scale));
+    height: calc((100dvh - 24px) / var(--ui-scale));
+    max-height: calc((100vh - 24px) / var(--ui-scale));
+    max-height: calc((100dvh - 24px) / var(--ui-scale));
+    grid-template-rows: auto auto minmax(0, 1fr);
     padding: 12px;
   }
 
@@ -3099,16 +3289,22 @@ body {
   }
 
   .build-menu__body {
+    min-height: 0;
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(190px, 0.95fr) minmax(180px, 1fr);
+    gap: 10px;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .build-menu__resources {
     min-height: 0;
+    padding: 10px;
   }
 
   .build-menu__tabs {
     overflow-x: auto;
+    padding-bottom: 2px;
   }
 
   .build-menu__tab {
@@ -3116,12 +3312,15 @@ body {
   }
 
   .build-menu__grid {
-    overflow: visible;
+    overflow-y: auto;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-right: 4px;
   }
 
   .build-menu__details {
     grid-column: auto;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .tool-hotbar {
@@ -3138,14 +3337,29 @@ body {
   .online-toggle {
     left: 10px;
     right: auto;
-    bottom: 10px;
+    top: 10px;
+    bottom: auto;
     min-width: 96px;
     height: 46px;
   }
 
-  .compact-hud-toggles {
-    right: 10px;
+  .touch-joystick {
+    left: 10px;
     bottom: 10px;
+    width: 118px;
+    height: 118px;
+  }
+
+  .touch-joystick--fire {
+    left: auto;
+    right: 10px;
+  }
+
+  .compact-hud-toggles {
+    left: 10px;
+    right: auto;
+    top: 64px;
+    bottom: auto;
   }
 
   .tech-ledger {
@@ -3154,9 +3368,9 @@ body {
   }
 
   .settings-toggle {
-    right: 172px;
-    top: auto;
-    bottom: 10px;
+    right: 10px;
+    top: 64px;
+    bottom: auto;
     width: 46px;
     height: 46px;
   }
@@ -3205,7 +3419,7 @@ body {
 
   .difficulty-screen__panel,
   .death-screen__panel {
-    padding: 20px;
+    padding: 18px;
   }
 
   .death-screen__panel {
@@ -3221,6 +3435,7 @@ body {
   }
 
   .start-menu {
+    gap: 12px;
     max-height: calc((100vh - 20px) / var(--ui-scale));
     max-height: calc((100dvh - 20px) / var(--ui-scale));
   }
@@ -3238,6 +3453,17 @@ body {
   .start-menu__join,
   .lobby-panel__actions {
     grid-template-columns: 1fr;
+  }
+
+  .start-menu__actions {
+    gap: 8px;
+  }
+
+  .start-menu__button,
+  .start-menu__join input,
+  .lobby-panel__invite input {
+    min-height: 46px;
+    font-size: 14px;
   }
 
   .lobby-panel__difficulty,
@@ -3262,10 +3488,12 @@ body {
 
   .difficulty-screen__options {
     grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .difficulty-card {
-    min-height: 112px;
+    min-height: 92px;
+    padding: 12px;
   }
 
   .death-screen__stats {
