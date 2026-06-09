@@ -889,6 +889,9 @@
   const multiplayerSnapshotInterval = 0.25;
   const partyInputInterval = 0.05;
   const partyWorldSnapshotInterval = 0.1;
+  const partyRemotePredictionLead = 0.12;
+  const partyRemotePredictionMax = 0.28;
+  const partyRemoteBucketPadding = 12;
   const remoteSnapshotRenderDelay = multiplayerSnapshotInterval * 0.8;
   const remoteSnapshotExtrapolateLimit = multiplayerSnapshotInterval * 1.35;
   const remoteSnapshotBufferLimit = 6;
@@ -11633,7 +11636,11 @@
     const backHalf = funnelShape.backHalf;
     const rimX = funnelShape.rimX;
     const rimHalf = funnelShape.rimHalf;
-    const radius = target.radius;
+    const requestedBucketPadding = Math.max(0, finiteOr(state.bucketPadding, 0));
+    const bucketPadding = requestedBucketPadding > 0
+      ? clamp(target.radius * 0.35, 5, requestedBucketPadding)
+      : 0;
+    const radius = target.radius + bucketPadding;
 
     touchedBucket = collideFunnelSegment(bucketState, backX, -backHalf, rimX, -rimHalf, radius) || touchedBucket;
     touchedBucket = collideFunnelSegment(bucketState, backX, backHalf, rimX, rimHalf, radius) || touchedBucket;
@@ -11728,13 +11735,58 @@
       }
 
       const source = entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : {};
-      const remotePlayer = normalizeRemotePlayerSnapshot(source.player || source);
+      const remotePlayer = predictPartyRemotePlayer(
+        normalizeRemotePlayerSnapshot(source.player || source),
+        entry.receivedAt
+      );
       const state = partyGadgetStateForPlayer(remotePlayer);
       if (state) {
         states.push(state);
       }
     }
     return states;
+  }
+
+  function predictPartyRemotePlayer(remotePlayer, receivedAt) {
+    if (!remotePlayer) {
+      return null;
+    }
+
+    const predicted = {
+      ...remotePlayer,
+      landed: remotePlayer.landed ? { ...remotePlayer.landed } : null
+    };
+    const now = performance.now();
+    const lead = clamp(
+      (now - finiteOr(receivedAt, now)) / 1000 + partyRemotePredictionLead,
+      0,
+      partyRemotePredictionMax
+    );
+
+    if (predicted.landed) {
+      const body = bodyById(predicted.landed.bodyId);
+      if (body && isLandableBody(body)) {
+        const surfaceRadius = Math.max(24, body.radius + surfaceExtensionAtAngle(body, predicted.landed.angle));
+        predicted.landed.angle += (finiteOr(predicted.landed.walkSpeed, 0) / surfaceRadius) * lead;
+        const normal = {
+          x: Math.cos(predicted.landed.angle),
+          y: Math.sin(predicted.landed.angle)
+        };
+        const tangent = { x: -normal.y, y: normal.x };
+        const surfaceOffset = surfaceExtensionAtAngle(body, predicted.landed.angle);
+        const distanceFromCenter = body.radius + surfaceOffset + playerFootOffset;
+        const walkSpeed = finiteOr(predicted.landed.walkSpeed, 0);
+        predicted.x = body.x + normal.x * distanceFromCenter;
+        predicted.y = body.y + normal.y * distanceFromCenter;
+        predicted.vx = finiteOr(body.vx, 0) + tangent.x * walkSpeed;
+        predicted.vy = finiteOr(body.vy, 0) + tangent.y * walkSpeed;
+        return predicted;
+      }
+    }
+
+    predicted.x += finiteOr(predicted.vx, 0) * lead;
+    predicted.y += finiteOr(predicted.vy, 0) * lead;
+    return predicted;
   }
 
   function partyGadgetStateForPlayer(remotePlayer) {
@@ -11759,6 +11811,7 @@
       suckFactor: 1,
       blowFactor: 1,
       bucketActive: true,
+      bucketPadding: partyRemoteBucketPadding,
       landedBodyId: remotePlayer.landed ? remotePlayer.landed.bodyId : null
     };
   }
