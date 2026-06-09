@@ -38,6 +38,8 @@
   const settingsToggle = document.getElementById("settingsToggle");
   const settingsPanel = document.getElementById("settingsPanel");
   const settingsClose = document.getElementById("settingsClose");
+  const settingsSections = settingsPanel ? Array.from(settingsPanel.querySelectorAll("[data-settings-section]")) : [];
+  const settingsSectionToggles = settingsPanel ? Array.from(settingsPanel.querySelectorAll("[data-settings-section-toggle]")) : [];
   const uiScaleInput = document.getElementById("uiScaleInput");
   const uiScaleValue = document.getElementById("uiScaleValue");
   const zoomInput = document.getElementById("zoomInput");
@@ -1336,6 +1338,39 @@
     writeGameSettings();
   }
 
+  function setSettingsSectionOpen(sectionName, open) {
+    let openedSection = null;
+    settingsSections.forEach(function (section) {
+      const name = section.dataset.settingsSection || "";
+      const isTarget = name === sectionName;
+      const isOpen = isTarget && open;
+      const body = section.querySelector(".settings-panel__section-body");
+      section.classList.toggle("is-open", isOpen);
+      if (body) {
+        body.hidden = !isOpen;
+      }
+      if (isOpen) {
+        openedSection = name;
+      }
+    });
+
+    settingsSectionToggles.forEach(function (toggle) {
+      toggle.setAttribute("aria-expanded", toggle.dataset.settingsSectionToggle === openedSection ? "true" : "false");
+    });
+  }
+
+  function ensureSettingsSectionOpen() {
+    if (!settingsSections.length) {
+      return;
+    }
+    const openSection = settingsSections.find(function (section) {
+      return section.classList.contains("is-open");
+    });
+    if (!openSection) {
+      setSettingsSectionOpen(settingsSections[0].dataset.settingsSection || "", true);
+    }
+  }
+
   function setSettingsOpen(open) {
     settingsOpen = Boolean(open);
     pendingControlRemap = null;
@@ -1356,6 +1391,7 @@
       setBuildMenuOpen(false);
       setSocialPanelOpen(false);
       resetMouseButtons();
+      ensureSettingsSectionOpen();
       void refreshAccountSaves();
     }
 
@@ -20004,6 +20040,15 @@
   if (settingsPanel) {
     settingsPanel.addEventListener("click", function (event) {
       event.stopPropagation();
+
+      const sectionToggle = closestEventTarget(event, "[data-settings-section-toggle]");
+      if (sectionToggle) {
+        const sectionName = sectionToggle.dataset.settingsSectionToggle || "";
+        const section = settingsPanel.querySelector("[data-settings-section=\"" + sectionName + "\"]");
+        const shouldOpen = !(section && section.classList.contains("is-open"));
+        setSettingsSectionOpen(sectionName, shouldOpen);
+        return;
+      }
 
       const button = closestEventTarget(event, "button[data-control-action]");
       if (!button) {
