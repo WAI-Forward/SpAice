@@ -134,6 +134,14 @@
               <input id="surfaceCameraRotationInput" type="checkbox">
             </label>
           </div>
+          <div class="settings-panel__group">
+            <div class="settings-panel__section-title">Multiplayer</div>
+            <label class="settings-panel__check" for="multiplayerToggleInput">
+              <span>Allow friend joins</span>
+              <input id="multiplayerToggleInput" type="checkbox">
+            </label>
+            <p class="settings-panel__save-status multiplayer-status" id="multiplayerStatus">Multiplayer Off</p>
+          </div>
           <div class="settings-panel__group settings-panel__group--saves">
             <div class="settings-panel__section-title">Saves</div>
             <form class="settings-panel__auth-form" id="accountLoginForm">
@@ -183,6 +191,10 @@
         <strong id="publicNameValue">Player</strong>
         <button class="social-panel__close" id="socialPanelClose" type="button" aria-label="Close online players">x</button>
       </div>
+      <div class="social-panel__multiplayer">
+        <span id="multiplayerPanelStatus">Multiplayer Off</span>
+        <button id="multiplayerPanelToggle" type="button">Enable</button>
+      </div>
       <div class="social-panel__tools">
         <input id="playerSearch" type="search" autocomplete="off" placeholder="Search name">
         <label class="social-panel__filter">
@@ -229,26 +241,126 @@
       </div>
       <p class="trade-panel__status" id="tradeStatus">Choose resources to trade.</p>
     </section>
-    <section class="difficulty-screen is-open" id="difficultyScreen" aria-label="Choose difficulty">
-      <div class="difficulty-screen__panel">
-        <p class="difficulty-screen__eyebrow">New run</p>
-        <h1>Choose difficulty</h1>
-        <div class="difficulty-screen__options">
-          <button class="difficulty-card" type="button" data-difficulty="easy">
-            <strong>Easy</strong>
-            <span>Fewer mobs, more tech</span>
-            <small>0.75x body / 0.65x mob / 1.45x tech</small>
-          </button>
-          <button class="difficulty-card is-recommended" type="button" data-difficulty="medium">
-            <strong>Medium</strong>
-            <span>Balanced pressure</span>
-            <small>1.00x body / 1.00x mob / 1.15x tech</small>
-          </button>
-          <button class="difficulty-card" type="button" data-difficulty="hard">
-            <strong>Hard</strong>
-            <span>More mobs</span>
-            <small>1.25x body / 1.65x mob / 1.00x tech</small>
-          </button>
+    <section class="difficulty-screen is-open" id="difficultyScreen" aria-label="Clusternauts menu">
+      <div class="difficulty-screen__panel start-menu">
+        <div class="start-menu__top">
+          <button class="start-menu__back" id="startMenuBack" type="button" data-menu-action="back">Back</button>
+          <p class="difficulty-screen__eyebrow" id="startMenuEyebrow">Clusternauts</p>
+          <h1 id="startMenuTitle">Clusternauts</h1>
+        </div>
+
+        <div class="start-menu__view is-active" data-menu-view="main">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single">Single Player</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer">Multiplayer</button>
+            <button class="start-menu__button" type="button" data-menu-action="settings">Settings</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="single">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="new-game">New Game</button>
+            <button class="start-menu__button" type="button" data-menu-action="load-game">Load Existing Save</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="load">
+          <div class="start-menu__list" id="startSavedGameList" aria-label="Saved games"></div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="difficulty">
+          <div class="difficulty-screen__options">
+            <button class="difficulty-card" type="button" data-difficulty="easy">
+              <strong>Easy</strong>
+              <span>Fewer mobs, more tech</span>
+              <small>0.75x body / 0.65x mob / 1.45x tech</small>
+            </button>
+            <button class="difficulty-card is-recommended" type="button" data-difficulty="medium">
+              <strong>Medium</strong>
+              <span>Balanced pressure</span>
+              <small>1.00x body / 1.00x mob / 1.15x tech</small>
+            </button>
+            <button class="difficulty-card" type="button" data-difficulty="hard">
+              <strong>Hard</strong>
+              <span>More mobs</span>
+              <small>1.25x body / 1.65x mob / 1.00x tech</small>
+            </button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="create-lobby">Create Lobby</button>
+            <div class="start-menu__join">
+              <input id="lobbyCodeInput" type="text" autocomplete="off" maxlength="12" placeholder="Lobby code">
+              <button class="start-menu__button" id="joinLobbyButton" type="button" data-menu-action="join-lobby">Join Lobby</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="lobby">
+          <div class="lobby-panel">
+            <div class="lobby-panel__summary">
+              <span>Lobby</span>
+              <strong id="lobbyCodeValue">----</strong>
+              <button class="settings-panel__save-action" id="copyLobbyCodeButton" type="button">Copy</button>
+            </div>
+            <div class="lobby-panel__difficulty" id="lobbyDifficultyOptions">
+              <span id="lobbyDifficultyLabel">Difficulty</span>
+              <div class="lobby-difficulty-select" id="lobbyDifficultySelect">
+                <button class="lobby-difficulty-select__toggle" id="lobbyDifficultyToggle" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="lobbyDifficultyLabel lobbyDifficultyToggle">Medium - Balanced pressure</button>
+                <div class="lobby-difficulty-select__menu" id="lobbyDifficultyMenu" role="listbox" aria-labelledby="lobbyDifficultyLabel" hidden>
+                  <button type="button" role="option" data-lobby-difficulty="easy">Easy - Fewer mobs, more tech</button>
+                  <button type="button" role="option" data-lobby-difficulty="medium">Medium - Balanced pressure</button>
+                  <button type="button" role="option" data-lobby-difficulty="hard">Hard - More mobs</button>
+                </div>
+              </div>
+            </div>
+            <div class="lobby-panel__players" id="lobbyPlayerSlots" aria-label="Lobby players"></div>
+            <div class="lobby-panel__invite">
+              <input id="lobbyPlayerSearch" type="search" autocomplete="off" placeholder="Search player">
+              <div class="start-menu__list" id="lobbyPlayerSearchList" aria-label="Invite players"></div>
+            </div>
+            <div class="lobby-panel__actions">
+              <button class="start-menu__button start-menu__button--primary" id="startLobbyButton" type="button" data-menu-action="start-lobby">Start</button>
+              <button class="start-menu__button" id="lobbyLoadSaveButton" type="button" data-menu-action="lobby-load-game">Load Save</button>
+              <button class="start-menu__button" id="leaveLobbyButton" type="button" data-menu-action="leave-lobby">Leave</button>
+            </div>
+            <p class="settings-panel__save-status" id="lobbyStatus" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="settings">
+          <div class="start-settings">
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Audio</div>
+              <button class="sound-toggle" id="menuSoundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__range" for="menuUiScaleInput">
+                <span>UI scale</span>
+                <output id="menuUiScaleValue" for="menuUiScaleInput">100%</output>
+              </label>
+              <input id="menuUiScaleInput" type="range" min="80" max="130" step="5" value="100">
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__range" for="menuZoomInput">
+                <span>Zoom level</span>
+                <output id="menuZoomValue" for="menuZoomInput">62%</output>
+              </label>
+              <input id="menuZoomInput" type="range" min="0" max="200" step="1" value="100">
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__check" for="menuSurfaceCameraRotationInput">
+                <span>Rotate camera on surfaces</span>
+                <input id="menuSurfaceCameraRotationInput" type="checkbox">
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Controls</div>
+              <button class="settings-panel__reset" id="menuResetControlsButton" type="button">Reset controls</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>

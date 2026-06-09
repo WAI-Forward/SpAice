@@ -43,6 +43,10 @@
   const zoomInput = document.getElementById("zoomInput");
   const zoomValue = document.getElementById("zoomValue");
   const surfaceCameraRotationInput = document.getElementById("surfaceCameraRotationInput");
+  const multiplayerToggleInput = document.getElementById("multiplayerToggleInput");
+  const multiplayerStatus = document.getElementById("multiplayerStatus");
+  const multiplayerPanelStatus = document.getElementById("multiplayerPanelStatus");
+  const multiplayerPanelToggle = document.getElementById("multiplayerPanelToggle");
   const accountLoginForm = document.getElementById("accountLoginForm");
   const accountUsernameInput = document.getElementById("accountUsernameInput");
   const accountPasswordInput = document.getElementById("accountPasswordInput");
@@ -80,6 +84,30 @@
   const investigateSignal = document.getElementById("investigateSignal");
   const avoidSignal = document.getElementById("avoidSignal");
   const difficultyScreen = document.getElementById("difficultyScreen");
+  const startMenuBack = document.getElementById("startMenuBack");
+  const startMenuEyebrow = document.getElementById("startMenuEyebrow");
+  const startMenuTitle = document.getElementById("startMenuTitle");
+  const startSavedGameList = document.getElementById("startSavedGameList");
+  const lobbyCodeInput = document.getElementById("lobbyCodeInput");
+  const joinLobbyButton = document.getElementById("joinLobbyButton");
+  const lobbyCodeValue = document.getElementById("lobbyCodeValue");
+  const copyLobbyCodeButton = document.getElementById("copyLobbyCodeButton");
+  const lobbyDifficultySelect = document.getElementById("lobbyDifficultySelect");
+  const lobbyDifficultyToggle = document.getElementById("lobbyDifficultyToggle");
+  const lobbyDifficultyMenu = document.getElementById("lobbyDifficultyMenu");
+  const lobbyPlayerSlots = document.getElementById("lobbyPlayerSlots");
+  const lobbyPlayerSearch = document.getElementById("lobbyPlayerSearch");
+  const lobbyPlayerSearchList = document.getElementById("lobbyPlayerSearchList");
+  const startLobbyButton = document.getElementById("startLobbyButton");
+  const leaveLobbyButton = document.getElementById("leaveLobbyButton");
+  const lobbyStatus = document.getElementById("lobbyStatus");
+  const menuSoundToggle = document.getElementById("menuSoundToggle");
+  const menuUiScaleInput = document.getElementById("menuUiScaleInput");
+  const menuUiScaleValue = document.getElementById("menuUiScaleValue");
+  const menuZoomInput = document.getElementById("menuZoomInput");
+  const menuZoomValue = document.getElementById("menuZoomValue");
+  const menuSurfaceCameraRotationInput = document.getElementById("menuSurfaceCameraRotationInput");
+  const menuResetControlsButton = document.getElementById("menuResetControlsButton");
   const commandPanel = document.getElementById("commandPanel");
   const commandInput = document.getElementById("commandInput");
   const commandHint = document.getElementById("commandHint");
@@ -111,8 +139,23 @@
     gameplayEventsDisabled: false,
     settingsListener: null,
     authListener: null,
+    roomJoinListener: null,
     authAvailable: true,
-    authPromptActive: false
+    authPromptActive: false,
+    user: null,
+    instantMultiplayer: false,
+    instantMultiplayerHandled: false,
+    initialInviteHandled: false,
+    lastRoomReport: "",
+    lastInviteLinkKey: "",
+    inviteLinkPending: false,
+    inviteLink: ""
+  };
+  const crazyGamesRoomMaxPlayers = 4;
+  const clusternautsTestConfig = window.__CLUSTERNAUTS_TEST__ || null;
+  const clusternautsTestCounters = {
+    particleMerges: 0,
+    bodyBounces: 0
   };
   let lastClientErrorReportAt = -Infinity;
 
@@ -126,6 +169,7 @@
   const accountSessionStorageKey = "clusternauts.accountSession";
   const playerIdStorageKey = "clusternauts.playerId";
   const legacyPlayerIdStorageKey = "spaice.playerId";
+  const multiplayerPreferenceStorageKey = "clusternauts.multiplayer.enabled";
   const commandPassword = "imacheater";
   const defaultControlBindings = {
     up: "KeyW",
@@ -259,10 +303,13 @@
     if (configuredBackendOrigin()) {
       return true;
     }
-    if (isLocalDevelopmentHost(hostName)) {
+    if (isCrazyGamesRuntime()) {
+      return true;
+    }
+    if (hostName === renderBackendHost()) {
       return false;
     }
-    return hostName !== renderBackendHost();
+    return !isLocalDevelopmentHost(hostName);
   }
 
   function backendOrigin() {
@@ -282,7 +329,36 @@
   }
 
   function isLocalDevelopmentHost(hostName) {
-    return hostName === "localhost" || hostName === "127.0.0.1" || hostName === "::1" || hostName === "";
+    const host = String(hostName || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+    return (
+      host === "localhost" ||
+      host === "0.0.0.0" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "" ||
+      host.endsWith(".localhost") ||
+      isPrivateIpv4Host(host)
+    );
+  }
+
+  function isPrivateIpv4Host(hostName) {
+    const parts = String(hostName || "").split(".");
+    if (parts.length !== 4) {
+      return false;
+    }
+
+    const octets = parts.map((part) => Number(part));
+    if (octets.some((octet, index) => !Number.isInteger(octet) || octet < 0 || octet > 255 || String(octet) !== parts[index])) {
+      return false;
+    }
+
+    return (
+      octets[0] === 10 ||
+      octets[0] === 127 ||
+      (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+      (octets[0] === 192 && octets[1] === 168) ||
+      (octets[0] === 169 && octets[1] === 254)
+    );
   }
 
   function crazyGamesSdkEnvironment() {
@@ -777,6 +853,19 @@
     active: false,
     difficultyId: defaultDifficultyId
   };
+  const startMenu = {
+    view: "main",
+    history: [],
+    titles: {
+      main: ["Clusternauts", "Clusternauts"],
+      single: ["Single Player", "Choose Mode"],
+      load: ["Single Player", "Load Save"],
+      difficulty: ["New Game", "Choose Difficulty"],
+      multiplayer: ["Multiplayer", "Party Setup"],
+      lobby: ["Multiplayer", "Lobby"],
+      settings: ["Settings", "Settings"]
+    }
+  };
   const deathState = {
     active: false,
     summaryReady: false,
@@ -796,6 +885,8 @@
     submittedDeathKey: ""
   };
   const multiplayerSnapshotInterval = 0.25;
+  const partyInputInterval = 0.05;
+  const partyWorldSnapshotInterval = 0.1;
   const remoteSnapshotRenderDelay = multiplayerSnapshotInterval * 0.8;
   const remoteSnapshotExtrapolateLimit = multiplayerSnapshotInterval * 1.35;
   const remoteSnapshotBufferLimit = 6;
@@ -815,6 +906,31 @@
     profile: null,
     universeId: "",
     bubbleRadius: 5000,
+    roomId: "",
+    roomMode: "world-overlap",
+    roomPlayerCount: 0,
+    roomMaxPlayers: crazyGamesRoomMaxPlayers,
+    roomJoinable: false,
+    roomCreatePending: false,
+    pendingJoinRoomId: "",
+    pendingJoinMode: "world-overlap",
+    joinRequestedRoomId: "",
+    lobby: null,
+    lobbyLoadedSnapshot: null,
+    lobbyCreatePending: false,
+    lobbyJoinPending: "",
+    lobbyRequestStartedAt: 0,
+    lobbyInviteLink: "",
+    partySession: null,
+    partyMode: "solo",
+    partyHostId: "",
+    partyHostUniverseId: "",
+    partyPlayerSnapshots: new Map(),
+    partyInputTimer: 0,
+    partySnapshotTimer: 0,
+    partyRespawnInvulnerableTimer: 0,
+    anomaly: null,
+    friendJoinsEnabled: false,
     onlineCount: 0,
     players: [],
     panelOpen: false,
@@ -1148,6 +1264,12 @@
     if (uiScaleValue) {
       uiScaleValue.textContent = Math.round(gameSettings.uiScale * 100) + "%";
     }
+    if (menuUiScaleInput) {
+      menuUiScaleInput.value = String(Math.round(gameSettings.uiScale * 100));
+    }
+    if (menuUiScaleValue) {
+      menuUiScaleValue.textContent = Math.round(gameSettings.uiScale * 100) + "%";
+    }
   }
 
   function renderControlBindings() {
@@ -1184,11 +1306,20 @@
     if (zoomValue) {
       zoomValue.textContent = Math.round(cameraZoom * 100) + "%";
     }
+    if (menuZoomInput) {
+      menuZoomInput.value = String(Math.round(cameraZoomToSliderValue(cameraZoom)));
+    }
+    if (menuZoomValue) {
+      menuZoomValue.textContent = Math.round(cameraZoom * 100) + "%";
+    }
   }
 
   function updateSurfaceCameraRotationUi() {
     if (surfaceCameraRotationInput) {
       surfaceCameraRotationInput.checked = Boolean(gameSettings.surfaceCameraRotation);
+    }
+    if (menuSurfaceCameraRotationInput) {
+      menuSurfaceCameraRotationInput.checked = Boolean(gameSettings.surfaceCameraRotation);
     }
   }
 
@@ -1421,16 +1552,17 @@
   }
 
   function updateSoundToggle() {
-    if (!soundToggle) {
-      return;
-    }
-
     const audioAllowed = isGameAudioAllowed();
-    soundToggle.classList.toggle("is-active", audioAllowed);
-    soundToggle.classList.toggle("is-muted", !audioAllowed);
-    soundToggle.setAttribute("aria-pressed", soundState.enabled ? "true" : "false");
-    soundToggle.setAttribute("aria-label", soundState.enabled ? "Mute sound effects" : "Unmute sound effects");
-    soundToggle.textContent = audioAllowed ? "SFX On" : "SFX Off";
+    for (const toggle of [soundToggle, menuSoundToggle]) {
+      if (!toggle) {
+        continue;
+      }
+      toggle.classList.toggle("is-active", audioAllowed);
+      toggle.classList.toggle("is-muted", !audioAllowed);
+      toggle.setAttribute("aria-pressed", soundState.enabled ? "true" : "false");
+      toggle.setAttribute("aria-label", soundState.enabled ? "Mute sound effects" : "Unmute sound effects");
+      toggle.textContent = audioAllowed ? "SFX On" : "SFX Off";
+    }
   }
 
   function isGameAudioAllowed() {
@@ -2843,6 +2975,9 @@
       difficultyScreen.classList.toggle("is-open", Boolean(open));
       difficultyScreen.setAttribute("aria-hidden", open ? "false" : "true");
     }
+    if (open) {
+      renderStartMenu();
+    }
     updateCrazyGamesGameplayState(open ? "difficulty-screen-open" : "difficulty-screen-closed");
   }
 
@@ -2870,10 +3005,746 @@
     }
   }
 
+  function setStartMenuView(view, options) {
+    const nextView = startMenu.titles[view] ? view : "main";
+    if (!options || options.push !== false) {
+      if (startMenu.view !== nextView) {
+        startMenu.history.push(startMenu.view);
+      }
+    }
+    startMenu.view = nextView;
+    renderStartMenu();
+
+    if (nextView === "load") {
+      if (isAccountSignedIn()) {
+        void refreshAccountSaves();
+      }
+      renderStartSavedGames();
+    }
+    if (nextView === "lobby") {
+      renderLobby();
+      void refreshLobbyPlayerSearch();
+    }
+  }
+
+  function goBackStartMenu() {
+    if (startMenu.view === "lobby") {
+      leaveLobby();
+      return;
+    }
+
+    const previous = startMenu.history.pop() || "main";
+    setStartMenuView(previous, { push: false });
+  }
+
+  function renderStartMenu() {
+    if (!difficultyScreen) {
+      return;
+    }
+
+    const title = startMenu.titles[startMenu.view] || startMenu.titles.main;
+    if (startMenuEyebrow) {
+      startMenuEyebrow.textContent = title[0];
+    }
+    if (startMenuTitle) {
+      startMenuTitle.textContent = title[1];
+    }
+    if (startMenuBack) {
+      startMenuBack.hidden = startMenu.view === "main";
+      startMenuBack.textContent = startMenu.view === "lobby" ? "Leave" : "Back";
+    }
+
+    difficultyScreen.querySelectorAll("[data-menu-view]").forEach((viewElement) => {
+      viewElement.classList.toggle("is-active", viewElement.dataset.menuView === startMenu.view);
+    });
+
+    syncMenuSettingsControls();
+    renderStartSavedGames();
+    renderLobby();
+  }
+
+  function syncMenuSettingsControls() {
+    applyUiScale(gameSettings.uiScale);
+    updateZoomUi();
+    updateSurfaceCameraRotationUi();
+    updateSoundToggle();
+  }
+
+  function renderStartSavedGames() {
+    if (!startSavedGameList) {
+      return;
+    }
+
+    startSavedGameList.textContent = "";
+    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+      const row = createStartMenuRow("Guest progress", "Continue", "continue-guest");
+      startSavedGameList.append(row);
+      return;
+    }
+
+    if (!isAccountSignedIn()) {
+      const empty = document.createElement("p");
+      empty.className = "start-menu__empty";
+      empty.textContent = "Log in from Settings to load named saves.";
+      startSavedGameList.append(empty);
+      return;
+    }
+
+    if (accountState.savesLoading) {
+      const loading = document.createElement("p");
+      loading.className = "start-menu__empty";
+      loading.textContent = "Loading saves...";
+      startSavedGameList.append(loading);
+      return;
+    }
+
+    if (!accountState.saves.length) {
+      const empty = document.createElement("p");
+      empty.className = "start-menu__empty";
+      empty.textContent = "No saved worlds yet.";
+      startSavedGameList.append(empty);
+      return;
+    }
+
+    const lobbySaveMode = Boolean(multiplayer.lobby && startMenu.history.includes("lobby"));
+    for (const save of accountState.saves) {
+      const row = createStartMenuRow(save.name || "Saved world", lobbySaveMode ? "Use" : "Load", lobbySaveMode ? "load-lobby-save" : "load-save");
+      const button = row.querySelector("button");
+      if (button) {
+        button.dataset.saveId = save.id || "";
+      }
+      startSavedGameList.append(row);
+    }
+  }
+
+  function createStartMenuRow(label, actionLabel, action) {
+    const row = document.createElement("div");
+    const details = document.createElement("div");
+    const name = document.createElement("strong");
+    const button = document.createElement("button");
+
+    row.className = "start-menu__row";
+    name.textContent = label;
+    button.className = "settings-panel__save-action";
+    button.type = "button";
+    button.dataset.menuAction = action;
+    button.textContent = actionLabel;
+    details.append(name);
+    row.append(details, button);
+    return row;
+  }
+
+  function handleStartMenuAction(action, sourceElement) {
+    if (action === "back") {
+      goBackStartMenu();
+      return;
+    }
+    if (action === "single") {
+      setStartMenuView("single");
+      return;
+    }
+    if (action === "new-game") {
+      setStartMenuView("difficulty");
+      return;
+    }
+    if (action === "load-game") {
+      setStartMenuView("load");
+      return;
+    }
+    if (action === "load-save") {
+      void loadManualGame(sourceElement && sourceElement.dataset.saveId);
+      return;
+    }
+    if (action === "load-lobby-save") {
+      void loadLobbySave(sourceElement && sourceElement.dataset.saveId);
+      return;
+    }
+    if (action === "continue-guest") {
+      void continueGuestProgress();
+      return;
+    }
+    if (action === "multiplayer") {
+      setStartMenuView("multiplayer");
+      return;
+    }
+    if (action === "create-lobby") {
+      createLobby();
+      return;
+    }
+    if (action === "join-lobby") {
+      joinLobby(lobbyCodeInput && lobbyCodeInput.value);
+      return;
+    }
+    if (action === "start-lobby") {
+      startLobby();
+      return;
+    }
+    if (action === "lobby-load-game") {
+      if (!isLobbyHost()) {
+        setLobbyStatus("Only the host can load a save.", "error");
+        return;
+      }
+      setStartMenuView("load");
+      return;
+    }
+    if (action === "leave-lobby") {
+      leaveLobby();
+      return;
+    }
+    if (action === "settings") {
+      setStartMenuView("settings");
+    }
+  }
+
+  async function continueGuestProgress() {
+    resetLocalPlayerState();
+    resetLocalWorldState();
+    resetLifeStats();
+    resetDeathState();
+    await loadPersistentState();
+    runState.active = true;
+    persistence.saveTimer = persistenceSaveInterval;
+    persistence.pollTimer = persistencePollInterval;
+    setDifficultyScreenOpen(false);
+    resetMouseButtons();
+    lastTime = performance.now();
+    updateHud();
+    connectMultiplayer();
+    maybeNotifyText("Guest progress loaded.");
+  }
+
+  async function loadLobbySave(saveId) {
+    const cleanSaveId = String(saveId || "").trim();
+    if (!multiplayer.lobby || !isLobbyHost()) {
+      setLobbyStatus("Create a lobby as host first.", "error");
+      return;
+    }
+    if (!isAccountSignedIn()) {
+      setLobbyStatus(isCrazyGamesRuntime() ? "Guest progress is already available." : "Log in to use saved worlds.", "error");
+      return;
+    }
+    if (!cleanSaveId) {
+      setLobbyStatus("Choose a saved world.", "error");
+      return;
+    }
+
+    try {
+      const data = await fetchPersistentJson("/api/saves/" + encodeURIComponent(cleanSaveId), {
+        headers: accountAuthHeaders()
+      });
+      const payload = data && data.payload;
+      const saveName = data && data.save && data.save.name ? data.save.name : "saved world";
+      if (!payload || typeof payload !== "object" || !payload.player || !payload.world) {
+        setLobbyStatus("Could not use this save.", "error");
+        return;
+      }
+
+      resetLocalPlayerState();
+      resetLocalWorldState();
+      resetLifeStats();
+      resetDeathState();
+      applyPersistentPayload(Object.assign({ ok: true }, payload), { includePlayer: true });
+      applyRunSnapshot(payload.run);
+      runState.active = false;
+      multiplayer.lobbyLoadedSnapshot = payload;
+      setLobbyDifficulty(payload.run && payload.run.difficulty ? payload.run.difficulty : payload.world.difficulty || selectedLobbyDifficulty());
+      setStartMenuView("lobby", { push: false });
+      setLobbyStatus('Using "' + saveName + '".', "success");
+    } catch (error) {
+      console.warn("Clusternauts lobby save load failed.", error);
+      setLobbyStatus("Could not use this save.", "error");
+    }
+  }
+
+  function setLobbyStatus(message, state) {
+    if (!lobbyStatus) {
+      return;
+    }
+    lobbyStatus.textContent = message || "";
+    lobbyStatus.classList.toggle("is-success", state === "success");
+    lobbyStatus.classList.toggle("is-error", state === "error");
+  }
+
+  function lobbyPlayers() {
+    return multiplayer.lobby && Array.isArray(multiplayer.lobby.players) ? multiplayer.lobby.players : [];
+  }
+
+  function isLobbyHost() {
+    return Boolean(multiplayer.lobby && multiplayer.lobby.hostPlayerId === player.id);
+  }
+
+  function createLobby() {
+    setFriendJoinsEnabled(true, "lobby-create", { persist: true, notify: false, startRun: false });
+    multiplayer.lobbyCreatePending = true;
+    multiplayer.lobbyJoinPending = "";
+    multiplayer.lobbyLoadedSnapshot = null;
+    multiplayer.lobbyRequestStartedAt = performance.now();
+    setLobbyStatus("Creating lobby...", "");
+    setStartMenuView("lobby");
+    connectMultiplayer();
+    flushLobbyRequests("create-lobby");
+  }
+
+  function joinLobby(code) {
+    const cleanCode = sanitizeLobbyCode(code);
+    if (!cleanCode) {
+      setLobbyStatus("Enter a lobby code.", "error");
+      setStartMenuView("multiplayer", { push: false });
+      return;
+    }
+    setFriendJoinsEnabled(true, "lobby-join", { persist: true, notify: false, startRun: false });
+    multiplayer.lobbyCreatePending = false;
+    multiplayer.lobbyJoinPending = cleanCode;
+    multiplayer.lobbyLoadedSnapshot = null;
+    multiplayer.lobbyRequestStartedAt = performance.now();
+    setLobbyStatus("Joining lobby...", "");
+    setStartMenuView("lobby");
+    connectMultiplayer();
+    flushLobbyRequests("join-lobby");
+  }
+
+  function sanitizeLobbyCode(code) {
+    return String(code || "").replace(/[^\w-]/g, "").trim().slice(0, 12).toUpperCase();
+  }
+
+  function selectedLobbyDifficulty() {
+    return multiplayer.lobby && difficultyDefinitions[multiplayer.lobby.difficulty]
+      ? multiplayer.lobby.difficulty
+      : runState.difficultyId || defaultDifficultyId;
+  }
+
+  function lobbyDifficultySummary(difficulty) {
+    if (difficulty === "easy") {
+      return "Fewer mobs, more tech";
+    }
+    if (difficulty === "hard") {
+      return "More mobs";
+    }
+    return "Balanced pressure";
+  }
+
+  function lobbyDifficultyDisplayText(difficulty) {
+    const definition = difficultyDefinition(difficulty);
+    return definition.label + " - " + lobbyDifficultySummary(definition.id);
+  }
+
+  function setLobbyDifficultyMenuOpen(open) {
+    const isOpen = Boolean(open && lobbyDifficultyToggle && !lobbyDifficultyToggle.disabled);
+    if (lobbyDifficultySelect) {
+      lobbyDifficultySelect.classList.toggle("is-open", isOpen);
+    }
+    if (lobbyDifficultyToggle) {
+      lobbyDifficultyToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    }
+    if (lobbyDifficultyMenu) {
+      lobbyDifficultyMenu.hidden = !isOpen;
+    }
+  }
+
+  function setLobbyDifficulty(difficulty) {
+    if (!difficultyDefinitions[difficulty]) {
+      return;
+    }
+    if (multiplayer.lobby) {
+      multiplayer.lobby.difficulty = difficulty;
+    }
+    renderLobby();
+    sendMultiplayer({
+      type: "lobby.setDifficulty",
+      difficulty
+    });
+  }
+
+  function startLobby() {
+    if (!multiplayer.lobby || !isLobbyHost()) {
+      setLobbyStatus("Only the host can start.", "error");
+      return;
+    }
+    if (multiplayer.lobbyLoadedSnapshot) {
+      applyPersistentPayload(Object.assign({ ok: true }, multiplayer.lobbyLoadedSnapshot), { includePlayer: true });
+      applyRunSnapshot(multiplayer.lobbyLoadedSnapshot.run);
+    } else {
+      applyDifficulty(selectedLobbyDifficulty());
+      resetLocalPlayerState();
+      resetLocalWorldState();
+      resetLifeStats();
+      resetDeathState();
+    }
+    sendMultiplayer({
+      type: "lobby.start",
+      difficulty: selectedLobbyDifficulty(),
+      snapshot: multiplayer.lobbyLoadedSnapshot || buildPersistentPayload(true)
+    });
+    setLobbyStatus("Starting shared world...", "");
+  }
+
+  function leaveLobby() {
+    sendMultiplayer({ type: "lobby.leave" });
+    multiplayer.lobby = null;
+    multiplayer.lobbyCreatePending = false;
+    multiplayer.lobbyJoinPending = "";
+    multiplayer.lobbyRequestStartedAt = 0;
+    multiplayer.lobbyInviteLink = "";
+    multiplayer.lobbyLoadedSnapshot = null;
+    setLobbyStatus("", "");
+    setStartMenuView("multiplayer", { push: false });
+  }
+
+  function applyLobbyState(message) {
+    multiplayer.lobby = normalizeLobbyState(message && message.lobby ? message.lobby : message);
+    multiplayer.lobbyCreatePending = false;
+    multiplayer.lobbyJoinPending = "";
+    multiplayer.lobbyRequestStartedAt = 0;
+    setLobbyStatus(multiplayer.lobby.status === "started" ? "Shared world starting." : "", "success");
+    setStartMenuView("lobby", { push: false });
+    updateLobbyCrazyGamesRoom("lobby-state");
+    renderLobby();
+  }
+
+  function normalizeLobbyState(source) {
+    const lobby = source && typeof source === "object" ? source : {};
+    return {
+      id: String(lobby.id || ""),
+      code: sanitizeLobbyCode(lobby.code || lobby.id),
+      hostPlayerId: String(lobby.hostPlayerId || ""),
+      maxPlayers: Math.max(1, Math.floor(finiteOr(lobby.maxPlayers, crazyGamesRoomMaxPlayers))),
+      difficulty: difficultyDefinitions[lobby.difficulty] ? lobby.difficulty : defaultDifficultyId,
+      status: String(lobby.status || "open"),
+      players: Array.isArray(lobby.players)
+        ? lobby.players.map(normalizeLobbyPlayer).filter(Boolean)
+        : []
+    };
+  }
+
+  function normalizeLobbyPlayer(source) {
+    if (!source || typeof source !== "object") {
+      return null;
+    }
+    const playerId = String(source.playerId || "");
+    if (!playerId) {
+      return null;
+    }
+    return {
+      playerId,
+      publicName: String(source.publicName || source.name || playerId),
+      online: source.online !== false
+    };
+  }
+
+  function renderLobby() {
+    if (!lobbyPlayerSlots) {
+      return;
+    }
+
+    const lobby = multiplayer.lobby;
+    const requestPending = Boolean(!lobby && (multiplayer.lobbyCreatePending || multiplayer.lobbyJoinPending));
+    const requestAge = requestPending ? performance.now() - multiplayer.lobbyRequestStartedAt : 0;
+    const host = isLobbyHost();
+    const maxPlayers = lobby ? lobby.maxPlayers || crazyGamesRoomMaxPlayers : crazyGamesRoomMaxPlayers;
+    const players = lobbyPlayers();
+    if (lobbyCodeValue) {
+      lobbyCodeValue.textContent = lobby ? lobby.code || lobby.id || "----" : requestPending ? "..." : "----";
+    }
+    if (copyLobbyCodeButton) {
+      copyLobbyCodeButton.disabled = !lobby || !(lobby.code || lobby.id);
+    }
+    if (startLobbyButton) {
+      startLobbyButton.disabled = !lobby || !host || !players.length;
+    }
+    if (leaveLobbyButton) {
+      leaveLobbyButton.textContent = lobby ? "Leave" : "Back";
+    }
+    const selectedDifficulty = selectedLobbyDifficulty();
+    const difficultyLocked = Boolean(lobby && !host);
+    if (lobbyDifficultySelect) {
+      lobbyDifficultySelect.classList.toggle("is-disabled", difficultyLocked);
+    }
+    if (lobbyDifficultyToggle) {
+      lobbyDifficultyToggle.textContent = lobbyDifficultyDisplayText(selectedDifficulty);
+      lobbyDifficultyToggle.disabled = difficultyLocked;
+      if (difficultyLocked) {
+        setLobbyDifficultyMenuOpen(false);
+      }
+    }
+    if (lobbyDifficultyMenu) {
+      lobbyDifficultyMenu.querySelectorAll("[data-lobby-difficulty]").forEach((button) => {
+        const difficulty = button.dataset.lobbyDifficulty || defaultDifficultyId;
+        const selected = difficulty === selectedDifficulty;
+        button.classList.toggle("is-selected", selected);
+        button.setAttribute("aria-selected", selected ? "true" : "false");
+      });
+    }
+
+    lobbyPlayerSlots.textContent = "";
+    for (let index = 0; index < maxPlayers; index += 1) {
+      const slot = document.createElement("div");
+      const occupant = players[index];
+      slot.className = "lobby-slot";
+      slot.classList.toggle("is-filled", Boolean(occupant));
+
+      const name = document.createElement("strong");
+      const status = document.createElement("span");
+      name.textContent = occupant ? occupant.publicName || occupant.playerId : "Open slot";
+      status.textContent = occupant
+        ? occupant.playerId === (lobby && lobby.hostPlayerId)
+          ? "Host"
+          : occupant.playerId === player.id
+          ? "You"
+          : "Player"
+        : "Invite";
+      slot.append(name, status);
+
+      if (host && occupant && occupant.playerId !== player.id) {
+        const kick = document.createElement("button");
+        kick.className = "settings-panel__save-action settings-panel__save-action--danger";
+        kick.type = "button";
+        kick.dataset.lobbyKick = occupant.playerId;
+        kick.textContent = "Kick";
+        slot.append(kick);
+      }
+
+      lobbyPlayerSlots.append(slot);
+    }
+
+    renderLobbyPlayerSearch();
+    if (requestPending && requestAge > 4500) {
+      setLobbyStatus(
+        multiplayer.connected
+          ? "Lobby create request was sent, but the server did not answer. Restart the local server so the new backend code is running."
+          : "Connecting to multiplayer server...",
+        multiplayer.connected ? "error" : ""
+      );
+    }
+  }
+
+  async function refreshLobbyPlayerSearch() {
+    if (!window.fetch || !lobbyPlayerSearchList || !multiplayer.lobby) {
+      renderLobbyPlayerSearch();
+      return;
+    }
+
+    try {
+      const url =
+        "/api/players/search?playerId=" +
+        encodeURIComponent(player.id) +
+        "&q=" +
+        encodeURIComponent(lobbyPlayerSearch ? lobbyPlayerSearch.value || "" : "") +
+        "&friendsOnly=false&relayOnly=false";
+      const data = await fetchPersistentJson(url);
+      if (data && data.ok) {
+        multiplayer.players = Array.isArray(data.players) ? data.players : [];
+      }
+      renderLobbyPlayerSearch();
+    } catch {
+      renderLobbyPlayerSearch("Search unavailable.");
+    }
+  }
+
+  function renderLobbyPlayerSearch(message) {
+    if (!lobbyPlayerSearchList) {
+      return;
+    }
+    lobbyPlayerSearchList.textContent = "";
+
+    if (!multiplayer.lobby) {
+      const empty = document.createElement("p");
+      empty.className = "start-menu__empty";
+      empty.textContent = "Create or join a lobby first.";
+      lobbyPlayerSearchList.append(empty);
+      return;
+    }
+
+    const existing = new Set(lobbyPlayers().map((entry) => entry.playerId));
+    const players = (multiplayer.players || []).filter(
+      (candidate) => candidate.playerId && candidate.online && !existing.has(candidate.playerId)
+    );
+    if (message || !players.length) {
+      const empty = document.createElement("p");
+      empty.className = "start-menu__empty";
+      empty.textContent = message || "No online players found.";
+      lobbyPlayerSearchList.append(empty);
+      return;
+    }
+
+    for (const candidate of players.slice(0, 8)) {
+      const row = document.createElement("div");
+      const details = document.createElement("div");
+      const name = document.createElement("strong");
+      const status = document.createElement("span");
+      const invite = document.createElement("button");
+      row.className = "start-menu__row";
+      name.textContent = candidate.publicName || candidate.playerId;
+      status.textContent = "Online";
+      invite.className = "settings-panel__save-action";
+      invite.type = "button";
+      invite.dataset.lobbyInvite = candidate.playerId;
+      invite.textContent = "Invite";
+      invite.disabled = !candidate.online || !isLobbyHost();
+      details.append(name, status);
+      row.append(details, invite);
+      lobbyPlayerSearchList.append(row);
+    }
+  }
+
+  function updateLobbyCrazyGamesRoom(reason) {
+    if (!multiplayer.lobby) {
+      return;
+    }
+    multiplayer.roomId = multiplayer.lobby.code || multiplayer.lobby.id;
+    multiplayer.roomMode = "party-lobby";
+    multiplayer.roomPlayerCount = lobbyPlayers().length;
+    multiplayer.roomMaxPlayers = multiplayer.lobby.maxPlayers || crazyGamesRoomMaxPlayers;
+    multiplayer.roomJoinable = multiplayer.roomPlayerCount < multiplayer.roomMaxPlayers;
+    reportCrazyGamesRoom(reason || "lobby-state");
+  }
+
+  function isPartySessionActive() {
+    return Boolean(multiplayer.partySession && multiplayer.partySession.id);
+  }
+
+  function isPartyHost() {
+    return isPartySessionActive() && multiplayer.partyHostId === player.id;
+  }
+
+  function isSharedWorldFollower() {
+    return isPartySessionActive() && !isPartyHost();
+  }
+
+  function applyPartyStart(message) {
+    const session = message && message.session && typeof message.session === "object" ? message.session : message;
+    const difficulty = difficultyDefinitions[session.difficulty] ? session.difficulty : selectedLobbyDifficulty();
+    multiplayer.partySession = {
+      id: String(session.sessionId || session.id || ""),
+      lobbyId: String(session.lobbyId || ""),
+      players: Array.isArray(session.players) ? session.players.map(normalizeLobbyPlayer).filter(Boolean) : lobbyPlayers(),
+      pvpMode: String(session.pvpMode || "party-off")
+    };
+    multiplayer.partyMode = "party";
+    multiplayer.partyHostId = String(session.hostPlayerId || message.hostPlayerId || player.id);
+    multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
+    multiplayer.partyPlayerSnapshots.clear();
+    multiplayer.partyInputTimer = 0;
+    multiplayer.lobby = null;
+    multiplayer.lobbyInviteLink = "";
+    multiplayer.lobbyLoadedSnapshot = null;
+
+    applyDifficulty(difficulty);
+    resetLocalPlayerState();
+    resetLocalWorldState();
+    resetLifeStats();
+    resetDeathState();
+
+    if (message.snapshot && typeof message.snapshot === "object") {
+      if (message.snapshot.world) {
+        applyWorldSnapshot(message.snapshot.world);
+      }
+      if (isPartyHost() && message.snapshot.player) {
+        applyPlayerSnapshot(message.snapshot.player);
+      }
+    }
+
+    runState.active = true;
+    gamePaused = false;
+    persistence.saveTimer = persistenceSaveInterval;
+    persistence.pollTimer = persistencePollInterval;
+    setDifficultyScreenOpen(false);
+    resetMouseButtons();
+    lastTime = performance.now();
+    updateHud();
+    connectMultiplayer();
+    maybeNotifyText(isPartyHost() ? "Shared world started." : "Joined shared world.");
+    clearCrazyGamesRoomState("party-start");
+  }
+
+  function applyPartyHostChanged(message) {
+    multiplayer.partyHostId = String(message.hostPlayerId || "");
+    multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
+    maybeNotifyText(isPartyHost() ? "You are now host." : "Host migrated.");
+    if (message.snapshot && isPartyHost()) {
+      applyWorldSnapshot(message.snapshot.world);
+    }
+  }
+
+  function applyPartyWorldSnapshot(message) {
+    if (!isPartySessionActive() || isPartyHost()) {
+      return;
+    }
+    const snapshot = message.snapshot && typeof message.snapshot === "object" ? message.snapshot : message;
+    if (snapshot.world) {
+      applyWorldSnapshot(snapshot.world, { smoothParticles: true });
+    }
+    if (snapshot.player) {
+      applyPartyPlayerSnapshot({
+        fromPlayerId: multiplayer.partyHostId,
+        publicName: message.hostName || "Host",
+        snapshot: { player: snapshot.player }
+      });
+    }
+  }
+
+  function applyPartyPlayerSnapshot(message) {
+    const fromPlayerId = String(message.fromPlayerId || message.playerId || "");
+    if (!fromPlayerId || fromPlayerId === player.id) {
+      return;
+    }
+    const source = message.snapshot && typeof message.snapshot === "object" ? message.snapshot : message;
+    multiplayer.partyPlayerSnapshots.set(fromPlayerId, {
+      playerId: fromPlayerId,
+      snapshot: source,
+      receivedAt: performance.now()
+    });
+    const remote = getRemoteUniverse("solo:" + fromPlayerId);
+    remote.playerId = fromPlayerId;
+    remote.publicName = message.publicName || message.fromName || remote.publicName || fromPlayerId;
+    remote.partySessionId = multiplayer.partySession ? multiplayer.partySession.id : "";
+    remote.teamId = message.teamId || remote.teamId || "";
+    remote.transform = createRemoteTransform(0, 0, 1, "overlap", multiplayer.anomaly ? "anomaly" : "party");
+    remote.displayTransform = { ...remote.transform };
+    remote.snapshot = normalizeRemoteSnapshot({
+      player: source.player || source,
+      world: {
+        particles: [],
+        alienoids: [],
+        ufos: [],
+        rambots: [],
+        engineers: [],
+        teslas: [],
+        rockets: [],
+        fighters: [],
+        structures: [],
+        rivalProjectiles: []
+      }
+    });
+    remote.seenAt = performance.now();
+    addRemoteSnapshotFrame(remote, remote.snapshot, remote.seenAt / 1000);
+  }
+
+  function copyTextToClipboard(text, successMessage) {
+    const value = String(text || "");
+    if (!value) {
+      return;
+    }
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(value).then(function () {
+        setLobbyStatus(successMessage || "Copied.", "success");
+      }).catch(function () {
+        setLobbyStatus(value, "success");
+      });
+      return;
+    }
+    setLobbyStatus(value, "success");
+  }
+
   async function beginRunWithDifficulty(id) {
     if (runState.active) {
       return;
     }
+    multiplayer.partySession = null;
+    multiplayer.partyMode = "solo";
+    multiplayer.partyHostId = "";
+    multiplayer.partyPlayerSnapshots.clear();
+    multiplayer.partyInputTimer = 0;
+    multiplayer.anomaly = null;
     applyDifficulty(id);
     runState.active = true;
     resetLocalPlayerState();
@@ -2888,6 +3759,9 @@
     void refreshLeaderboard(true);
     await savePersistentState({ includeWorld: true });
     connectMultiplayer();
+    if (multiplayer.friendJoinsEnabled && !multiplayer.pendingJoinRoomId && !multiplayer.roomCreatePending) {
+      requestCrazyGamesRoomCreate("run-start");
+    }
     updateCrazyGamesGameplayState("run-start");
   }
 
@@ -3051,6 +3925,7 @@
     multiplayer.connected = false;
     multiplayer.reconnectTimer = 0;
     multiplayer.remoteUniverses.clear();
+    clearCrazyGamesRoomState("identity-changed");
 
     player.id = cleanPlayerId;
     player.name = "Player " + cleanPlayerId.slice(-4).toUpperCase();
@@ -3059,6 +3934,10 @@
       window.localStorage.setItem(playerIdStorageKey, cleanPlayerId);
     } catch {
       // Local storage can be unavailable in private or locked-down browser contexts.
+    }
+
+    if (runState.active && multiplayer.friendJoinsEnabled) {
+      requestCrazyGamesRoomCreate("identity-changed");
     }
   }
 
@@ -3070,6 +3949,520 @@
   function crazyGamesGameModule() {
     const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
     return sdk && sdk.game ? sdk.game : null;
+  }
+
+  function readMultiplayerPreference() {
+    try {
+      const stored = window.localStorage.getItem(multiplayerPreferenceStorageKey);
+      if (stored === "1") {
+        return true;
+      }
+      if (stored === "0") {
+        return false;
+      }
+    } catch {
+      // Local storage can be unavailable in private or locked-down browser contexts.
+    }
+    return !isCrazyGamesRuntime();
+  }
+
+  function writeMultiplayerPreference(enabled) {
+    try {
+      window.localStorage.setItem(multiplayerPreferenceStorageKey, enabled ? "1" : "0");
+    } catch {
+      // Preference persistence is best-effort.
+    }
+  }
+
+  function multiplayerStatusText() {
+    if (!multiplayer.friendJoinsEnabled) {
+      return "Multiplayer Off";
+    }
+    if (multiplayer.pendingJoinRoomId) {
+      return "Joining friend room";
+    }
+    if (multiplayer.roomCreatePending) {
+      return "Multiplayer On";
+    }
+    if (multiplayer.roomId && multiplayer.roomPlayerCount >= multiplayer.roomMaxPlayers) {
+      return "Room full";
+    }
+    if (multiplayer.roomId && multiplayer.roomJoinable) {
+      return "Multiplayer On: Friends can join";
+    }
+    return "Multiplayer On";
+  }
+
+  function updateMultiplayerModeUi() {
+    const enabled = Boolean(multiplayer.friendJoinsEnabled);
+    const text = multiplayerStatusText();
+    if (multiplayerToggleInput) {
+      multiplayerToggleInput.checked = enabled;
+    }
+    if (multiplayerStatus) {
+      multiplayerStatus.textContent = text;
+      multiplayerStatus.classList.toggle("is-success", enabled && text !== "Room full");
+      multiplayerStatus.classList.toggle("is-error", text === "Room full");
+    }
+    if (multiplayerPanelStatus) {
+      multiplayerPanelStatus.textContent = text;
+    }
+    if (multiplayerPanelToggle) {
+      multiplayerPanelToggle.textContent = enabled ? "Disable" : "Enable";
+    }
+    const panelRow = multiplayerPanelStatus ? multiplayerPanelStatus.closest(".social-panel__multiplayer") : null;
+    if (panelRow) {
+      panelRow.classList.toggle("is-on", enabled && text !== "Room full");
+      panelRow.classList.toggle("is-full", text === "Room full");
+    }
+  }
+
+  function sendMultiplayerOptIn() {
+    sendMultiplayer({
+      type: "multiplayer.optIn",
+      enabled: Boolean(multiplayer.friendJoinsEnabled)
+    });
+  }
+
+  function setFriendJoinsEnabled(enabled, reason, options) {
+    const nextEnabled = Boolean(enabled);
+    const changed = multiplayer.friendJoinsEnabled !== nextEnabled;
+    multiplayer.friendJoinsEnabled = nextEnabled;
+    if (!options || options.persist !== false) {
+      writeMultiplayerPreference(nextEnabled);
+    }
+
+    if (!nextEnabled) {
+      multiplayer.roomCreatePending = false;
+      multiplayer.pendingJoinRoomId = "";
+      if (multiplayer.connected) {
+        sendMultiplayerOptIn();
+        sendMultiplayer({ type: "overlap.leave" });
+      }
+      multiplayer.remoteUniverses.clear();
+      clearCrazyGamesRoomState(reason || "multiplayer-off");
+      if (!options || options.notify !== false) {
+        maybeNotifyText("Multiplayer Off");
+      }
+      updateMultiplayerModeUi();
+      if (multiplayer.panelOpen) {
+        renderPlayerSearch();
+      }
+      return;
+    }
+
+    connectMultiplayer();
+    if (multiplayer.connected) {
+      sendMultiplayerOptIn();
+    }
+    if (changed && (!options || options.notify !== false)) {
+      maybeNotifyText("Multiplayer On");
+    }
+    if (!runState.active && (!options || options.startRun !== false)) {
+      void beginRunWithDifficulty(defaultDifficultyId);
+    } else if (runState.active && !multiplayer.roomId && !multiplayer.pendingJoinRoomId) {
+      requestCrazyGamesRoomCreate(reason || "multiplayer-on");
+    }
+    updateMultiplayerModeUi();
+    if (multiplayer.panelOpen) {
+      renderPlayerSearch();
+    }
+  }
+
+  function sanitizeCrazyGamesRoomId(roomId) {
+    return String(roomId || "").trim().slice(0, 96);
+  }
+
+  function normalizeCrazyGamesRoomMode(mode) {
+    return String(mode || "world-overlap").trim().slice(0, 32) || "world-overlap";
+  }
+
+  function crazyGamesRoomInviteParams(roomId, mode) {
+    return {
+      roomId,
+      mode: normalizeCrazyGamesRoomMode(mode),
+      maxPlayers: String(crazyGamesRoomMaxPlayers)
+    };
+  }
+
+  function logCrazyGamesQa(event, details) {
+    if (!window.console || typeof console.info !== "function") {
+      return;
+    }
+
+    console.info("[CrazyGames QA] " + event, details || {});
+  }
+
+  function isCrazyGamesRoomApiAvailable() {
+    const game = crazyGamesGameModule();
+    return Boolean(game && typeof game.updateRoom === "function");
+  }
+
+  function callCrazyGamesRoomMethod(methodName, payload, reason) {
+    const game = crazyGamesGameModule();
+    if (!game || typeof game[methodName] !== "function") {
+      return false;
+    }
+
+    try {
+      const result = payload === undefined ? game[methodName]() : game[methodName](payload);
+      if (result && typeof result.catch === "function") {
+        result.catch(function (error) {
+          console.warn("CrazyGames room method failed.", { methodName, reason, error });
+        });
+      }
+      return true;
+    } catch (error) {
+      console.warn("CrazyGames room method unavailable.", { methodName, reason, error });
+      return false;
+    }
+  }
+
+  function storeCrazyGamesInviteLink(inviteKey, link, inviteParams, reason) {
+    if (crazyGamesState.lastInviteLinkKey !== inviteKey) {
+      return;
+    }
+
+    crazyGamesState.inviteLinkPending = false;
+    crazyGamesState.inviteLink = typeof link === "string" ? link : String(link || "");
+    if (normalizeCrazyGamesRoomMode(inviteParams.mode) === "party-lobby") {
+      multiplayer.lobbyInviteLink = crazyGamesState.inviteLink;
+      renderLobby();
+    }
+    logCrazyGamesQa("invite link received", {
+      reason,
+      roomId: inviteParams.roomId,
+      inviteParams,
+      hasInviteLink: Boolean(crazyGamesState.inviteLink)
+    });
+  }
+
+  function clearCrazyGamesInviteLinkState() {
+    crazyGamesState.lastInviteLinkKey = "";
+    crazyGamesState.inviteLinkPending = false;
+    crazyGamesState.inviteLink = "";
+    multiplayer.lobbyInviteLink = "";
+  }
+
+  function requestCrazyGamesInviteLink(inviteParams, reason) {
+    const game = crazyGamesGameModule();
+    if (!game || typeof game.inviteLink !== "function") {
+      return false;
+    }
+
+    const cleanInviteParams = crazyGamesRoomInviteParams(inviteParams.roomId, inviteParams.mode);
+    const inviteKey = JSON.stringify(cleanInviteParams);
+    if (crazyGamesState.lastInviteLinkKey === inviteKey && (crazyGamesState.inviteLinkPending || crazyGamesState.inviteLink)) {
+      return true;
+    }
+
+    crazyGamesState.lastInviteLinkKey = inviteKey;
+    crazyGamesState.inviteLinkPending = true;
+    crazyGamesState.inviteLink = "";
+    logCrazyGamesQa("invite link requested", {
+      reason,
+      roomId: cleanInviteParams.roomId,
+      inviteParams: cleanInviteParams
+    });
+
+    try {
+      const result = game.inviteLink(cleanInviteParams);
+      if (result && typeof result.then === "function") {
+        result.then(function (link) {
+          storeCrazyGamesInviteLink(inviteKey, link, cleanInviteParams, reason);
+        }).catch(function (error) {
+          if (crazyGamesState.lastInviteLinkKey === inviteKey) {
+            crazyGamesState.inviteLinkPending = false;
+          }
+          console.warn("CrazyGames invite link failed.", { reason, inviteParams: cleanInviteParams, error });
+        });
+      } else {
+        storeCrazyGamesInviteLink(inviteKey, result, cleanInviteParams, reason);
+      }
+      return true;
+    } catch (error) {
+      if (crazyGamesState.lastInviteLinkKey === inviteKey) {
+        crazyGamesState.inviteLinkPending = false;
+      }
+      console.warn("CrazyGames invite link unavailable.", { reason, inviteParams: cleanInviteParams, error });
+      return false;
+    }
+  }
+
+  function reportCrazyGamesRoom(reason) {
+    if (!isCrazyGamesRuntime()) {
+      return;
+    }
+    if (!multiplayer.friendJoinsEnabled) {
+      leaveCrazyGamesRoom(reason || "multiplayer-off");
+      return;
+    }
+
+    const roomId = sanitizeCrazyGamesRoomId(multiplayer.roomId);
+    if (!roomId) {
+      leaveCrazyGamesRoom(reason);
+      return;
+    }
+
+    const mode = normalizeCrazyGamesRoomMode(multiplayer.roomMode);
+    const isJoinable = Boolean(multiplayer.roomJoinable && multiplayer.roomPlayerCount < multiplayer.roomMaxPlayers);
+    const payload = {
+      roomId,
+      isJoinable,
+      inviteParams: crazyGamesRoomInviteParams(roomId, mode)
+    };
+    const reportKey = JSON.stringify(payload);
+    if (crazyGamesState.lastRoomReport === reportKey) {
+      if (isJoinable) {
+        requestCrazyGamesInviteLink(payload.inviteParams, reason);
+      } else {
+        clearCrazyGamesInviteLinkState();
+      }
+      return;
+    }
+
+    crazyGamesState.lastRoomReport = reportKey;
+    const inviteLinkRequested = isJoinable ? requestCrazyGamesInviteLink(payload.inviteParams, reason) : false;
+    if (!isJoinable) {
+      clearCrazyGamesInviteLinkState();
+    }
+
+    if (!callCrazyGamesRoomMethod("updateRoom", payload, reason)) {
+      const game = crazyGamesGameModule();
+      if (game && typeof game.showInviteButton === "function" && isJoinable && !inviteLinkRequested) {
+        callCrazyGamesRoomMethod("showInviteButton", payload.inviteParams, reason);
+      } else if (game && typeof game.hideInviteButton === "function" && !isJoinable) {
+        callCrazyGamesRoomMethod("hideInviteButton", undefined, reason);
+      }
+    }
+  }
+
+  function leaveCrazyGamesRoom(reason) {
+    if (!crazyGamesState.lastRoomReport) {
+      return;
+    }
+
+    crazyGamesState.lastRoomReport = "";
+    clearCrazyGamesInviteLinkState();
+    if (!callCrazyGamesRoomMethod("leftRoom", undefined, reason)) {
+      callCrazyGamesRoomMethod("hideInviteButton", undefined, reason);
+    }
+  }
+
+  function applyCrazyGamesRoomState(message) {
+    const roomId = sanitizeCrazyGamesRoomId(message && message.roomId);
+    if (!roomId) {
+      clearCrazyGamesRoomState("missing-room-id");
+      return;
+    }
+
+    multiplayer.roomId = roomId;
+    multiplayer.roomMode = normalizeCrazyGamesRoomMode(message.mode);
+    multiplayer.roomMaxPlayers = Math.max(1, Math.floor(finiteOr(message.maxPlayers, crazyGamesRoomMaxPlayers)));
+    multiplayer.roomPlayerCount = Math.max(0, Math.floor(finiteOr(message.playerCount, 1)));
+    multiplayer.roomJoinable = message.isJoinable !== false && multiplayer.roomPlayerCount < multiplayer.roomMaxPlayers;
+    if (multiplayer.joinRequestedRoomId === roomId) {
+      multiplayer.joinRequestedRoomId = "";
+      logCrazyGamesQa("roomId joined", {
+        roomId,
+        mode: multiplayer.roomMode,
+        playerCount: multiplayer.roomPlayerCount,
+        maxPlayers: multiplayer.roomMaxPlayers
+      });
+    }
+    reportCrazyGamesRoom("room-state");
+    updateMultiplayerModeUi();
+  }
+
+  function clearCrazyGamesRoomState(reason) {
+    multiplayer.roomId = "";
+    multiplayer.roomMode = "world-overlap";
+    multiplayer.roomPlayerCount = 0;
+    multiplayer.roomMaxPlayers = crazyGamesRoomMaxPlayers;
+    multiplayer.roomJoinable = false;
+    multiplayer.joinRequestedRoomId = "";
+    leaveCrazyGamesRoom(reason);
+    updateMultiplayerModeUi();
+  }
+
+  function requestCrazyGamesRoomCreate(reason) {
+    if (!multiplayer.friendJoinsEnabled || !multiplayer.enabled || !player.id) {
+      return;
+    }
+
+    multiplayer.roomCreatePending = true;
+    multiplayer.pendingJoinRoomId = "";
+    connectMultiplayer();
+    flushMultiplayerRoomRequests(reason || "create-room");
+    updateMultiplayerModeUi();
+  }
+
+  function requestCrazyGamesRoomJoin(roomId, mode, reason) {
+    const cleanRoomId = sanitizeCrazyGamesRoomId(roomId);
+    if (!cleanRoomId || !multiplayer.enabled || !player.id) {
+      return;
+    }
+
+    multiplayer.pendingJoinRoomId = cleanRoomId;
+    multiplayer.pendingJoinMode = normalizeCrazyGamesRoomMode(mode);
+    multiplayer.joinRequestedRoomId = cleanRoomId;
+    multiplayer.roomCreatePending = false;
+    connectMultiplayer();
+    flushMultiplayerRoomRequests(reason || "join-room");
+    updateMultiplayerModeUi();
+  }
+
+  function flushMultiplayerRoomRequests(reason) {
+    if (!multiplayer.connected) {
+      return;
+    }
+
+    if (multiplayer.pendingJoinRoomId) {
+      const roomId = multiplayer.pendingJoinRoomId;
+      const mode = multiplayer.pendingJoinMode;
+      if (sendMultiplayer({ type: "room.join", roomId, mode })) {
+        multiplayer.pendingJoinRoomId = "";
+      }
+      return;
+    }
+
+    if (multiplayer.friendJoinsEnabled && multiplayer.roomCreatePending) {
+      if (sendMultiplayer({ type: "room.create", mode: "world-overlap", reason: reason || "room-create" })) {
+        multiplayer.roomCreatePending = false;
+        updateMultiplayerModeUi();
+      }
+    }
+  }
+
+  function flushLobbyRequests(reason) {
+    if (!multiplayer.connected) {
+      return;
+    }
+
+    if (multiplayer.lobbyJoinPending) {
+      const code = multiplayer.lobbyJoinPending;
+      if (sendMultiplayer({ type: "lobby.join", code, reason: reason || "lobby-join" })) {
+        multiplayer.lobbyJoinPending = "";
+      }
+      return;
+    }
+
+    if (multiplayer.lobbyCreatePending) {
+      if (sendMultiplayer({ type: "lobby.create", difficulty: selectedLobbyDifficulty(), reason: reason || "lobby-create" })) {
+        multiplayer.lobbyCreatePending = false;
+      }
+    }
+  }
+
+  function handleCrazyGamesJoinParams(inviteParams, reason) {
+    const params = inviteParams && typeof inviteParams === "object" ? inviteParams : {};
+    const roomId = sanitizeCrazyGamesRoomId(params.roomId || params.roomName);
+    if (!roomId) {
+      return false;
+    }
+
+    logCrazyGamesQa("invite params used", {
+      reason,
+      roomId,
+      inviteParams: params
+    });
+    if (normalizeCrazyGamesRoomMode(params.mode) === "party-lobby") {
+      joinLobby(roomId);
+      maybeNotifyText("Joined lobby");
+      return true;
+    }
+    setFriendJoinsEnabled(true, reason || "invite-join", { persist: true, notify: false, startRun: false });
+    if (!runState.active) {
+      void beginRunWithDifficulty(defaultDifficultyId);
+    }
+    requestCrazyGamesRoomJoin(roomId, params.mode || "world-overlap", reason);
+    maybeNotifyText("Joined friend room");
+    return true;
+  }
+
+  async function readCrazyGamesInviteParams(game) {
+    if (!game) {
+      return null;
+    }
+
+    if (game.inviteParams && typeof game.inviteParams === "object") {
+      return game.inviteParams;
+    }
+
+    if (typeof game.getInviteParam !== "function") {
+      return null;
+    }
+
+    const params = {};
+    for (const key of ["roomId", "roomName", "mode", "maxPlayers"]) {
+      try {
+        const value = await game.getInviteParam(key);
+        if (value != null && value !== "") {
+          params[key] = value;
+        }
+      } catch {
+        // Missing invite params are normal on ordinary starts.
+      }
+    }
+    return Object.keys(params).length ? params : null;
+  }
+
+  async function refreshCrazyGamesVisibleUser() {
+    const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
+    if (!sdk || !sdk.user || typeof sdk.user.getUser !== "function") {
+      return;
+    }
+
+    try {
+      const user = await sdk.user.getUser();
+      crazyGamesState.user = user && typeof user === "object" ? user : null;
+      if (crazyGamesState.user && crazyGamesState.user.username) {
+        player.name = sanitizePlayerName(crazyGamesState.user.username) || player.name;
+        if (publicNameValue) {
+          publicNameValue.textContent = player.name;
+        }
+      }
+    } catch {
+      crazyGamesState.user = null;
+    }
+  }
+
+  function configureCrazyGamesMultiplayer(game) {
+    if (!game || crazyGamesState.roomJoinListener) {
+      return;
+    }
+
+    crazyGamesState.instantMultiplayer = Boolean(game.isInstantMultiplayer || game.isInstantJoin);
+    crazyGamesState.roomJoinListener = function (inviteParams) {
+      handleCrazyGamesJoinParams(inviteParams, "join-listener");
+    };
+
+    if (typeof game.addJoinRoomListener === "function") {
+      try {
+        game.addJoinRoomListener(crazyGamesState.roomJoinListener);
+      } catch (error) {
+        console.warn("CrazyGames room join listener unavailable.", error);
+      }
+    }
+  }
+
+  async function handleCrazyGamesStartupMultiplayer(game) {
+    if (!game || crazyGamesState.initialInviteHandled) {
+      return;
+    }
+
+    crazyGamesState.initialInviteHandled = true;
+    const inviteParams = await readCrazyGamesInviteParams(game);
+    if (handleCrazyGamesJoinParams(inviteParams, "startup-invite")) {
+      return;
+    }
+
+    if (crazyGamesState.instantMultiplayer && !crazyGamesState.instantMultiplayerHandled) {
+      crazyGamesState.instantMultiplayerHandled = true;
+      setStartMenuView("lobby", { push: false });
+      setDifficultyScreenOpen(true);
+      createLobby();
+    }
   }
 
   function isDifficultyScreenOpen() {
@@ -3136,6 +4529,7 @@
 
         if (sdk.game) {
           applyCrazyGamesSettings(sdk.game.settings);
+          configureCrazyGamesMultiplayer(sdk.game);
           if (typeof sdk.game.addSettingsChangeListener === "function") {
             crazyGamesState.settingsListener = function (newSettings) {
               applyCrazyGamesSettings(newSettings);
@@ -3152,6 +4546,9 @@
               crazyGamesState.authAvailable = true;
             }
             updateAccountUi();
+          } else if (typeof sdk.user.isUserAccountAvailable === "boolean") {
+            crazyGamesState.authAvailable = sdk.user.isUserAccountAvailable;
+            updateAccountUi();
           }
           crazyGamesState.authListener = function () {
             void authenticateWithCrazyGames();
@@ -3159,7 +4556,9 @@
           sdk.user.addAuthListener(crazyGamesState.authListener);
         }
 
+        await refreshCrazyGamesVisibleUser();
         await authenticateWithCrazyGames();
+        await handleCrazyGamesStartupMultiplayer(sdk.game);
       } catch (error) {
         crazyGamesState.authAvailable = false;
         updateAccountUi();
@@ -3197,6 +4596,7 @@
         })
       });
       applyAccountSession(data);
+      await refreshCrazyGamesVisibleUser();
       await refreshAccountSaves();
       setManualSaveStatus("Signed in with CrazyGames.", "success");
     } catch (error) {
@@ -3253,6 +4653,7 @@
 
   function renderSavedGames() {
     if (!savedGameList) {
+      renderStartSavedGames();
       return;
     }
 
@@ -3265,6 +4666,7 @@
         ? "Guest progress autosaves on this device. Sign in with CrazyGames for named saves."
         : "Log in to save and load worlds.";
       savedGameList.append(empty);
+      renderStartSavedGames();
       return;
     }
 
@@ -3273,6 +4675,7 @@
       loading.className = "settings-panel__save-empty";
       loading.textContent = "Loading saves...";
       savedGameList.append(loading);
+      renderStartSavedGames();
       return;
     }
 
@@ -3281,6 +4684,7 @@
       empty.className = "settings-panel__save-empty";
       empty.textContent = "No saved worlds yet.";
       savedGameList.append(empty);
+      renderStartSavedGames();
       return;
     }
 
@@ -3300,6 +4704,7 @@
       row.append(details, button);
       savedGameList.append(row);
     }
+    renderStartSavedGames();
   }
 
   async function bootstrapAccountSession() {
@@ -3346,6 +4751,12 @@
     accountState.username = sanitizeAccountUsername(account.username || accountState.username);
     accountState.crazyGamesLinked = account.crazyGamesLinked === true;
     adoptLinkedPlayerId(account.linkedPlayerId);
+    if (account.crazyGamesUsername) {
+      player.name = sanitizePlayerName(account.crazyGamesUsername) || player.name;
+      if (publicNameValue) {
+        publicNameValue.textContent = player.name;
+      }
+    }
     writeStoredAccountSession();
     updateAccountUi();
   }
@@ -3501,6 +4912,11 @@
   async function saveManualGame() {
     const name = sanitizeManualSaveName(saveGameNameInput && saveGameNameInput.value);
 
+    if (isPartySessionActive() && !isPartyHost()) {
+      setManualSaveStatus("Only the host can save this shared world.", "error");
+      return false;
+    }
+
     if (!isAccountSignedIn()) {
       if (isCrazyGamesRuntime()) {
         return await saveGuestProgress();
@@ -3542,6 +4958,11 @@
   }
 
   async function saveGuestProgress() {
+    if (isPartySessionActive() && !isPartyHost()) {
+      setManualSaveStatus("Only the host can save this shared world.", "error");
+      return false;
+    }
+
     if (!runState.active || deathState.active) {
       setManualSaveStatus("Start a live run before saving.", "error");
       return false;
@@ -3630,6 +5051,7 @@
       multiplayer.profile = null;
       multiplayer.universeId = "";
       multiplayer.remoteUniverses.clear();
+      clearCrazyGamesRoomState("restart-game");
 
       clearStoredNetworkIdentity();
       runState.active = false;
@@ -3643,6 +5065,7 @@
       persistence.pollTimer = persistencePollInterval;
       setRestartGameConfirmOpen(false);
       setSettingsOpen(false);
+      setStartMenuView("main", { push: false });
       setDifficultyScreenOpen(true);
       resetMouseButtons();
       lastTime = performance.now();
@@ -4127,6 +5550,10 @@
   }
 
   function resetDeathLeaderboardForm() {
+    const multiplayerDeath = isPartySessionActive();
+    if (deathLeaderboardForm) {
+      deathLeaderboardForm.hidden = multiplayerDeath;
+    }
     if (deathRunNameInput) {
       deathRunNameInput.disabled = false;
       deathRunNameInput.value = sanitizePlayerName(player.name) || "Player";
@@ -4138,6 +5565,9 @@
     }
     if (deathLeaderboardStatus) {
       deathLeaderboardStatus.textContent = "";
+    }
+    if (playAgainButton) {
+      playAgainButton.textContent = multiplayerDeath ? "Respawn" : "Play again";
     }
   }
 
@@ -4192,6 +5622,9 @@
     if (deathState.active || player.health <= 0) {
       return false;
     }
+    if (multiplayer.partyRespawnInvulnerableTimer > 0) {
+      return false;
+    }
 
     const amount = Math.max(0, finiteOr(damage, 0));
     if (amount <= 0) {
@@ -4235,6 +5668,9 @@
     deathState.cause = cause || "Hull failure";
     deathState.stats = collectDeathStats();
     updateCrazyGamesGameplayState("death");
+    if (!isPartySessionActive()) {
+      clearCrazyGamesRoomState("death");
+    }
     resetDeathLeaderboardForm();
     playSound("death", { throttle: 0.8 });
     keys.clear();
@@ -4357,6 +5793,7 @@
       persistence.saveTimer = persistenceSaveInterval;
       persistence.pollTimer = persistencePollInterval;
       resetDeathState();
+      setStartMenuView("main", { push: false });
       setDifficultyScreenOpen(true);
       void refreshLeaderboard(true);
       updateHud();
@@ -4372,8 +5809,46 @@
     }
   }
 
+  function respawnMultiplayerPlayer() {
+    if (!isPartySessionActive() || deathState.resetInFlight) {
+      return;
+    }
+
+    deathState.resetInFlight = true;
+    const spawnBody = findNearestProgressBody();
+    if (spawnBody) {
+      const angle = Math.atan2(player.y - spawnBody.y, player.x - spawnBody.x) || 0;
+      player.x = spawnBody.x + Math.cos(angle) * (spawnBody.radius + player.radius + 18);
+      player.y = spawnBody.y + Math.sin(angle) * (spawnBody.radius + player.radius + 18);
+    } else {
+      player.x += randomRange(-180, 180);
+      player.y += randomRange(-180, 180);
+    }
+    player.vx = 0;
+    player.vy = 0;
+    player.health = player.maxHealth;
+    player.energy = player.maxEnergy;
+    player.hitCooldown = 0;
+    player.hitFlash = 0;
+    player.landed = null;
+    multiplayer.partyRespawnInvulnerableTimer = 3.5;
+    resetDeathState();
+    deathState.resetInFlight = false;
+    lastTime = performance.now();
+    sendMultiplayer({
+      type: "party.respawn",
+      snapshot: {
+        player: buildPersistentPayload(false).player
+      }
+    });
+    maybeNotifyText("Respawned.");
+  }
+
   function updatePersistence(dt) {
     if (!persistence.enabled || persistence.resetInFlight || deathState.active || !runState.active) {
+      return;
+    }
+    if (isPartySessionActive() && !isPartyHost()) {
       return;
     }
 
@@ -4433,7 +5908,7 @@
   }
 
   function openRelayContacts() {
-    if (!hasCommunicationRelay()) {
+    if (!isCrazyGamesRuntime() && !hasCommunicationRelay()) {
       maybeNotifyText("Build a communication relay first.");
       return;
     }
@@ -4448,7 +5923,7 @@
 
     const query = playerSearch ? playerSearch.value : "";
     const friendsOnly = friendsOnlyFilter && friendsOnlyFilter.checked;
-    const relayOnly = multiplayer.socialMode === "relay";
+    const relayOnly = multiplayer.socialMode === "relay" && !isCrazyGamesRuntime();
 
     try {
       const url =
@@ -4492,7 +5967,7 @@
       const name = document.createElement("strong");
       const status = document.createElement("span");
       const action = document.createElement("button");
-      const hasRelay = Boolean(candidate.hasCommunicationRelay);
+      const hasRelay = isCrazyGamesRuntime() || Boolean(candidate.hasCommunicationRelay);
 
       row.className = "social-row";
       main.className = "social-row__main";
@@ -4500,7 +5975,11 @@
       status.className = "social-row__status";
       name.textContent = candidate.publicName || candidate.playerId;
       if (multiplayer.socialMode === "relay") {
-        status.textContent = candidate.friend ? "Friend relay online" : "Relay online";
+        status.textContent = !multiplayer.friendJoinsEnabled
+          ? "Multiplayer Off"
+          : candidate.friend
+          ? "Friend relay online"
+          : "Relay online";
       } else {
         status.textContent = candidate.online
           ? candidate.friend
@@ -4521,7 +6000,7 @@
         action.dataset.action = "invite";
         action.textContent = candidate.friend ? "Invite" : "Link";
         action.title = candidate.friend ? "Invite friend" : "Link as friends";
-        action.disabled = !candidate.online || !hasRelay || !hasCommunicationRelay();
+        action.disabled = !multiplayer.friendJoinsEnabled || !candidate.online || !hasRelay || (!isCrazyGamesRuntime() && !hasCommunicationRelay());
       }
 
       main.append(name, status);
@@ -4664,6 +6143,10 @@
 
   function inviteFriend(targetPlayerId) {
     if (!targetPlayerId) {
+      return;
+    }
+    if (!multiplayer.friendJoinsEnabled) {
+      maybeNotifyText("Multiplayer Off");
       return;
     }
 
@@ -5116,8 +6599,12 @@
       sendMultiplayer({
         type: "hello",
         playerId: player.id,
+        multiplayerOptIn: Boolean(multiplayer.friendJoinsEnabled),
+        relayBypass: isCrazyGamesRuntime(),
         snapshot: buildRealtimeSnapshot()
       });
+      flushMultiplayerRoomRequests("socket-open");
+      flushLobbyRequests("socket-open");
     });
 
     socket.addEventListener("message", function (event) {
@@ -5152,6 +6639,13 @@
     multiplayer.socket = null;
     multiplayer.reconnectTimer = multiplayer.reconnectDelay;
     multiplayer.reconnectDelay = Math.min(12, multiplayer.reconnectDelay * 1.5);
+    if (multiplayer.lobby && multiplayer.lobby.code) {
+      multiplayer.lobbyJoinPending = multiplayer.lobby.code;
+    }
+    if (multiplayer.roomId) {
+      multiplayer.roomJoinable = false;
+      reportCrazyGamesRoom("socket-closed");
+    }
   }
 
   function sendMultiplayer(message) {
@@ -5189,6 +6683,8 @@
       if (multiplayer.panelOpen) {
         renderPlayerSearch();
       }
+      flushMultiplayerRoomRequests("bootstrap");
+      flushLobbyRequests("bootstrap");
       return;
     }
 
@@ -5206,7 +6702,133 @@
       return;
     }
 
+    if (message.type === "room.state") {
+      applyCrazyGamesRoomState(message);
+      return;
+    }
+
+    if (message.type === "room.player.joined") {
+      maybeNotifyText((message.publicName || "A player") + " joined.");
+      return;
+    }
+
+    if (message.type === "room.join.failed") {
+      multiplayer.pendingJoinRoomId = "";
+      multiplayer.joinRequestedRoomId = "";
+      multiplayer.roomCreatePending = false;
+      if (multiplayer.roomId === message.roomId) {
+        clearCrazyGamesRoomState("join-failed");
+      }
+      maybeNotifyText(message.message || "Multiplayer room is unavailable.");
+      return;
+    }
+
+    if (message.type === "lobby.state") {
+      applyLobbyState(message);
+      return;
+    }
+
+    if (message.type === "lobby.join.failed") {
+      multiplayer.lobbyCreatePending = false;
+      multiplayer.lobbyJoinPending = "";
+      setLobbyStatus(message.message || "Lobby unavailable.", "error");
+      maybeNotifyText(message.message || "Lobby unavailable.");
+      setStartMenuView("multiplayer", { push: false });
+      return;
+    }
+
+    if (message.type === "lobby.invite") {
+      if (!multiplayer.friendJoinsEnabled) {
+        maybeNotifyText("Multiplayer Off");
+        return;
+      }
+      multiplayer.pendingSignal = {
+        kind: "lobby",
+        lobbyId: message.lobbyId,
+        code: message.code,
+        fromPlayerId: message.fromPlayerId,
+        fromName: message.fromName
+      };
+      if (signalName) {
+        signalName.textContent = (message.fromName || "Player") + " invited you";
+      }
+      if (investigateSignal) {
+        investigateSignal.textContent = "Join";
+      }
+      if (avoidSignal) {
+        avoidSignal.textContent = "Decline";
+      }
+      if (signalPanel) {
+        signalPanel.classList.add("is-open");
+        signalPanel.setAttribute("aria-hidden", "false");
+      }
+      return;
+    }
+
+    if (message.type === "lobby.kicked") {
+      multiplayer.lobby = null;
+      multiplayer.lobbyInviteLink = "";
+      setStartMenuView("multiplayer", { push: false });
+      maybeNotifyText(message.message || "Removed from lobby.");
+      return;
+    }
+
+    if (message.type === "party.start") {
+      applyPartyStart(message);
+      return;
+    }
+
+    if (message.type === "party.host.changed") {
+      applyPartyHostChanged(message);
+      return;
+    }
+
+    if (message.type === "party.world.snapshot") {
+      applyPartyWorldSnapshot(message);
+      return;
+    }
+
+    if (message.type === "party.player.snapshot") {
+      applyPartyPlayerSnapshot(message);
+      return;
+    }
+
+    if (message.type === "player.respawn") {
+      applyPartyPlayerSnapshot(message);
+      return;
+    }
+
+    if (message.type === "anomaly.ready") {
+      showAnomalyPrompt(message);
+      return;
+    }
+
+    if (message.type === "anomaly.start") {
+      multiplayer.anomaly = {
+        id: message.encounterId || "",
+        teamId: message.teamId || "",
+        phase: "overlap",
+        endsAt: finiteOr(message.endsAt, Date.now() + 90000)
+      };
+      maybeNotifyText("Anomaly investigated.");
+      return;
+    }
+
+    if (message.type === "anomaly.end") {
+      multiplayer.anomaly = null;
+      maybeNotifyText("Anomaly separated.");
+      return;
+    }
+
     if (message.type === "signal.detected") {
+      if (!multiplayer.friendJoinsEnabled) {
+        sendMultiplayer({
+          type: "signal.choice",
+          signalId: message.signalId,
+          choice: "avoid"
+        });
+        return;
+      }
       showSignalPrompt(message);
       return;
     }
@@ -5241,6 +6863,10 @@
     }
 
     if (message.type === "friend.invite") {
+      if (!multiplayer.friendJoinsEnabled) {
+        maybeNotifyText("Multiplayer Off");
+        return;
+      }
       showFriendInvite(message);
       return;
     }
@@ -5357,6 +6983,27 @@
     }
   }
 
+  function showAnomalyPrompt(message) {
+    multiplayer.pendingSignal = {
+      kind: "anomaly",
+      encounterId: message.encounterId,
+      otherPartySize: Math.max(1, Math.floor(finiteOr(message.otherPartySize, 1)))
+    };
+    if (signalName) {
+      signalName.textContent = "Equal party detected";
+    }
+    if (investigateSignal) {
+      investigateSignal.textContent = "Investigate";
+    }
+    if (avoidSignal) {
+      avoidSignal.textContent = "Flee";
+    }
+    if (signalPanel) {
+      signalPanel.classList.add("is-open");
+      signalPanel.setAttribute("aria-hidden", "false");
+    }
+  }
+
   function hideSignalPrompt() {
     multiplayer.pendingSignal = null;
     if (signalPanel) {
@@ -5378,6 +7025,24 @@
           fromPlayerId: pending.fromPlayerId
         });
       }
+      hideSignalPrompt();
+      return;
+    }
+
+    if (pending.kind === "lobby") {
+      if (choice === "investigate") {
+        joinLobby(pending.code || pending.lobbyId);
+      }
+      hideSignalPrompt();
+      return;
+    }
+
+    if (pending.kind === "anomaly") {
+      sendMultiplayer({
+        type: "anomaly.choice",
+        encounterId: pending.encounterId,
+        choice
+      });
       hideSignalPrompt();
       return;
     }
@@ -5934,6 +7599,50 @@
     return Boolean(playerId && multiplayer.truces.has(playerId));
   }
 
+  function partyPlayerIds() {
+    return new Set(
+      multiplayer.partySession && Array.isArray(multiplayer.partySession.players)
+        ? multiplayer.partySession.players.map((entry) => entry.playerId).filter(Boolean)
+        : []
+    );
+  }
+
+  function isFriendlyPartyPlayer(playerId) {
+    if (!playerId || !isPartySessionActive()) {
+      return false;
+    }
+    return partyPlayerIds().has(playerId);
+  }
+
+  function canDamageRemotePlayer(remote) {
+    if (!remote || !remote.playerId) {
+      return false;
+    }
+    if (isTrucedWith(remote.playerId)) {
+      return false;
+    }
+    if (multiplayer.anomaly && remote.teamId && multiplayer.anomaly.teamId) {
+      return remote.teamId !== multiplayer.anomaly.teamId;
+    }
+    if (isFriendlyPartyPlayer(remote.playerId)) {
+      return false;
+    }
+    return true;
+  }
+
+  function canReceiveDamageFromPlayer(fromPlayerId, fromTeamId) {
+    if (!fromPlayerId) {
+      return true;
+    }
+    if (isTrucedWith(fromPlayerId)) {
+      return false;
+    }
+    if (multiplayer.anomaly && fromTeamId && multiplayer.anomaly.teamId) {
+      return fromTeamId !== multiplayer.anomaly.teamId;
+    }
+    return !isFriendlyPartyPlayer(fromPlayerId);
+  }
+
   function buildRealtimeSnapshot() {
     return buildPersistentPayload(true);
   }
@@ -5943,6 +7652,8 @@
       return;
     }
 
+    multiplayer.partyRespawnInvulnerableTimer = Math.max(0, multiplayer.partyRespawnInvulnerableTimer - dt);
+
     if (!multiplayer.socket && multiplayer.reconnectTimer <= 0) {
       connectMultiplayer();
     }
@@ -5951,13 +7662,35 @@
       multiplayer.reconnectTimer -= dt;
     }
 
+    multiplayer.partyInputTimer -= dt;
+    if (multiplayer.connected && isPartySessionActive() && multiplayer.partyInputTimer <= 0) {
+      multiplayer.partyInputTimer = partyInputInterval;
+      const snapshot = buildPersistentPayload(false);
+      sendMultiplayer({
+        type: "party.input",
+        snapshot: {
+          player: snapshot.player
+        }
+      });
+    }
+
     multiplayer.snapshotTimer -= dt;
     if (multiplayer.connected && multiplayer.snapshotTimer <= 0) {
-      multiplayer.snapshotTimer = multiplayerSnapshotInterval;
+      multiplayer.snapshotTimer = isPartyHost() ? partyWorldSnapshotInterval : multiplayerSnapshotInterval;
+      const snapshot = isSharedWorldFollower() ? buildPersistentPayload(false) : buildRealtimeSnapshot();
       sendMultiplayer({
         type: "input",
-        snapshot: buildRealtimeSnapshot()
+        multiplayerOptIn: Boolean(multiplayer.friendJoinsEnabled),
+        snapshot
       });
+      if (isPartySessionActive()) {
+        if (isPartyHost()) {
+          sendMultiplayer({
+            type: "party.world.snapshot",
+            snapshot
+          });
+        }
+      }
     }
 
     updateRemoteVisualTransforms(dt);
@@ -5966,17 +7699,23 @@
     pruneRemoteUniverses();
   }
 
-  function createRemoteTransform(offsetX, offsetY, alpha, phase) {
+  function createRemoteTransform(offsetX, offsetY, alpha, phase, mode) {
     return {
       offsetX: finiteOr(offsetX, 0),
       offsetY: finiteOr(offsetY, 0),
       alpha: clamp(finiteOr(alpha, 0), 0, 1),
-      phase: phase || "approach"
+      phase: phase || "approach",
+      mode: mode || "random"
     };
   }
 
   function displayTransformFor(remote) {
     return remote.displayTransform || remote.transform || createRemoteTransform(0, 0, 0, "approach");
+  }
+
+  function isPermanentRemoteOverlap(remote) {
+    const transform = displayTransformFor(remote);
+    return transform.mode === "world-overlap" || transform.mode === "friend" || transform.mode === "party";
   }
 
   function displaySnapshotFor(remote) {
@@ -5995,13 +7734,15 @@
             remote.transform.offsetX,
             remote.transform.offsetY,
             remote.transform.alpha,
-            remote.transform.phase
+            remote.transform.phase,
+            remote.transform.mode
           );
         } else {
           remote.displayTransform.offsetX += (remote.transform.offsetX - remote.displayTransform.offsetX) * positionBlend;
           remote.displayTransform.offsetY += (remote.transform.offsetY - remote.displayTransform.offsetY) * positionBlend;
           remote.displayTransform.alpha += (remote.transform.alpha - remote.displayTransform.alpha) * alphaBlend;
           remote.displayTransform.phase = remote.transform.phase;
+          remote.displayTransform.mode = remote.transform.mode;
         }
       }
 
@@ -6020,11 +7761,14 @@
       remote.playerId = transform.playerId || remote.playerId;
       remote.publicName = transform.publicName || remote.publicName;
       remote.overlapId = message.overlapId || remote.overlapId;
+      remote.partySessionId = transform.partySessionId || remote.partySessionId || "";
+      remote.teamId = transform.teamId || remote.teamId || "";
       remote.transform = createRemoteTransform(
         finiteOr(transform.offsetX, remote.transform.offsetX || 0),
         finiteOr(transform.offsetY, remote.transform.offsetY || 0),
         finiteOr(transform.alpha, remote.transform.alpha || 0),
-        transform.phase || message.phase || remote.transform.phase || "approach"
+        transform.phase || message.phase || remote.transform.phase || "approach",
+        message.mode || transform.mode || remote.transform.mode || "random"
       );
       if (!remote.displayTransform) {
         remote.displayTransform = {
@@ -6045,7 +7789,8 @@
       finiteOr(transform.offsetX, remote.transform.offsetX || 0),
       finiteOr(transform.offsetY, remote.transform.offsetY || 0),
       finiteOr(transform.alpha, remote.transform.alpha || 0),
-      transform.phase || remote.transform.phase
+      transform.phase || remote.transform.phase,
+      transform.mode || remote.transform.mode || "random"
     );
 
     if (!remote.displayTransform) {
@@ -6064,6 +7809,8 @@
         playerId: "",
         publicName: "Unknown",
         overlapId: "",
+        partySessionId: "",
+        teamId: "",
         transform: initialTransform,
         displayTransform: { ...initialTransform },
         snapshot: null,
@@ -6349,6 +8096,9 @@
       if (remote.overlapId === overlapId) {
         multiplayer.remoteUniverses.delete(universeId);
       }
+    }
+    if (overlapId && multiplayer.roomId === overlapId) {
+      clearCrazyGamesRoomState("overlap-ended");
     }
   }
 
@@ -6685,7 +8435,7 @@
       const remotePlayer = transformedRemoteEntity(snapshot.player, transform);
       const playerDist = distanceToSegment(remotePlayer.x, remotePlayer.y, tailX, tailY, laser.x, laser.y);
 
-      if (!isTrucedWith(remote.playerId) && playerDist < (remotePlayer.radius || 34) * 0.72 + laser.radius) {
+      if (canDamageRemotePlayer(remote) && playerDist < (remotePlayer.radius || 34) * 0.72 + laser.radius) {
         sendRemoteEntityEffect(remote, {
           entityType: "player",
           damage: laser.damage || playerWeaponDefaults.damage,
@@ -6725,7 +8475,10 @@
     const toolDisable = Math.max(0, finiteOr(effect.toolDisable, 0));
 
     if (effect.entityType === "player") {
-      if (isTrucedWith(message.fromPlayerId) && damage > 0) {
+      if ((damage > 0 || toolDisable > 0) && !canReceiveDamageFromPlayer(message.fromPlayerId, message.fromTeamId)) {
+        return;
+      }
+      if (multiplayer.partyRespawnInvulnerableTimer > 0 && damage > 0) {
         return;
       }
       if (player.landed && (Math.abs(impulseX) + Math.abs(impulseY) > 80 || damage > 0)) {
@@ -6898,7 +8651,7 @@
     }
   }
 
-  function applyWorldSnapshot(snapshot) {
+  function applyWorldSnapshot(snapshot, options) {
     if (!snapshot || typeof snapshot !== "object") {
       return;
     }
@@ -6913,8 +8666,12 @@
     }
 
     if (Array.isArray(snapshot.particles)) {
-      particles.length = 0;
-      particles.push(...snapshot.particles.map(normalizeParticleSnapshot).filter(Boolean));
+      if (options && options.smoothParticles) {
+        applySmoothedParticleSnapshots(snapshot.particles);
+      } else {
+        particles.length = 0;
+        particles.push(...snapshot.particles.map(normalizeParticleSnapshot).filter(Boolean));
+      }
     }
 
     const alienoidSnapshots = Array.isArray(snapshot.alienoids) ? snapshot.alienoids : snapshot.rivals;
@@ -7045,6 +8802,89 @@
       wobble: particle.wobble,
       pulse: particle.pulse
     };
+  }
+
+  function applySmoothedParticleSnapshots(snapshotParticles) {
+    const normalized = snapshotParticles.map(normalizeParticleSnapshot).filter(Boolean);
+    const existingById = new Map();
+    for (const particle of particles) {
+      existingById.set(particle.id, particle);
+    }
+
+    const now = performance.now();
+    const nextParticles = [];
+    for (const incoming of normalized) {
+      const existing = existingById.get(incoming.id);
+      if (!existing) {
+        markParticleSmoothingTarget(incoming, incoming, now);
+        nextParticles.push(incoming);
+        continue;
+      }
+
+      const distance = Math.hypot(incoming.x - existing.x, incoming.y - existing.y);
+      const shouldSnap = distance > Math.max(900, incoming.radius * 5);
+      const displayX = shouldSnap ? incoming.x : existing.x;
+      const displayY = shouldSnap ? incoming.y : existing.y;
+      const displayVx = shouldSnap ? incoming.vx : existing.vx;
+      const displayVy = shouldSnap ? incoming.vy : existing.vy;
+
+      Object.assign(existing, incoming);
+      existing.x = displayX;
+      existing.y = displayY;
+      existing.vx = displayVx;
+      existing.vy = displayVy;
+      markParticleSmoothingTarget(existing, incoming, now);
+      nextParticles.push(existing);
+    }
+
+    particles.length = 0;
+    particles.push(...nextParticles);
+  }
+
+  function markParticleSmoothingTarget(particle, target, receivedAt) {
+    particle._partyTargetX = finiteOr(target.x, particle.x);
+    particle._partyTargetY = finiteOr(target.y, particle.y);
+    particle._partyTargetVx = finiteOr(target.vx, particle.vx);
+    particle._partyTargetVy = finiteOr(target.vy, particle.vy);
+    particle._partyTargetReceivedAt = receivedAt;
+  }
+
+  function updateFollowerWorldSmoothing(dt) {
+    if (!isSharedWorldFollower()) {
+      return;
+    }
+
+    const positionBlend = 1 - Math.pow(0.00035, dt);
+    const velocityBlend = 1 - Math.pow(0.0015, dt);
+    const now = performance.now();
+
+    for (const particle of particles) {
+      if (!Number.isFinite(particle._partyTargetX) || !Number.isFinite(particle._partyTargetY)) {
+        continue;
+      }
+
+      const age = Math.max(0, Math.min(0.18, (now - finiteOr(particle._partyTargetReceivedAt, now)) / 1000));
+      const targetVx = finiteOr(particle._partyTargetVx, particle.vx);
+      const targetVy = finiteOr(particle._partyTargetVy, particle.vy);
+      const targetX = finiteOr(particle._partyTargetX, particle.x) + targetVx * age;
+      const targetY = finiteOr(particle._partyTargetY, particle.y) + targetVy * age;
+      const error = Math.hypot(targetX - particle.x, targetY - particle.y);
+
+      if (error > Math.max(900, particle.radius * 5)) {
+        particle.x = targetX;
+        particle.y = targetY;
+        particle.vx = targetVx;
+        particle.vy = targetVy;
+        continue;
+      }
+
+      particle.vx += (targetVx - particle.vx) * velocityBlend;
+      particle.vy += (targetVy - particle.vy) * velocityBlend;
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      particle.x += (targetX - particle.x) * positionBlend;
+      particle.y += (targetY - particle.y) * positionBlend;
+    }
   }
 
   function serializeRival(rival) {
@@ -7707,28 +9547,186 @@
     return 3;
   }
 
-  function spawnParticleNearPlayer() {
-    const angle = randomRange(0, Math.PI * 2);
+  function activePartyPlayerAnchors() {
+    const anchors = [{
+      x: player.x,
+      y: player.y,
+      vx: player.vx,
+      vy: player.vy,
+      playerId: player.id
+    }];
+
+    if (!isPartyHost() || !multiplayer.partyPlayerSnapshots.size) {
+      return anchors;
+    }
+
+    const now = performance.now();
+    for (const [playerId, entry] of multiplayer.partyPlayerSnapshots) {
+      if (!entry || now - finiteOr(entry.receivedAt, 0) > 2200) {
+        continue;
+      }
+
+      const source = entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : {};
+      const remotePlayer = normalizeRemotePlayerSnapshot(source.player || source);
+      if (!remotePlayer) {
+        continue;
+      }
+      anchors.push({
+        x: remotePlayer.x,
+        y: remotePlayer.y,
+        vx: remotePlayer.vx,
+        vy: remotePlayer.vy,
+        playerId
+      });
+    }
+
+    return anchors;
+  }
+
+  function nearestPartyAnchorDistance(x, y, anchors) {
+    const source = Array.isArray(anchors) && anchors.length ? anchors : activePartyPlayerAnchors();
+    let nearest = Infinity;
+    for (const anchor of source) {
+      const distance = Math.hypot(x - anchor.x, y - anchor.y);
+      if (distance < nearest) {
+        nearest = distance;
+      }
+    }
+    return nearest;
+  }
+
+  function activeParticleTargetCount(anchorCount) {
+    const count = Math.max(1, Math.floor(finiteOr(anchorCount, 1)));
+    if (!isPartyHost()) {
+      return targetParticles;
+    }
+    return Math.round(targetParticles * (0.92 + Math.max(0, count - 1) * 0.82));
+  }
+
+  function particleDensityRadius() {
     const spawnWidth = Math.max(640, finiteOr(width, 0));
     const spawnHeight = Math.max(360, finiteOr(height, 0));
-    const minDist = Math.min(spawnWidth, spawnHeight) * 0.38 + 150;
-    const maxDist = Math.max(spawnWidth, spawnHeight) * 0.74 + 420;
-    const dist = randomRange(minDist, maxDist);
-    const drift = rotatePoint(randomRange(-44, 44), randomRange(-44, 44), angle + Math.PI / 2);
+    return Math.hypot(spawnWidth, spawnHeight) * 0.62 + 260;
+  }
+
+  function isAmbientDensityParticle(particle) {
+    return Boolean(particle && particle.tier && !particle.tier.solid && !isUfoBeamCargo(particle));
+  }
+
+  function countAmbientParticlesNearAnchor(anchor, radius) {
+    const radiusSq = radius * radius;
+    let count = 0;
+    for (const particle of particles) {
+      if (!isAmbientDensityParticle(particle)) {
+        continue;
+      }
+      const dx = particle.x - anchor.x;
+      const dy = particle.y - anchor.y;
+      if (dx * dx + dy * dy <= radiusSq) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  function localParticleTargetPerAnchor(anchorCount) {
+    const count = Math.max(1, Math.floor(finiteOr(anchorCount, 1)));
+    return Math.round(targetParticles * (isPartyHost() ? clamp(0.54 + 0.08 / count, 0.52, 0.62) : 0.62));
+  }
+
+  function mostUnderdenseParticleAnchor(anchors) {
+    const source = Array.isArray(anchors) && anchors.length ? anchors : activePartyPlayerAnchors();
+    const densityRadius = particleDensityRadius();
+    const localTarget = localParticleTargetPerAnchor(source.length);
+    let best = null;
+
+    for (const anchor of source) {
+      const localCount = countAmbientParticlesNearAnchor(anchor, densityRadius);
+      const speed = Math.hypot(finiteOr(anchor.vx, 0), finiteOr(anchor.vy, 0));
+      const deficit = localTarget - localCount;
+      const score = deficit + clamp(speed / 240, 0, 2.2);
+      if (!best || score > best.score) {
+        best = { anchor, localCount, localTarget, score };
+      }
+    }
+
+    return best || { anchor: source[0] || player, localCount: 0, localTarget, score: 0 };
+  }
+
+  function nearestAmbientParticleDistance(x, y) {
+    let nearest = Infinity;
+    for (const particle of particles) {
+      if (!isAmbientDensityParticle(particle)) {
+        continue;
+      }
+      const distance = Math.hypot(x - particle.x, y - particle.y);
+      if (distance < nearest) {
+        nearest = distance;
+      }
+    }
+    return nearest;
+  }
+
+  function chooseParticleSpawnPoint(anchor) {
+    const source = anchor || randomPartySpawnAnchor();
+    const spawnWidth = Math.max(640, finiteOr(width, 0));
+    const spawnHeight = Math.max(360, finiteOr(height, 0));
+    const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
+    const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
+    const moving = speed > 45;
+    const travel = moving ? normalize(source.vx, source.vy) : { x: 0, y: 0 };
+    let best = null;
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const aheadBias = moving && Math.random() < 0.58;
+      const angle = aheadBias
+        ? Math.atan2(travel.y, travel.x) + randomRange(-1.05, 1.05)
+        : randomRange(0, Math.PI * 2);
+      const offscreenBias = moving && Math.random() < 0.42;
+      const minDist = offscreenBias ? viewportRadius * 0.86 : viewportRadius * 0.18;
+      const maxDist = offscreenBias
+        ? viewportRadius * 1.5 + clamp(speed * 1.15, 0, 760)
+        : viewportRadius * 1.02;
+      const dist = randomRange(minDist, maxDist);
+      const ahead = moving ? clamp(speed * randomRange(0.12, offscreenBias ? 1.45 : 0.72), 0, 920) : 0;
+      const drift = rotatePoint(randomRange(-170, 170), randomRange(-170, 170), angle + Math.PI / 2);
+      const x = source.x + travel.x * ahead + Math.cos(angle) * dist + drift.x;
+      const y = source.y + travel.y * ahead + Math.sin(angle) * dist + drift.y;
+      const nearest = nearestAmbientParticleDistance(x, y);
+      const distanceFromAnchor = Math.hypot(x - source.x, y - source.y);
+      const score = nearest + (offscreenBias ? 70 : 0) - Math.max(0, 260 - distanceFromAnchor) * 2.8;
+      if (!best || score > best.score) {
+        best = { x, y, angle, score };
+      }
+    }
+
+    return best || { x: source.x, y: source.y, angle: randomRange(0, Math.PI * 2), score: 0 };
+  }
+
+  function spawnParticleNearPlayer(anchor) {
+    const source = anchor || randomPartySpawnAnchor();
+    const spawnPoint = chooseParticleSpawnPoint(source);
     const particle = createParticle(
-      player.x + Math.cos(angle) * dist + drift.x,
-      player.y + Math.sin(angle) * dist + drift.y,
+      spawnPoint.x,
+      spawnPoint.y,
       randomAmbientParticleMass(),
       randomParticleColor()
     );
-    particle.vx += -Math.cos(angle) * randomRange(6, 26);
-    particle.vy += -Math.sin(angle) * randomRange(6, 26);
+    particle.vx += finiteOr(source.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(6, 26);
+    particle.vy += finiteOr(source.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(6, 26);
     particles.push(particle);
+  }
+
+  function randomPartySpawnAnchor() {
+    const anchors = activePartyPlayerAnchors();
+    return anchors[Math.floor(Math.random() * anchors.length)] || anchors[0] || player;
   }
 
   function seedParticles() {
     particles.length = 0;
-    for (let i = 0; i < targetParticles; i += 1) {
+    const anchors = activePartyPlayerAnchors();
+    const targetCount = activeParticleTargetCount(anchors.length);
+    for (let i = 0; i < targetCount; i += 1) {
       spawnParticleNearPlayer();
     }
   }
@@ -8418,12 +10416,18 @@
   }
 
   function getFunnel(aim) {
+    return actorFunnel(player, aim.world);
+  }
+
+  function actorFunnel(actor, aimWorld) {
+    const source = actor || player;
+    const aim = aimWorld || { x: 1, y: 0 };
     const reach = funnelShape.captureX;
     return {
-      x: player.x + aim.world.x * reach,
-      y: player.y + aim.world.y * reach,
-      mouthX: player.x + aim.world.x * funnelShape.rimX,
-      mouthY: player.y + aim.world.y * funnelShape.rimX,
+      x: source.x + aim.x * reach,
+      y: source.y + aim.y * reach,
+      mouthX: source.x + aim.x * funnelShape.rimX,
+      mouthY: source.y + aim.y * funnelShape.rimX,
       radius: funnelShape.rimHalf,
       reach,
       mouthReach: funnelShape.rimX
@@ -8689,6 +10693,10 @@
 
     player.energy -= cost;
     return true;
+  }
+
+  function canSpendPlayerEnergy(amount) {
+    return player.energy >= Math.max(0, finiteOr(amount, 0));
   }
 
   function drainPlayerEnergy(rate, dt) {
@@ -9242,19 +11250,40 @@
       return;
     }
 
-    const aim = getAim();
     const direction = mouse.left ? 1 : -1;
+    applyGadgetThrustToBody(body, getAim().world, direction, dt);
+  }
+
+  function applyGadgetThrustToBody(body, aimWorld, direction, dt) {
+    if (!body || !isLandableBody(body)) {
+      return false;
+    }
+
     const massDamping = clamp(1 / Math.pow(Math.max(1, body.mass / 100), 0.38), 0.18, 1);
     const thrust = 155 * massDamping;
     const maxSpeed = 220 * massDamping + 60;
+    const aim = aimWorld || { x: 1, y: 0 };
 
-    body.vx += aim.world.x * direction * thrust * dt;
-    body.vy += aim.world.y * direction * thrust * dt;
+    body.vx += aim.x * direction * thrust * dt;
+    body.vy += aim.y * direction * thrust * dt;
 
     const speed = Math.hypot(body.vx, body.vy);
     if (speed > maxSpeed) {
       body.vx = (body.vx / speed) * maxSpeed;
       body.vy = (body.vy / speed) * maxSpeed;
+    }
+    return true;
+  }
+
+  function updatePartyLandedGadgetThrusts(dt) {
+    for (const state of activePartyGadgetStates()) {
+      if (!state.landedBodyId || (!state.left && !state.right)) {
+        continue;
+      }
+
+      const body = bodyById(state.landedBodyId);
+      const direction = state.left ? 1 : -1;
+      applyGadgetThrustToBody(body, state.aimWorld, direction, dt);
     }
   }
 
@@ -9266,6 +11295,29 @@
       }
     }
 
+    const targetMaxEnergy = targetPlayerMaxEnergy();
+    player.maxEnergy = clamp(finiteOr(player.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
+    if (player.maxEnergy < targetMaxEnergy) {
+      const growthRate = 0.32 + Math.sqrt(Math.max(0, finiteOr(lifeStats.absorbedParticleMass, 0))) * 0.0025;
+      player.maxEnergy = Math.min(targetMaxEnergy, player.maxEnergy + growthRate * dt);
+    }
+    player.energy = clamp(finiteOr(player.energy, player.maxEnergy), 0, player.maxEnergy);
+    if (player.energy >= player.maxEnergy) {
+      return;
+    }
+
+    let regen = playerBaseEnergyRegen;
+    if (player.landed) {
+      const landedBody = bodyById(player.landed.bodyId);
+      if (landedBody) {
+        regen += energyRegenForBody(landedBody) * landedEnergyRegenShare;
+      }
+    }
+
+    player.energy = Math.min(player.maxEnergy, player.energy + regen * dt);
+  }
+
+  function updatePlayerEnergySystems(dt) {
     const targetMaxEnergy = targetPlayerMaxEnergy();
     player.maxEnergy = clamp(finiteOr(player.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
     if (player.maxEnergy < targetMaxEnergy) {
@@ -9361,15 +11413,37 @@
   }
 
   function applyGadgetForces(target, aim, funnel, dt, options = {}) {
-    const controlsEnabled = canUseSuctionControls();
-    const leftActive = controlsEnabled && mouse.left;
-    const middleActive = controlsEnabled && mouse.middle;
-    const rightActive = controlsEnabled && mouse.right;
-    const toTargetX = target.x - player.x;
-    const toTargetY = target.y - player.y;
-    const forward = toTargetX * aim.world.x + toTargetY * aim.world.y;
-    const sideX = toTargetX - aim.world.x * forward;
-    const sideY = toTargetY - aim.world.y * forward;
+    return applyActorGadgetForces(target, {
+      actor: player,
+      aimWorld: aim.world,
+      funnel,
+      left: canUseSuctionControls() && mouse.left,
+      middle: canUseSuctionControls() && mouse.middle,
+      right: canUseSuctionControls() && mouse.right,
+      suckFactor: currentGadgetSuckFactor(),
+      blowFactor: currentGadgetBlowFactor()
+    }, dt, options);
+  }
+
+  function applyActorGadgetForces(target, state, dt, options = {}) {
+    if (!state || !state.actor || !target) {
+      return false;
+    }
+    const leftActive = state.left === true;
+    const middleActive = state.middle === true;
+    const rightActive = state.right === true;
+    if (!leftActive && !middleActive && !rightActive) {
+      return false;
+    }
+
+    const actor = state.actor;
+    const aimWorld = state.aimWorld || { x: 1, y: 0 };
+    const funnel = state.funnel || actorFunnel(actor, aimWorld);
+    const toTargetX = target.x - actor.x;
+    const toTargetY = target.y - actor.y;
+    const forward = toTargetX * aimWorld.x + toTargetY * aimWorld.y;
+    const sideX = toTargetX - aimWorld.x * forward;
+    const sideY = toTargetY - aimWorld.y * forward;
     const side = length(sideX, sideY);
     const coneWidth = 64 + Math.max(0, forward) * 0.42;
     const inCone = forward > -70 && forward < gadgetForceReach && side < coneWidth;
@@ -9380,8 +11454,8 @@
     const captureInFunnel = options.captureInFunnel !== false;
 
     if (middleActive && inCone) {
-      const holdX = player.x + aim.world.x * gadgetHoldReach;
-      const holdY = player.y + aim.world.y * gadgetHoldReach;
+      const holdX = actor.x + aimWorld.x * gadgetHoldReach;
+      const holdY = actor.y + aimWorld.y * gadgetHoldReach;
       const toHoldX = holdX - target.x;
       const toHoldY = holdY - target.y;
       const holdDistance = length(toHoldX, toHoldY);
@@ -9405,7 +11479,7 @@
       } else {
         target.gadgetStabilized = false;
       }
-      return;
+      return true;
     }
 
     if (leftActive || rightActive) {
@@ -9416,7 +11490,7 @@
       const pull = normalize(toMouthX, toMouthY);
       const coneStrength = clamp(1 - side / Math.max(1, coneWidth), 0, 1);
       const distanceStrength = clamp(1 - mouthDist / 620, 0.16, 1);
-      const force = 1180 * currentGadgetSuckFactor() * coneStrength * distanceStrength * pushResponse;
+      const force = 1180 * finiteOr(state.suckFactor, 1) * coneStrength * distanceStrength * pushResponse;
       target.vx += pull.x * force * dt;
       target.vy += pull.y * force * dt;
 
@@ -9435,10 +11509,12 @@
     if (rightActive && forward > -20 && forward < 470 && side < coneWidth * 0.9) {
       const blastFalloff = clamp(1 - Math.max(0, forward) / 520, 0.22, 1);
       const sidePush = normalize(sideX, sideY);
-      const force = 1450 * currentGadgetBlowFactor() * blastFalloff * pushResponse;
-      target.vx += (aim.world.x * force + sidePush.x * 120 * pushResponse) * dt;
-      target.vy += (aim.world.y * force + sidePush.y * 120 * pushResponse) * dt;
+      const force = 1450 * finiteOr(state.blowFactor, 1) * blastFalloff * pushResponse;
+      target.vx += (aimWorld.x * force + sidePush.x * 120 * pushResponse) * dt;
+      target.vy += (aimWorld.y * force + sidePush.y * 120 * pushResponse) * dt;
     }
+
+    return leftActive || rightActive;
   }
 
   function collideFunnelSegment(state, ax, ay, bx, by, radius) {
@@ -9484,21 +11560,34 @@
   }
 
   function resolveFunnelBucket(target, aim, dt) {
-    const controlsEnabled = canUseSuctionControls();
-    const leftActive = controlsEnabled && mouse.left;
-    const rightActive = controlsEnabled && mouse.right;
-    const normal = { x: -aim.world.y, y: aim.world.x };
-    const relX = target.x - player.x;
-    const relY = target.y - player.y;
-    const velocityX = target.vx - player.vx;
-    const velocityY = target.vy - player.vy;
+    return resolveActorFunnelBucket(target, {
+      actor: player,
+      aimWorld: aim.world,
+      left: canUseSuctionControls() && mouse.left,
+      right: canUseSuctionControls() && mouse.right
+    }, dt);
+  }
+
+  function resolveActorFunnelBucket(target, state, dt) {
+    if (!state || !state.actor || !target) {
+      return false;
+    }
+    const leftActive = state.left === true;
+    const rightActive = state.right === true;
+    const actor = state.actor;
+    const aimWorld = state.aimWorld || { x: 1, y: 0 };
+    const normal = { x: -aimWorld.y, y: aimWorld.x };
+    const relX = target.x - actor.x;
+    const relY = target.y - actor.y;
+    const velocityX = target.vx - finiteOr(actor.vx, 0);
+    const velocityY = target.vy - finiteOr(actor.vy, 0);
     const originalState = {
-      x: relX * aim.world.x + relY * aim.world.y,
+      x: relX * aimWorld.x + relY * aimWorld.y,
       y: relX * normal.x + relY * normal.y,
-      vx: velocityX * aim.world.x + velocityY * aim.world.y,
+      vx: velocityX * aimWorld.x + velocityY * aimWorld.y,
       vy: velocityX * normal.x + velocityY * normal.y
     };
-    const state = {
+    const bucketState = {
       ...originalState
     };
     const pushResponse = bodyPushResponse(target);
@@ -9510,69 +11599,70 @@
     const rimHalf = funnelShape.rimHalf;
     const radius = target.radius;
 
-    touchedBucket = collideFunnelSegment(state, backX, -backHalf, rimX, -rimHalf, radius) || touchedBucket;
-    touchedBucket = collideFunnelSegment(state, backX, backHalf, rimX, rimHalf, radius) || touchedBucket;
-    touchedBucket = collideFunnelSegment(state, backX, -backHalf, backX, backHalf, radius) || touchedBucket;
+    touchedBucket = collideFunnelSegment(bucketState, backX, -backHalf, rimX, -rimHalf, radius) || touchedBucket;
+    touchedBucket = collideFunnelSegment(bucketState, backX, backHalf, rimX, rimHalf, radius) || touchedBucket;
+    touchedBucket = collideFunnelSegment(bucketState, backX, -backHalf, backX, backHalf, radius) || touchedBucket;
 
-    if (state.x >= backX && state.x <= rimX) {
-      const half = funnelHalfAt(state.x);
+    if (bucketState.x >= backX && bucketState.x <= rimX) {
+      const half = funnelHalfAt(bucketState.x);
       const availableHalf = Math.max(7, half - radius * 0.42);
-      if (Math.abs(state.y) > availableHalf && Math.abs(state.y) < half) {
-        const side = Math.sign(state.y) || 1;
-        state.y = side * availableHalf;
-        if (state.vy * side > 0) {
-          state.vy *= -0.22;
+      if (Math.abs(bucketState.y) > availableHalf && Math.abs(bucketState.y) < half) {
+        const side = Math.sign(bucketState.y) || 1;
+        bucketState.y = side * availableHalf;
+        if (bucketState.vy * side > 0) {
+          bucketState.vy *= -0.22;
         }
         touchedBucket = true;
       }
     }
 
     if (
-      state.x < backX + radius &&
-      state.x > backX - radius * 1.35 &&
-      Math.abs(state.y) < backHalf + radius * 0.8 &&
-      (state.x >= backX || state.vx < 0)
+      bucketState.x < backX + radius &&
+      bucketState.x > backX - radius * 1.35 &&
+      Math.abs(bucketState.y) < backHalf + radius * 0.8 &&
+      (bucketState.x >= backX || bucketState.vx < 0)
     ) {
-      state.x = backX + radius;
-      if (state.vx < 0) {
-        state.vx *= -0.24;
+      bucketState.x = backX + radius;
+      if (bucketState.vx < 0) {
+        bucketState.vx *= -0.24;
       }
       touchedBucket = true;
     }
 
-    const cupHalf = funnelHalfAt(state.x);
+    const cupHalf = funnelHalfAt(bucketState.x);
     const insideCup =
-      state.x > backX - radius * 0.35 &&
-      state.x < rimX + radius * 0.55 &&
-      Math.abs(state.y) < cupHalf + radius * 0.25;
+      bucketState.x > backX - radius * 0.35 &&
+      bucketState.x < rimX + radius * 0.55 &&
+      Math.abs(bucketState.y) < cupHalf + radius * 0.25;
 
     if (insideCup || touchedBucket) {
       const damping = Math.pow(rightActive ? 0.72 : 0.18, dt);
-      state.vx *= damping;
-      state.vy *= damping;
+      bucketState.vx *= damping;
+      bucketState.vy *= damping;
 
       if (!rightActive) {
-        state.vx += (funnelShape.captureX - state.x) * 7.5 * dt;
-        state.vy += -state.y * 8.5 * dt;
+        bucketState.vx += (funnelShape.captureX - bucketState.x) * 7.5 * dt;
+        bucketState.vy += -bucketState.y * 8.5 * dt;
       }
 
       if (leftActive) {
-        state.vx += (funnelShape.captureX - state.x) * 6.5 * dt;
-        state.vy += -state.y * 6.5 * dt;
+        bucketState.vx += (funnelShape.captureX - bucketState.x) * 6.5 * dt;
+        bucketState.vy += -bucketState.y * 6.5 * dt;
       }
     }
 
     const resolvedState = {
-      x: originalState.x + (state.x - originalState.x) * pushResponse,
-      y: originalState.y + (state.y - originalState.y) * pushResponse,
-      vx: originalState.vx + (state.vx - originalState.vx) * pushResponse,
-      vy: originalState.vy + (state.vy - originalState.vy) * pushResponse
+      x: originalState.x + (bucketState.x - originalState.x) * pushResponse,
+      y: originalState.y + (bucketState.y - originalState.y) * pushResponse,
+      vx: originalState.vx + (bucketState.vx - originalState.vx) * pushResponse,
+      vy: originalState.vy + (bucketState.vy - originalState.vy) * pushResponse
     };
 
-    target.x = player.x + aim.world.x * resolvedState.x + normal.x * resolvedState.y;
-    target.y = player.y + aim.world.y * resolvedState.x + normal.y * resolvedState.y;
-    target.vx = player.vx + aim.world.x * resolvedState.vx + normal.x * resolvedState.vy;
-    target.vy = player.vy + aim.world.y * resolvedState.vx + normal.y * resolvedState.vy;
+    target.x = actor.x + aimWorld.x * resolvedState.x + normal.x * resolvedState.y;
+    target.y = actor.y + aimWorld.y * resolvedState.x + normal.y * resolvedState.y;
+    target.vx = finiteOr(actor.vx, 0) + aimWorld.x * resolvedState.vx + normal.x * resolvedState.vy;
+    target.vy = finiteOr(actor.vy, 0) + aimWorld.y * resolvedState.vx + normal.y * resolvedState.vy;
+    return true;
   }
 
   function isValidParticleState(particle) {
@@ -9586,6 +11676,94 @@
       Number.isFinite(particle.mass) &&
       Number.isFinite(particle.radius)
     );
+  }
+
+  function activePartyGadgetStates() {
+    if (!isPartyHost() || !multiplayer.partyPlayerSnapshots.size) {
+      return [];
+    }
+
+    const now = performance.now();
+    const states = [];
+    for (const [playerId, entry] of multiplayer.partyPlayerSnapshots) {
+      if (!entry || now - finiteOr(entry.receivedAt, 0) > 1100) {
+        multiplayer.partyPlayerSnapshots.delete(playerId);
+        continue;
+      }
+
+      const source = entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : {};
+      const remotePlayer = normalizeRemotePlayerSnapshot(source.player || source);
+      const state = partyGadgetStateForPlayer(remotePlayer);
+      if (state) {
+        states.push(state);
+      }
+    }
+    return states;
+  }
+
+  function partyGadgetStateForPlayer(remotePlayer) {
+    if (!remotePlayer || remotePlayer.equippedTool !== defaultToolId) {
+      return null;
+    }
+
+    const mode = remotePlayer.toolMode || "idle";
+    if (mode !== "pull" && mode !== "push" && mode !== "hold" && mode !== "idle") {
+      return null;
+    }
+
+    const canApplyForce = remotePlayer.energy > 0;
+    const aimWorld = normalize(Math.cos(remotePlayer.aimAngle), Math.sin(remotePlayer.aimAngle));
+    return {
+      actor: remotePlayer,
+      aimWorld,
+      funnel: actorFunnel(remotePlayer, aimWorld),
+      left: canApplyForce && mode === "pull",
+      middle: canApplyForce && mode === "hold",
+      right: canApplyForce && mode === "push",
+      suckFactor: 1,
+      blowFactor: 1,
+      bucketActive: true,
+      landedBodyId: remotePlayer.landed ? remotePlayer.landed.bodyId : null
+    };
+  }
+
+  function partyGadgetCanAffectParticle(state, particle) {
+    return Boolean(
+      state &&
+      particle &&
+      particle.id !== state.landedBodyId &&
+      !isUfoBeamCargo(particle)
+    );
+  }
+
+  function pruneExcessAmbientParticles(anchors, maxParticleBudget) {
+    if (particles.length <= maxParticleBudget) {
+      return;
+    }
+
+    for (let remaining = particles.length - maxParticleBudget; remaining > 0; remaining -= 1) {
+      let removeIndex = -1;
+      let removeScore = -Infinity;
+
+      for (let i = 0; i < particles.length; i += 1) {
+        const particle = particles[i];
+        if (!isAmbientDensityParticle(particle)) {
+          continue;
+        }
+
+        const distance = nearestPartyAnchorDistance(particle.x, particle.y, anchors);
+        const score = distance + Math.max(0, particle.mass - 1) * 8;
+        if (score > removeScore) {
+          removeScore = score;
+          removeIndex = i;
+        }
+      }
+
+      if (removeIndex < 0) {
+        return;
+      }
+      particles.splice(removeIndex, 1);
+    }
   }
 
   function pruneInvalidParticles() {
@@ -9602,12 +11780,22 @@
     const landedBodyId = player.landed ? player.landed.bodyId : null;
     const suctionActive = canUseSuctionControls();
     const vacuumBucketActive = hasVacuumBucketCollider();
+    const partyGadgetStates = activePartyGadgetStates();
+    const partySpawnAnchors = activePartyPlayerAnchors();
+    const activeTargetParticles = activeParticleTargetCount(partySpawnAnchors.length);
+    const maxParticleBudget = Math.round(activeTargetParticles * 1.28);
 
     pruneInvalidParticles();
     spawnTimer -= dt;
-    while (particles.length < targetParticles && spawnTimer <= 0) {
-      spawnParticleNearPlayer();
-      spawnTimer += 0.14;
+    while (spawnTimer <= 0) {
+      const underdense = mostUnderdenseParticleAnchor(partySpawnAnchors);
+      const needsLocalFill = underdense.score > 0.5 && underdense.localCount < underdense.localTarget;
+      if (particles.length >= activeTargetParticles && (!needsLocalFill || particles.length >= maxParticleBudget)) {
+        break;
+      }
+      spawnParticleNearPlayer(needsLocalFill ? underdense.anchor : randomPartySpawnAnchor());
+      const deficit = clamp((activeTargetParticles - particles.length) / Math.max(1, activeTargetParticles), 0, 1);
+      spawnTimer += needsLocalFill ? 0.035 : 0.11 - deficit * 0.07;
     }
 
     for (let i = particles.length - 1; i >= 0; i -= 1) {
@@ -9619,6 +11807,11 @@
 
       if (suctionActive && !isLandedBody && !isUfoBeamCargo(particle)) {
         applyGadgetForces(particle, aim, funnel, dt);
+      }
+      for (const state of partyGadgetStates) {
+        if (partyGadgetCanAffectParticle(state, particle)) {
+          applyActorGadgetForces(particle, state, dt);
+        }
       }
 
       if (particle.gadgetStabilized && length(particle.vx, particle.vy) > gadgetStabilizedBreakSpeed) {
@@ -9643,13 +11836,20 @@
       if (vacuumBucketActive && !isLandedBody && !isUfoBeamCargo(particle)) {
         resolveFunnelBucket(particle, aim, dt);
       }
+      for (const state of partyGadgetStates) {
+        if (state.bucketActive && partyGadgetCanAffectParticle(state, particle)) {
+          resolveActorFunnelBucket(particle, state, dt);
+        }
+      }
 
-      const fromPlayer = length(particle.x - player.x, particle.y - player.y);
-      const cullDistance = Math.max(width, height) * 1.35 + 1100;
-      if (!particle.tier.solid && fromPlayer > cullDistance && particles.length > targetParticles * 0.65) {
+      const fromPlayer = nearestPartyAnchorDistance(particle.x, particle.y, partySpawnAnchors);
+      const cullDistance = Math.max(width, height) * 1.85 + 1600;
+      if (!particle.tier.solid && fromPlayer > cullDistance && particles.length > activeTargetParticles * 0.82) {
         particles.splice(i, 1);
       }
     }
+
+    pruneExcessAmbientParticles(partySpawnAnchors, maxParticleBudget);
 
     mergeParticles();
     resolvePlayerBodyCollisions();
@@ -9760,6 +11960,9 @@
   }
 
   function resolveBodyBounce(a, b, dx, dy, minDist) {
+    if (clusternautsTestConfig) {
+      clusternautsTestCounters.bodyBounces += 1;
+    }
     const rawDist = Math.hypot(dx, dy);
     const dist = rawDist || 1;
     const nx = rawDist ? dx / dist : 1;
@@ -9881,6 +12084,9 @@
           });
           maybeNotifyTier(tier, previousTier);
           mergesThisFrame += 1;
+          if (clusternautsTestConfig) {
+            clusternautsTestCounters.particleMerges += 1;
+          }
           j = i;
 
           if (mergesThisFrame > 8) {
@@ -10063,6 +12269,41 @@
     }
   }
 
+  function resolveFollowerPlayerBodyCollisions() {
+    for (const particle of particles) {
+      if (!particle.tier.solid) {
+        continue;
+      }
+      if (player.landed && player.landed.bodyId === particle.id) {
+        continue;
+      }
+
+      const dx = player.x - particle.x;
+      const dy = player.y - particle.y;
+      const rawDist = Math.hypot(dx, dy);
+      const dist = rawDist || 1;
+      const minDist = player.radius + solidBodyContactRadius(particle);
+
+      if (dist >= minDist) {
+        continue;
+      }
+
+      const nx = rawDist ? dx / dist : 1;
+      const ny = rawDist ? dy / dist : 0;
+      const overlap = minDist - dist;
+
+      player.x += nx * overlap;
+      player.y += ny * overlap;
+
+      const relativeVelocity = (player.vx - particle.vx) * nx + (player.vy - particle.vy) * ny;
+      if (relativeVelocity < 0) {
+        const impulse = -relativeVelocity * 0.72;
+        player.vx += nx * impulse;
+        player.vy += ny * impulse;
+      }
+    }
+  }
+
   function allCombatMobs() {
     return rivals.concat(ufos, rambots, engineers, teslas, rockets, fighters);
   }
@@ -10196,6 +12437,10 @@
           player.vy += ny * impulse;
           sendSharedBodyImpactEffect(contact, "player-body-bounce", nx, ny, incomingSpeed);
         }
+      }
+
+      if (isPermanentRemoteOverlap(contact.remote)) {
+        continue;
       }
 
       const damageThreshold = body.tier.solid ? solidBodyDamageSpeed : projectileDamageSpeed;
@@ -10597,12 +12842,14 @@
       return;
     }
 
-    if (!spendPlayerEnergy(finiteOr(weapon.energyCost, playerWeaponDefaults.energyCost))) {
+    const energyCost = finiteOr(weapon.energyCost, playerWeaponDefaults.energyCost);
+    if (!canSpendPlayerEnergy(energyCost)) {
       notifyEnergyDepleted();
       return;
     }
 
     firePlayerLaser(weapon);
+    spendPlayerEnergy(energyCost);
     toolFireCooldown = weapon.cooldown;
   }
 
@@ -12154,6 +14401,9 @@
 
       let hitRemotePlayer = false;
       for (const target of collectRemoteCombatPlayers()) {
+        if (!canDamageRemotePlayer(target.remote)) {
+          continue;
+        }
         const remotePlayer = target.player;
         const remoteDist = distanceToSegment(remotePlayer.x, remotePlayer.y, tailX, tailY, projectile.x, projectile.y);
         const remoteHitDistance = (remotePlayer.radius || player.radius) * playerHitScale + hitRadius;
@@ -15828,8 +18078,9 @@
 
       const transformAlpha = clamp(transform.alpha, 0, 1);
       const alpha = transformAlpha * remoteUniverseAlphaScale;
-      const sharedEntityAlpha = transformAlpha * (transform.phase === "overlap" ? 0.92 : 0.42);
+      const sharedEntityAlpha = transformAlpha * (transform.phase === "overlap" ? 0.56 : 0.3);
       const sharedBodyAlpha = transform.phase === "overlap" ? sharedEntityAlpha : alpha;
+      const remotePlayerAlpha = transformAlpha * (transform.phase === "overlap" ? 0.9 : 0.48);
       const world = snapshot.world;
       ctx.save();
       ctx.globalAlpha = sharedBodyAlpha;
@@ -15879,6 +18130,7 @@
       }
 
       if (snapshot.player) {
+        ctx.globalAlpha = remotePlayerAlpha;
         drawRemotePlayer(transformedRemoteEntity(snapshot.player, transform), remote.publicName, time);
       }
 
@@ -17446,6 +19698,68 @@
     }
   }
 
+  function stepGameplaySimulation(dt, options) {
+    const includeExternalSystems = !options || options.includeExternalSystems !== false;
+    if (isSharedWorldFollower()) {
+      stepSharedWorldFollowerSimulation(dt, includeExternalSystems);
+      return;
+    }
+
+    updateLifeStats();
+    updateToolDisable(dt);
+    updateEnergySystems(dt);
+    updateToolEnergyUsage(dt);
+    updatePlayer(dt);
+    updateGadgetAim(dt);
+    updateEquippedTool(dt);
+    updateLandedGadgetThrust(dt);
+    updatePartyLandedGadgetThrusts(dt);
+    updateMobSpawns(dt);
+    updateParticles(dt);
+    applyLandedSurfaceConstraint();
+    updateRivals(dt);
+    updateUfos(dt);
+    updateRambots(dt);
+    updateEngineers(dt);
+    updateTeslas(dt);
+    updateRockets(dt);
+    updateFighters(dt);
+    updateStructures(dt);
+    updatePlayerLasers(dt);
+    updateLauncherMissiles(dt);
+    resolveShieldGeneratorMobCollisions(dt);
+    resolveMobBodyCollisions();
+    damageMobsWithProjectiles();
+    resolveRemoteBodyPlayerCollisions();
+    resolveRemoteBodyMobCollisions();
+    updateSparks(dt);
+    updateHealthPickups(dt);
+    updateTechPickups(dt);
+    if (includeExternalSystems) {
+      updatePersistence(dt);
+      updateMultiplayer(dt);
+    }
+  }
+
+  function stepSharedWorldFollowerSimulation(dt, includeExternalSystems) {
+    updateLifeStats();
+    updateToolDisable(dt);
+    updatePlayerEnergySystems(dt);
+    updateToolEnergyUsage(dt);
+    updatePlayer(dt);
+    updateGadgetAim(dt);
+    updateEquippedTool(dt);
+    updateFollowerWorldSmoothing(dt);
+    applyLandedSurfaceConstraint();
+    resolveFollowerPlayerBodyCollisions();
+    updateSparks(dt);
+
+    if (includeExternalSystems) {
+      updatePersistence(dt);
+      updateMultiplayer(dt);
+    }
+  }
+
   function tick(now) {
     const dt = Math.min(0.033, (now - lastTime) / 1000 || 0);
     lastTime = now;
@@ -17490,37 +19804,7 @@
       return;
     }
 
-    updateLifeStats();
-    updateToolDisable(dt);
-    updateEnergySystems(dt);
-    updateToolEnergyUsage(dt);
-    updatePlayer(dt);
-    updateGadgetAim(dt);
-    updateEquippedTool(dt);
-    updateLandedGadgetThrust(dt);
-    updateMobSpawns(dt);
-    updateParticles(dt);
-    applyLandedSurfaceConstraint();
-    updateRivals(dt);
-    updateUfos(dt);
-    updateRambots(dt);
-    updateEngineers(dt);
-    updateTeslas(dt);
-    updateRockets(dt);
-    updateFighters(dt);
-    updateStructures(dt);
-    updatePlayerLasers(dt);
-    updateLauncherMissiles(dt);
-    resolveShieldGeneratorMobCollisions(dt);
-    resolveMobBodyCollisions();
-    damageMobsWithProjectiles();
-    resolveRemoteBodyPlayerCollisions();
-    resolveRemoteBodyMobCollisions();
-    updateSparks(dt);
-    updateHealthPickups(dt);
-    updateTechPickups(dt);
-    updatePersistence(dt);
-    updateMultiplayer(dt);
+    stepGameplaySimulation(dt);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
@@ -17536,6 +19820,152 @@
     requestAnimationFrame(tick);
   }
 
+  function resetClusternautsTestCounters() {
+    clusternautsTestCounters.particleMerges = 0;
+    clusternautsTestCounters.bodyBounces = 0;
+  }
+
+  function configureClusternautsTestInput(input) {
+    keys.clear();
+    const codes = input && Array.isArray(input.keys) ? input.keys : [];
+    for (const code of codes) {
+      if (typeof code === "string" && code) {
+        keys.add(code);
+      }
+    }
+
+    if (input && input.mouse) {
+      mouse.x = finiteOr(input.mouse.x, mouse.x);
+      mouse.y = finiteOr(input.mouse.y, mouse.y);
+      mouse.left = Boolean(input.mouse.left);
+      mouse.middle = Boolean(input.mouse.middle);
+      mouse.right = Boolean(input.mouse.right);
+      mouse.seen = true;
+    } else {
+      resetMouseButtons();
+    }
+  }
+
+  function countWorldMass(list) {
+    return list.reduce(function (total, body) {
+      return total + Math.max(0, finiteOr(body.mass, 0));
+    }, 0);
+  }
+
+  function createClusternautsFrameRateSnapshot() {
+    const majorBodies = particles.filter(function (particle) {
+      return finiteOr(particle.mass, 0) >= mappedBodyThreshold;
+    });
+    const mobCounts = {
+      alienoids: rivals.length,
+      ufos: ufos.length,
+      rambots: rambots.length,
+      engineers: engineers.length,
+      teslas: teslas.length,
+      rockets: rockets.length,
+      fighters: fighters.length
+    };
+    const mobCount = Object.keys(mobCounts).reduce(function (total, key) {
+      return total + mobCounts[key];
+    }, 0);
+
+    updateLifeStats();
+
+    return {
+      active: runState.active,
+      difficulty: runState.difficultyId,
+      deathActive: deathState.active,
+      player: {
+        x: player.x,
+        y: player.y,
+        vx: player.vx,
+        vy: player.vy,
+        health: player.health,
+        maxHealth: player.maxHealth,
+        energy: player.energy,
+        maxEnergy: player.maxEnergy
+      },
+      particles: {
+        count: particles.length,
+        totalMass: countWorldMass(particles),
+        majorCount: majorBodies.length,
+        majorMass: countWorldMass(majorBodies),
+        largestMass: particles.reduce(function (largest, particle) {
+          return Math.max(largest, finiteOr(particle.mass, 0));
+        }, 0)
+      },
+      structures: {
+        count: structures.length
+      },
+      mobs: Object.assign({
+        total: mobCount
+      }, mobCounts),
+      score: {
+        current: lifeStats.currentScore,
+        best: lifeStats.bestScore,
+        body: lifeStats.bodyScore,
+        mob: lifeStats.mobScore
+      },
+      events: {
+        particleMerges: clusternautsTestCounters.particleMerges,
+        bodyBounces: clusternautsTestCounters.bodyBounces,
+        playerAbsorptions: lifeStats.absorbedParticleCount,
+        mobsDefeated: lifeStats.mobsDefeated
+      }
+    };
+  }
+
+  function installClusternautsTestHarness() {
+    if (!clusternautsTestConfig) {
+      return;
+    }
+
+    window.__clusternautsTestHarness = {
+      startRun: function (options) {
+        const config = options || {};
+        if (config.viewport) {
+          window.innerWidth = Math.max(1, Math.floor(finiteOr(config.viewport.width, window.innerWidth || 1280)));
+          window.innerHeight = Math.max(1, Math.floor(finiteOr(config.viewport.height, window.innerHeight || 720)));
+        }
+        resize();
+        applyDifficulty(config.difficulty || defaultDifficultyId);
+        resetLocalPlayerState();
+        resetLocalWorldState();
+        resetLifeStats();
+        resetDeathState();
+        resetClusternautsTestCounters();
+        configureClusternautsTestInput(config.input);
+        runState.active = true;
+        gamePaused = false;
+        persistence.enabled = false;
+        multiplayer.enabled = false;
+        setDifficultyScreenOpen(false);
+        lastTime = performance.now();
+        return createClusternautsFrameRateSnapshot();
+      },
+      setInput: function (input) {
+        configureClusternautsTestInput(input);
+      },
+      step: function (dt) {
+        const seconds = Math.max(0, finiteOr(dt, 0));
+        if (!runState.active) {
+          return createClusternautsFrameRateSnapshot();
+        }
+        if (deathState.active) {
+          updateDeath(seconds);
+          return createClusternautsFrameRateSnapshot();
+        }
+        if (!gamePaused) {
+          stepGameplaySimulation(seconds, { includeExternalSystems: false });
+        }
+        return createClusternautsFrameRateSnapshot();
+      },
+      snapshot: createClusternautsFrameRateSnapshot
+    };
+  }
+
+  installClusternautsTestHarness();
+
   window.addEventListener("resize", function () {
     resize();
     syncCompactHudControls();
@@ -17549,6 +19979,12 @@
 
   if (soundToggle) {
     soundToggle.addEventListener("click", function () {
+      setSoundEnabled(!soundState.enabled);
+    });
+  }
+
+  if (menuSoundToggle) {
+    menuSoundToggle.addEventListener("click", function () {
       setSoundEnabled(!soundState.enabled);
     });
   }
@@ -17586,15 +20022,46 @@
     });
   }
 
+  if (menuUiScaleInput) {
+    menuUiScaleInput.addEventListener("input", function () {
+      applyUiScale(Number(menuUiScaleInput.value) / 100);
+      writeGameSettings();
+    });
+  }
+
   if (zoomInput) {
     zoomInput.addEventListener("input", function () {
       setCameraZoom(sliderValueToCameraZoom(zoomInput.value));
     });
   }
 
+  if (menuZoomInput) {
+    menuZoomInput.addEventListener("input", function () {
+      setCameraZoom(sliderValueToCameraZoom(menuZoomInput.value));
+    });
+  }
+
   if (surfaceCameraRotationInput) {
     surfaceCameraRotationInput.addEventListener("change", function () {
       applySurfaceCameraRotationSetting(surfaceCameraRotationInput.checked);
+    });
+  }
+
+  if (menuSurfaceCameraRotationInput) {
+    menuSurfaceCameraRotationInput.addEventListener("change", function () {
+      applySurfaceCameraRotationSetting(menuSurfaceCameraRotationInput.checked);
+    });
+  }
+
+  if (multiplayerToggleInput) {
+    multiplayerToggleInput.addEventListener("change", function () {
+      setFriendJoinsEnabled(multiplayerToggleInput.checked, "settings-toggle");
+    });
+  }
+
+  if (multiplayerPanelToggle) {
+    multiplayerPanelToggle.addEventListener("click", function () {
+      setFriendJoinsEnabled(!multiplayer.friendJoinsEnabled, "panel-toggle");
     });
   }
 
@@ -17674,6 +20141,10 @@
 
   if (resetControlsButton) {
     resetControlsButton.addEventListener("click", resetControlBindings);
+  }
+
+  if (menuResetControlsButton) {
+    menuResetControlsButton.addEventListener("click", resetControlBindings);
   }
 
   if (onlineToggle) {
@@ -17766,11 +20237,79 @@
 
   if (difficultyScreen) {
     difficultyScreen.addEventListener("click", function (event) {
+      const action = closestEventTarget(event, "[data-menu-action]");
+      if (action && action.dataset.menuAction) {
+        event.preventDefault();
+        handleStartMenuAction(action.dataset.menuAction, action);
+        return;
+      }
+
+      const lobbyDifficultyToggleTarget = closestEventTarget(event, "#lobbyDifficultyToggle");
+      if (lobbyDifficultyToggleTarget) {
+        event.preventDefault();
+        setLobbyDifficultyMenuOpen(!(lobbyDifficultySelect && lobbyDifficultySelect.classList.contains("is-open")));
+        return;
+      }
+
+      const lobbyDifficulty = closestEventTarget(event, "[data-lobby-difficulty]");
+      if (lobbyDifficulty && lobbyDifficulty.dataset.lobbyDifficulty) {
+        event.preventDefault();
+        setLobbyDifficulty(lobbyDifficulty.dataset.lobbyDifficulty);
+        setLobbyDifficultyMenuOpen(false);
+        return;
+      }
+
+      if (!closestEventTarget(event, ".lobby-difficulty-select")) {
+        setLobbyDifficultyMenuOpen(false);
+      }
+
+      const invite = closestEventTarget(event, "[data-lobby-invite]");
+      if (invite && invite.dataset.lobbyInvite) {
+        event.preventDefault();
+        sendMultiplayer({ type: "lobby.invite", targetPlayerId: invite.dataset.lobbyInvite });
+        setLobbyStatus("Invite sent.", "success");
+        return;
+      }
+
+      const kick = closestEventTarget(event, "[data-lobby-kick]");
+      if (kick && kick.dataset.lobbyKick) {
+        event.preventDefault();
+        sendMultiplayer({ type: "lobby.kick", targetPlayerId: kick.dataset.lobbyKick });
+        return;
+      }
+
       const button = closestEventTarget(event, ".difficulty-card");
       if (!button || !button.dataset.difficulty) {
         return;
       }
+      if (startMenu.view !== "difficulty") {
+        return;
+      }
       void beginRunWithDifficulty(button.dataset.difficulty);
+    });
+  }
+
+  if (lobbyCodeInput) {
+    lobbyCodeInput.addEventListener("keydown", function (event) {
+      if (event.code === "Enter") {
+        event.preventDefault();
+        joinLobby(lobbyCodeInput.value);
+      }
+    });
+  }
+
+  if (lobbyPlayerSearch) {
+    lobbyPlayerSearch.addEventListener("input", function () {
+      window.clearTimeout(lobbyPlayerSearch._searchTimer);
+      lobbyPlayerSearch._searchTimer = window.setTimeout(function () {
+        void refreshLobbyPlayerSearch();
+      }, 180);
+    });
+  }
+
+  if (copyLobbyCodeButton) {
+    copyLobbyCodeButton.addEventListener("click", function () {
+      copyTextToClipboard(multiplayer.lobby && (multiplayer.lobby.code || multiplayer.lobby.id), "Lobby code copied.");
     });
   }
 
@@ -17803,7 +20342,11 @@
 
   if (playAgainButton) {
     playAgainButton.addEventListener("click", function () {
-      void hardResetAfterDeath();
+      if (isPartySessionActive()) {
+        respawnMultiplayerPlayer();
+      } else {
+        void hardResetAfterDeath();
+      }
     });
   }
 
@@ -18214,9 +20757,6 @@
   async function startGame() {
     initializeNetworkIdentity();
     await bootstrapAccountSession();
-    void initializeCrazyGamesIntegration().then(function () {
-      updateCrazyGamesGameplayState("sdk-ready");
-    });
     applyUiScale(gameSettings.uiScale);
     setCameraZoom(gameSettings.zoom);
     updateSurfaceCameraRotationUi();
@@ -18229,10 +20769,15 @@
     seedParticles();
     applyDifficulty(defaultDifficultyId);
     resetLifeStats();
+    setStartMenuView("main", { push: false });
     setDifficultyScreenOpen(true);
     void refreshLeaderboard(true);
     updateOnlineUi();
     updateAccountUi();
+    setFriendJoinsEnabled(readMultiplayerPreference(), "startup", { persist: false, notify: false, startRun: false });
+    void initializeCrazyGamesIntegration().then(function () {
+      updateCrazyGamesGameplayState("sdk-ready");
+    });
 
     if (!starDust.length) {
       seedStarDust();
@@ -18245,5 +20790,7 @@
     requestAnimationFrame(tick);
   }
 
-  void startGame();
+  if (!clusternautsTestConfig || !clusternautsTestConfig.skipAutoStart) {
+    void startGame();
+  }
 }());

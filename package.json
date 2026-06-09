@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build": "node scripts/build-platforms.js all",
+    "build:render": "node scripts/build-platforms.js render",
+    "build:crazygames": "node scripts/build-platforms.js crazygames",
+    "package:crazygames": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-crazygames.ps1",
     "start": "node server.js",
+    "test:menu:lobby": "node tests/menu-lobby-contract.test.js",
     "test:physics:framerate": "node tests/crazygames-framerate-consistency.test.js"
   },
   "dependencies": {
