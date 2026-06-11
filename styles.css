@@ -29,6 +29,31 @@ body {
   -webkit-user-select: none;
 }
 
+body.hud-hidden {
+  cursor: none;
+}
+
+body.hud-hidden.hud-menu-open {
+  cursor: default;
+}
+
+body.hud-hidden .hud,
+body.hud-hidden .reticle,
+body.hud-hidden .compact-hud-toggles,
+body.hud-hidden .touch-joystick,
+body.hud-hidden .tool-hotbar,
+body.hud-hidden .tech-ledger,
+body.hud-hidden .online-toggle,
+body.hud-hidden .settings-toggle,
+body.hud-hidden .social-panel,
+body.hud-hidden .signal-panel,
+body.hud-hidden .command-panel,
+body.hud-hidden .player-interaction,
+body.hud-hidden .trade-panel,
+body.hud-hidden .notifications {
+  display: none !important;
+}
+
 button,
 canvas,
 .hud,

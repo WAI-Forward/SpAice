@@ -47,6 +47,7 @@ const sockets = new Set();
 const clientsByPlayerId = new Map();
 const pendingSignals = new Map();
 const pendingPlayerInteractions = new Map();
+const activePlayerDuels = new Set();
 const overlaps = new Map();
 const lobbies = new Map();
 const lobbyCodes = new Map();
@@ -57,7 +58,7 @@ let nextOverlapNumber = 1;
 let nextLobbyNumber = 1;
 let nextPartySessionNumber = 1;
 let nextAnomalyNumber = 1;
-const playerInteractionChoices = new Set(["trade", "truce", "team"]);
+const playerInteractionChoices = new Set(["trade", "duel", "truce"]);
 const difficultyChoices = new Set(["easy", "medium", "hard"]);
 const partyLobbyMaxPlayers = 4;
 const anomalyPromptTimeoutMs = 15000;
@@ -2327,12 +2328,12 @@ function normalizeStructure(source) {
     return null;
   }
 
-  const type = source.type === "turret" || source.type === "missile-launcher" || source.type === "accumulator" || source.type === "shield-generator" || source.type === "plating-block" || source.type === "battery" || source.type === "communication-relay" || source.type === "jet" || source.type === "tether" ? source.type : null;
+  const type = source.type === "turret" || source.type === "missile-launcher" || source.type === "accumulator" || source.type === "shield-generator" || source.type === "plating-block" || source.type === "battery" || source.type === "communication-relay" || source.type === "jet" || source.type === "tether" || source.type === "bridge" ? source.type : null;
   if (!type) {
     return null;
   }
 
-  const structureMaxHealth = type === "plating-block" ? 150 : type === "tether" || type === "shield-generator" ? 130 : type === "missile-launcher" ? 125 : type === "accumulator" || type === "battery" || type === "communication-relay" || type === "jet" ? 120 : 110;
+  const structureMaxHealth = type === "plating-block" ? 150 : type === "bridge" ? 170 : type === "tether" || type === "shield-generator" ? 130 : type === "missile-launcher" ? 125 : type === "accumulator" || type === "battery" || type === "communication-relay" || type === "jet" ? 120 : 110;
   const maxHealth = Number.isFinite(Number(source.maxHealth))
     ? clampNumber(source.maxHealth, 1, 200)
     : structureMaxHealth;
@@ -2354,6 +2355,8 @@ function normalizeStructure(source) {
     x2: Number.isFinite(Number(source.x2)) ? clampNumber(source.x2, -1000000, 1000000) : clampNumber(source.x, -1000000, 1000000),
     y2: Number.isFinite(Number(source.y2)) ? clampNumber(source.y2, -1000000, 1000000) : clampNumber(source.y, -1000000, 1000000),
     restLength: Number.isFinite(Number(source.restLength)) ? clampNumber(source.restLength, 0, 1000000) : 0,
+    restCenterDx: Number.isFinite(Number(source.restCenterDx)) ? clampNumber(source.restCenterDx, -1000000, 1000000) : 0,
+    restCenterDy: Number.isFinite(Number(source.restCenterDy)) ? clampNumber(source.restCenterDy, -1000000, 1000000) : 0,
     aimAngle: clampNumber(source.aimAngle, -Math.PI * 16, Math.PI * 16),
     deploy: clampNumber(source.deploy, 0, 1),
     thrustAmount: clampNumber(source.thrustAmount, 0, 1),
@@ -2426,6 +2429,10 @@ function normalizeLanding(source) {
 
   return {
     bodyId: Math.max(1, Math.floor(Number(source.bodyId) || 1)),
+    bridgeId: Math.max(0, Math.floor(Number(source.bridgeId) || 0)),
+    bridgeT: clampNumber(source.bridgeT, 0, 1000000),
+    bridgeSide: Number(source.bridgeSide) < 0 ? -1 : 1,
+    bridgeInputSign: Number(source.bridgeInputSign) < 0 ? -1 : 1,
     angle: clampNumber(source.angle, -Math.PI * 16, Math.PI * 16),
     walkSpeed: clampNumber(source.walkSpeed, -500, 500),
     walkCycle: clampNumber(source.walkCycle, 0, Number.MAX_SAFE_INTEGER)
@@ -4312,6 +4319,17 @@ async function handlePlayerInteractionChoice(client, message) {
   }
 
   const key = interactionPairKey(client.playerId, targetPlayerId);
+  if (choice === "truce" && !activePlayerDuels.has(key)) {
+    logMultiplayer("interaction choice rejected", {
+      fromPlayerId: client.playerId,
+      targetPlayerId,
+      choice,
+      reason: "truce without active duel"
+    });
+    sendWsJson(client, { type: "error", message: "Truce is only available during an active duel." });
+    return;
+  }
+
   const existing = pendingPlayerInteractions.get(key);
   const pending =
     existing && Date.now() - existing.updatedAt < 30000
@@ -4356,11 +4374,11 @@ async function acceptPlayerInteraction(aPlayerId, bPlayerId, choice) {
     return;
   }
 
-  if (choice === "team") {
-    await addFriendship(aPlayerId, bPlayerId);
-    notifyProfileChanged(aPlayerId);
-    notifyProfileChanged(bPlayerId);
-    startOverlap(addToFriendOverlap(aPlayerId, bPlayerId), "friend");
+  const key = interactionPairKey(aPlayerId, bPlayerId);
+  if (choice === "duel") {
+    activePlayerDuels.add(key);
+  } else if (choice === "truce") {
+    activePlayerDuels.delete(key);
   }
 
   sendInteractionResult(aClient, bClient, choice, true);

@@ -53,6 +53,7 @@
   const zoomValue = document.getElementById("zoomValue");
   const surfaceCameraRotationInput = document.getElementById("surfaceCameraRotationInput");
   const touchScreenInput = document.getElementById("touchScreenInput");
+  const hudEnabledInput = document.getElementById("hudEnabledInput");
   const multiplayerToggleInput = document.getElementById("multiplayerToggleInput");
   const multiplayerStatus = document.getElementById("multiplayerStatus");
   const multiplayerPanelStatus = document.getElementById("multiplayerPanelStatus");
@@ -528,6 +529,7 @@
     "communication-relay": 120,
     jet: 120,
     tether: 130,
+    bridge: 170,
     "missile-launcher": 125,
     turret: 110
   };
@@ -707,6 +709,14 @@
   const tetherSpring = 34;
   const tetherDamping = 9.5;
   const tetherMaxAcceleration = 760;
+  const bridgeHalfWidth = 18;
+  const bridgeWalkTransferAngle = 0.11;
+  const bridgeWalkExitAnglePadding = 0.045;
+  const bridgeMinAnchorLength = 80;
+  const bridgeMinCurveLength = 54;
+  const bridgeMaxCurveLength = 138;
+  const bridgeMaxAngularSpeed = 2.7;
+  const bridgeAngularDamping = 0.74;
   const jetEnergyDrain = 9;
   const jetThrust = 620;
   const defaultToolId = "suction-gadget";
@@ -849,6 +859,15 @@
       cost: { plating: 5, suction: 2, propulsion: 2 },
       structureType: "tether",
       icon: "assets/tether.svg"
+    },
+    {
+      id: "bridge",
+      name: "Bridge",
+      category: "structures",
+      description: "A rigid plated span that welds two bodies together and lets you walk between them.",
+      cost: { plating: 12, propulsion: 2 },
+      structureType: "bridge",
+      icon: "assets/bridge.svg"
     }
   ];
   const toolUpgradeDefinitions = {
@@ -948,6 +967,8 @@
   const partyRemoteBucketPadding = 12;
   const partyGadgetCandidateLimit = 8;
   const partyGadgetBucketLimit = 4;
+  const partyAuthorityBodyLimit = 6;
+  const partyBodyAuthorityHoldMs = 480;
   const partyGadgetIntentAssistMs = 520;
   const partyFollowerPredictionHoldMs = 420;
   const remoteSnapshotRenderDelay = multiplayerSnapshotInterval * 0.8;
@@ -957,11 +978,11 @@
   const remoteStaleMs = 16000;
   const remoteUniverseAlphaScale = 0.32;
   const playerInteractionRange = 250;
-  const playerInteractionChoicesConfig = [
-    { key: "trade", label: "Trade", icon: "$", speech: "Trade?", emote: "swap" },
-    { key: "truce", label: "Truce", icon: "!", speech: "Truce?", emote: "peace" },
-    { key: "team", label: "Team", icon: "+", speech: "Team?", emote: "team" }
-  ];
+  const playerInteractionChoiceConfigs = {
+    trade: { key: "trade", label: "Trade", icon: "$", speech: "Trade?", emote: "swap" },
+    duel: { key: "duel", label: "Duel", icon: "!", speech: "Duel?", emote: "duel" },
+    truce: { key: "truce", label: "Truce", icon: "=", speech: "Truce?", emote: "peace" }
+  };
   const multiplayer = {
     enabled: Boolean(window.WebSocket),
     socket: null,
@@ -990,6 +1011,7 @@
     partyHostId: "",
     partyHostUniverseId: "",
     partyPlayerSnapshots: new Map(),
+    partyBodyAuthority: new Map(),
     partyInputTimer: 0,
     partyInputSeq: 0,
     partyLastInputSnapshot: null,
@@ -1014,7 +1036,7 @@
     interactionMenu: null,
     incomingInteractions: new Map(),
     remoteEmotes: new Map(),
-    truces: new Set(),
+    duels: new Set(),
     claimedTechPickupIds: new Set(),
     trade: null
   };
@@ -1214,6 +1236,7 @@
       zoom: 0.62,
       surfaceCameraRotation: false,
       touchScreen: shouldEnableTouchControlsByDefault(),
+      hudEnabled: true,
       controls: Object.assign({}, defaultControlBindings)
     };
 
@@ -1231,6 +1254,7 @@
         zoom: clamp(zoom || defaults.zoom, 0.4, 1.75),
         surfaceCameraRotation: stored.surfaceCameraRotation === true,
         touchScreen: typeof stored.touchScreen === "boolean" ? stored.touchScreen : defaults.touchScreen,
+        hudEnabled: typeof stored.hudEnabled === "boolean" ? stored.hudEnabled : defaults.hudEnabled,
         controls: normalizeControlBindings(stored.controls)
       };
     } catch (error) {
@@ -1245,6 +1269,7 @@
         zoom: gameSettings.zoom,
         surfaceCameraRotation: gameSettings.surfaceCameraRotation,
         touchScreen: gameSettings.touchScreen,
+        hudEnabled: gameSettings.hudEnabled,
         controls: gameSettings.controls
       }));
     } catch (error) {
@@ -1418,6 +1443,17 @@
     }
   }
 
+  function updateHudEnabledUi() {
+    const hudEnabled = gameSettings.hudEnabled !== false;
+    document.body.classList.toggle("hud-hidden", !hudEnabled);
+    document.body.classList.toggle("hud-menu-open", settingsOpen || buildMenuOpen);
+    if (hudEnabledInput) {
+      hudEnabledInput.checked = hudEnabled;
+    }
+    syncCompactHudControls();
+    updateToolHotbar();
+  }
+
   function surfaceCameraRollForAngle(angle) {
     return gameSettings.surfaceCameraRotation ? cameraRollForSurfaceAngle(angle) : 0;
   }
@@ -1438,6 +1474,18 @@
       resetMouseButtons();
     }
     updateTouchLandButton();
+    writeGameSettings();
+  }
+
+  function applyHudEnabledSetting(enabled) {
+    gameSettings.hudEnabled = Boolean(enabled);
+    if (!gameSettings.hudEnabled) {
+      setLeaderboardOpen(false);
+      setBuildMenuOpen(false);
+      setSocialPanelOpen(false);
+      resetMouseButtons();
+    }
+    updateHudEnabledUi();
     writeGameSettings();
   }
 
@@ -1499,6 +1547,7 @@
     }
 
     renderControlBindings();
+    updateHudEnabledUi();
   }
 
   function remapControl(action, code) {
@@ -3138,7 +3187,7 @@
     }
 
     toolHotbar.textContent = "";
-    toolHotbar.classList.toggle("is-visible", hotbarToolIds.length > 0 && (unlockedToolIds.length > 1 || buildMenuOpen));
+    toolHotbar.classList.toggle("is-visible", gameSettings.hudEnabled !== false && hotbarToolIds.length > 0 && (unlockedToolIds.length > 1 || buildMenuOpen));
 
     hotbarToolIds.forEach((toolId, index) => {
       const tool = toolById(toolId);
@@ -3259,8 +3308,8 @@
     pendingTetherAnchor = null;
     setBuildMenuOpen(false);
     resetMouseButtons();
-    if (recipe.structureType === "tether") {
-      maybeNotifyText("Choose a boulder or larger body for the first tether anchor.");
+    if (isLinkedStructureType(recipe.structureType)) {
+      maybeNotifyText("Choose a boulder or larger body for the first " + recipe.name.toLowerCase() + " anchor.");
     } else {
       maybeNotifyText("Choose a dwarf moon, moon, planet, or plate surface for the " + recipe.name.toLowerCase() + ".");
     }
@@ -3360,6 +3409,24 @@
   }
 
   function syncCompactHudControls() {
+    if (gameSettings.hudEnabled === false) {
+      if (gameVitalsHud) {
+        gameVitalsHud.classList.remove("is-compact", "is-compact-open");
+        gameVitalsHud.setAttribute("aria-hidden", "true");
+      }
+      if (techLedger) {
+        techLedger.classList.remove("is-open");
+        techLedger.setAttribute("aria-hidden", "true");
+      }
+      for (const toggle of [vitalsToggle, resourcesToggle, buildToggle, mapToggle]) {
+        if (toggle) {
+          toggle.classList.remove("is-active");
+          toggle.setAttribute("aria-expanded", "false");
+        }
+      }
+      return;
+    }
+
     const compact = isCompactHudViewport();
     const vitalsVisible = !compact || vitalsHudOpen;
 
@@ -3478,6 +3545,7 @@
       buildToggle.setAttribute("aria-label", buildMenuOpen ? "Close build menu" : "Open build menu");
     }
     updateToolHotbar();
+    updateHudEnabledUi();
   }
 
   function serializeTechInventory() {
@@ -3659,6 +3727,7 @@
     applyUiScale(gameSettings.uiScale);
     updateZoomUi();
     updateSurfaceCameraRotationUi();
+    updateHudEnabledUi();
     updateSoundToggle();
   }
 
@@ -4285,6 +4354,7 @@
     multiplayer.partyHostId = String(session.hostPlayerId || message.hostPlayerId || player.id);
     multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
     multiplayer.partyPlayerSnapshots.clear();
+    multiplayer.partyBodyAuthority.clear();
     multiplayer.partyInputTimer = 0;
     multiplayer.partyInputSeq = 0;
     multiplayer.partyLastInputSnapshot = null;
@@ -4324,6 +4394,7 @@
   function applyPartyHostChanged(message) {
     multiplayer.partyHostId = String(message.hostPlayerId || "");
     multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
+    multiplayer.partyBodyAuthority.clear();
     maybeNotifyText(isPartyHost() ? "You are now host." : "Host migrated.");
     if (message.snapshot && isPartyHost()) {
       applyWorldSnapshot(message.snapshot.world);
@@ -6084,7 +6155,7 @@
     while (changed) {
       changed = false;
       for (const structure of structures) {
-        if (!structure || structure.type !== "tether" || structure.health <= 0 || !structure.bodyId || !structure.linkedBodyId) {
+        if (!structure || !isLinkedStructureType(structure.type) || structure.health <= 0 || !structure.bodyId || !structure.linkedBodyId) {
           continue;
         }
         const firstKnown = ids.has(structure.bodyId);
@@ -6863,7 +6934,7 @@
     }
 
     if (multiplayer.commandOpen) {
-      setCommandLockedState(true);
+      setCommandLockedState(!multiplayer.commandUnlocked);
       void refreshPlayerSearch();
       focusCommandInput();
       window.requestAnimationFrame(focusCommandInput);
@@ -6872,9 +6943,8 @@
       }, 0);
     } else {
       commandInput.blur();
-      commandInput.type = "text";
+      commandInput.type = multiplayer.commandUnlocked ? "text" : "password";
       commandInput.value = "";
-      multiplayer.commandUnlocked = false;
       multiplayer.commandCompletions = [];
       multiplayer.commandCompletionIndex = 0;
     }
@@ -7732,11 +7802,28 @@
   }
 
   function interactionChoiceByKey(key) {
-    return playerInteractionChoicesConfig.find((choice) => choice.key === key) || null;
+    return playerInteractionChoiceConfigs[key] || null;
   }
 
   function normalizeInteractionChoice(key) {
     return interactionChoiceByKey(key) ? key : "";
+  }
+
+  function isDuelingWith(playerId) {
+    return Boolean(playerId && multiplayer.duels.has(playerId));
+  }
+
+  function interactionChoicesForPlayer(playerId) {
+    return [
+      playerInteractionChoiceConfigs.trade,
+      isDuelingWith(playerId) ? playerInteractionChoiceConfigs.truce : playerInteractionChoiceConfigs.duel
+    ];
+  }
+
+  function interactionMenuChoiceByKey(menu, key) {
+    return menu && Array.isArray(menu.choices)
+      ? menu.choices.find((choice) => choice && choice.key === key) || null
+      : null;
   }
 
   function playerIdForInteractionTarget(target) {
@@ -7793,14 +7880,16 @@
     }
 
     const requested = normalizeInteractionChoice(requestedChoice);
+    const choices = interactionChoicesForPlayer(targetPlayerId);
     const selectedIndex = Math.max(
       0,
-      playerInteractionChoicesConfig.findIndex((choice) => choice.key === requested)
+      choices.findIndex((choice) => choice.key === requested)
     );
     multiplayer.interactionMenu = {
       targetPlayerId,
       targetName: target.publicName || target.player.name || "Contact",
       requestedChoice: requested,
+      choices,
       selectedIndex
     };
     renderPlayerInteractionMenu();
@@ -7819,7 +7908,7 @@
     }
 
     playerInteractionChoices.textContent = "";
-    playerInteractionChoicesConfig.forEach((choice, index) => {
+    menu.choices.forEach((choice, index) => {
       const button = document.createElement("button");
       const icon = document.createElement("span");
       const label = document.createElement("span");
@@ -7849,7 +7938,7 @@
       return;
     }
 
-    const count = playerInteractionChoicesConfig.length;
+    const count = menu.choices.length;
     menu.selectedIndex = (menu.selectedIndex + delta + count) % count;
     renderPlayerInteractionMenu();
   }
@@ -7857,7 +7946,7 @@
   function choosePlayerInteraction(choiceKey) {
     const menu = multiplayer.interactionMenu;
     const choice = normalizeInteractionChoice(choiceKey);
-    if (!menu || !choice) {
+    if (!menu || !choice || !interactionMenuChoiceByKey(menu, choice)) {
       return;
     }
 
@@ -7940,16 +8029,19 @@
       return;
     }
 
-    if (message.accepted && choice === "truce") {
+    if (message.accepted && choice === "duel") {
       if (peerId) {
-        multiplayer.truces.add(peerId);
+        multiplayer.duels.add(peerId);
       }
-      maybeNotifyText("Truce agreed with " + peerName + ". PvP is off.");
+      maybeNotifyText("Duel agreed with " + peerName + ". PvP is on.");
       return;
     }
 
-    if (message.accepted && choice === "team") {
-      maybeNotifyText("Team formed with " + peerName + ".");
+    if (message.accepted && choice === "truce") {
+      if (peerId) {
+        multiplayer.duels.delete(peerId);
+      }
+      maybeNotifyText("Truce agreed with " + peerName + ". PvP is off.");
       return;
     }
 
@@ -8271,10 +8363,6 @@
     maybeNotifyText("Trade complete with " + trade.peerName + ".");
   }
 
-  function isTrucedWith(playerId) {
-    return Boolean(playerId && multiplayer.truces.has(playerId));
-  }
-
   function partyPlayerIds() {
     return new Set(
       multiplayer.partySession && Array.isArray(multiplayer.partySession.players)
@@ -8294,29 +8382,26 @@
     if (!remote || !remote.playerId) {
       return false;
     }
-    if (isTrucedWith(remote.playerId)) {
-      return false;
-    }
     if (multiplayer.anomaly && remote.teamId && multiplayer.anomaly.teamId) {
       return remote.teamId !== multiplayer.anomaly.teamId;
     }
     if (isFriendlyPartyPlayer(remote.playerId)) {
       return false;
     }
-    return true;
+    return isDuelingWith(remote.playerId);
   }
 
   function canReceiveDamageFromPlayer(fromPlayerId, fromTeamId) {
     if (!fromPlayerId) {
       return true;
     }
-    if (isTrucedWith(fromPlayerId)) {
-      return false;
-    }
     if (multiplayer.anomaly && fromTeamId && multiplayer.anomaly.teamId) {
       return fromTeamId !== multiplayer.anomaly.teamId;
     }
-    return !isFriendlyPartyPlayer(fromPlayerId);
+    if (isFriendlyPartyPlayer(fromPlayerId)) {
+      return false;
+    }
+    return isDuelingWith(fromPlayerId);
   }
 
   function collectPartyGadgetIntentIds(state) {
@@ -8347,13 +8432,61 @@
     };
   }
 
+  function serializePartyAuthorityBody(body) {
+    if (!body) {
+      return null;
+    }
+    return {
+      id: body.id,
+      x: finiteOr(body.x, 0),
+      y: finiteOr(body.y, 0),
+      vx: finiteOr(body.vx, 0),
+      vy: finiteOr(body.vy, 0)
+    };
+  }
+
+  function collectPartyAuthorityBodies(ids, landedBodyId) {
+    const bodies = [];
+    const seen = new Set();
+    const addBody = (id) => {
+      const cleanId = Math.max(1, Math.floor(finiteOr(id, 0)));
+      if (!cleanId || seen.has(cleanId) || bodies.length >= partyAuthorityBodyLimit) {
+        return;
+      }
+      const body = bodyById(cleanId);
+      if (!body || isUfoBeamCargo(body)) {
+        return;
+      }
+      seen.add(cleanId);
+      const snapshot = serializePartyAuthorityBody(body);
+      if (snapshot) {
+        bodies.push(snapshot);
+      }
+    };
+
+    if (landedBodyId) {
+      addBody(landedBodyId);
+    }
+    for (const id of ids.bucketIds || []) {
+      addBody(id);
+    }
+    for (const id of ids.candidateIds || []) {
+      addBody(id);
+    }
+    return bodies;
+  }
+
   function buildLocalPartyGadgetSnapshot(playerSnapshot, seq) {
     const state = localPartyGadgetState(playerSnapshot);
     const mode = state ? state.mode : "idle";
     const active = Boolean(state && state.active);
-    const ids = active || (state && state.landedBodyId && (state.left || state.right))
+    const ids = state
       ? collectPartyGadgetIntentIds(state)
       : { candidateIds: [], bucketIds: [] };
+    const landedThrustDirection = state && state.landedBodyId && (state.left || state.right) ? (state.left ? 1 : -1) : 0;
+    const authorityBodies = active || landedThrustDirection || ids.bucketIds.length
+      ? collectPartyAuthorityBodies(ids, landedThrustDirection ? state.landedBodyId : 0)
+      : [];
 
     return {
       seq,
@@ -8366,8 +8499,11 @@
       vy: finiteOr(playerSnapshot && playerSnapshot.vy, player.vy),
       candidateIds: ids.candidateIds,
       bucketIds: ids.bucketIds,
+      authorityBodies,
       landedBodyId: state && state.landedBodyId ? state.landedBodyId : 0,
-      landedThrustDirection: state && state.landedBodyId && (state.left || state.right) ? (state.left ? 1 : -1) : 0
+      landedThrustDirection,
+      suckFactor: state ? state.suckFactor : 1,
+      blowFactor: state ? state.blowFactor : 1
     };
   }
 
@@ -8406,7 +8542,10 @@
 
   function partyInputIntervalFor(snapshot) {
     const gadget = snapshot && snapshot.gadget;
-    if ((gadget && (gadget.active || gadget.landedThrustDirection)) || partyInputMotionSharp(snapshot)) {
+    if (
+      (gadget && (gadget.active || gadget.landedThrustDirection || (gadget.bucketIds && gadget.bucketIds.length) || (gadget.authorityBodies && gadget.authorityBodies.length))) ||
+      partyInputMotionSharp(snapshot)
+    ) {
       return partyActiveInputInterval;
     }
     return partyInputInterval;
@@ -8431,7 +8570,16 @@
       const snapshot = entry && entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : null;
       const gadget = snapshot && snapshot.gadget && typeof snapshot.gadget === "object" ? snapshot.gadget : null;
       const remotePlayer = snapshot && snapshot.player && typeof snapshot.player === "object" ? snapshot.player : null;
-      if (gadget && (gadget.active || gadget.landedThrustDirection) && now - finiteOr(entry.receivedAt, 0) <= partyGadgetIntentAssistMs) {
+      if (
+        gadget &&
+        (
+          gadget.active ||
+          gadget.landedThrustDirection ||
+          (Array.isArray(gadget.bucketIds) && gadget.bucketIds.length) ||
+          (Array.isArray(gadget.authorityBodies) && gadget.authorityBodies.length)
+        ) &&
+        now - finiteOr(entry.receivedAt, 0) <= partyGadgetIntentAssistMs
+      ) {
         return true;
       }
       if (
@@ -8805,7 +8953,7 @@
         }),
         structures: interpolateRemoteEntityList(fromWorld.structures, toWorld.structures, progress, lead, {
           angleKeys: ["angle", "linkedAngle", "aimAngle"],
-          scalarKeys: ["x2", "y2", "deploy", "thrustAmount", "thrustDirection", "health", "maxHealth", "disabledTimer", "flash", "restLength", "linkedSurfaceOffset", "burstTimer", "burstCooldown", "missileCharge", "lockTimer", "beepTimer", "targetX", "targetY", "targetCount"]
+          scalarKeys: ["x2", "y2", "deploy", "thrustAmount", "thrustDirection", "health", "maxHealth", "disabledTimer", "flash", "restLength", "restCenterDx", "restCenterDy", "linkedSurfaceOffset", "burstTimer", "burstCooldown", "missileCharge", "lockTimer", "beepTimer", "targetX", "targetY", "targetCount"]
         }),
         rivalProjectiles: interpolateRemoteEntityList(fromWorld.rivalProjectiles, toWorld.rivalProjectiles, progress, lead, {
           scalarKeys: ["radius", "length", "life", "maxLife"]
@@ -8876,6 +9024,10 @@
     const angle = fromLanding.angle + shortestAngleDelta(fromLanding.angle, toLanding.angle) * progress;
     return {
       bodyId: toLanding.bodyId,
+      bridgeId: toLanding.bridgeId || 0,
+      bridgeT: finiteOr(fromLanding.bridgeT, 0) + (finiteOr(toLanding.bridgeT, 0) - finiteOr(fromLanding.bridgeT, 0)) * progress,
+      bridgeSide: finiteOr(toLanding.bridgeSide, 1) < 0 ? -1 : 1,
+      bridgeInputSign: finiteOr(toLanding.bridgeInputSign, 1) < 0 ? -1 : 1,
       angle,
       walkSpeed: finiteOr(fromLanding.walkSpeed, 0) + (finiteOr(toLanding.walkSpeed, 0) - finiteOr(fromLanding.walkSpeed, 0)) * progress,
       walkCycle: finiteOr(fromLanding.walkCycle, 0) + (finiteOr(toLanding.walkCycle, 0) - finiteOr(fromLanding.walkCycle, 0)) * progress
@@ -9055,6 +9207,19 @@
       type: "entity.effect",
       targetUniverseId: remote.universeId,
       targetPlayerId: remote.playerId,
+      effect
+    });
+  }
+
+  function sendPartyHostEntityEffect(effect) {
+    if (!isSharedWorldFollower() || !multiplayer.partyHostId || !effect) {
+      return;
+    }
+
+    sendMultiplayer({
+      type: "entity.effect",
+      targetUniverseId: multiplayer.partyHostUniverseId || "solo:" + multiplayer.partyHostId,
+      targetPlayerId: multiplayer.partyHostId,
       effect
     });
   }
@@ -9845,16 +10010,15 @@
     }
 
     const now = performance.now();
+    const controlledBodyIds = new Set();
     if (state.landedBodyId && (state.left || state.right)) {
       const body = bodyById(state.landedBodyId);
       const direction = state.left ? 1 : -1;
-      if (applyGadgetThrustToBody(body, state.aimWorld, direction, dt)) {
+      const strengthFactor = state.left ? state.suckFactor : state.blowFactor;
+      if (applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor)) {
+        controlledBodyIds.add(body.id);
         markFollowerPredictedParticle(body, now);
       }
-    }
-
-    if (!state.active) {
-      return;
     }
 
     for (const particle of particles) {
@@ -9864,7 +10028,7 @@
 
       const probe = partyGadgetParticleProbe(state, particle, { padding: 24 });
       let predicted = false;
-      if (probe.force) {
+      if (state.active && probe.force) {
         predicted = applyActorGadgetForces(particle, state, dt) || predicted;
       }
       if (probe.bucket) {
@@ -9872,7 +10036,56 @@
         predicted = true;
       }
       if (predicted) {
+        controlledBodyIds.add(particle.id);
         markFollowerPredictedParticle(particle, now);
+      }
+    }
+
+    resolveFollowerControlledBodyCollisions(controlledBodyIds);
+  }
+
+  function resolveFollowerControlledBodyCollisions(controlledBodyIds) {
+    if (!controlledBodyIds || !controlledBodyIds.size) {
+      return;
+    }
+
+    for (const bodyId of controlledBodyIds) {
+      const body = bodyById(bodyId);
+      if (!body || !body.tier || !body.tier.solid) {
+        continue;
+      }
+
+      for (const other of particles) {
+        if (!other || other.id === body.id || !other.tier || !other.tier.solid) {
+          continue;
+        }
+
+        const dx = body.x - other.x;
+        const dy = body.y - other.y;
+        const rawDist = Math.hypot(dx, dy);
+        const dist = rawDist || 1;
+        const minDist = solidBodyContactRadius(body) + solidBodyContactRadius(other);
+        if (dist >= minDist) {
+          continue;
+        }
+
+        const nx = rawDist ? dx / dist : 1;
+        const ny = rawDist ? dy / dist : 0;
+        const overlap = minDist - dist;
+        body.x += nx * overlap;
+        body.y += ny * overlap;
+
+        const relativeVelocity = (body.vx - other.vx) * nx + (body.vy - other.vy) * ny;
+        if (relativeVelocity < 0) {
+          const impulse = -relativeVelocity * 0.92;
+          body.vx += nx * impulse;
+          body.vy += ny * impulse;
+          const tangentX = -ny;
+          const tangentY = nx;
+          const tangentVelocity = body.vx * tangentX + body.vy * tangentY;
+          body.vx -= tangentX * tangentVelocity * 0.12;
+          body.vy -= tangentY * tangentVelocity * 0.12;
+        }
       }
     }
   }
@@ -10146,6 +10359,8 @@
       x2: structure.x2,
       y2: structure.y2,
       restLength: structure.restLength,
+      restCenterDx: structure.restCenterDx,
+      restCenterDy: structure.restCenterDy,
       aimAngle: structure.aimAngle,
       deploy: structure.deploy,
       thrustAmount: structure.thrustAmount,
@@ -10450,6 +10665,8 @@
       x2: finiteOr(snapshot.x2, snapshot.x),
       y2: finiteOr(snapshot.y2, snapshot.y),
       restLength: Math.max(0, finiteOr(snapshot.restLength, 0)),
+      restCenterDx: finiteOr(snapshot.restCenterDx, 0),
+      restCenterDy: finiteOr(snapshot.restCenterDy, 0),
       aimAngle: finiteOr(snapshot.aimAngle, angle),
       deploy: clamp(finiteOr(snapshot.deploy, 0), 0, 1),
       thrustAmount: clamp(finiteOr(snapshot.thrustAmount, 0), 0, 1),
@@ -10581,6 +10798,10 @@
 
     return {
       bodyId: Math.max(1, Math.floor(finiteOr(snapshot.bodyId, 1))),
+      bridgeId: Math.max(0, Math.floor(finiteOr(snapshot.bridgeId, 0))),
+      bridgeT: Math.max(0, finiteOr(snapshot.bridgeT, 0)),
+      bridgeSide: finiteOr(snapshot.bridgeSide, 1) < 0 ? -1 : 1,
+      bridgeInputSign: finiteOr(snapshot.bridgeInputSign, 1) < 0 ? -1 : 1,
       angle: finiteOr(snapshot.angle, 0),
       walkSpeed: finiteOr(snapshot.walkSpeed, 0),
       walkCycle: finiteOr(snapshot.walkCycle, 0)
@@ -10659,6 +10880,87 @@
     }
 
     return anchors;
+  }
+
+  function activeMobSpawnAnchors() {
+    const anchors = [];
+    if (!deathState.active && player.health > 0) {
+      anchors.push({
+        x: player.x,
+        y: player.y,
+        vx: player.vx,
+        vy: player.vy,
+        playerId: player.id
+      });
+    }
+
+    if (isPartyHost() && multiplayer.partyPlayerSnapshots.size) {
+      const now = performance.now();
+      for (const [playerId, entry] of multiplayer.partyPlayerSnapshots) {
+        if (!entry || now - finiteOr(entry.receivedAt, 0) > 2200) {
+          continue;
+        }
+
+        const source = entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : {};
+        const remotePlayer = predictPartyRemotePlayer(
+          normalizeRemotePlayerSnapshot(source.player || source),
+          entry.receivedAt
+        );
+        if (!remotePlayer || remotePlayer.health <= 0) {
+          continue;
+        }
+        anchors.push({
+          x: remotePlayer.x,
+          y: remotePlayer.y,
+          vx: remotePlayer.vx,
+          vy: remotePlayer.vy,
+          playerId
+        });
+      }
+    }
+
+    if (!anchors.length) {
+      anchors.push({
+        x: player.x,
+        y: player.y,
+        vx: player.vx,
+        vy: player.vy,
+        playerId: player.id
+      });
+    }
+
+    return anchors.slice(0, crazyGamesRoomMaxPlayers);
+  }
+
+  function leastPopulatedMobSpawnAnchor(anchors) {
+    const source = Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors();
+    const counts = source.map(() => 0);
+
+    for (const mob of allCombatMobs()) {
+      if (!mob || mob.health <= 0) {
+        continue;
+      }
+
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      for (let i = 0; i < source.length; i += 1) {
+        const anchor = source[i];
+        const distance = Math.hypot(mob.x - anchor.x, mob.y - anchor.y);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = i;
+        }
+      }
+      counts[bestIndex] += 1;
+    }
+
+    let minCount = Infinity;
+    for (const count of counts) {
+      minCount = Math.min(minCount, count);
+    }
+
+    const candidates = source.filter((_, index) => counts[index] === minCount);
+    return candidates[Math.floor(Math.random() * candidates.length)] || source[0] || player;
   }
 
   function nearestPartyAnchorDistance(x, y, anchors) {
@@ -11273,76 +11575,76 @@
     applyRivalSurfaceConstraint(rival);
   }
 
-  function spawnAlienoidNearPlayer() {
-    const spawn = randomOffscreenPoint(110, 360);
+  function spawnAlienoidNearPlayer(anchor) {
+    const spawn = randomOffscreenPoint(110, 360, anchor);
     rivals.push(createRival(spawn.x, spawn.y));
   }
 
-  function spawnUfoNearPlayer() {
-    const spawn = randomOffscreenPoint(180, 520);
+  function spawnUfoNearPlayer(anchor) {
+    const spawn = randomOffscreenPoint(180, 520, anchor);
     ufos.push(createUfo(spawn.x, spawn.y));
   }
 
-  function spawnRambotNearPlayer() {
-    const spawn = randomOffscreenPoint(220, 620);
+  function spawnRambotNearPlayer(anchor) {
+    const spawn = randomOffscreenPoint(220, 620, anchor);
     rambots.push(createRambot(spawn.x, spawn.y));
   }
 
-  function spawnEngineerNearPlayer() {
-    const spawn = randomOffscreenPoint(210, 600);
+  function spawnEngineerNearPlayer(anchor) {
+    const spawn = randomOffscreenPoint(210, 600, anchor);
     engineers.push(createEngineer(spawn.x, spawn.y));
   }
 
-  function spawnTeslaNearPlayer() {
-    const spawn = randomOffscreenPoint(190, 560);
+  function spawnTeslaNearPlayer(anchor) {
+    const spawn = randomOffscreenPoint(190, 560, anchor);
     teslas.push(createTesla(spawn.x, spawn.y));
   }
 
-  function spawnSatelliteNearPlayer() {
-    const spawn = randomOffscreenPoint(230, 680);
+  function spawnSatelliteNearPlayer(anchor) {
+    const spawn = randomOffscreenPoint(230, 680, anchor);
     rockets.push(createSatellite(spawn.x, spawn.y));
   }
 
-  function spawnRocketNearPlayer() {
-    const spawn = randomOffscreenPoint(320, 900);
+  function spawnRocketNearPlayer(anchor) {
+    const spawn = randomOffscreenPoint(320, 900, anchor);
     rockets.push(createRocket(spawn.x, spawn.y));
   }
 
-  function spawnFighterNearPlayer() {
-    const spawn = randomOffscreenPoint(260, 760);
+  function spawnFighterNearPlayer(anchor) {
+    const spawn = randomOffscreenPoint(260, 760, anchor);
     fighters.push(createFighter(spawn.x, spawn.y));
   }
 
-  function spawnMobByKind(kind) {
+  function spawnMobByKind(kind, anchor) {
     if (kind === "ufo") {
-      spawnUfoNearPlayer();
+      spawnUfoNearPlayer(anchor);
       return;
     }
     if (kind === "rambot") {
-      spawnRambotNearPlayer();
+      spawnRambotNearPlayer(anchor);
       return;
     }
     if (kind === "engineer") {
-      spawnEngineerNearPlayer();
+      spawnEngineerNearPlayer(anchor);
       return;
     }
     if (kind === "tesla") {
-      spawnTeslaNearPlayer();
+      spawnTeslaNearPlayer(anchor);
       return;
     }
     if (kind === "satellite") {
-      spawnSatelliteNearPlayer();
+      spawnSatelliteNearPlayer(anchor);
       return;
     }
     if (kind === "rocket") {
-      spawnRocketNearPlayer();
+      spawnRocketNearPlayer(anchor);
       return;
     }
     if (kind === "fighter") {
-      spawnFighterNearPlayer();
+      spawnFighterNearPlayer(anchor);
       return;
     }
-    spawnAlienoidNearPlayer();
+    spawnAlienoidNearPlayer(anchor);
   }
 
   function isMobTierUnlocked(kind) {
@@ -11359,7 +11661,7 @@
     return Math.max(0, (performance.now() - lifeStats.startedAt) / 1000);
   }
 
-  function maxMobSpawnBatchSize(kind) {
+  function baseMobSpawnBatchLimit(kind) {
     const interval = difficultyMobSpawnInterval(kind);
     if (!interval) {
       return baseMaxMobSpawnBatchSize;
@@ -11370,6 +11672,11 @@
     return Math.max(1, Math.round(rawLimit * activeDifficulty().mobBatchScale));
   }
 
+  function maxMobSpawnBatchSize(kind, playerCount) {
+    const count = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Math.floor(finiteOr(playerCount, 1))));
+    return baseMobSpawnBatchLimit(kind) * count;
+  }
+
   function mobSpawnBonusSlotChanceScale(bonusSlot) {
     if (bonusSlot < 2) {
       return activeDifficulty().mobBonusChanceScale;
@@ -11377,13 +11684,12 @@
     return Math.pow(thirdMobSpawnChanceScale, bonusSlot - 1) * activeDifficulty().mobBonusChanceScale;
   }
 
-  function mobSpawnBatchSize(kind) {
+  function rollMobSpawnBatchSize(kind, batchLimit) {
     const index = mobTierOrder.indexOf(kind);
     const nextKind = mobTierOrder[index + 1];
 
     const defeats = Math.max(0, mobDefeatsByKind[nextKind || kind] || 0);
     let batchSize = 1;
-    const batchLimit = maxMobSpawnBatchSize(kind);
     for (let bonusSlot = 1; bonusSlot < batchLimit; bonusSlot += 1) {
       const chanceScale = mobSpawnBonusSlotChanceScale(bonusSlot);
       const chance = clamp(defeats / (previousTierDefeatsToUnlock * bonusSlot), 0, 0.92) * chanceScale;
@@ -11394,7 +11700,19 @@
     return batchSize;
   }
 
+  function mobSpawnBatchSize(kind, playerCount) {
+    const count = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Math.floor(finiteOr(playerCount, 1))));
+    const batchLimit = baseMobSpawnBatchLimit(kind);
+    let batchSize = 0;
+    for (let i = 0; i < count; i += 1) {
+      batchSize += rollMobSpawnBatchSize(kind, batchLimit);
+    }
+    return Math.min(maxMobSpawnBatchSize(kind, count), Math.max(1, batchSize));
+  }
+
   function updateMobSpawns(dt) {
+    const anchors = activeMobSpawnAnchors();
+    const playerCount = anchors.length;
     for (const kind of Object.keys(mobSpawnIntervals)) {
       if (!isMobTierUnlocked(kind)) {
         mobSpawnTimers[kind] = Math.max(0, mobSpawnTimers[kind] - dt);
@@ -11403,9 +11721,9 @@
 
       mobSpawnTimers[kind] -= dt;
       while (mobSpawnTimers[kind] <= 0) {
-        const batchSize = mobSpawnBatchSize(kind);
+        const batchSize = mobSpawnBatchSize(kind, playerCount);
         for (let i = 0; i < batchSize; i += 1) {
-          spawnMobByKind(kind);
+          spawnMobByKind(kind, leastPopulatedMobSpawnAnchor(anchors));
         }
         mobSpawnTimers[kind] += difficultyMobSpawnInterval(kind);
       }
@@ -11444,7 +11762,8 @@
     };
   }
 
-  function randomOffscreenPoint(margin, spread) {
+  function randomOffscreenPoint(margin, spread, anchor) {
+    const source = anchor || player;
     const side = Math.floor(Math.random() * 4);
     const halfW = width / (2 * cameraZoom);
     const halfH = height / (2 * cameraZoom);
@@ -11463,8 +11782,8 @@
 
     const world = cameraLocalToWorld(localX, localY);
     return {
-      x: player.x + world.x,
-      y: player.y + world.y
+      x: finiteOr(source.x, player.x) + world.x,
+      y: finiteOr(source.y, player.y) + world.y
     };
   }
 
@@ -11546,7 +11865,7 @@
   }
 
   function structurePlacementThresholdForType(type) {
-    if (type === "tether") {
+    if (isLinkedStructureType(type)) {
       return thresholdForTierName("boulder");
     }
     return structurePlacementTierThreshold;
@@ -11557,7 +11876,15 @@
   }
 
   function isKnownStructureType(type) {
-    return type === "turret" || type === "missile-launcher" || type === "accumulator" || type === "shield-generator" || type === "plating-block" || type === "battery" || type === "communication-relay" || type === "jet" || type === "tether";
+    return type === "turret" || type === "missile-launcher" || type === "accumulator" || type === "shield-generator" || type === "plating-block" || type === "battery" || type === "communication-relay" || type === "jet" || type === "tether" || type === "bridge";
+  }
+
+  function isLinkedStructureType(type) {
+    return type === "tether" || type === "bridge";
+  }
+
+  function isActiveBridge(structure) {
+    return Boolean(structure && structure.type === "bridge" && structure.health > 0 && !isStructureDisabled(structure));
   }
 
   function hasCommunicationRelay() {
@@ -11592,6 +11919,9 @@
     }
     if (structure.type === "tether") {
       return 42;
+    }
+    if (structure.type === "bridge") {
+      return 46;
     }
     return 48;
   }
@@ -11640,6 +11970,28 @@
     return extension;
   }
 
+  function platingBlockAtImpactAngle(body, angle) {
+    if (!body) {
+      return null;
+    }
+
+    let blocker = null;
+    let highestOffset = -Infinity;
+    for (const structure of structures) {
+      if (!structure || structure.health <= 0 || !platingBlockCoversAngle(body, structure, angle)) {
+        continue;
+      }
+
+      const topOffset = platingBlockTopOffset(structure);
+      if (topOffset > highestOffset) {
+        blocker = structure;
+        highestOffset = topOffset;
+      }
+    }
+
+    return blocker;
+  }
+
   function structureCenterOffset(type, surfaceOffset) {
     if (type === "plating-block") {
       return surfaceOffset + platingBlockHeight * 0.5;
@@ -11658,6 +12010,9 @@
     }
     if (type === "tether") {
       return surfaceOffset + 14;
+    }
+    if (type === "bridge") {
+      return surfaceOffset + 16;
     }
 
     return surfaceOffset + structureSurfaceOffset;
@@ -11823,6 +12178,43 @@
     return nearest;
   }
 
+  function findBucketProgressBody() {
+    if (!isSuctionEquipped()) {
+      return null;
+    }
+
+    const aim = getAim();
+    const state = {
+      actor: player,
+      aimWorld: aim.world,
+      funnel: getFunnel(aim),
+      left: false,
+      middle: false,
+      right: false,
+      bucketActive: true,
+      bucketPadding: 0,
+      landedBodyId: player.landed ? player.landed.bodyId : null
+    };
+    let best = null;
+    let bestMass = 0;
+
+    for (const particle of particles) {
+      if (!partyGadgetCanAffectParticle(state, particle)) {
+        continue;
+      }
+      if (!partyGadgetBucketContact(state, particle, 0)) {
+        continue;
+      }
+      const mass = finiteOr(particle.mass, 0);
+      if (mass > bestMass) {
+        best = particle;
+        bestMass = mass;
+      }
+    }
+
+    return best;
+  }
+
   function findNearestLandableBody() {
     let nearest = null;
     let nearestDistance = Infinity;
@@ -11946,6 +12338,8 @@
       x2: linkedPlacement ? linkedPlacement.x : placement.x,
       y2: linkedPlacement ? linkedPlacement.y : placement.y,
       restLength: linkedPlacement ? Math.hypot(linkedPlacement.x - placement.x, linkedPlacement.y - placement.y) : 0,
+      restCenterDx: linkedPlacement ? linkedPlacement.body.x - placement.body.x : 0,
+      restCenterDy: linkedPlacement ? linkedPlacement.body.y - placement.body.y : 0,
       aimAngle: placement.angle,
       deploy: 0,
       thrustAmount: 0,
@@ -11968,10 +12362,10 @@
     return structure;
   }
 
-  function applyTetherSurfaceConstraint(structure) {
+  function applyLinkedStructureSurfaceConstraint(structure) {
     const firstBody = bodyById(structure.bodyId);
     const secondBody = bodyById(structure.linkedBodyId);
-    if (!isStructureHostBodyForType(firstBody, "tether") || !isStructureHostBodyForType(secondBody, "tether") || firstBody.id === secondBody.id) {
+    if (!isStructureHostBodyForType(firstBody, structure.type) || !isStructureHostBodyForType(secondBody, structure.type) || firstBody.id === secondBody.id) {
       return false;
     }
 
@@ -11983,12 +12377,16 @@
     structure.x2 = secondBody.x + Math.cos(structure.linkedAngle) * (secondBody.radius + secondOffset);
     structure.y2 = secondBody.y + Math.sin(structure.linkedAngle) * (secondBody.radius + secondOffset);
     structure.restLength = Math.max(80, finiteOr(structure.restLength, Math.hypot(structure.x2 - structure.x, structure.y2 - structure.y)));
+    if (structure.type === "bridge") {
+      structure.restCenterDx = finiteOr(structure.restCenterDx, secondBody.x - firstBody.x);
+      structure.restCenterDy = finiteOr(structure.restCenterDy, secondBody.y - firstBody.y);
+    }
     return true;
   }
 
   function applyStructureSurfaceConstraint(structure) {
-    if (structure.type === "tether") {
-      return applyTetherSurfaceConstraint(structure);
+    if (isLinkedStructureType(structure.type)) {
+      return applyLinkedStructureSurfaceConstraint(structure);
     }
 
     const body = bodyById(structure.bodyId);
@@ -12001,6 +12399,338 @@
     structure.x = body.x + Math.cos(structure.angle) * (body.radius + centerOffset);
     structure.y = body.y + Math.sin(structure.angle) * (body.radius + centerOffset);
     return true;
+  }
+
+  function rotateBodyMountedFrame(bodyId, angleStep) {
+    if (!bodyId || Math.abs(angleStep) <= 0.000001) {
+      return;
+    }
+
+    for (const mounted of structures) {
+      if (mounted.bodyId === bodyId) {
+        mounted.angle += angleStep;
+      }
+      if (isLinkedStructureType(mounted.type) && mounted.linkedBodyId === bodyId) {
+        mounted.linkedAngle += angleStep;
+      }
+    }
+
+    if (player.landed && !player.landed.bridgeId && player.landed.bodyId === bodyId) {
+      player.landed.angle += angleStep;
+    }
+
+    for (const rival of rivals) {
+      if (rival.landed && !rival.landed.bridgeId && rival.landed.bodyId === bodyId) {
+        rival.landed.angle += angleStep;
+      }
+    }
+  }
+
+  function activeBridgeById(id) {
+    const cleanId = Math.max(1, Math.floor(finiteOr(id, 0)));
+    for (const structure of structures) {
+      if (structure.id === cleanId && isActiveBridge(structure)) {
+        return structure;
+      }
+    }
+    return null;
+  }
+
+  function bridgeGeometry(structure) {
+    if (!structure) {
+      return null;
+    }
+
+    const x1 = finiteOr(structure.x, 0);
+    const y1 = finiteOr(structure.y, 0);
+    const x2 = finiteOr(structure.x2, x1);
+    const y2 = finiteOr(structure.y2, y1);
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.hypot(dx, dy);
+    if (length < bridgeMinAnchorLength) {
+      return null;
+    }
+
+    const ux = dx / length;
+    const uy = dy / length;
+    return {
+      x1,
+      y1,
+      x2,
+      y2,
+      dx,
+      dy,
+      length,
+      ux,
+      uy,
+      nx: -uy,
+      ny: ux
+    };
+  }
+
+  function bridgeCurveLengthForGeometry(geometry) {
+    if (!geometry) {
+      return 0;
+    }
+
+    return Math.min(
+      geometry.length * 0.46,
+      clamp(geometry.length * 0.18, bridgeMinCurveLength, bridgeMaxCurveLength)
+    );
+  }
+
+  function cubicBezierPoint(p0, p1, p2, p3, t) {
+    const s = clamp(t, 0, 1);
+    const inv = 1 - s;
+    const inv2 = inv * inv;
+    const s2 = s * s;
+    return {
+      x: p0.x * inv2 * inv + p1.x * 3 * inv2 * s + p2.x * 3 * inv * s2 + p3.x * s2 * s,
+      y: p0.y * inv2 * inv + p1.y * 3 * inv2 * s + p2.y * 3 * inv * s2 + p3.y * s2 * s
+    };
+  }
+
+  function cubicBezierDerivative(p0, p1, p2, p3, t) {
+    const s = clamp(t, 0, 1);
+    const inv = 1 - s;
+    return {
+      x: 3 * inv * inv * (p1.x - p0.x) + 6 * inv * s * (p2.x - p1.x) + 3 * s * s * (p3.x - p2.x),
+      y: 3 * inv * inv * (p1.y - p0.y) + 6 * inv * s * (p2.y - p1.y) + 3 * s * s * (p3.y - p2.y)
+    };
+  }
+
+  function bridgeBodySurfacePoint(body, angle) {
+    const distanceFromCenter = body.radius + surfaceExtensionAtAngle(body, angle) + playerFootOffset;
+    return {
+      x: body.x + Math.cos(angle) * distanceFromCenter,
+      y: body.y + Math.sin(angle) * distanceFromCenter
+    };
+  }
+
+  function bridgeEndpointCurve(structure, bodyId, side) {
+    const geometry = bridgeGeometry(structure);
+    const body = bodyById(bodyId);
+    if (!geometry || !body || !isLandableBody(body)) {
+      return null;
+    }
+
+    const join = bridgeEndpointJoin(structure, bodyId, side);
+    if (!join) {
+      return null;
+    }
+
+    const cleanSide = join.side;
+    const normalX = geometry.nx * cleanSide;
+    const normalY = geometry.ny * cleanSide;
+    const offset = bridgeHalfWidth + playerFootOffset;
+    const curveLength = bridgeCurveLengthForGeometry(geometry);
+    if (curveLength <= 0) {
+      return null;
+    }
+
+    const bodyPoint = bridgeBodySurfacePoint(body, join.angle);
+    const straightT = join.atStart ? curveLength : geometry.length - curveLength;
+    const straightPoint = {
+      x: geometry.x1 + geometry.ux * straightT + normalX * offset,
+      y: geometry.y1 + geometry.uy * straightT + normalY * offset
+    };
+    const bodyTangent = {
+      x: -Math.sin(join.angle),
+      y: Math.cos(join.angle)
+    };
+    const startBodyDirection = join.entryWalkDirection;
+    const endBodyDirection = -join.entryWalkDirection;
+    const handle = curveLength * 0.42;
+    const bodyNormalAngle = join.angle;
+    const bridgeNormalAngle = Math.atan2(normalY, normalX);
+
+    if (join.atStart) {
+      const p0 = bodyPoint;
+      const p3 = straightPoint;
+      const d0 = {
+        x: bodyTangent.x * startBodyDirection,
+        y: bodyTangent.y * startBodyDirection
+      };
+      const d1 = { x: geometry.ux, y: geometry.uy };
+      return {
+        p0,
+        p1: { x: p0.x + d0.x * handle, y: p0.y + d0.y * handle },
+        p2: { x: p3.x - d1.x * handle, y: p3.y - d1.y * handle },
+        p3,
+        curveLength,
+        normalStartAngle: bodyNormalAngle,
+        normalEndAngle: bridgeNormalAngle,
+        geometry,
+        join
+      };
+    }
+
+    const p0 = straightPoint;
+    const p3 = bodyPoint;
+    const d0 = { x: geometry.ux, y: geometry.uy };
+    const d1 = {
+      x: bodyTangent.x * endBodyDirection,
+      y: bodyTangent.y * endBodyDirection
+    };
+    return {
+      p0,
+      p1: { x: p0.x + d0.x * handle, y: p0.y + d0.y * handle },
+      p2: { x: p3.x - d1.x * handle, y: p3.y - d1.y * handle },
+      p3,
+      curveLength,
+      normalStartAngle: bridgeNormalAngle,
+      normalEndAngle: bodyNormalAngle,
+      geometry,
+      join
+    };
+  }
+
+  function bridgeCurveSurfacePose(curve, progress, walkSpeed, baseVx, baseVy) {
+    if (!curve) {
+      return null;
+    }
+
+    const s = clamp(progress, 0, 1);
+    const point = cubicBezierPoint(curve.p0, curve.p1, curve.p2, curve.p3, s);
+    const derivative = cubicBezierDerivative(curve.p0, curve.p1, curve.p2, curve.p3, s);
+    const tangent = normalize(derivative.x, derivative.y);
+    const normalBlend = s * s * (3 - 2 * s);
+    const normalAngle = curve.normalStartAngle + shortestAngleDelta(curve.normalStartAngle, curve.normalEndAngle) * normalBlend;
+
+    return {
+      x: point.x,
+      y: point.y,
+      vx: baseVx + tangent.x * walkSpeed,
+      vy: baseVy + tangent.y * walkSpeed,
+      angle: normalAngle
+    };
+  }
+
+  function bridgeSurfacePose(structure, t, side, walkSpeedOverride) {
+    const geometry = bridgeGeometry(structure);
+    if (!geometry) {
+      return null;
+    }
+
+    const clampedT = clamp(finiteOr(t, 0), 0, geometry.length);
+    const cleanSide = finiteOr(side, 1) < 0 ? -1 : 1;
+    const normalX = geometry.nx * cleanSide;
+    const normalY = geometry.ny * cleanSide;
+    const offset = bridgeHalfWidth + playerFootOffset;
+    const walkSpeed = Number.isFinite(Number(walkSpeedOverride))
+      ? finiteOr(walkSpeedOverride, 0)
+      : (player.landed ? finiteOr(player.landed.walkSpeed, 0) : 0);
+    const firstBody = bodyById(structure.bodyId);
+    const secondBody = bodyById(structure.linkedBodyId);
+    const blend = geometry.length > 0 ? clampedT / geometry.length : 0;
+    const baseVx = firstBody && secondBody
+      ? finiteOr(firstBody.vx, 0) * (1 - blend) + finiteOr(secondBody.vx, 0) * blend
+      : 0;
+    const baseVy = firstBody && secondBody
+      ? finiteOr(firstBody.vy, 0) * (1 - blend) + finiteOr(secondBody.vy, 0) * blend
+      : 0;
+    const curveLength = bridgeCurveLengthForGeometry(geometry);
+
+    if (curveLength > 0 && clampedT < curveLength) {
+      const startCurve = bridgeEndpointCurve(structure, structure.bodyId, cleanSide);
+      const curvePose = bridgeCurveSurfacePose(startCurve, clampedT / curveLength, walkSpeed, baseVx, baseVy);
+      if (curvePose) {
+        return {
+          ...curvePose,
+          t: clampedT,
+          side: cleanSide,
+          geometry
+        };
+      }
+    }
+
+    if (curveLength > 0 && clampedT > geometry.length - curveLength) {
+      const endCurve = bridgeEndpointCurve(structure, structure.linkedBodyId, cleanSide);
+      const denominator = Math.max(1, curveLength);
+      const curvePose = bridgeCurveSurfacePose(endCurve, (clampedT - (geometry.length - curveLength)) / denominator, walkSpeed, baseVx, baseVy);
+      if (curvePose) {
+        return {
+          ...curvePose,
+          t: clampedT,
+          side: cleanSide,
+          geometry
+        };
+      }
+    }
+
+    return {
+      x: geometry.x1 + geometry.ux * clampedT + normalX * offset,
+      y: geometry.y1 + geometry.uy * clampedT + normalY * offset,
+      vx: baseVx + geometry.ux * walkSpeed,
+      vy: baseVy + geometry.uy * walkSpeed,
+      angle: Math.atan2(normalY, normalX),
+      t: clampedT,
+      side: cleanSide,
+      geometry
+    };
+  }
+
+  function bridgeSurfaceSideForPoint(structure, x, y, fallbackSide) {
+    const geometry = bridgeGeometry(structure);
+    if (!geometry) {
+      return finiteOr(fallbackSide, 1) < 0 ? -1 : 1;
+    }
+
+    const relX = finiteOr(x, geometry.x1) - geometry.x1;
+    const relY = finiteOr(y, geometry.y1) - geometry.y1;
+    const t = clamp(relX * geometry.ux + relY * geometry.uy, 0, geometry.length);
+    const centerX = geometry.x1 + geometry.ux * t;
+    const centerY = geometry.y1 + geometry.uy * t;
+    const sideScore = (finiteOr(x, centerX) - centerX) * geometry.nx + (finiteOr(y, centerY) - centerY) * geometry.ny;
+    if (Math.abs(sideScore) < 0.001) {
+      return finiteOr(fallbackSide, 1) < 0 ? -1 : 1;
+    }
+    return sideScore < 0 ? -1 : 1;
+  }
+
+  function bridgeEndpointJoin(structure, bodyId, side) {
+    if (!isActiveBridge(structure)) {
+      return null;
+    }
+
+    const geometry = bridgeGeometry(structure);
+    const body = bodyById(bodyId);
+    if (!geometry || !body || !isLandableBody(body)) {
+      return null;
+    }
+
+    const cleanSide = finiteOr(side, 1) < 0 ? -1 : 1;
+    const atStart = structure.bodyId === bodyId;
+    const atEnd = structure.linkedBodyId === bodyId;
+    if (!atStart && !atEnd) {
+      return null;
+    }
+
+    const endpointX = atStart ? geometry.x1 : geometry.x2;
+    const endpointY = atStart ? geometry.y1 : geometry.y2;
+    const playerBridgeOffset = bridgeHalfWidth + playerFootOffset;
+    const joinX = endpointX + geometry.nx * cleanSide * playerBridgeOffset;
+    const joinY = endpointY + geometry.ny * cleanSide * playerBridgeOffset;
+    const angle = Math.atan2(joinY - body.y, joinX - body.x);
+    const tangentX = -Math.sin(angle);
+    const tangentY = Math.cos(angle);
+    const bridgeDirX = atStart ? geometry.ux : -geometry.ux;
+    const bridgeDirY = atStart ? geometry.uy : -geometry.uy;
+    const entryWalkDirection = tangentX * bridgeDirX + tangentY * bridgeDirY >= 0 ? 1 : -1;
+    const desiredPathSign = atStart ? 1 : -1;
+
+    return {
+      t: atStart ? 0 : geometry.length,
+      angle,
+      bodyId,
+      otherBodyId: atStart ? structure.linkedBodyId : structure.bodyId,
+      side: cleanSide,
+      atStart,
+      geometry,
+      entryWalkDirection,
+      inputSign: desiredPathSign * entryWalkDirection
+    };
   }
 
   function confirmStructurePlacement() {
@@ -12019,16 +12749,16 @@
 
     const placement = currentStructurePlacement();
     if (!placement.valid) {
-      maybeNotifyText(recipe.structureType === "tether"
-        ? "Tethers need boulder-sized or larger bodies."
+      maybeNotifyText(isLinkedStructureType(recipe.structureType)
+        ? recipe.name + "s need boulder-sized or larger bodies."
         : "Structures need a dwarf moon, moon, planet, or plate surface.");
       return false;
     }
 
-    if (recipe.structureType === "tether") {
+    if (isLinkedStructureType(recipe.structureType)) {
       if (!pendingTetherAnchor) {
         pendingTetherAnchor = placement;
-        maybeNotifyText("Choose another body for the other end of the tether.");
+        maybeNotifyText("Choose another body for the other end of the " + recipe.name.toLowerCase() + ".");
         playSound("select");
         return true;
       }
@@ -12036,12 +12766,12 @@
       const firstPlacement = refreshPlacementAnchor(pendingTetherAnchor);
       if (!firstPlacement || !firstPlacement.valid) {
         pendingTetherAnchor = null;
-        maybeNotifyText("The first tether anchor is no longer available.");
+        maybeNotifyText("The first " + recipe.name.toLowerCase() + " anchor is no longer available.");
         return false;
       }
 
       if (placement.bodyId === firstPlacement.bodyId) {
-        maybeNotifyText("The tether needs two different bodies.");
+        maybeNotifyText("The " + recipe.name.toLowerCase() + " needs two different bodies.");
         return false;
       }
 
@@ -12159,7 +12889,7 @@
   }
 
   function applyRivalSurfaceConstraint(rival) {
-    if (!rival.landed) {
+    if (!rival.landed && gameSettings.hudEnabled !== false) {
       return false;
     }
 
@@ -12207,20 +12937,92 @@
     applyRivalSurfaceConstraint(rival);
   }
 
+  function findBridgeTransferFromBody(bodyId, angle, walkDirection) {
+    if (!bodyId || !walkDirection) {
+      return null;
+    }
+
+    let best = null;
+    let bestDelta = Infinity;
+    for (const structure of structures) {
+      for (const side of [-1, 1]) {
+        const endpoint = bridgeEndpointJoin(structure, bodyId, side);
+        if (!endpoint || endpoint.entryWalkDirection !== Math.sign(walkDirection)) {
+          continue;
+        }
+
+        const delta = Math.abs(shortestAngleDelta(angle, endpoint.angle));
+        if (delta > bridgeWalkTransferAngle || delta >= bestDelta) {
+          continue;
+        }
+
+        best = { structure, endpoint, inputSign: endpoint.inputSign };
+        bestDelta = delta;
+      }
+    }
+
+    return best;
+  }
+
+  function transferPlayerToBridge(transfer, walkDirection, walkSpeed) {
+    if (!transfer || !transfer.structure || !transfer.endpoint) {
+      return false;
+    }
+
+    player.landed = {
+      bodyId: transfer.endpoint.bodyId,
+      bridgeId: transfer.structure.id,
+      bridgeT: transfer.endpoint.t,
+      bridgeSide: transfer.endpoint.side,
+      bridgeInputSign: transfer.inputSign,
+      angle: transfer.endpoint.angle,
+      walkSpeed: finiteOr(walkSpeed, 0) * Math.sign(walkDirection || 1),
+      walkCycle: player.walkCycle || 0
+    };
+    applyLandedSurfaceConstraint();
+    return true;
+  }
+
+  function transferPlayerFromBridgeToBody(structure, bodyId, side, pathSpeed) {
+    const join = bridgeEndpointJoin(structure, bodyId, side);
+    const body = bodyById(bodyId);
+    if (!join || !body || !isLandableBody(body)) {
+      return false;
+    }
+
+    const bridgeMotionSign = Math.sign(finiteOr(pathSpeed, 0) || (join.atStart ? -1 : 1));
+    const incomingDirX = join.geometry.ux * bridgeMotionSign;
+    const incomingDirY = join.geometry.uy * bridgeMotionSign;
+    const tangentX = -Math.sin(join.angle);
+    const tangentY = Math.cos(join.angle);
+    const bodyWalkDirection = tangentX * incomingDirX + tangentY * incomingDirY >= 0 ? 1 : -1;
+    const continuationAngle = join.angle + bodyWalkDirection * (bridgeWalkTransferAngle + bridgeWalkExitAnglePadding);
+    player.landed = {
+      bodyId: body.id,
+      angle: continuationAngle,
+      walkSpeed: Math.abs(finiteOr(pathSpeed, 0)) * bodyWalkDirection,
+      walkCycle: player.walkCycle || 0
+    };
+    applyLandedSurfaceConstraint();
+    return true;
+  }
+
   function detachFromBody(jumpStrength) {
     if (!player.landed) {
       return;
     }
 
+    const normal = {
+      x: Math.cos(player.landed.angle),
+      y: Math.sin(player.landed.angle)
+    };
+    const bridge = player.landed.bridgeId ? activeBridgeById(player.landed.bridgeId) : null;
+    const pose = bridge ? bridgeSurfacePose(bridge, player.landed.bridgeT, player.landed.bridgeSide) : null;
     const body = bodyById(player.landed.bodyId);
-    if (body) {
-      const normal = {
-        x: Math.cos(player.landed.angle),
-        y: Math.sin(player.landed.angle)
-      };
-      player.vx = body.vx + normal.x * jumpStrength;
-      player.vy = body.vy + normal.y * jumpStrength;
-    }
+    const baseVx = pose ? pose.vx : (body ? body.vx : player.vx);
+    const baseVy = pose ? pose.vy : (body ? body.vy : player.vy);
+    player.vx = baseVx + normal.x * jumpStrength;
+    player.vy = baseVy + normal.y * jumpStrength;
 
     player.landed = null;
     jumpQueued = false;
@@ -12230,6 +13032,24 @@
   function applyLandedSurfaceConstraint() {
     if (!player.landed) {
       return false;
+    }
+
+    if (player.landed.bridgeId) {
+      const bridge = activeBridgeById(player.landed.bridgeId);
+      const pose = bridge ? bridgeSurfacePose(bridge, player.landed.bridgeT, player.landed.bridgeSide) : null;
+      if (!pose) {
+        detachFromBody(130);
+        return false;
+      }
+
+      player.landed.bridgeT = pose.t;
+      player.landed.bridgeSide = pose.side;
+      player.landed.angle = pose.angle;
+      player.x = pose.x;
+      player.y = pose.y;
+      player.vx = pose.vx;
+      player.vy = pose.vy;
+      return true;
     }
 
     const body = bodyById(player.landed.bodyId);
@@ -12257,6 +13077,68 @@
     return true;
   }
 
+  function updateBridgeLandedPlayer(dt) {
+    const bridge = activeBridgeById(player.landed.bridgeId);
+    const geometry = bridge ? bridgeGeometry(bridge) : null;
+    if (!bridge || !geometry) {
+      detachFromBody(120);
+      return;
+    }
+
+    if (jumpQueued) {
+      jumpQueued = false;
+      detachFromBody(380);
+      return;
+    }
+
+    const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
+    const walkSpeed = (isMovementKeyPressed("down") ? 68 : 128) * weaponSlowFactor;
+    const vacuumHoldActive = isVacuumHoldActive();
+    let walkDirection = 0;
+
+    if (!vacuumHoldActive && isKeyboardMovementKeyPressed("left")) {
+      walkDirection -= 1;
+    }
+    if (!vacuumHoldActive && isKeyboardMovementKeyPressed("right")) {
+      walkDirection += 1;
+    }
+    if (gameSettings.touchScreen && touchJoystickState.active) {
+      const world = cameraLocalToWorld(touchJoystickState.moveX, touchJoystickState.moveY);
+      const projected = (world.x * geometry.ux + world.y * geometry.uy) * finiteOr(player.landed.bridgeInputSign, 1);
+      if (Math.abs(projected) > touchMoveAxisThreshold) {
+        walkDirection += Math.sign(projected);
+      }
+    }
+    walkDirection = clamp(walkDirection, -1, 1);
+
+    const inputSign = finiteOr(player.landed.bridgeInputSign, 1) < 0 ? -1 : 1;
+    const pathSpeed = walkDirection * inputSign * walkSpeed;
+    player.landed.walkSpeed = pathSpeed;
+    if (walkDirection) {
+      player.walkCycle += (2.3 + Math.abs(pathSpeed) * 0.052) * dt;
+    }
+    player.landed.walkCycle = player.walkCycle;
+    player.landed.bridgeT += pathSpeed * dt;
+
+    const startJoin = bridgeEndpointJoin(bridge, bridge.bodyId, player.landed.bridgeSide);
+    const endJoin = bridgeEndpointJoin(bridge, bridge.linkedBodyId, player.landed.bridgeSide);
+    const startExitT = startJoin ? startJoin.t : 0;
+    const endExitT = endJoin ? endJoin.t : geometry.length;
+
+    if (pathSpeed < 0 && player.landed.bridgeT <= startExitT) {
+      transferPlayerFromBridgeToBody(bridge, bridge.bodyId, player.landed.bridgeSide, pathSpeed);
+      return;
+    }
+    if (pathSpeed > 0 && player.landed.bridgeT >= endExitT) {
+      transferPlayerFromBridgeToBody(bridge, bridge.linkedBodyId, player.landed.bridgeSide, pathSpeed);
+      return;
+    }
+    player.landed.bridgeT = clamp(player.landed.bridgeT, startExitT, endExitT);
+
+    applyLandedSurfaceConstraint();
+    cameraRoll = surfaceCameraRollForAngle(player.landed.angle);
+  }
+
   function toggleLanding() {
     if (player.landed) {
       detachFromBody(190);
@@ -12281,6 +13163,11 @@
   }
 
   function updateLandedPlayer(dt) {
+    if (player.landed.bridgeId) {
+      updateBridgeLandedPlayer(dt);
+      return;
+    }
+
     const body = bodyById(player.landed.bodyId);
     if (!body || !isLandableBody(body)) {
       detachFromBody(120);
@@ -12315,7 +13202,15 @@
     } else {
       player.landed.walkCycle = player.walkCycle;
     }
+    const previousAngle = player.landed.angle;
     player.landed.angle += (player.landed.walkSpeed / surfaceCircumferenceRadius) * dt;
+    const bridgeTransfer = findBridgeTransferFromBody(body.id, player.landed.angle, walkDirection);
+    if (bridgeTransfer && Math.abs(shortestAngleDelta(previousAngle, bridgeTransfer.endpoint.angle)) >= Math.abs(shortestAngleDelta(player.landed.angle, bridgeTransfer.endpoint.angle))) {
+      if (transferPlayerToBridge(bridgeTransfer, walkDirection, walkSpeed)) {
+        cameraRoll = surfaceCameraRollForAngle(player.landed.angle);
+        return;
+      }
+    }
     cameraRoll = surfaceCameraRollForAngle(player.landed.angle);
     applyLandedSurfaceConstraint();
   }
@@ -12331,21 +13226,33 @@
     }
 
     const direction = mouse.left ? 1 : -1;
-    applyGadgetThrustToBody(body, getAim().world, direction, dt);
+    const strengthFactor = mouse.left ? currentGadgetSuckFactor() : currentGadgetBlowFactor();
+    applyGadgetThrustToBody(body, getAim().world, direction, dt, strengthFactor);
   }
 
-  function applyGadgetThrustToBody(body, aimWorld, direction, dt) {
+  function applyGadgetThrustToBody(body, aimWorld, direction, dt, strengthFactor = 1) {
     if (!body || !isLandableBody(body)) {
       return false;
     }
 
+    const upgradeFactor = Math.max(0.1, finiteOr(strengthFactor, 1));
     const massDamping = clamp(1 / Math.pow(Math.max(1, body.mass / 100), 0.38), 0.18, 1);
-    const thrust = 155 * massDamping;
-    const maxSpeed = 220 * massDamping + 60;
+    const thrust = 155 * massDamping * upgradeFactor;
+    const speedFactor = clamp(Math.sqrt(upgradeFactor), 0.6, 1.75);
+    const baseMaxSpeed = (220 * massDamping + 60) * speedFactor;
     const aim = aimWorld || { x: 1, y: 0 };
+    const previousVx = finiteOr(body.vx, 0);
+    const previousVy = finiteOr(body.vy, 0);
+    const previousSpeed = Math.hypot(previousVx, previousVy);
+    const accelerationX = aim.x * direction * thrust * dt;
+    const accelerationY = aim.y * direction * thrust * dt;
+    const progradeGain = previousSpeed > 0
+      ? Math.max(0, (previousVx * accelerationX + previousVy * accelerationY) / previousSpeed)
+      : 0;
+    const maxSpeed = Math.max(baseMaxSpeed, previousSpeed + progradeGain);
 
-    body.vx += aim.x * direction * thrust * dt;
-    body.vy += aim.y * direction * thrust * dt;
+    body.vx = previousVx + accelerationX;
+    body.vy = previousVy + accelerationY;
 
     const speed = Math.hypot(body.vx, body.vy);
     if (speed > maxSpeed) {
@@ -12363,7 +13270,8 @@
 
       const body = bodyById(state.landedBodyId);
       const direction = state.left ? 1 : -1;
-      applyGadgetThrustToBody(body, state.aimWorld, direction, dt);
+      const strengthFactor = state.left ? state.suckFactor : state.blowFactor;
+      applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor);
     }
   }
 
@@ -12548,6 +13456,36 @@
     return new Set(normalizePartyGadgetIdList(list, limit));
   }
 
+  function normalizePartyAuthorityBodies(list) {
+    if (!Array.isArray(list)) {
+      return [];
+    }
+
+    const bodies = [];
+    const seen = new Set();
+    for (const entry of list) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+      const id = Math.max(1, Math.floor(finiteOr(entry.id, 0)));
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      bodies.push({
+        id,
+        x: clamp(finiteOr(entry.x, 0), -1000000, 1000000),
+        y: clamp(finiteOr(entry.y, 0), -1000000, 1000000),
+        vx: clamp(finiteOr(entry.vx, 0), -1200, 1200),
+        vy: clamp(finiteOr(entry.vy, 0), -1200, 1200)
+      });
+      if (bodies.length >= partyAuthorityBodyLimit) {
+        break;
+      }
+    }
+    return bodies;
+  }
+
   function partyGadgetHasCandidate(state, target) {
     return Boolean(state && target && state.candidateIds && state.candidateIds.has(target.id));
   }
@@ -12626,8 +13564,10 @@
     });
     const candidateIds = assistFresh ? partyGadgetIdSet(intent.candidateIds, partyGadgetCandidateLimit) : new Set();
     const bucketIds = assistFresh ? partyGadgetIdSet(intent.bucketIds, partyGadgetBucketLimit) : new Set();
+    const authorityBodies = assistFresh ? normalizePartyAuthorityBodies(intent.authorityBodies) : [];
 
     return {
+      playerId: actor.id || "",
       actor: gadgetActor,
       aimWorld,
       funnel: actorFunnel(gadgetActor, aimWorld),
@@ -12640,6 +13580,7 @@
       bucketPadding: finiteOr(options && options.bucketPadding, 0),
       candidateIds,
       bucketIds,
+      authorityBodies,
       candidateReachPadding: candidateIds.size || bucketIds.size ? 120 : 0,
       candidateSidePadding: candidateIds.size || bucketIds.size ? 46 : 0,
       bucketAssistPadding: bucketIds.size ? 34 : 0,
@@ -13054,6 +13995,27 @@
     );
 
     if (predicted.landed) {
+      if (predicted.landed.bridgeId) {
+        const bridge = activeBridgeById(predicted.landed.bridgeId);
+        const geometry = bridge ? bridgeGeometry(bridge) : null;
+        if (bridge && geometry) {
+          predicted.landed.bridgeT = clamp(
+            finiteOr(predicted.landed.bridgeT, 0) + finiteOr(predicted.landed.walkSpeed, 0) * lead,
+            0,
+            geometry.length
+          );
+          const pose = bridgeSurfacePose(bridge, predicted.landed.bridgeT, predicted.landed.bridgeSide, predicted.landed.walkSpeed);
+          if (pose) {
+            predicted.landed.angle = pose.angle;
+            predicted.x = pose.x;
+            predicted.y = pose.y;
+            predicted.vx = pose.vx;
+            predicted.vy = pose.vy;
+            return predicted;
+          }
+        }
+      }
+
       const body = bodyById(predicted.landed.bodyId);
       if (body && isLandableBody(body)) {
         const surfaceRadius = Math.max(24, body.radius + surfaceExtensionAtAngle(body, predicted.landed.angle));
@@ -13082,6 +14044,8 @@
   function partyGadgetStateForPlayer(remotePlayer, gadget, receivedAt) {
     return partyGadgetStateFromActor(remotePlayer, gadget, receivedAt, {
       bucketPadding: partyRemoteBucketPadding,
+      suckFactor: finiteOr(gadget && gadget.suckFactor, 1),
+      blowFactor: finiteOr(gadget && gadget.blowFactor, 1),
       lead: gadget && gadget.active ? partyRemoteGadgetPredictionLead : 0,
       maxLead: gadget && gadget.active ? partyRemoteGadgetPredictionMax : 0
     });
@@ -13094,6 +14058,95 @@
       particle.id !== state.landedBodyId &&
       !isUfoBeamCargo(particle)
     );
+  }
+
+  function prunePartyBodyAuthority(now) {
+    for (const [bodyId, claim] of multiplayer.partyBodyAuthority) {
+      if (!claim || finiteOr(claim.expiresAt, 0) <= now || !bodyById(bodyId)) {
+        multiplayer.partyBodyAuthority.delete(bodyId);
+      }
+    }
+  }
+
+  function partyBodyAuthorityOwner(bodyId, now) {
+    const claim = multiplayer.partyBodyAuthority.get(bodyId);
+    if (!claim || finiteOr(claim.expiresAt, 0) <= now) {
+      multiplayer.partyBodyAuthority.delete(bodyId);
+      return "";
+    }
+    return claim.playerId || "";
+  }
+
+  function partyStateCanClaimBody(state, body, incoming, now) {
+    if (!state || !state.playerId || !body || !incoming) {
+      return false;
+    }
+    if (
+      incoming.id !== state.landedBodyId &&
+      !partyGadgetHasCandidate(state, body) &&
+      !partyGadgetHasBucketTarget(state, body)
+    ) {
+      return false;
+    }
+
+    const currentOwner = partyBodyAuthorityOwner(body.id, now);
+    if (currentOwner && currentOwner !== state.playerId) {
+      return false;
+    }
+
+    const actor = state.actor || player;
+    const reach = gadgetForceReach + Math.max(260, finiteOr(body.radius, 1) * 2.5);
+    const hostDistance = Math.hypot(body.x - actor.x, body.y - actor.y);
+    const incomingDistance = Math.hypot(incoming.x - actor.x, incoming.y - actor.y);
+    if (Math.min(hostDistance, incomingDistance) > reach) {
+      return false;
+    }
+
+    const correctionDistance = Math.hypot(incoming.x - body.x, incoming.y - body.y);
+    if (correctionDistance > Math.max(1400, finiteOr(body.radius, 1) * 9)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function applyPartyAuthorityBodyState(body, incoming) {
+    const correctionDistance = Math.hypot(incoming.x - body.x, incoming.y - body.y);
+    const directDistance = Math.max(720, finiteOr(body.radius, 1) * 5);
+    const blend = correctionDistance <= directDistance ? 1 : 0.72;
+
+    body.x += (incoming.x - body.x) * blend;
+    body.y += (incoming.y - body.y) * blend;
+    body.vx = finiteOr(incoming.vx, body.vx);
+    body.vy = finiteOr(incoming.vy, body.vy);
+    body.gadgetStabilized = false;
+  }
+
+  function applyPartyBodyAuthorityUpdates(states) {
+    if (!isPartyHost() || !Array.isArray(states) || !states.length) {
+      return;
+    }
+
+    const now = performance.now();
+    prunePartyBodyAuthority(now);
+
+    for (const state of states) {
+      if (!state || !state.playerId || !Array.isArray(state.authorityBodies)) {
+        continue;
+      }
+      for (const incoming of state.authorityBodies) {
+        const body = bodyById(incoming.id);
+        if (!partyStateCanClaimBody(state, body, incoming, now)) {
+          continue;
+        }
+
+        multiplayer.partyBodyAuthority.set(body.id, {
+          playerId: state.playerId,
+          expiresAt: now + partyBodyAuthorityHoldMs
+        });
+        applyPartyAuthorityBodyState(body, incoming);
+      }
+    }
   }
 
   function pruneExcessAmbientParticles(anchors, maxParticleBudget) {
@@ -13144,6 +14197,8 @@
     const partySpawnAnchors = activePartyPlayerAnchors();
     const activeTargetParticles = activeParticleTargetCount(partySpawnAnchors.length);
     const maxParticleBudget = Math.round(activeTargetParticles * 1.28);
+    applyPartyBodyAuthorityUpdates(partyGadgetStates);
+    const authorityNow = performance.now();
 
     pruneInvalidParticles();
     spawnTimer -= dt;
@@ -13169,6 +14224,9 @@
         applyGadgetForces(particle, aim, funnel, dt);
       }
       for (const state of partyGadgetStates) {
+        if (partyBodyAuthorityOwner(particle.id, authorityNow) === state.playerId) {
+          continue;
+        }
         if (partyGadgetCanAffectParticle(state, particle)) {
           applyActorGadgetForces(particle, state, dt);
         }
@@ -13197,6 +14255,9 @@
         resolveFunnelBucket(particle, aim, dt);
       }
       for (const state of partyGadgetStates) {
+        if (partyBodyAuthorityOwner(particle.id, authorityNow) === state.playerId) {
+          continue;
+        }
         if (state.bucketActive && partyGadgetCanAffectParticle(state, particle)) {
           resolveActorFunnelBucket(particle, state, dt);
         }
@@ -13275,7 +14336,7 @@
 
     for (const structure of structures) {
       if (
-        structure.type === "tether" &&
+        isLinkedStructureType(structure.type) &&
         structure.health > 0 &&
         (
           (structure.bodyId === a.id && structure.linkedBodyId === b.id) ||
@@ -14111,7 +15172,7 @@
   }
 
   function structureTargetPoint(structure, cursor) {
-    if (structure.type === "tether") {
+    if (isLinkedStructureType(structure.type)) {
       const firstDistance = Math.hypot(structure.x - cursor.x, structure.y - cursor.y);
       const x2 = finiteOr(structure.x2, structure.x);
       const y2 = finiteOr(structure.y2, structure.y);
@@ -14321,7 +15382,8 @@
     resetMouseButtons();
   }
 
-  function updatePlayerLasers(dt) {
+  function updatePlayerLasers(dt, options) {
+    const relaySharedWorldHits = Boolean(options && options.relaySharedWorldHits);
     for (let i = playerLasers.length - 1; i >= 0; i -= 1) {
       const laser = playerLasers[i];
       laser.life -= dt;
@@ -14375,7 +15437,18 @@
           break;
         }
 
-        knockMob(mob, dirX, dirY, laser.knockback || 170);
+        const knockback = laser.knockback || 170;
+        if (relaySharedWorldHits) {
+          sendPartyHostEntityEffect({
+            entityType: mob.kind,
+            entityId: mob.id,
+            damage: laser.damage || playerWeaponDefaults.damage,
+            impulseX: dirX * knockback,
+            impulseY: dirY * knockback,
+            color: laser.color
+          });
+        }
+        knockMob(mob, dirX, dirY, knockback);
         damageMob(mob, laser.damage || playerWeaponDefaults.damage, laser.color, laser.hitMessage || mobName(mob) + " dropped by the " + (laser.weaponLabel || playerWeaponDefaults.label) + ".");
         sparks.push({
           x: laser.x,
@@ -15582,6 +16655,93 @@
     }
   }
 
+  function updateBridge(structure, dt) {
+    const firstBody = bodyById(structure.bodyId);
+    const secondBody = bodyById(structure.linkedBodyId);
+    if (!firstBody || !secondBody || firstBody.id === secondBody.id) {
+      return;
+    }
+
+    structure.deploy = clamp((structure.deploy || 0) + dt * 2.8, 0, 1);
+
+    let restDx = finiteOr(structure.restCenterDx, secondBody.x - firstBody.x);
+    let restDy = finiteOr(structure.restCenterDy, secondBody.y - firstBody.y);
+    let restLength = Math.hypot(restDx, restDy);
+    if (restLength < 1) {
+      restDx = secondBody.x - firstBody.x;
+      restDy = secondBody.y - firstBody.y;
+      restLength = Math.hypot(restDx, restDy) || 1;
+    }
+
+    const firstMass = Math.max(1, finiteOr(firstBody.mass, 1));
+    const secondMass = Math.max(1, finiteOr(secondBody.mass, 1));
+    const totalMass = firstMass + secondMass;
+    const firstShare = clamp(secondMass / totalMass, 0.08, 0.92);
+    const secondShare = clamp(firstMass / totalMass, 0.08, 0.92);
+    const currentDx = secondBody.x - firstBody.x;
+    const currentDy = secondBody.y - firstBody.y;
+    const leverLengthSq = Math.max(1, currentDx * currentDx + currentDy * currentDy);
+    const relativeVx = finiteOr(secondBody.vx, 0) - finiteOr(firstBody.vx, 0);
+    const relativeVy = finiteOr(secondBody.vy, 0) - finiteOr(firstBody.vy, 0);
+    const angularVelocity = clamp(
+      ((currentDx * relativeVy - currentDy * relativeVx) / leverLengthSq) * Math.pow(bridgeAngularDamping, dt),
+      -bridgeMaxAngularSpeed,
+      bridgeMaxAngularSpeed
+    );
+    const angleStep = angularVelocity * dt;
+
+    if (Math.abs(angleStep) > 0.000001) {
+      const rotated = rotatePoint(restDx, restDy, angleStep);
+      restDx = rotated.x;
+      restDy = rotated.y;
+      rotateBodyMountedFrame(firstBody.id, angleStep);
+      rotateBodyMountedFrame(secondBody.id, angleStep);
+    }
+
+    structure.restCenterDx = restDx;
+    structure.restCenterDy = restDy;
+
+    const centerX = (firstBody.x * firstMass + secondBody.x * secondMass) / totalMass;
+    const centerY = (firstBody.y * firstMass + secondBody.y * secondMass) / totalMass;
+    firstBody.x = centerX - restDx * firstShare;
+    firstBody.y = centerY - restDy * firstShare;
+    secondBody.x = centerX + restDx * secondShare;
+    secondBody.y = centerY + restDy * secondShare;
+
+    const averageVx = (finiteOr(firstBody.vx, 0) * firstMass + finiteOr(secondBody.vx, 0) * secondMass) / totalMass;
+    const averageVy = (finiteOr(firstBody.vy, 0) * firstMass + finiteOr(secondBody.vy, 0) * secondMass) / totalMass;
+    const firstRadiusX = -restDx * firstShare;
+    const firstRadiusY = -restDy * firstShare;
+    const secondRadiusX = restDx * secondShare;
+    const secondRadiusY = restDy * secondShare;
+    const firstTargetVx = averageVx - angularVelocity * firstRadiusY;
+    const firstTargetVy = averageVy + angularVelocity * firstRadiusX;
+    const secondTargetVx = averageVx - angularVelocity * secondRadiusY;
+    const secondTargetVy = averageVy + angularVelocity * secondRadiusX;
+    const velocityBlend = 1 - Math.pow(0.0001, dt);
+    firstBody.vx += (firstTargetVx - firstBody.vx) * velocityBlend;
+    firstBody.vy += (firstTargetVy - firstBody.vy) * velocityBlend;
+    secondBody.vx += (secondTargetVx - secondBody.vx) * velocityBlend;
+    secondBody.vy += (secondTargetVy - secondBody.vy) * velocityBlend;
+
+    applyLinkedStructureSurfaceConstraint(structure);
+
+    if (Math.random() < dt * 0.7) {
+      const geometry = bridgeGeometry(structure);
+      if (geometry) {
+        const t = randomRange(bridgeHalfWidth, Math.max(bridgeHalfWidth, geometry.length - bridgeHalfWidth));
+        sparks.push({
+          x: geometry.x1 + geometry.ux * t + randomRange(-6, 6),
+          y: geometry.y1 + geometry.uy * t + randomRange(-6, 6),
+          radius: 14,
+          color: { r: 255, g: 209, b: 102 },
+          life: 0.14,
+          maxLife: 0.14
+        });
+      }
+    }
+  }
+
   function updateJet(structure, dt) {
     const body = bodyById(structure.bodyId);
     const landedHere = player.landed && body && player.landed.bodyId === body.id;
@@ -15718,6 +16878,11 @@
 
       if (structure.type === "tether") {
         updateTether(structure, dt);
+        continue;
+      }
+
+      if (structure.type === "bridge") {
+        updateBridge(structure, dt);
         continue;
       }
 
@@ -16159,6 +17324,20 @@
   }
 
   function damageBodyWithRambot(rambot, body, nx, ny, impactSpeed) {
+    const impactAngle = Math.atan2(ny, nx);
+    const platingBlocker = platingBlockAtImpactAngle(body, impactAngle);
+    if (platingBlocker) {
+      const damage = difficultyMobDamage(structureRambotDamage + Math.max(0, impactSpeed - rambotBodyImpactSpeed) * 0.045);
+      damageStructure(platingBlocker, damage, rambot.color);
+      rambot.impactCooldown = 0.95;
+      rambot.recoverTimer = Math.max(rambot.recoverTimer, 0.65);
+      rambot.chargeTimer = 0;
+      rambot.vx += nx * 250;
+      rambot.vy += ny * 250;
+      playSound("mobHit", { throttleKey: "rambotPlateImpact" });
+      return;
+    }
+
     const drain = Math.min(
       36,
       rambotBodyImpactDrain + Math.sqrt(Math.max(1, body.mass)) * 0.045 + Math.max(0, impactSpeed - rambotBodyImpactSpeed) * 0.025
@@ -16268,7 +17447,7 @@
       const dist = Math.hypot(toTargetX, toTargetY) || 1;
 
       if (playerDist > Math.max(width, height) * 2.7 + 1800) {
-        const spawn = randomOffscreenPoint(180, 560);
+        const spawn = randomOffscreenPoint(180, 560, targetPlayer);
         ufo.x = spawn.x;
         ufo.y = spawn.y;
         ufo.vx = randomRange(-24, 24);
@@ -16331,7 +17510,7 @@
       const dist = Math.hypot(toPlayerX, toPlayerY) || 1;
 
       if (dist > Math.max(width, height) * 2.4 + 1600) {
-        const spawn = randomOffscreenPoint(150, 500);
+        const spawn = randomOffscreenPoint(150, 500, targetPlayer);
         rival.x = spawn.x;
         rival.y = spawn.y;
         rival.vx = randomRange(-16, 16);
@@ -16534,7 +17713,7 @@
       const dist = Math.hypot(toTargetX, toTargetY) || 1;
 
       if (playerDist > Math.max(width, height) * 2.5 + 1800) {
-        const spawn = randomOffscreenPoint(220, 640);
+        const spawn = randomOffscreenPoint(220, 640, targetPlayer);
         rambot.x = spawn.x;
         rambot.y = spawn.y;
         rambot.vx = randomRange(-10, 10);
@@ -16676,7 +17855,7 @@
       const playerDist = Math.hypot(targetPlayer.x - engineer.x, targetPlayer.y - engineer.y) || 1;
 
       if (playerDist > Math.max(width, height) * 2.55 + 1800) {
-        const spawn = randomOffscreenPoint(210, 600);
+        const spawn = randomOffscreenPoint(210, 600, targetPlayer);
         engineer.x = spawn.x;
         engineer.y = spawn.y;
         engineer.vx = randomRange(-16, 16);
@@ -16774,7 +17953,7 @@
       const playerDist = Math.hypot(targetPlayer.x - tesla.x, targetPlayer.y - tesla.y) || 1;
 
       if (playerDist > Math.max(width, height) * 2.6 + 1800) {
-        const spawn = randomOffscreenPoint(190, 560);
+        const spawn = randomOffscreenPoint(190, 560, targetPlayer);
         tesla.x = spawn.x;
         tesla.y = spawn.y;
         tesla.vx = randomRange(-18, 18);
@@ -16994,7 +18173,7 @@
     const dist = Math.hypot(toTargetX, toTargetY) || 1;
 
     if (dist > Math.max(width, height) * 2.9 + 2400) {
-      const spawn = randomOffscreenPoint(320, 900);
+      const spawn = randomOffscreenPoint(320, 900, targetPlayer);
       rocket.x = spawn.x;
       rocket.y = spawn.y;
       rocket.vx = randomRange(-24, 24);
@@ -17113,7 +18292,7 @@
       const dist = Math.hypot(toPlayerX, toPlayerY) || 1;
 
       if (dist > Math.max(width, height) * 2.7 + 2000) {
-        const spawn = randomOffscreenPoint(230, 680);
+        const spawn = randomOffscreenPoint(230, 680, targetPlayer);
         rocket.x = spawn.x;
         rocket.y = spawn.y;
         rocket.vx = randomRange(-14, 14);
@@ -17241,7 +18420,7 @@
       const dist = Math.hypot(toPlayerX, toPlayerY) || 1;
 
       if (dist > Math.max(width, height) * 2.8 + 2200) {
-        const spawn = randomOffscreenPoint(260, 760);
+        const spawn = randomOffscreenPoint(260, 760, targetPlayer);
         fighter.x = spawn.x;
         fighter.y = spawn.y;
         fighter.vx = randomRange(-20, 20);
@@ -17904,13 +19083,15 @@
       ctx.stroke();
     }
 
-    const healthPct = clamp(ufo.health / ufo.maxHealth, 0, 1);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.48)";
-    roundRectPath(-28, -46, 56, 6, 3);
-    ctx.fill();
-    ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
-    roundRectPath(-28, -46, 56 * healthPct, 6, 3);
-    ctx.fill();
+    if (gameSettings.hudEnabled !== false) {
+      const healthPct = clamp(ufo.health / ufo.maxHealth, 0, 1);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.48)";
+      roundRectPath(-28, -46, 56, 6, 3);
+      ctx.fill();
+      ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-28, -46, 56 * healthPct, 6, 3);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -18009,13 +19190,15 @@
     ctx.lineWidth = 3.5;
     ctx.stroke();
 
-    const healthPct = clamp(rambot.health / rambot.maxHealth, 0, 1);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    roundRectPath(-32, -76, 64, 7, 3.5);
-    ctx.fill();
-    ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
-    roundRectPath(-32, -76, 64 * healthPct, 7, 3.5);
-    ctx.fill();
+    if (gameSettings.hudEnabled !== false) {
+      const healthPct = clamp(rambot.health / rambot.maxHealth, 0, 1);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      roundRectPath(-32, -76, 64, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-32, -76, 64 * healthPct, 7, 3.5);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -18070,13 +19253,15 @@
     ctx.arc(0, 0, 44, 0, Math.PI * 2);
     ctx.fill();
 
-    const healthPct = clamp(tesla.health / tesla.maxHealth, 0, 1);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    roundRectPath(-28, -48, 56, 6, 3);
-    ctx.fill();
-    ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
-    roundRectPath(-28, -48, 56 * healthPct, 6, 3);
-    ctx.fill();
+    if (gameSettings.hudEnabled !== false) {
+      const healthPct = clamp(tesla.health / tesla.maxHealth, 0, 1);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      roundRectPath(-28, -48, 56, 6, 3);
+      ctx.fill();
+      ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-28, -48, 56 * healthPct, 6, 3);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -18142,16 +19327,18 @@
 
     ctx.restore();
 
-    const healthPct = clamp(engineer.health / engineer.maxHealth, 0, 1);
-    ctx.save();
-    ctx.translate(engineer.x, engineer.y);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.54)";
-    roundRectPath(-28, -50, 56, 6, 3);
-    ctx.fill();
-    ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
-    roundRectPath(-28, -50, 56 * healthPct, 6, 3);
-    ctx.fill();
-    ctx.restore();
+    if (gameSettings.hudEnabled !== false) {
+      const healthPct = clamp(engineer.health / engineer.maxHealth, 0, 1);
+      ctx.save();
+      ctx.translate(engineer.x, engineer.y);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.54)";
+      roundRectPath(-28, -50, 56, 6, 3);
+      ctx.fill();
+      ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-28, -50, 56 * healthPct, 6, 3);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   function drawRocket(rocket, time) {
@@ -18254,13 +19441,15 @@
     ctx.fill();
     ctx.stroke();
 
-    const healthPct = clamp(rocket.health / rocket.maxHealth, 0, 1);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    roundRectPath(-30, -76, 60, 7, 3.5);
-    ctx.fill();
-    ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
-    roundRectPath(-30, -76, 60 * healthPct, 7, 3.5);
-    ctx.fill();
+    if (gameSettings.hudEnabled !== false) {
+      const healthPct = clamp(rocket.health / rocket.maxHealth, 0, 1);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      roundRectPath(-30, -76, 60, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-30, -76, 60 * healthPct, 7, 3.5);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -18378,13 +19567,15 @@
     ctx.stroke();
     ctx.globalCompositeOperation = "source-over";
 
-    const satelliteHealthPct = clamp(rocket.health / rocket.maxHealth, 0, 1);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    roundRectPath(-30, -74, 60, 7, 3.5);
-    ctx.fill();
-    ctx.fillStyle = satelliteHealthPct > 0.45 ? "#72ff94" : "#ff6d6d";
-    roundRectPath(-30, -74, 60 * satelliteHealthPct, 7, 3.5);
-    ctx.fill();
+    if (gameSettings.hudEnabled !== false) {
+      const satelliteHealthPct = clamp(rocket.health / rocket.maxHealth, 0, 1);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      roundRectPath(-30, -74, 60, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = satelliteHealthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-30, -74, 60 * satelliteHealthPct, 7, 3.5);
+      ctx.fill();
+    }
 
     ctx.restore();
     return;
@@ -18455,13 +19646,15 @@
     ctx.arc(0, -59, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * scanPct);
     ctx.stroke();
 
-    const healthPct = clamp(rocket.health / rocket.maxHealth, 0, 1);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    roundRectPath(-30, -76, 60, 7, 3.5);
-    ctx.fill();
-    ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
-    roundRectPath(-30, -76, 60 * healthPct, 7, 3.5);
-    ctx.fill();
+    if (gameSettings.hudEnabled !== false) {
+      const healthPct = clamp(rocket.health / rocket.maxHealth, 0, 1);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      roundRectPath(-30, -76, 60, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-30, -76, 60 * healthPct, 7, 3.5);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -18524,20 +19717,22 @@
       ctx.stroke();
     }
 
-    const shieldChargePct = clamp((fighter.shieldCharge || 0) / fighterShieldMaxCharge, 0, 1);
-    const healthPct = clamp(fighter.health / fighter.maxHealth, 0, 1);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    roundRectPath(-34, -78, 68, 7, 3.5);
-    ctx.fill();
-    ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
-    roundRectPath(-34, -78, 68 * healthPct, 7, 3.5);
-    ctx.fill();
-    ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
-    roundRectPath(-34, -68, 68, 5, 2.5);
-    ctx.fill();
-    ctx.fillStyle = colorString(fighter.color, 0.92);
-    roundRectPath(-34, -68, 68 * shieldChargePct, 5, 2.5);
-    ctx.fill();
+    if (gameSettings.hudEnabled !== false) {
+      const shieldChargePct = clamp((fighter.shieldCharge || 0) / fighterShieldMaxCharge, 0, 1);
+      const healthPct = clamp(fighter.health / fighter.maxHealth, 0, 1);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      roundRectPath(-34, -78, 68, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-34, -78, 68 * healthPct, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
+      roundRectPath(-34, -68, 68, 5, 2.5);
+      ctx.fill();
+      ctx.fillStyle = colorString(fighter.color, 0.92);
+      roundRectPath(-34, -68, 68 * shieldChargePct, 5, 2.5);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -19250,6 +20445,88 @@
     drawTetherAnchor(structure, x2, y2, finiteOr(structure.linkedAngle, structure.angle + Math.PI), time, alpha, valid);
   }
 
+  function drawBridge(structure, time, alpha, valid) {
+    const x2 = finiteOr(structure.x2, structure.x);
+    const y2 = finiteOr(structure.y2, structure.y);
+    const dx = x2 - structure.x;
+    const dy = y2 - structure.y;
+    const length = Math.hypot(dx, dy);
+    const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 255, g: 209, b: 102 };
+
+    if (length > 8) {
+      const angle = Math.atan2(dy, dx);
+      const deploy = clamp(structure.deploy || 0, 0, 1);
+      const segmentCount = Math.max(3, Math.min(18, Math.ceil(length / 96)));
+      const segmentLength = length / segmentCount;
+
+      ctx.save();
+      ctx.globalAlpha *= alpha * (valid === false ? 0.58 : 0.92);
+      ctx.translate(structure.x, structure.y);
+      ctx.rotate(angle);
+
+      ctx.fillStyle = "rgba(5, 8, 18, 0.92)";
+      ctx.beginPath();
+      ctx.moveTo(0, -8);
+      ctx.bezierCurveTo(10, -17, 24, -bridgeHalfWidth - 8, 42, -bridgeHalfWidth - 7);
+      ctx.lineTo(42, bridgeHalfWidth + 7);
+      ctx.bezierCurveTo(24, bridgeHalfWidth + 8, 10, 17, 0, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(length, -8);
+      ctx.bezierCurveTo(length - 10, -17, length - 24, -bridgeHalfWidth - 8, length - 42, -bridgeHalfWidth - 7);
+      ctx.lineTo(length - 42, bridgeHalfWidth + 7);
+      ctx.bezierCurveTo(length - 24, bridgeHalfWidth + 8, length - 10, 17, length, 8);
+      ctx.closePath();
+      ctx.fill();
+
+      roundRectPath(10, -bridgeHalfWidth - 5, Math.max(1, length - 20), bridgeHalfWidth * 2 + 10, 8);
+      ctx.fill();
+
+      const deckGradient = ctx.createLinearGradient(0, -bridgeHalfWidth, 0, bridgeHalfWidth);
+      deckGradient.addColorStop(0, "#f8fbff");
+      deckGradient.addColorStop(0.5, "#9aa4b8");
+      deckGradient.addColorStop(1, "#3a4258");
+      ctx.fillStyle = deckGradient;
+      roundRectPath(16, -bridgeHalfWidth, Math.max(1, length - 32), bridgeHalfWidth * 2, 6);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(6, 10, 24, 0.7)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(22, -bridgeHalfWidth + 4);
+      ctx.lineTo(length - 22, -bridgeHalfWidth + 4);
+      ctx.moveTo(22, bridgeHalfWidth - 4);
+      ctx.lineTo(length - 22, bridgeHalfWidth - 4);
+      ctx.stroke();
+
+      for (let i = 0; i < segmentCount; i += 1) {
+        const start = 18 + i * segmentLength;
+        const end = Math.min(length - 18, start + segmentLength * 0.72);
+        ctx.strokeStyle = i % 2 === 0 ? "rgba(255, 209, 102, 0.76)" : "rgba(88, 226, 255, 0.58)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(start, -bridgeHalfWidth + 5);
+        ctx.lineTo(end, bridgeHalfWidth - 5);
+        ctx.moveTo(start, bridgeHalfWidth - 5);
+        ctx.lineTo(end, -bridgeHalfWidth + 5);
+        ctx.stroke();
+      }
+
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = colorString(accent, 0.12 + deploy * 0.12);
+      ctx.lineWidth = bridgeHalfWidth * 2 + 18;
+      ctx.beginPath();
+      ctx.moveTo(22, 0);
+      ctx.lineTo(length - 22, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    drawTetherAnchor(structure, structure.x, structure.y, structure.angle, time, alpha, valid);
+    drawTetherAnchor(structure, x2, y2, finiteOr(structure.linkedAngle, structure.angle + Math.PI), time, alpha, valid);
+  }
+
   function drawStructure(structure, time, alpha, valid) {
     if (structure.type === "plating-block") {
       drawPlatingBlock(structure, time, alpha, valid);
@@ -19265,6 +20542,8 @@
       drawJet(structure, time, alpha, valid);
     } else if (structure.type === "tether") {
       drawTether(structure, time, alpha, valid);
+    } else if (structure.type === "bridge") {
+      drawBridge(structure, time, alpha, valid);
     } else if (structure.type === "missile-launcher") {
       drawMissileLauncher(structure, time, alpha, valid);
     } else {
@@ -19275,6 +20554,10 @@
   }
 
   function drawStructureStatus(structure, alpha, valid) {
+    if (gameSettings.hudEnabled === false) {
+      return;
+    }
+
     if (valid === false || !Number.isFinite(Number(structure.health))) {
       return;
     }
@@ -19330,11 +20613,11 @@
     }
 
     const placement = currentStructurePlacement();
-    const firstTetherPlacement = recipe.structureType === "tether" && pendingTetherAnchor
+    const firstTetherPlacement = isLinkedStructureType(recipe.structureType) && pendingTetherAnchor
       ? refreshPlacementAnchor(pendingTetherAnchor)
       : null;
     const tetherSecondValid = Boolean(
-      recipe.structureType !== "tether" ||
+      !isLinkedStructureType(recipe.structureType) ||
       !firstTetherPlacement ||
       (firstTetherPlacement.valid && placement.valid && firstTetherPlacement.bodyId !== placement.bodyId)
     );
@@ -20052,31 +21335,33 @@
     drawRemoteHeldArms(aimAngle, bob, bodyRotation, "front");
     ctx.restore();
 
-    const screen = worldToScreen(remotePlayer.x, remotePlayer.y);
-    const pct = clamp(remotePlayer.health / Math.max(1, remotePlayer.maxHealth || 100), 0, 1);
-    const label = publicName || remotePlayer.name || "Contact";
+    if (gameSettings.hudEnabled !== false) {
+      const screen = worldToScreen(remotePlayer.x, remotePlayer.y);
+      const pct = clamp(remotePlayer.health / Math.max(1, remotePlayer.maxHealth || 100), 0, 1);
+      const label = publicName || remotePlayer.name || "Contact";
 
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "rgba(3, 8, 24, 0.62)";
-    roundRectPath(screen.x - 37, screen.y - 91, 74, 8, 4);
-    ctx.fill();
-    ctx.fillStyle = pct > 0.55 ? "#61f59a" : pct > 0.28 ? "#f5d65b" : "#ff6262";
-    roundRectPath(screen.x - 37, screen.y - 91, 74 * pct, 8, 4);
-    ctx.fill();
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = "rgba(3, 8, 24, 0.62)";
+      roundRectPath(screen.x - 37, screen.y - 91, 74, 8, 4);
+      ctx.fill();
+      ctx.fillStyle = pct > 0.55 ? "#61f59a" : pct > 0.28 ? "#f5d65b" : "#ff6262";
+      roundRectPath(screen.x - 37, screen.y - 91, 74 * pct, 8, 4);
+      ctx.fill();
 
-    ctx.font = "800 11px Inter, system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(3, 8, 24, 0.68)";
-    const widthLabel = Math.min(160, ctx.measureText(label).width + 18);
-    roundRectPath(screen.x - widthLabel / 2, screen.y - 120, widthLabel, 22, 8);
-    ctx.fill();
-    ctx.fillStyle = "#dffcff";
-    ctx.fillText(label, screen.x, screen.y - 109, widthLabel - 10);
-    ctx.restore();
+      ctx.font = "800 11px Inter, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(3, 8, 24, 0.68)";
+      const widthLabel = Math.min(160, ctx.measureText(label).width + 18);
+      roundRectPath(screen.x - widthLabel / 2, screen.y - 120, widthLabel, 22, 8);
+      ctx.fill();
+      ctx.fillStyle = "#dffcff";
+      ctx.fillText(label, screen.x, screen.y - 109, widthLabel - 10);
+      ctx.restore();
 
-    drawRemoteInteractionBubble(remotePlayer, screen);
+      drawRemoteInteractionBubble(remotePlayer, screen);
+    }
   }
 
   function drawRemoteInteractionBubble(remotePlayer, screen) {
@@ -20087,7 +21372,7 @@
 
     const alpha = clamp(Math.min(1, emote.life / 0.45), 0, 1);
     const speech = emote.speech || emote.label || "";
-    const symbol = emote.emote === "team" ? "+" : emote.emote === "peace" ? "!" : "$";
+    const symbol = emote.emote === "duel" ? "!" : emote.emote === "peace" ? "=" : "$";
     const y = screen.y - 154;
 
     ctx.save();
@@ -20098,13 +21383,13 @@
     ctx.textBaseline = "middle";
     const bubbleWidth = Math.min(130, ctx.measureText(speech).width + 42);
     ctx.fillStyle = "rgba(3, 8, 24, 0.78)";
-    ctx.strokeStyle = emote.emote === "peace" ? "rgba(255, 229, 111, 0.72)" : "rgba(88, 226, 255, 0.62)";
+    ctx.strokeStyle = emote.emote === "duel" || emote.emote === "peace" ? "rgba(255, 229, 111, 0.72)" : "rgba(88, 226, 255, 0.62)";
     ctx.lineWidth = 1.5;
     roundRectPath(screen.x - bubbleWidth / 2, y - 15, bubbleWidth, 30, 8);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = emote.emote === "peace" ? "#ffe56f" : "#58e2ff";
+    ctx.fillStyle = emote.emote === "duel" || emote.emote === "peace" ? "#ffe56f" : "#58e2ff";
     ctx.fillText(symbol, screen.x - bubbleWidth / 2 + 17, y + 0.5, 18);
     ctx.fillStyle = "#f8fbff";
     ctx.fillText(speech, screen.x + 12, y + 0.5, bubbleWidth - 34);
@@ -20759,6 +22044,10 @@
   }
 
   function drawPlayerHealthBar() {
+    if (gameSettings.hudEnabled === false) {
+      return;
+    }
+
     const pct = clamp(player.health / player.maxHealth, 0, 1);
     const energyPct = playerEnergyPct();
     const barWidth = 74;
@@ -21017,6 +22306,10 @@
   }
 
   function drawMapOverlay() {
+    if (gameSettings.hudEnabled === false) {
+      return;
+    }
+
     if (isCompactHudViewport() && !mapHudOpen) {
       return;
     }
@@ -21111,6 +22404,10 @@
   }
 
   function updateHud() {
+    if (gameSettings.hudEnabled === false) {
+      return;
+    }
+
     let largest = 1;
     let largestParticle = null;
     for (const particle of particles) {
@@ -21134,7 +22431,7 @@
     }
     updateTouchLandButton();
 
-    const progressBody = findNearestProgressBody() || largestParticle;
+    const progressBody = findBucketProgressBody() || findNearestProgressBody() || largestParticle;
     const progressMass = progressBody ? progressBody.mass : largest;
     const tier = progressBody ? progressBody.tier : bodyTiers[0];
     const nextTier = nextTierAfter(tier);
@@ -21189,6 +22486,7 @@
     updateRockets(dt);
     updateFighters(dt);
     updateStructures(dt);
+    applyLandedSurfaceConstraint();
     updatePlayerLasers(dt);
     updateLauncherMissiles(dt);
     resolveShieldGeneratorMobCollisions(dt);
@@ -21213,6 +22511,7 @@
     updatePlayer(dt);
     updateGadgetAim(dt);
     updateEquippedTool(dt);
+    updatePlayerLasers(dt, { relaySharedWorldHits: true });
     updateFollowerWorldSmoothing(dt);
     updateFollowerGadgetPrediction(dt);
     updateFollowerTechPickups();
@@ -21531,6 +22830,12 @@
   if (touchScreenInput) {
     touchScreenInput.addEventListener("change", function () {
       applyTouchScreenSetting(touchScreenInput.checked);
+    });
+  }
+
+  if (hudEnabledInput) {
+    hudEnabledInput.addEventListener("change", function () {
+      applyHudEnabledSetting(hudEnabledInput.checked);
     });
   }
 
@@ -22040,13 +23345,13 @@
       }
       if (event.code === "Enter") {
         event.preventDefault();
-        const selected = playerInteractionChoicesConfig[multiplayer.interactionMenu.selectedIndex];
+        const selected = multiplayer.interactionMenu.choices[multiplayer.interactionMenu.selectedIndex];
         choosePlayerInteraction(selected && selected.key);
         return;
       }
-      if (/^Digit[1-3]$/.test(event.code)) {
+      if (/^Digit[1-2]$/.test(event.code)) {
         event.preventDefault();
-        const selected = playerInteractionChoicesConfig[Number(event.code.slice(5)) - 1];
+        const selected = multiplayer.interactionMenu.choices[Number(event.code.slice(5)) - 1];
         choosePlayerInteraction(selected && selected.key);
         return;
       }
@@ -22283,6 +23588,7 @@
     setCameraZoom(gameSettings.zoom);
     updateSurfaceCameraRotationUi();
     updateTouchScreenUi();
+    updateHudEnabledUi();
     renderControlBindings();
     initializeTechUi();
     updateSoundToggle();
