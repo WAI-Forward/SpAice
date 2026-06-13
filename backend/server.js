@@ -7,6 +7,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const root = path.resolve(__dirname, "..");
+const mpV2Sim = require(path.join(root, "frontend", "src", "mp-v2-sim.js"));
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
 const advertisedHosts = [
@@ -52,6 +53,8 @@ const overlaps = new Map();
 const lobbies = new Map();
 const lobbyCodes = new Map();
 const partySessions = new Map();
+const partyV2Rooms = new Map();
+const partyCodes = new Map();
 const anomalyMatches = new Map();
 const playerCooldowns = new Map();
 let nextOverlapNumber = 1;
@@ -61,6 +64,7 @@ let nextAnomalyNumber = 1;
 const playerInteractionChoices = new Set(["trade", "duel", "truce"]);
 const difficultyChoices = new Set(["easy", "medium", "hard"]);
 const partyLobbyMaxPlayers = 4;
+const partyNetcodeVersion = 2;
 const anomalyPromptTimeoutMs = 15000;
 const anomalyEncounterLifetimeMs = 90000;
 const multiplayerDebugEnabled = process.env.CLUSTERNAUTS_MULTIPLAYER_DEBUG === "1";
@@ -111,6 +115,8 @@ function createDefaultWorldState() {
     fighters: [],
     structures: [],
     rivalProjectiles: [],
+    techPickups: [],
+    healthPickups: [],
     starDust: [],
     nextParticleId: 1,
     nextAlienoidId: 1,
@@ -121,6 +127,9 @@ function createDefaultWorldState() {
     nextRocketId: 1,
     nextFighterId: 1,
     nextStructureId: 1,
+    nextRivalProjectileId: 1,
+    nextTechPickupId: 1,
+    nextHealthPickupId: 1,
     mobSpawnTimers: {
       alienoid: 120,
       ufo: 180,
@@ -1959,6 +1968,8 @@ function normalizeWorldState(snapshot) {
     rivalProjectiles: Array.isArray(source.rivalProjectiles)
       ? source.rivalProjectiles.map(normalizeProjectile).filter(Boolean).slice(0, 160)
       : [],
+    techPickups: Array.isArray(source.techPickups) ? source.techPickups.map(normalizeTechPickup).filter(Boolean).slice(0, 80) : [],
+    healthPickups: Array.isArray(source.healthPickups) ? source.healthPickups.map(normalizeHealthPickup).filter(Boolean).slice(0, 80) : [],
     starDust: Array.isArray(source.starDust) ? source.starDust.map(normalizeStar).filter(Boolean).slice(0, 360) : [],
     difficulty: sanitizeText(source.difficulty, 16) || "medium",
     nextParticleId: Math.max(1, Math.floor(Number(source.nextParticleId) || 1)),
@@ -1970,6 +1981,9 @@ function normalizeWorldState(snapshot) {
     nextRocketId: Math.max(1, Math.floor(Number(source.nextRocketId) || 1)),
     nextFighterId: Math.max(1, Math.floor(Number(source.nextFighterId) || 1)),
     nextStructureId: Math.max(1, Math.floor(Number(source.nextStructureId) || 1)),
+    nextRivalProjectileId: Math.max(1, Math.floor(Number(source.nextRivalProjectileId) || 1)),
+    nextTechPickupId: Math.max(1, Math.floor(Number(source.nextTechPickupId) || 1)),
+    nextHealthPickupId: Math.max(1, Math.floor(Number(source.nextHealthPickupId) || 1)),
     mobSpawnTimers: normalizeMobSpawnTimers(source.mobSpawnTimers),
     mobDefeatsByKind: normalizeMobDefeatsByKind(source.mobDefeatsByKind),
     lastEvolvedAt: clampNumber(source.lastEvolvedAt, 0, Date.now()) || Date.now()
@@ -2384,6 +2398,7 @@ function normalizeProjectile(source) {
   }
 
   return {
+    id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
     y: clampNumber(source.y, -1000000, 1000000),
     vx: clampNumber(source.vx, -2000, 2000),
@@ -2398,6 +2413,44 @@ function normalizeProjectile(source) {
     cause: sanitizeText(source.cause, 64) || "",
     lightning: Boolean(source.lightning),
     rocket: Boolean(source.rocket)
+  };
+}
+
+function normalizeTechPickup(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+  const key = techKeys.includes(source.key) ? source.key : techKeys[0];
+  return {
+    id: Math.max(1, Math.floor(Number(source.id) || 1)),
+    key,
+    x: clampNumber(source.x, -1000000, 1000000),
+    y: clampNumber(source.y, -1000000, 1000000),
+    vx: clampNumber(source.vx, -2000, 2000),
+    vy: clampNumber(source.vy, -2000, 2000),
+    radius: clampNumber(source.radius, 1, 80),
+    life: clampNumber(source.life, 0, 60),
+    maxLife: clampNumber(source.maxLife, 0, 60),
+    rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
+  };
+}
+
+function normalizeHealthPickup(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+  return {
+    id: Math.max(1, Math.floor(Number(source.id) || 1)),
+    x: clampNumber(source.x, -1000000, 1000000),
+    y: clampNumber(source.y, -1000000, 1000000),
+    vx: clampNumber(source.vx, -2000, 2000),
+    vy: clampNumber(source.vy, -2000, 2000),
+    radius: clampNumber(source.radius, 1, 80),
+    heal: clampNumber(source.heal, 1, 100),
+    life: clampNumber(source.life, 0, 60),
+    maxLife: clampNumber(source.maxLife, 0, 60),
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
   };
 }
 
@@ -3129,6 +3182,11 @@ async function handleSocketMessage(client, message) {
     return;
   }
 
+  if (message.type === "mp.v2.input") {
+    handlePartyV2Input(client, message);
+    return;
+  }
+
   if (message.type === "party.input") {
     handlePartyInput(client, message);
     return;
@@ -3146,6 +3204,22 @@ async function handleSocketMessage(client, message) {
 
   if (message.type === "party.tech.pickup") {
     handlePartyTechPickup(client, message);
+    return;
+  }
+
+  if (message.type === "party.command") {
+    handlePartyCommand(client, message);
+    return;
+  }
+
+  if (
+    message.type === "party.physics.start" ||
+    message.type === "party.physics.state" ||
+    message.type === "party.physics.end" ||
+    message.type === "party.physics.authority" ||
+    message.type === "party.physics.reject"
+  ) {
+    handlePartyPhysicsSession(client, message);
     return;
   }
 
@@ -3261,10 +3335,11 @@ function reattachClientToLobbyOrParty(client) {
   for (const session of partySessions.values()) {
     if (session.players.includes(client.playerId)) {
       client.partySessionId = session.id;
+      const room = partyV2Rooms.get(session.id);
       sendWsJson(client, {
         type: "party.start",
         session: publicPartySession(session),
-        snapshot: session.worldSnapshot
+        snapshot: room ? buildPartyV2StartSnapshot(room) : session.worldSnapshot
       });
       return;
     }
@@ -3654,7 +3729,7 @@ function createLobbyCode() {
   let code = "";
   do {
     code = crypto.randomBytes(4).toString("base64url").replace(/[^A-Z0-9]/gi, "").slice(0, 6).toUpperCase();
-  } while (!code || lobbyCodes.has(code));
+  } while (!code || lobbyCodes.has(code) || partyCodes.has(code));
   return code;
 }
 
@@ -3662,6 +3737,12 @@ function findLobbyByCodeOrId(value) {
   const raw = sanitizeText(value, 96);
   const clean = raw.toUpperCase();
   return lobbies.get(raw) || lobbies.get(clean) || lobbies.get(lobbyCodes.get(clean)) || null;
+}
+
+function findPartyByCodeOrId(value) {
+  const raw = sanitizeText(value, 96);
+  const clean = raw.toUpperCase();
+  return partySessions.get(raw) || partySessions.get(clean) || partySessions.get(partyCodes.get(clean)) || null;
 }
 
 function publicLobbyPlayer(playerId) {
@@ -3718,6 +3799,16 @@ function assignClientLobby(playerId, lobbyId) {
   }
 }
 
+function assignClientParty(playerId, partySessionId) {
+  const clients = clientsByPlayerId.get(playerId);
+  if (!clients) {
+    return;
+  }
+  for (const client of clients) {
+    client.partySessionId = partySessionId;
+  }
+}
+
 function handleLobbyCreate(client, message) {
   if (!client.multiplayerOptIn) {
     sendWsJson(client, { type: "lobby.join.failed", message: "Multiplayer is off." });
@@ -3746,13 +3837,21 @@ function handleLobbyCreate(client, message) {
 }
 
 function handleLobbyJoin(client, message) {
-  const lobby = findLobbyByCodeOrId(message.code || message.lobbyId || message.roomId);
   if (!client.multiplayerOptIn) {
     sendWsJson(client, { type: "lobby.join.failed", message: "Multiplayer is off." });
     return;
   }
+  const requestedCode = message.code || message.lobbyId || message.roomId;
+  const lobby = findLobbyByCodeOrId(requestedCode);
+  if (!lobby) {
+    const session = findPartyByCodeOrId(requestedCode);
+    if (session) {
+      handlePartyJoin(client, session);
+      return;
+    }
+  }
   if (!lobby || lobby.status !== "open") {
-    sendWsJson(client, { type: "lobby.join.failed", message: "Lobby unavailable." });
+    sendWsJson(client, { type: "lobby.join.failed", message: "World unavailable." });
     return;
   }
   if (!lobby.players.includes(client.playerId) && lobby.players.length >= lobby.maxPlayers) {
@@ -3773,6 +3872,58 @@ function handleLobbyJoin(client, message) {
   client.lobbyId = lobby.id;
   assignClientLobby(client.playerId, lobby.id);
   sendLobbyState(lobby);
+}
+
+function handlePartyJoin(client, session) {
+  if (!client.multiplayerOptIn) {
+    sendWsJson(client, { type: "lobby.join.failed", message: "Multiplayer is off." });
+    return;
+  }
+  if (!session) {
+    sendWsJson(client, { type: "lobby.join.failed", message: "World unavailable." });
+    return;
+  }
+
+  const maxPlayers = Math.max(1, Math.floor(session.maxPlayers || partyLobbyMaxPlayers));
+  if (!session.players.includes(client.playerId) && session.players.length >= maxPlayers) {
+    sendWsJson(client, { type: "lobby.join.failed", message: "World full." });
+    return;
+  }
+
+  if (client.lobbyId) {
+    leaveClientLobby(client, true);
+  }
+  if (client.partySessionId && client.partySessionId !== session.id) {
+    leaveClientParty(client);
+  }
+  if (!session.players.includes(client.playerId)) {
+    session.players.push(client.playerId);
+  }
+  const room = partyV2Rooms.get(session.id);
+  if (room) {
+    addPartyV2Player(room, session, client.playerId);
+  }
+
+  client.lobbyId = "";
+  client.partySessionId = session.id;
+  assignClientParty(client.playerId, session.id);
+
+  const payload = {
+    type: "party.state",
+    session: publicPartySession(session)
+  };
+  relayToParty(session, payload, client.playerId);
+
+  const clients = clientsByPlayerId.get(client.playerId);
+  if (clients) {
+    for (const partyClient of clients) {
+      sendWsJson(partyClient, {
+        type: "party.start",
+        session: publicPartySession(session),
+        snapshot: room ? buildPartyV2StartSnapshot(room) : session.worldSnapshot
+      });
+    }
+  }
 }
 
 function leaveClientLobby(client, explicitLeave) {
@@ -3851,6 +4002,268 @@ function handleLobbyDifficulty(client, message) {
   sendLobbyState(lobby);
 }
 
+function isPartyV2Session(session) {
+  return Boolean(session && Number(session.netcodeVersion || 1) >= partyNetcodeVersion);
+}
+
+function createPartyV2Room(session) {
+  if (!session || !isPartyV2Session(session)) {
+    return null;
+  }
+
+  const players = session.players.map(publicLobbyPlayer);
+  const state = mpV2Sim.createInitialState(session.worldSnapshot, players, {
+    seed: session.id
+  });
+  for (const playerId of session.players) {
+    mpV2Sim.addPlayer(state, publicLobbyPlayer(playerId));
+  }
+
+  const room = {
+    sessionId: session.id,
+    state,
+    inputQueues: new Map(),
+    lastInputs: new Map(),
+    lastAckByPlayerId: new Map(),
+    lastSnapshotTick: 0,
+    pendingEvents: [],
+    lastTouchedAt: Date.now(),
+    perf: {
+      stepMsEma: 0,
+      snapshotBytesEma: 0,
+      entityCount: partyV2EntityCount(state.world),
+      maxInputQueue: 0
+    }
+  };
+  partyV2Rooms.set(session.id, room);
+  session.worldSnapshot = buildPartyV2StartSnapshot(room);
+  return room;
+}
+
+function addPartyV2Player(room, session, playerId) {
+  if (!room || !session || !playerId) {
+    return null;
+  }
+  const client = firstOnlineClient(playerId);
+  return mpV2Sim.addPlayer(room.state, {
+    playerId,
+    publicName: client && client.profile ? client.profile.publicName : playerId
+  });
+}
+
+function buildPartyV2StartSnapshot(room) {
+  return {
+    v2: true,
+    state: mpV2Sim.serializeState(room.state)
+  };
+}
+
+function monotonicMs() {
+  return Number(process.hrtime.bigint()) / 1000000;
+}
+
+function smoothMetric(previous, next, weight) {
+  const value = Number(next);
+  if (!Number.isFinite(value)) {
+    return Number(previous) || 0;
+  }
+  const current = Number(previous);
+  if (!Number.isFinite(current) || current <= 0) {
+    return value;
+  }
+  const blend = Number.isFinite(Number(weight)) ? Math.max(0, Math.min(1, Number(weight))) : 0.18;
+  return current + (value - current) * blend;
+}
+
+function partyV2EntityCount(world) {
+  const source = world && typeof world === "object" ? world : {};
+  return [
+    "particles",
+    "techPickups",
+    "healthPickups",
+    "alienoids",
+    "ufos",
+    "rambots",
+    "engineers",
+    "teslas",
+    "rockets",
+    "fighters",
+    "rivalProjectiles",
+    "structures"
+  ].reduce((total, key) => total + (Array.isArray(source[key]) ? source[key].length : 0), 0);
+}
+
+function partyV2PerfPayload(room) {
+  const perf = room && room.perf ? room.perf : {};
+  return {
+    stepMs: Math.round((Number(perf.stepMsEma) || 0) * 100) / 100,
+    snapshotBytes: Math.max(0, Math.round(Number(perf.snapshotBytesEma) || 0)),
+    entityCount: Math.max(0, Math.round(Number(perf.entityCount) || 0)),
+    maxInputQueue: Math.max(0, Math.round(Number(perf.maxInputQueue) || 0))
+  };
+}
+
+function handlePartyV2Input(client, message) {
+  const session = partySessions.get(client.partySessionId);
+  if (!session || !isPartyV2Session(session) || !session.players.includes(client.playerId)) {
+    return;
+  }
+  const room = partyV2Rooms.get(session.id);
+  if (!room) {
+    return;
+  }
+
+  if (message.roomId && message.roomId !== session.id && message.roomId !== session.lobbyId) {
+    return;
+  }
+
+  addPartyV2Player(room, session, client.playerId);
+  const input = mpV2Sim.sanitizeInput({
+    seq: message.seq,
+    clientTick: message.clientTick,
+    aimAngle: message.aimAngle,
+    aimLocalAngle: message.aimLocalAngle,
+    equippedTool: message.equippedTool,
+    toolMode: message.toolMode,
+    buttons: message.buttons
+  });
+  input.playerId = client.playerId;
+
+  const lastAck = room.lastAckByPlayerId.get(client.playerId) || 0;
+  if (input.seq <= lastAck) {
+    return;
+  }
+
+  const queue = room.inputQueues.get(client.playerId) || [];
+  queue.push(input);
+  queue.sort((a, b) => a.seq - b.seq);
+  while (queue.length > 120) {
+    queue.shift();
+  }
+  room.inputQueues.set(client.playerId, queue);
+  if (room.perf) {
+    room.perf.maxInputQueue = Math.max(Number(room.perf.maxInputQueue) || 0, queue.length);
+  }
+  room.lastTouchedAt = Date.now();
+}
+
+function popPartyV2Input(room, playerId) {
+  const queue = room.inputQueues.get(playerId) || [];
+  let next = null;
+  while (queue.length) {
+    const candidate = queue.shift();
+    const lastAck = room.lastAckByPlayerId.get(playerId) || 0;
+    if (candidate.seq > lastAck) {
+      next = candidate;
+      break;
+    }
+  }
+  if (queue.length) {
+    room.inputQueues.set(playerId, queue);
+  } else {
+    room.inputQueues.delete(playerId);
+  }
+  if (next) {
+    room.lastInputs.set(playerId, next);
+    room.lastAckByPlayerId.set(playerId, next.seq);
+    return next;
+  }
+  return room.lastInputs.get(playerId) || { playerId, seq: room.lastAckByPlayerId.get(playerId) || 0 };
+}
+
+const partyV2MaxElapsedSeconds = 0.25;
+const partyV2MaxCatchUpSteps = 5;
+let partyV2LastTickMs = monotonicMs();
+let partyV2TickAccumulator = 0;
+
+function stepPartyV2RoomsOnce() {
+  for (const [sessionId, room] of Array.from(partyV2Rooms.entries())) {
+    const session = partySessions.get(sessionId);
+    if (!session || !isPartyV2Session(session)) {
+      partyV2Rooms.delete(sessionId);
+      continue;
+    }
+
+    const inputs = {};
+    for (const playerId of session.players) {
+      addPartyV2Player(room, session, playerId);
+      inputs[playerId] = popPartyV2Input(room, playerId);
+    }
+
+    const stepStart = monotonicMs();
+    mpV2Sim.step(room.state, inputs, { dt: mpV2Sim.TICK_DT, enableMobs: true });
+    if (room.perf) {
+      room.perf.stepMsEma = smoothMetric(room.perf.stepMsEma, monotonicMs() - stepStart, 0.18);
+      room.perf.entityCount = partyV2EntityCount(room.state.world);
+    }
+    if (Array.isArray(room.state.events) && room.state.events.length) {
+      room.pendingEvents.push(...room.state.events);
+      if (room.pendingEvents.length > 120) {
+        room.pendingEvents.splice(0, room.pendingEvents.length - 120);
+      }
+    }
+
+    if (room.state.tick - room.lastSnapshotTick >= mpV2Sim.SNAPSHOT_INTERVAL_TICKS) {
+      room.lastSnapshotTick = room.state.tick;
+      session.worldSnapshot = buildPartyV2StartSnapshot(room);
+      sendPartyV2Snapshot(session, room);
+    }
+  }
+}
+
+function tickPartyV2Rooms() {
+  const now = monotonicMs();
+  const rawElapsedSeconds = (now - partyV2LastTickMs) / 1000;
+  const elapsedSeconds = Math.min(
+    partyV2MaxElapsedSeconds,
+    Math.max(0, Number.isFinite(rawElapsedSeconds) ? rawElapsedSeconds : mpV2Sim.TICK_DT)
+  );
+  partyV2LastTickMs = now;
+  partyV2TickAccumulator = Math.min(
+    partyV2MaxElapsedSeconds,
+    partyV2TickAccumulator + elapsedSeconds
+  );
+
+  let steps = 0;
+  while (partyV2TickAccumulator + 0.000001 >= mpV2Sim.TICK_DT && steps < partyV2MaxCatchUpSteps) {
+    partyV2TickAccumulator -= mpV2Sim.TICK_DT;
+    stepPartyV2RoomsOnce();
+    steps += 1;
+  }
+
+  if (steps >= partyV2MaxCatchUpSteps) {
+    partyV2TickAccumulator = Math.min(partyV2TickAccumulator, mpV2Sim.TICK_DT * partyV2MaxCatchUpSteps);
+  }
+}
+
+function sendPartyV2Snapshot(session, room) {
+  const ackInputSeq = {};
+  for (const playerId of session.players) {
+    ackInputSeq[playerId] = room.lastAckByPlayerId.get(playerId) || 0;
+  }
+  const stateSnapshot = session.worldSnapshot && session.worldSnapshot.v2 && session.worldSnapshot.state
+    ? session.worldSnapshot.state
+    : mpV2Sim.serializeState(room.state);
+  const payload = {
+    type: "mp.v2.snapshot",
+    roomId: session.id,
+    serverTick: room.state.tick,
+    ackInputSeq,
+    state: stateSnapshot,
+    events: Array.isArray(room.pendingEvents) ? room.pendingEvents.slice() : [],
+    perf: partyV2PerfPayload(room)
+  };
+  if (Array.isArray(room.pendingEvents)) {
+    room.pendingEvents.length = 0;
+  }
+  if (room.perf) {
+    room.perf.snapshotBytesEma = smoothMetric(room.perf.snapshotBytesEma, Buffer.byteLength(JSON.stringify(payload.state)), 0.18);
+    payload.perf = partyV2PerfPayload(room);
+    room.perf.maxInputQueue = 0;
+  }
+  relayToParty(session, payload);
+}
+
 function handleLobbyStart(client, message) {
   const lobby = lobbies.get(client.lobbyId);
   if (!lobby || lobby.hostPlayerId !== client.playerId) {
@@ -3863,8 +4276,11 @@ function handleLobbyStart(client, message) {
     lobbyId: lobby.id,
     hostPlayerId: client.playerId,
     players: lobby.players.slice(),
+    maxPlayers: lobby.maxPlayers,
+    joinCode: lobby.code,
     difficulty: sanitizeDifficultyId(message.difficulty || lobby.difficulty),
     pvpMode: "party-off",
+    netcodeVersion: partyNetcodeVersion,
     worldSnapshot: message.snapshot && typeof message.snapshot === "object" ? message.snapshot : client.lastSnapshot,
     playerSnapshots: new Map(),
     claimedTechPickupIds: new Set(),
@@ -3872,8 +4288,11 @@ function handleLobbyStart(client, message) {
     anomalyId: ""
   };
   partySessions.set(session.id, session);
+  partyCodes.set(lobby.code, session.id);
   lobbies.delete(lobby.id);
   lobbyCodes.delete(lobby.code);
+  const room = createPartyV2Room(session);
+  const startSnapshot = room ? buildPartyV2StartSnapshot(room) : session.worldSnapshot;
 
   for (const playerId of session.players) {
     const clients = clientsByPlayerId.get(playerId);
@@ -3886,7 +4305,7 @@ function handleLobbyStart(client, message) {
       sendWsJson(partyClient, {
         type: "party.start",
         session: publicPartySession(session),
-        snapshot: session.worldSnapshot
+        snapshot: startSnapshot
       });
     }
   }
@@ -3897,8 +4316,13 @@ function publicPartySession(session) {
     id: session.id,
     sessionId: session.id,
     lobbyId: session.lobbyId,
+    code: session.joinCode || "",
+    joinCode: session.joinCode || "",
     hostPlayerId: session.hostPlayerId,
+    maxPlayers: Math.max(1, Math.floor(session.maxPlayers || partyLobbyMaxPlayers)),
     difficulty: session.difficulty,
+    netcodeVersion: session.netcodeVersion || 1,
+    authoritativeServer: (session.netcodeVersion || 1) >= partyNetcodeVersion,
     pvpMode: session.pvpMode,
     players: session.players.map(publicLobbyPlayer)
   };
@@ -3921,6 +4345,9 @@ function handlePartyInput(client, message) {
   if (!session || !session.players.includes(client.playerId)) {
     return;
   }
+  if (isPartyV2Session(session)) {
+    return;
+  }
   const snapshot = message.snapshot && typeof message.snapshot === "object" ? message.snapshot : null;
   if (snapshot) {
     session.playerSnapshots.set(client.playerId, snapshot);
@@ -3937,6 +4364,9 @@ function handlePartyInput(client, message) {
 function handlePartyWorldSnapshot(client, message) {
   const session = partySessions.get(client.partySessionId);
   if (!session || session.hostPlayerId !== client.playerId) {
+    return;
+  }
+  if (isPartyV2Session(session)) {
     return;
   }
   const snapshot = message.snapshot && typeof message.snapshot === "object" ? message.snapshot : null;
@@ -3961,6 +4391,24 @@ function handlePartyRespawn(client, message) {
   const snapshot = message.snapshot && typeof message.snapshot === "object" ? message.snapshot : null;
   if (snapshot) {
     session.playerSnapshots.set(client.playerId, snapshot);
+  }
+  const room = isPartyV2Session(session) ? partyV2Rooms.get(session.id) : null;
+  if (room && snapshot && snapshot.player && typeof mpV2Sim.respawnPlayer === "function") {
+    mpV2Sim.respawnPlayer(room.state, client.playerId, snapshot.player);
+    room.inputQueues.delete(client.playerId);
+    room.lastInputs.delete(client.playerId);
+    if (Array.isArray(room.pendingEvents)) {
+      room.pendingEvents = room.pendingEvents.filter((event) => {
+        return !(event && event.type === "player.died" && String(event.playerId || "") === client.playerId);
+      });
+    }
+    if (room.state && Array.isArray(room.state.events)) {
+      room.state.events = room.state.events.filter((event) => {
+        return !(event && event.type === "player.died" && String(event.playerId || "") === client.playerId);
+      });
+    }
+    session.worldSnapshot = buildPartyV2StartSnapshot(room);
+    sendPartyV2Snapshot(session, room);
   }
   relayToParty(session, {
     type: "player.respawn",
@@ -3998,6 +4446,261 @@ function handlePartyTechPickup(client, message) {
   });
 }
 
+function sanitizePartyCommandSource(source) {
+  const data = source && typeof source === "object" ? source : {};
+  const sourceNumber = (value, fallback, min, max) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+  };
+  return {
+    x: sourceNumber(data.x, 0, -1000000, 1000000),
+    y: sourceNumber(data.y, 0, -1000000, 1000000),
+    radius: sourceNumber(data.radius, 34, 1, 120),
+    directionX: sourceNumber(data.directionX, 1, -1, 1),
+    directionY: sourceNumber(data.directionY, 0, -1, 1)
+  };
+}
+
+function sanitizePartyCommand(message) {
+  const command = sanitizeText(message.command, 32);
+  if (command === "tech") {
+    const tech = sanitizeText(message.tech, 32).toLowerCase();
+    const amount = Math.max(1, Math.floor(clampNumber(message.amount, 1, 1000000)));
+    return {
+      command,
+      tech: tech === "all" || techKeys.includes(tech) ? tech : "",
+      amount
+    };
+  }
+  if (command === "spawnBody") {
+    const body = sanitizeText(message.body, 32).toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
+    const allowed = mpV2Sim.constants.BODY_TIERS.some((tier) => tier.name === body);
+    const amount = Math.max(1, Math.floor(clampNumber(message.amount, 1, 100)));
+    return {
+      command,
+      body: allowed ? body : "",
+      amount,
+      source: sanitizePartyCommandSource(message.source)
+    };
+  }
+  if (command === "spawnMob") {
+    const mob = sanitizeText(message.mob, 32).toLowerCase().replace(/[-_\s]+/g, "");
+    const allowed = mpV2Sim.constants.MOB_TIER_ORDER.includes(mob);
+    const amount = Math.max(1, Math.floor(clampNumber(message.amount, 1, 100)));
+    return {
+      command,
+      mob: allowed ? mob : "",
+      amount,
+      source: sanitizePartyCommandSource(message.source)
+    };
+  }
+  return { command: "" };
+}
+
+function handlePartyCommand(client, message) {
+  const session = partySessions.get(client.partySessionId);
+  if (!session || !session.players.includes(client.playerId)) {
+    return;
+  }
+
+  const payload = sanitizePartyCommand(message);
+  if (!payload.command) {
+    return;
+  }
+
+  if (isPartyV2Session(session)) {
+    const room = partyV2Rooms.get(session.id);
+    if (!room || !room.state) {
+      return;
+    }
+    let changed = false;
+    if (payload.command === "tech" && payload.tech) {
+      changed = mpV2Sim.addTechToPlayer(room.state, client.playerId, payload.tech, payload.amount);
+    } else if (payload.command === "spawnBody" && payload.body) {
+      for (let i = 0; i < payload.amount; i += 1) {
+        changed = Boolean(mpV2Sim.spawnBody(room.state, payload.body, payload.source)) || changed;
+      }
+    } else if (payload.command === "spawnMob" && payload.mob) {
+      changed = mpV2Sim.spawnMob(room.state, payload.mob, payload.amount, payload.source) > 0;
+    }
+    if (changed) {
+      room.lastTouchedAt = Date.now();
+      session.worldSnapshot = buildPartyV2StartSnapshot(room);
+      sendPartyV2Snapshot(session, room);
+    }
+    return;
+  }
+
+  if (
+    (payload.command !== "spawnBody" || !payload.body) &&
+    (payload.command !== "spawnMob" || !payload.mob) ||
+    session.hostPlayerId === client.playerId
+  ) {
+    return;
+  }
+
+  relayToPlayer(session.hostPlayerId, {
+    type: "party.command",
+    fromPlayerId: client.playerId,
+    publicName: client.profile ? client.profile.publicName : client.playerId,
+    command: payload.command,
+    body: payload.body,
+    mob: payload.mob,
+    amount: payload.amount,
+    source: payload.source
+  });
+}
+
+function sanitizePartyEntityType(value) {
+  const clean = sanitizeText(value, 32);
+  return [
+    "particle",
+    "techPickup",
+    "healthPickup",
+    "rivalProjectile",
+    "alienoid",
+    "ufo",
+    "rambot",
+    "engineer",
+    "tesla",
+    "rocket",
+    "fighter"
+  ].includes(clean) ? clean : "";
+}
+
+function sanitizePartyEntityState(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+  const state = {
+    id: Math.max(1, Math.floor(Number(source.id) || 0)),
+    x: clampNumber(source.x, -1000000, 1000000),
+    y: clampNumber(source.y, -1000000, 1000000),
+    vx: clampNumber(source.vx, -2200, 2200),
+    vy: clampNumber(source.vy, -2200, 2200),
+    radius: clampNumber(source.radius, 1, 10000)
+  };
+  const optionalNumberKeys = [
+    "mass",
+    "energy",
+    "maxEnergy",
+    "textureSeed",
+    "wobble",
+    "pulse",
+    "heal",
+    "life",
+    "maxLife",
+    "rotation",
+    "health",
+    "maxHealth",
+    "flash",
+    "hitCooldown",
+    "length",
+    "damage",
+    "toolDisable"
+  ];
+  for (const key of optionalNumberKeys) {
+    if (Number.isFinite(Number(source[key]))) {
+      state[key] = clampNumber(source[key], -1000000, 1000000);
+    }
+  }
+  if (source.color && typeof source.color === "object") {
+    state.color = normalizeColor(source.color);
+  }
+  for (const key of ["key", "kind", "cause"]) {
+    if (typeof source[key] === "string") {
+      state[key] = sanitizeText(source[key], 80);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "lightning")) {
+    state.lightning = Boolean(source.lightning);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "rocket")) {
+    state.rocket = Boolean(source.rocket);
+  }
+  return state.id ? state : null;
+}
+
+function sanitizePartyEntityActor(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+  return {
+    id: sanitizeText(source.id, 80),
+    name: sanitizeText(source.name, 32),
+    x: clampNumber(source.x, -1000000, 1000000),
+    y: clampNumber(source.y, -1000000, 1000000),
+    vx: clampNumber(source.vx, -2200, 2200),
+    vy: clampNumber(source.vy, -2200, 2200),
+    radius: clampNumber(source.radius, 1, 120),
+    health: clampNumber(source.health, 0, 100),
+    maxHealth: clampNumber(source.maxHealth, 1, 100),
+    energy: clampNumber(source.energy, 0, 260),
+    maxEnergy: clampNumber(source.maxEnergy, 1, 260),
+    equippedTool: sanitizeText(source.equippedTool, 40),
+    toolMode: sanitizeText(source.toolMode, 16),
+    aimAngle: clampNumber(source.aimAngle, -Math.PI * 16, Math.PI * 16),
+    landed: source.landed && typeof source.landed === "object" ? normalizeLanding(source.landed) : null
+  };
+}
+
+function sanitizePartyPhysicsPayload(message) {
+  const type = sanitizePartyEntityType(message.entityType);
+  const entityId = Math.max(1, Math.floor(Number(message.entityId) || 0));
+  return {
+    entityType: type,
+    entityId,
+    ownerPlayerId: sanitizeText(message.ownerPlayerId, 80),
+    targetPlayerId: sanitizeText(message.targetPlayerId, 80),
+    seq: Math.max(0, Math.floor(Number(message.seq) || 0)),
+    action: sanitizeText(message.action, 24),
+    reason: sanitizeText(message.reason, 80),
+    mode: sanitizeText(message.mode, 16),
+    active: message.active !== false,
+    state: sanitizePartyEntityState(message.state),
+    actor: sanitizePartyEntityActor(message.actor)
+  };
+}
+
+function handlePartyPhysicsSession(client, message) {
+  const session = partySessions.get(client.partySessionId);
+  if (!session || !session.players.includes(client.playerId)) {
+    return;
+  }
+  if (isPartyV2Session(session)) {
+    return;
+  }
+
+  const payload = sanitizePartyPhysicsPayload(message);
+  if (!payload.entityType || !payload.entityId) {
+    return;
+  }
+
+  if (message.type === "party.physics.authority" || message.type === "party.physics.reject") {
+    if (session.hostPlayerId !== client.playerId) {
+      return;
+    }
+    relayToParty(session, {
+      type: message.type,
+      fromPlayerId: client.playerId,
+      publicName: client.profile ? client.profile.publicName : client.playerId,
+      ...payload
+    }, client.playerId);
+    return;
+  }
+
+  const hostId = session.hostPlayerId;
+  if (!hostId || hostId === client.playerId) {
+    return;
+  }
+  relayToPlayer(hostId, {
+    type: message.type,
+    fromPlayerId: client.playerId,
+    publicName: client.profile ? client.profile.publicName : client.playerId,
+    ...payload
+  });
+}
+
 function leaveClientParty(client) {
   if (!client || !client.partySessionId) {
     return;
@@ -4011,6 +4714,13 @@ function leaveClientParty(client) {
 
   session.players = session.players.filter((candidate) => candidate !== playerId);
   session.playerSnapshots.delete(playerId);
+  const room = partyV2Rooms.get(session.id);
+  if (room) {
+    mpV2Sim.removePlayer(room.state, playerId);
+    room.inputQueues.delete(playerId);
+    room.lastInputs.delete(playerId);
+    room.lastAckByPlayerId.delete(playerId);
+  }
   if (!session.players.length) {
     endPartySession(session.id, "empty");
     return;
@@ -4019,8 +4729,7 @@ function leaveClientParty(client) {
     migratePartyHost(session, "host-left");
   } else {
     relayToParty(session, {
-      type: "party.host.changed",
-      hostPlayerId: session.hostPlayerId,
+      type: "party.state",
       session: publicPartySession(session)
     });
   }
@@ -4056,6 +4765,10 @@ function endPartySession(sessionId, reason) {
     }
   }
   partySessions.delete(sessionId);
+  partyV2Rooms.delete(sessionId);
+  if (session.joinCode) {
+    partyCodes.delete(session.joinCode);
+  }
   for (const playerId of session.players) {
     const clients = clientsByPlayerId.get(playerId);
     if (clients) {
@@ -4854,6 +5567,7 @@ function havePendingSignal(playerId) {
 }
 
 setInterval(scanForRandomSignals, randomSignalIntervalMs);
+setInterval(tickPartyV2Rooms, 1000 / mpV2Sim.TICK_RATE);
 setInterval(() => {
   for (const overlap of Array.from(overlaps.values())) {
     broadcastOverlapTransform(overlap);

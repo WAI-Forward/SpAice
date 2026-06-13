@@ -1,6 +1,7 @@
 (function () {
   "use strict";
 
+  const mpV2Sim = window.ClusternautsMpV2Sim || null;
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d", { alpha: false });
   const healthValue = document.getElementById("healthValue");
@@ -55,6 +56,8 @@
   const touchScreenInput = document.getElementById("touchScreenInput");
   const hudEnabledInput = document.getElementById("hudEnabledInput");
   const multiplayerToggleInput = document.getElementById("multiplayerToggleInput");
+  const settingsJoinCodeValue = document.getElementById("settingsJoinCodeValue");
+  const copySettingsJoinCodeButton = document.getElementById("copySettingsJoinCodeButton");
   const multiplayerStatus = document.getElementById("multiplayerStatus");
   const multiplayerPanelStatus = document.getElementById("multiplayerPanelStatus");
   const multiplayerPanelToggle = document.getElementById("multiplayerPanelToggle");
@@ -141,7 +144,8 @@
   const deathLeaderboardButton = document.getElementById("deathLeaderboardButton");
   const deathLeaderboardStatus = document.getElementById("deathLeaderboardStatus");
   const playAgainButton = document.getElementById("playAgainButton");
-  const renderBackendOrigin = "https://clusternaut.onrender.com";
+  const externalBackendOrigin = "https://36ff-92-29-230-204.ngrok-free.app";
+  const serverMaintenanceMessage = "Server is down for maintenance.  Please try again later";
   const crazyGamesState = {
     sdk: null,
     initPromise: null,
@@ -165,11 +169,32 @@
   };
   const crazyGamesRoomMaxPlayers = 4;
   const clusternautsTestConfig = window.__CLUSTERNAUTS_TEST__ || null;
+  const joinedPlayerIsolationStorageKey = "clusternauts.debug.joinedPlayerIsolation";
+  const joinedPlayerIsolationComponentsStorageKey = "clusternauts.debug.joinedPlayerComponents";
+  const joinedPlayerIsolationComponentDefaults = Object.freeze({
+    hostWorldSnapshots: false,
+    partyPlayerSnapshots: false,
+    partyPhysicsAuthority: false,
+    partyPhysicsRejects: false,
+    partyInput: true,
+    partyInputGadgetState: false,
+    localPhysicsLeases: false,
+    relayHostEntityEffects: false,
+    followerWorldSmoothing: false,
+    followerGadgetPrediction: false,
+    followerPickupPrediction: false,
+    followerBodyCollisions: false
+  });
+  const joinedPlayerIsolation = {
+    enabled: false,
+    components: { ...joinedPlayerIsolationComponentDefaults }
+  };
   const clusternautsTestCounters = {
     particleMerges: 0,
     bodyBounces: 0
   };
   let lastClientErrorReportAt = -Infinity;
+  let lastServerMaintenanceNoticeAt = -Infinity;
 
   installClientErrorReporting();
 
@@ -297,48 +322,60 @@
     if (/^https?:\/\//i.test(value)) {
       return value;
     }
-    if (value.startsWith("/api") && shouldUseRenderBackend()) {
+    if (value.startsWith("/api") && shouldUseExternalBackend()) {
       return backendOrigin() + value;
     }
     return value;
   }
 
   function websocketUrl() {
-    if (shouldUseRenderBackend()) {
+    if (shouldUseExternalBackend()) {
       return backendOrigin().replace(/^https:/, "wss:").replace(/^http:/, "ws:") + "/ws";
     }
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return protocol + "//" + window.location.host + "/ws";
   }
 
-  function shouldUseRenderBackend() {
-    const hostName = String(window.location.hostname || "").toLowerCase();
+  function shouldUseExternalBackend() {
     if (configuredBackendOrigin()) {
       return true;
     }
     if (isCrazyGamesRuntime()) {
       return true;
     }
-    if (hostName === renderBackendHost()) {
-      return false;
-    }
-    return !isLocalDevelopmentHost(hostName);
+    return false;
   }
 
   function backendOrigin() {
-    return configuredBackendOrigin() || renderBackendOrigin;
+    return configuredBackendOrigin() || externalBackendOrigin;
   }
 
   function configuredBackendOrigin() {
     return typeof window.CLUSTERNAUTS_BACKEND_ORIGIN === "string" ? window.CLUSTERNAUTS_BACKEND_ORIGIN.replace(/\/+$/, "") : "";
   }
 
-  function renderBackendHost() {
-    try {
-      return new URL(renderBackendOrigin).hostname.toLowerCase();
-    } catch {
-      return "clusternaut.onrender.com";
+  function createServerMaintenanceError(cause) {
+    const error = new Error(serverMaintenanceMessage);
+    error.name = "ServerMaintenanceError";
+    error.cause = cause;
+    return error;
+  }
+
+  function isServerMaintenanceError(error) {
+    return Boolean(error && error.message === serverMaintenanceMessage);
+  }
+
+  function backendErrorMessage(error, fallback) {
+    return isServerMaintenanceError(error) ? serverMaintenanceMessage : fallback;
+  }
+
+  function notifyServerMaintenance() {
+    const now = performance.now();
+    if (now - lastServerMaintenanceNoticeAt < 15000) {
+      return;
     }
+    lastServerMaintenanceNoticeAt = now;
+    maybeNotifyText(serverMaintenanceMessage, { groupKey: "server-maintenance" });
   }
 
   function isLocalDevelopmentHost(hostName) {
@@ -501,6 +538,10 @@
   const rivalProjectileDamage = 10;
   const rambotImpactDamage = 18;
   const rambotImpactSpeed = 260;
+  const playerHurtboxTopOffset = -38;
+  const playerHurtboxBottomOffset = 94;
+  const playerProjectileHurtboxScale = 0.72;
+  const playerBodyHurtboxScale = 0.86;
   const engineerHealRange = 620;
   const engineerHealRate = 18;
   const engineerHealCooldown = 0.55;
@@ -898,6 +939,7 @@
     saveInFlight: false,
     resetInFlight: false,
     online: false,
+    serverUnavailable: false,
     storage: "none",
     saveTimer: persistenceSaveInterval,
     pollTimer: persistencePollInterval
@@ -953,6 +995,7 @@
     refreshInFlight: false,
     submitInFlight: false,
     lastRefreshAt: 0,
+    statusMessage: "",
     submittedDeathKey: ""
   };
   const multiplayerSnapshotInterval = 0.25;
@@ -964,16 +1007,20 @@
   const partyRemotePredictionMax = 0.28;
   const partyRemoteGadgetPredictionLead = 0.06;
   const partyRemoteGadgetPredictionMax = 0.18;
-  const partyRemoteBucketPadding = 12;
-  const partyGadgetCandidateLimit = 8;
-  const partyGadgetBucketLimit = 4;
-  const partyAuthorityBodyLimit = 6;
-  const partyBodyAuthorityHoldMs = 480;
-  const partyGadgetIntentAssistMs = 520;
+  const partyPhysicsSessionActiveHoldMs = 900;
+  const partyPhysicsSessionLocalHoldMs = 860;
+  const partyPhysicsSessionUpdateIntervalMs = 34;
+  const partyGadgetIntentFreshMs = 1100;
   const partyFollowerPredictionHoldMs = 420;
   const remoteSnapshotRenderDelay = multiplayerSnapshotInterval * 0.8;
   const remoteSnapshotExtrapolateLimit = multiplayerSnapshotInterval * 1.35;
   const remoteSnapshotBufferLimit = 6;
+  const multiplayerV2MaxFrameDt = 0.16;
+  const multiplayerV2MaxCatchUpSteps = 6;
+  const multiplayerV2MaxAccumulator = multiplayerV2MaxFrameDt;
+  const multiplayerV2LocalCorrectionBlendPerFrame = 0.42;
+  const multiplayerV2RemoteSnapshotRenderDelay = 0.07;
+  const multiplayerV2RemoteSnapshotExtrapolateLimit = 0.16;
   const remoteEffectInterval = 0.18;
   const remoteStaleMs = 16000;
   const remoteUniverseAlphaScale = 0.32;
@@ -987,6 +1034,7 @@
     enabled: Boolean(window.WebSocket),
     socket: null,
     connected: false,
+    serverUnavailable: false,
     profile: null,
     universeId: "",
     bubbleRadius: 5000,
@@ -1007,11 +1055,15 @@
     lobbyRequestStartedAt: 0,
     lobbyInviteLink: "",
     partySession: null,
+    partyJoinCode: "",
     partyMode: "solo",
     partyHostId: "",
     partyHostUniverseId: "",
     partyPlayerSnapshots: new Map(),
-    partyBodyAuthority: new Map(),
+    partyPhysicsSessions: new Map(),
+    partyInputSeqByPlayer: new Map(),
+    localPartyPhysicsSessions: new Map(),
+    partyPhysicsSeq: 0,
     partyInputTimer: 0,
     partyInputSeq: 0,
     partyLastInputSnapshot: null,
@@ -1038,7 +1090,35 @@
     remoteEmotes: new Map(),
     duels: new Set(),
     claimedTechPickupIds: new Set(),
-    trade: null
+    claimedHealthPickupIds: new Set(),
+    trade: null,
+    v2: {
+      active: false,
+      roomId: "",
+      state: null,
+      authoritativeState: null,
+      inputSeq: 0,
+      clientTick: 0,
+      fixedAccumulator: 0,
+      sendAccumulator: 0,
+      pendingInputs: [],
+      lastServerTick: 0,
+      lastAckInputSeq: 0,
+      ignoreDeathEventsBeforeTick: 0,
+      visualBlend: null,
+      eventKeys: new Map(),
+      perf: {
+        clientStepMs: 0,
+        reconcileMs: 0,
+        syncMs: 0,
+        pendingInputs: 0,
+        entityCount: 0,
+        snapshotBytes: 0,
+        serverStepMs: 0,
+        serverSnapshotBytes: 0,
+        serverMaxInputQueue: 0
+      }
+    }
   };
   const bodyTiers = [
     { name: "particle", threshold: 0, article: "a", solid: false },
@@ -1090,6 +1170,7 @@
   let nextStructureId = 1;
   let nextRivalProjectileId = 1;
   let nextTechPickupId = 1;
+  let nextHealthPickupId = 1;
   let jumpQueued = false;
   let buildMenuOpen = false;
   let activePlacementRecipeId = null;
@@ -1543,6 +1624,7 @@
       setSocialPanelOpen(false);
       resetMouseButtons();
       ensureSettingsSectionOpen();
+      updateSettingsJoinCodeUi();
       void refreshAccountSaves();
     }
 
@@ -1691,11 +1773,23 @@
     return tangentAmount > 0 ? 1 : -1;
   }
 
-  function updateTouchAimFromPointer(event) {
+  function updatePointerAimFromEvent(event) {
+    if (!event || !canvas || typeof canvas.getBoundingClientRect !== "function") {
+      return;
+    }
+    const clientX = Number(event.clientX);
+    const clientY = Number(event.clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
-    mouse.x = event.clientX - rect.left;
-    mouse.y = event.clientY - rect.top;
+    mouse.x = clientX - rect.left;
+    mouse.y = clientY - rect.top;
     mouse.seen = true;
+  }
+
+  function updateTouchAimFromPointer(event) {
+    updatePointerAimFromEvent(event);
   }
 
   function updateTouchAimFromVector(x, y) {
@@ -2841,7 +2935,7 @@
   }
 
   function canUseSuctionControls() {
-    return isSuctionEquipped() && !areToolsDisabled() && hasPlayerEnergy();
+    return isSuctionEquipped() && !areToolsDisabled() && canSpendPlayerEnergy(suctionEnergyDrain / 60);
   }
 
   function hasVacuumBucketCollider() {
@@ -4095,6 +4189,7 @@
     }
     sendMultiplayer({
       type: "lobby.start",
+      netcodeVersion: 2,
       difficulty: selectedLobbyDifficulty(),
       snapshot: multiplayer.lobbyLoadedSnapshot || buildPersistentPayload(true)
     });
@@ -4242,8 +4337,10 @@
       setLobbyStatus(
         multiplayer.connected
           ? "Lobby create request was sent, but the server did not answer. Restart the local server so the new backend code is running."
+          : multiplayer.serverUnavailable
+          ? serverMaintenanceMessage
           : "Connecting to multiplayer server...",
-        multiplayer.connected ? "error" : ""
+        multiplayer.connected || multiplayer.serverUnavailable ? "error" : ""
       );
     }
   }
@@ -4266,8 +4363,8 @@
         multiplayer.players = Array.isArray(data.players) ? data.players : [];
       }
       renderLobbyPlayerSearch();
-    } catch {
-      renderLobbyPlayerSearch("Search unavailable.");
+    } catch (error) {
+      renderLobbyPlayerSearch(backendErrorMessage(error, "Search unavailable."));
     }
   }
 
@@ -4329,6 +4426,26 @@
     reportCrazyGamesRoom(reason || "lobby-state");
   }
 
+  function activePartyJoinCode() {
+    if (multiplayer.partyJoinCode) {
+      return multiplayer.partyJoinCode;
+    }
+    if (!multiplayer.partySession) {
+      return "";
+    }
+    return sanitizeLobbyCode(multiplayer.partySession.joinCode || multiplayer.partySession.code || multiplayer.partySession.lobbyId);
+  }
+
+  function updateSettingsJoinCodeUi() {
+    const code = activePartyJoinCode();
+    if (settingsJoinCodeValue) {
+      settingsJoinCodeValue.textContent = code || "----";
+    }
+    if (copySettingsJoinCodeButton) {
+      copySettingsJoinCodeButton.disabled = !code;
+    }
+  }
+
   function isPartySessionActive() {
     return Boolean(multiplayer.partySession && multiplayer.partySession.id);
   }
@@ -4341,20 +4458,655 @@
     return isPartySessionActive() && !isPartyHost();
   }
 
+  function queryValue(name) {
+    const href = String(window.location && window.location.href || "");
+    const query = href.includes("?") ? href.slice(href.indexOf("?") + 1).split("#")[0] : "";
+    if (!query) {
+      return "";
+    }
+    for (const part of query.split("&")) {
+      const pieces = part.split("=");
+      const key = decodeURIComponent(pieces[0] || "").trim();
+      if (key === name) {
+        return decodeURIComponent(pieces.slice(1).join("=") || "");
+      }
+    }
+    return "";
+  }
+
+  function queryFlagEnabled(name) {
+    const value = queryValue(name).trim().toLowerCase();
+    return value !== "" && value !== "0" && value !== "false" && value !== "off";
+  }
+
+  function joinedPlayerComponentListConfig(value) {
+    return String(value || "").split(",").reduce(function (config, entry) {
+      const key = entry.trim();
+      if (Object.prototype.hasOwnProperty.call(joinedPlayerIsolationComponentDefaults, key)) {
+        config[key] = true;
+      }
+      return config;
+    }, {});
+  }
+
+  function configureJoinedPlayerIsolation(options) {
+    const source = options && typeof options === "object" ? options : {};
+    if (Object.prototype.hasOwnProperty.call(source, "enabled")) {
+      joinedPlayerIsolation.enabled = source.enabled === true || source.enabled === "1" || source.enabled === "true";
+    }
+    const components = source.components && typeof source.components === "object" ? source.components : source;
+    for (const key of Object.keys(joinedPlayerIsolationComponentDefaults)) {
+      if (Object.prototype.hasOwnProperty.call(components, key)) {
+        joinedPlayerIsolation.components[key] = components[key] === true || components[key] === "1" || components[key] === "true";
+      }
+    }
+    return {
+      enabled: joinedPlayerIsolation.enabled,
+      components: { ...joinedPlayerIsolation.components }
+    };
+  }
+
+  function initializeJoinedPlayerIsolation() {
+    const windowConfig = window.CLUSTERNAUTS_JOINED_PLAYER_ISOLATION;
+    const windowComponents = window.CLUSTERNAUTS_JOINED_PLAYER_COMPONENTS;
+    if (windowConfig && typeof windowConfig === "object") {
+      configureJoinedPlayerIsolation(windowConfig);
+    } else if (windowConfig !== undefined) {
+      configureJoinedPlayerIsolation({ enabled: windowConfig });
+    }
+    if (windowComponents && typeof windowComponents === "object") {
+      configureJoinedPlayerIsolation({ components: windowComponents });
+    }
+    if (clusternautsTestConfig && clusternautsTestConfig.joinedPlayerIsolation) {
+      configureJoinedPlayerIsolation(clusternautsTestConfig.joinedPlayerIsolation);
+    }
+    if (queryFlagEnabled("joinedPlayerIsolation")) {
+      configureJoinedPlayerIsolation({ enabled: true });
+    }
+    const queryComponents = queryValue("joinedPlayerComponents");
+    if (queryComponents) {
+      configureJoinedPlayerIsolation({ components: joinedPlayerComponentListConfig(queryComponents) });
+    }
+    try {
+      const stored = window.localStorage.getItem(joinedPlayerIsolationStorageKey);
+      if (stored === "1" || stored === "true") {
+        configureJoinedPlayerIsolation({ enabled: true });
+      } else if (stored === "0" || stored === "false") {
+        configureJoinedPlayerIsolation({ enabled: false });
+      }
+      const storedComponents = window.localStorage.getItem(joinedPlayerIsolationComponentsStorageKey);
+      if (storedComponents) {
+        try {
+          configureJoinedPlayerIsolation({ components: JSON.parse(storedComponents) });
+        } catch {
+          configureJoinedPlayerIsolation({ components: joinedPlayerComponentListConfig(storedComponents) });
+        }
+      }
+    } catch {
+      // Ignore storage failures; URL/window/test flags still work.
+    }
+  }
+
+  function isJoinedPlayerIsolationActive() {
+    return Boolean(joinedPlayerIsolation.enabled && isSharedWorldFollower() && !isMultiplayerV2Active());
+  }
+
+  function joinedPlayerIsolationAllows(component) {
+    if (!isJoinedPlayerIsolationActive()) {
+      return true;
+    }
+    return joinedPlayerIsolation.components[component] === true;
+  }
+
+  initializeJoinedPlayerIsolation();
+
+  function isPartyV2Session(session) {
+    return Boolean(session && Number(session.netcodeVersion || 1) >= 2);
+  }
+
+  function isMultiplayerV2Active() {
+    return Boolean(multiplayer.v2.active && multiplayer.v2.roomId && mpV2Sim);
+  }
+
+  function resetMultiplayerV2State() {
+    multiplayer.v2.active = false;
+    multiplayer.v2.roomId = "";
+    multiplayer.v2.state = null;
+    multiplayer.v2.authoritativeState = null;
+    multiplayer.v2.inputSeq = 0;
+    multiplayer.v2.clientTick = 0;
+    multiplayer.v2.fixedAccumulator = 0;
+    multiplayer.v2.sendAccumulator = 0;
+    multiplayer.v2.pendingInputs = [];
+    multiplayer.v2.lastServerTick = 0;
+    multiplayer.v2.lastAckInputSeq = 0;
+    multiplayer.v2.ignoreDeathEventsBeforeTick = 0;
+    multiplayer.v2.visualBlend = null;
+    multiplayer.v2.eventKeys = new Map();
+  }
+
+  function multiplayerV2EventKey(event) {
+    if (!event || typeof event !== "object") {
+      return "";
+    }
+    return [
+      Math.max(0, Math.floor(finiteOr(event.tick, 0))),
+      String(event.type || ""),
+      String(event.kind || ""),
+      String(event.mobId || ""),
+      String(event.playerId || ""),
+      String(event.projectileId || ""),
+      String(event.pickupId || ""),
+      String(event.keptId || ""),
+      String(event.removedId || ""),
+      String(event.cause || "")
+    ].join(":");
+  }
+
+  function processMultiplayerV2BodyMergeEvent(event) {
+    const mass = Math.max(1, finiteOr(event && event.mass, 1));
+    const tier = event && event.tier && typeof event.tier === "object" ? event.tier : tierForMass(mass);
+    const previousTier = event && event.previousTier && typeof event.previousTier === "object"
+      ? event.previousTier
+      : tier;
+    const graduated = event && Object.prototype.hasOwnProperty.call(event, "graduated")
+      ? Boolean(event.graduated)
+      : tier.threshold > previousTier.threshold;
+
+    playSound(graduated ? "milestone" : "merge", {
+      throttleKey: "mpV2BodyMerge",
+      throttle: 0.09,
+      volume: clamp(0.45 + Math.log2(mass) * 0.08, 0.45, 1.1)
+    });
+    maybeNotifyTier(tier, previousTier);
+  }
+
+  function multiplayerV2DeathCause(event) {
+    const cause = String(event && event.cause || "");
+    if (cause === "body-impact") {
+      return "Crushing impact";
+    }
+    if (cause === "mob-contact") {
+      return "Hostile contact";
+    }
+    if (cause === "projectile") {
+      return "Contact fire";
+    }
+    return "Hull failure";
+  }
+
+  function markMultiplayerV2EventSeen(event) {
+    const key = multiplayerV2EventKey(event);
+    if (!key) {
+      return false;
+    }
+    if (!multiplayer.v2.eventKeys || typeof multiplayer.v2.eventKeys.has !== "function") {
+      multiplayer.v2.eventKeys = new Map();
+    }
+    const now = performance.now();
+    for (const [eventKey, seenAt] of multiplayer.v2.eventKeys.entries()) {
+      if (now - seenAt > 3500) {
+        multiplayer.v2.eventKeys.delete(eventKey);
+      }
+    }
+    if (multiplayer.v2.eventKeys.has(key)) {
+      return false;
+    }
+    multiplayer.v2.eventKeys.set(key, now);
+    return true;
+  }
+
+  function processMultiplayerV2Events(events) {
+    if (!Array.isArray(events)) {
+      return;
+    }
+    for (const event of events) {
+      if (!markMultiplayerV2EventSeen(event)) {
+        continue;
+      }
+      if (event.type === "mob.hit") {
+        playSound("mobHit", { throttleKey: "mpV2MobHit", throttle: 0.04 });
+      } else if (event.type === "mob.defeated") {
+        playSound("mobDestroyed", { throttleKey: "mpV2MobDestroyed", throttle: 0.08 });
+      } else if (event.type === "body.merged") {
+        processMultiplayerV2BodyMergeEvent(event);
+      } else if (event.type === "pickup.tech" && String(event.playerId || "") === player.id) {
+        playSound("pickupTech", { throttleKey: "mpV2PickupTech", throttle: 0.05 });
+      } else if (event.type === "pickup.health" && String(event.playerId || "") === player.id) {
+        playSound("pickupHealth", { throttleKey: "mpV2PickupHealth", throttle: 0.08 });
+      } else if (event.type === "player.died" && String(event.playerId || "") === player.id) {
+        if (Math.floor(finiteOr(event.tick, 0)) <= Math.floor(finiteOr(multiplayer.v2.ignoreDeathEventsBeforeTick, 0))) {
+          continue;
+        }
+        beginPlayerDeath(multiplayerV2DeathCause(event));
+      }
+    }
+  }
+
+  function partyV2StartState(message) {
+    const snapshot = message && message.snapshot && typeof message.snapshot === "object" ? message.snapshot : null;
+    if (snapshot && snapshot.v2 && snapshot.state) {
+      return mpV2Sim.serializeState(snapshot.state);
+    }
+    const sessionPlayers = message && message.session && Array.isArray(message.session.players) ? message.session.players : lobbyPlayers();
+    return mpV2Sim.createInitialState(snapshot || buildPersistentPayload(true), sessionPlayers, {
+      seed: message && (message.sessionId || message.id || message.roomId || "client-v2")
+    });
+  }
+
+  function startMultiplayerV2(message) {
+    if (!mpV2Sim) {
+      maybeNotifyText("Multiplayer V2 unavailable.");
+      return false;
+    }
+    const session = message && message.session && typeof message.session === "object" ? message.session : multiplayer.partySession;
+    const roomId = String(session && (session.sessionId || session.id) || message && message.roomId || "");
+    if (!roomId) {
+      return false;
+    }
+    resetMultiplayerV2State();
+    multiplayer.v2.active = true;
+    multiplayer.v2.roomId = roomId;
+    multiplayer.v2.state = partyV2StartState(message || {});
+    multiplayer.v2.authoritativeState = mpV2Sim.serializeState(multiplayer.v2.state);
+    multiplayer.v2.lastServerTick = multiplayer.v2.state.tick || 0;
+    multiplayer.v2.lastAckInputSeq = 0;
+    multiplayer.v2.pendingInputs = [];
+    multiplayer.partyPhysicsSessions.clear();
+    multiplayer.localPartyPhysicsSessions.clear();
+    multiplayer.partyPlayerSnapshots.clear();
+    syncMultiplayerV2StateToGame({ snapLocal: true });
+    return true;
+  }
+
+  function buildMultiplayerV2Input(seq) {
+    const aim = getAim();
+    const toolMode = multiplayerLocalToolModeForInput();
+    return {
+      playerId: player.id,
+      roomId: multiplayer.v2.roomId,
+      seq,
+      clientTick: multiplayer.v2.clientTick,
+      aimAngle: Math.atan2(aim.world.y, aim.world.x),
+      aimLocalAngle: aim.angle,
+      equippedTool: equippedToolId || defaultToolId,
+      toolMode,
+      buttons: {
+        up: isMovementKeyPressed("up"),
+        down: isMovementKeyPressed("down"),
+        left: isMovementKeyPressed("left"),
+        right: isMovementKeyPressed("right"),
+        boost: canSendMultiplayerBoostInput(),
+        pull: toolMode === "pull",
+        push: toolMode === "push",
+        hold: toolMode === "hold",
+        fire: toolMode === "fire"
+      }
+    };
+  }
+
+  function multiplayerV2FrameDt(dt) {
+    return Math.min(multiplayerV2MaxFrameDt, Math.max(0, finiteOr(dt, 0)));
+  }
+
+  function frameRateIndependentBlend(perFrameBlend, dt) {
+    const blend = clamp(finiteOr(perFrameBlend, 0), 0, 1);
+    if (blend >= 1) {
+      return 1;
+    }
+    const frames = Math.max(0, finiteOr(dt, 1 / 60)) * 60;
+    return clamp(1 - Math.pow(1 - blend, frames), 0, 1);
+  }
+
+  function sendMultiplayerV2Input(input) {
+    if (!input || !isMultiplayerV2Active()) {
+      return false;
+    }
+    return sendMultiplayer({
+      type: "mp.v2.input",
+      roomId: multiplayer.v2.roomId,
+      seq: input.seq,
+      clientTick: input.clientTick,
+      aimAngle: input.aimAngle,
+      aimLocalAngle: input.aimLocalAngle,
+      equippedTool: input.equippedTool,
+      toolMode: input.toolMode,
+      buttons: input.buttons
+    });
+  }
+
+  function multiplayerV2WorldEntityCount(world) {
+    const source = world && typeof world === "object" ? world : {};
+    return [
+      "particles",
+      "techPickups",
+      "healthPickups",
+      "alienoids",
+      "ufos",
+      "rambots",
+      "engineers",
+      "teslas",
+      "rockets",
+      "fighters",
+      "rivalProjectiles",
+      "structures"
+    ].reduce((total, key) => total + (Array.isArray(source[key]) ? source[key].length : 0), 0);
+  }
+
+  function updateMultiplayerV2Perf(patch) {
+    if (!multiplayer.v2.perf) {
+      multiplayer.v2.perf = {};
+    }
+    Object.assign(multiplayer.v2.perf, patch || {});
+    if (typeof window !== "undefined") {
+      window.__clusternautsMultiplayerPerf = {
+        ...(window.__clusternautsMultiplayerPerf || {}),
+        v2: { ...multiplayer.v2.perf }
+      };
+    }
+  }
+
+  function applyMultiplayerV2Snapshot(message) {
+    if (!mpV2Sim || !message || !message.state) {
+      return;
+    }
+    const reconcileStart = performance.now();
+    if (!multiplayer.v2.active) {
+      resetMultiplayerV2State();
+      multiplayer.v2.active = true;
+      multiplayer.v2.roomId = String(message.roomId || "");
+    }
+    const ack = message.ackInputSeq && typeof message.ackInputSeq === "object"
+      ? Math.max(0, Math.floor(finiteOr(message.ackInputSeq[player.id], multiplayer.v2.lastAckInputSeq)))
+      : multiplayer.v2.lastAckInputSeq;
+    multiplayer.v2.lastAckInputSeq = Math.max(multiplayer.v2.lastAckInputSeq, ack);
+    multiplayer.v2.pendingInputs = multiplayer.v2.pendingInputs.filter((input) => input.seq > multiplayer.v2.lastAckInputSeq);
+    multiplayer.v2.authoritativeState = mpV2Sim.serializeState(message.state);
+    multiplayer.v2.lastServerTick = Math.max(multiplayer.v2.lastServerTick, Math.floor(finiteOr(message.serverTick, message.state.tick || 0)));
+    if (message.perf && typeof message.perf === "object") {
+      updateMultiplayerV2Perf({
+        serverStepMs: finiteOr(message.perf.stepMs, multiplayer.v2.perf && multiplayer.v2.perf.serverStepMs),
+        serverSnapshotBytes: finiteOr(message.perf.snapshotBytes, multiplayer.v2.perf && multiplayer.v2.perf.serverSnapshotBytes),
+        serverMaxInputQueue: finiteOr(message.perf.maxInputQueue, multiplayer.v2.perf && multiplayer.v2.perf.serverMaxInputQueue)
+      });
+    }
+    processMultiplayerV2Events(message.events);
+
+    const oldX = player.x;
+    const oldY = player.y;
+    const replayInputs = multiplayer.v2.pendingInputs.map((input) => Object.assign({}, input));
+    multiplayer.v2.state = mpV2Sim.replayFromSnapshot(multiplayer.v2.authoritativeState, replayInputs, {
+      dt: mpV2Sim.TICK_DT,
+      enableMobs: true
+    });
+    syncMultiplayerV2StateToGame({ previousLocalX: oldX, previousLocalY: oldY, blendDt: mpV2Sim.TICK_DT });
+    updateMultiplayerV2Perf({
+      reconcileMs: performance.now() - reconcileStart,
+      pendingInputs: multiplayer.v2.pendingInputs.length,
+      entityCount: multiplayerV2WorldEntityCount(message.state.world)
+    });
+  }
+
+  function syncMultiplayerV2StateToGame(options) {
+    const state = multiplayer.v2.state;
+    if (!state || !state.players || !state.world) {
+      return;
+    }
+    const local = state.players[player.id];
+    if (local) {
+      const previousHealth = player.health;
+      const previousX = Number.isFinite(options && options.previousLocalX) ? options.previousLocalX : player.x;
+      const previousY = Number.isFinite(options && options.previousLocalY) ? options.previousLocalY : player.y;
+      const snapLocal = Boolean(options && options.snapLocal);
+      const error = Math.hypot(local.x - previousX, local.y - previousY);
+      const correctionBlend = frameRateIndependentBlend(
+        multiplayerV2LocalCorrectionBlendPerFrame,
+        options && options.blendDt
+      );
+      const blend = !snapLocal && error < 360 ? correctionBlend : 1;
+      player.x = previousX + (finiteOr(local.x, previousX) - previousX) * blend;
+      player.y = previousY + (finiteOr(local.y, previousY) - previousY) * blend;
+      player.vx = finiteOr(local.vx, player.vx);
+      player.vy = finiteOr(local.vy, player.vy);
+      player.radius = finiteOr(local.radius, player.radius);
+      player.maxHealth = clamp(finiteOr(local.maxHealth, player.maxHealth), 1, 100);
+      player.health = clamp(finiteOr(local.health, player.health), 0, player.maxHealth);
+      player.maxEnergy = clamp(finiteOr(local.maxEnergy, player.maxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
+      player.energy = clamp(finiteOr(local.energy, player.energy), 0, player.maxEnergy);
+      player.hitCooldown = Math.max(0, finiteOr(local.hitCooldown, player.hitCooldown || 0));
+      player.landed = null;
+      player.walkCycle = finiteOr(local.walkCycle, player.walkCycle);
+      syncTechInventoryFromMultiplayerV2(local.tech);
+      applyToolInventory(local.tools, local.equippedTool, local.equippedTools);
+      applyToolUpgrades(local.toolUpgrades);
+      if (!deathState.active && previousHealth > 0 && player.health <= 0) {
+        beginPlayerDeath("Hull failure");
+      }
+    }
+
+    const syncStart = performance.now();
+    syncMultiplayerV2World(state.world);
+    syncMultiplayerV2RemotePlayers(state);
+    updateMultiplayerV2Perf({
+      syncMs: performance.now() - syncStart,
+      entityCount: multiplayerV2WorldEntityCount(state.world)
+    });
+    updateHud();
+  }
+
+  function syncTechInventoryFromMultiplayerV2(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return;
+    }
+    let changed = false;
+    for (const tech of techTypes) {
+      const nextValue = Math.max(0, Math.floor(finiteOr(snapshot[tech.key], techInventory[tech.key] || 0)));
+      if (techInventory[tech.key] !== nextValue) {
+        techInventory[tech.key] = nextValue;
+        changed = true;
+      }
+    }
+    if (changed) {
+      updateTechUi();
+    }
+  }
+
+  function syncMultiplayerV2EntityList(target, sourceList, normalizer) {
+    const incoming = Array.isArray(sourceList) ? sourceList : [];
+    const existingById = new Map();
+    for (const entity of target) {
+      if (entity && entity.id !== undefined && entity.id !== null) {
+        existingById.set(String(entity.id), entity);
+      }
+    }
+
+    const next = [];
+    for (const snapshot of incoming) {
+      const normalized = normalizer(snapshot);
+      if (!normalized) {
+        continue;
+      }
+      const existing = existingById.get(String(normalized.id));
+      if (existing) {
+        Object.assign(existing, normalized);
+        next.push(existing);
+      } else {
+        next.push(normalized);
+      }
+    }
+
+    target.length = 0;
+    target.push(...next);
+  }
+
+  function syncMultiplayerV2World(world) {
+    const source = world && typeof world === "object" ? world : {};
+    if (Array.isArray(source.claimedTechPickupIds)) {
+      multiplayer.claimedTechPickupIds = new Set(source.claimedTechPickupIds.map(String));
+    }
+    if (Array.isArray(source.claimedHealthPickupIds)) {
+      multiplayer.claimedHealthPickupIds = new Set(source.claimedHealthPickupIds.map(String));
+    }
+    if (Array.isArray(source.starDust)) {
+      starDust.length = 0;
+      starDust.push(...source.starDust.map(normalizeStarSnapshot).filter(Boolean));
+    }
+    syncMultiplayerV2EntityList(particles, source.particles, normalizeParticleSnapshot);
+    syncMultiplayerV2EntityList(rivals, source.alienoids, normalizeRivalSnapshot);
+    syncMultiplayerV2EntityList(ufos, source.ufos, normalizeUfoSnapshot);
+    syncMultiplayerV2EntityList(rambots, source.rambots, normalizeRambotSnapshot);
+    syncMultiplayerV2EntityList(engineers, source.engineers, normalizeEngineerSnapshot);
+    syncMultiplayerV2EntityList(teslas, source.teslas, normalizeTeslaSnapshot);
+    syncMultiplayerV2EntityList(rockets, source.rockets, normalizeRocketSnapshot);
+    syncMultiplayerV2EntityList(fighters, source.fighters, normalizeFighterSnapshot);
+    syncMultiplayerV2EntityList(structures, source.structures, normalizeStructureSnapshot);
+    syncMultiplayerV2EntityList(rivalProjectiles, source.rivalProjectiles, normalizeProjectileSnapshot);
+    syncMultiplayerV2EntityList(techPickups, source.techPickups, normalizeTechPickupSnapshot);
+    syncMultiplayerV2EntityList(healthPickups, source.healthPickups, normalizeHealthPickupSnapshot);
+    nextParticleId = Math.max(finiteOr(source.nextParticleId, nextParticleId), particles.reduce((largest, body) => Math.max(largest, body.id + 1), 1));
+    nextTechPickupId = Math.max(finiteOr(source.nextTechPickupId, nextTechPickupId), techPickups.reduce((largest, pickup) => Math.max(largest, pickup.id + 1), 1));
+    nextHealthPickupId = Math.max(finiteOr(source.nextHealthPickupId, nextHealthPickupId), healthPickups.reduce((largest, pickup) => Math.max(largest, pickup.id + 1), 1));
+  }
+
+  function syncMultiplayerV2RemotePlayers(state) {
+    const now = performance.now();
+    const players = state && state.players ? state.players : {};
+    for (const [remotePlayerId, remotePlayer] of Object.entries(players)) {
+      if (!remotePlayer || remotePlayerId === player.id) {
+        continue;
+      }
+      const remote = getRemoteUniverse("solo:" + remotePlayerId);
+      remote.playerId = remotePlayerId;
+      remote.publicName = remotePlayer.name || remote.publicName || remotePlayerId;
+      remote.partySessionId = multiplayer.partySession ? multiplayer.partySession.id : "";
+      remote.transform = createRemoteTransform(0, 0, 1, "overlap", "party");
+      remote.displayTransform = remote.displayTransform || { ...remote.transform };
+      remote.snapshot = normalizeRemoteSnapshot({
+        player: {
+          ...remotePlayer,
+          equippedTool: remotePlayer.equippedTool || defaultToolId,
+          toolMode: remotePlayer.toolMode || "idle",
+          toolActive: remotePlayer.toolMode && remotePlayer.toolMode !== "idle"
+        },
+        world: {
+          particles: [],
+          alienoids: [],
+          ufos: [],
+          rambots: [],
+          engineers: [],
+          teslas: [],
+          rockets: [],
+          fighters: [],
+          structures: [],
+          rivalProjectiles: [],
+          techPickups: [],
+          healthPickups: []
+        }
+      });
+      remote.seenAt = now;
+      addRemoteSnapshotFrame(remote, remote.snapshot, now / 1000);
+    }
+  }
+
+  function stepMultiplayerV2Simulation(dt, includeExternalSystems) {
+    if (!isMultiplayerV2Active()) {
+      return;
+    }
+    const frameDt = multiplayerV2FrameDt(dt);
+    updateGadgetAim(frameDt);
+    multiplayer.v2.fixedAccumulator = Math.min(multiplayerV2MaxAccumulator, multiplayer.v2.fixedAccumulator + frameDt);
+    const stepStart = performance.now();
+    let stepped = 0;
+    while (multiplayer.v2.fixedAccumulator + 0.000001 >= mpV2Sim.TICK_DT && stepped < multiplayerV2MaxCatchUpSteps) {
+      multiplayer.v2.fixedAccumulator -= mpV2Sim.TICK_DT;
+      multiplayer.v2.clientTick += 1;
+      const input = buildMultiplayerV2Input(multiplayer.v2.inputSeq + 1);
+      multiplayer.v2.inputSeq = input.seq;
+      multiplayer.v2.pendingInputs.push(input);
+      while (multiplayer.v2.pendingInputs.length > 180) {
+        multiplayer.v2.pendingInputs.shift();
+      }
+      mpV2Sim.step(multiplayer.v2.state, { [player.id]: input }, { dt: mpV2Sim.TICK_DT, enableMobs: true });
+      processMultiplayerV2Events(multiplayer.v2.state && multiplayer.v2.state.events);
+      sendMultiplayerV2Input(input);
+      stepped += 1;
+    }
+    if (stepped >= multiplayerV2MaxCatchUpSteps) {
+      multiplayer.v2.fixedAccumulator = Math.min(multiplayer.v2.fixedAccumulator, mpV2Sim.TICK_DT * multiplayerV2MaxCatchUpSteps);
+    }
+    if (stepped) {
+      updateMultiplayerV2Perf({
+        clientStepMs: performance.now() - stepStart,
+        pendingInputs: multiplayer.v2.pendingInputs.length,
+        entityCount: multiplayerV2WorldEntityCount(multiplayer.v2.state && multiplayer.v2.state.world)
+      });
+    }
+    syncMultiplayerV2StateToGame({ blendDt: frameDt || mpV2Sim.TICK_DT });
+    updateRemoteVisualTransforms(frameDt);
+    updateRemoteInteractions(frameDt);
+    updateInteractionState(frameDt);
+    pruneRemoteUniverses();
+    updateSparks(frameDt);
+    if (includeExternalSystems) {
+      updateMultiplayer(frameDt);
+    }
+  }
+
+  function applyPartyState(message) {
+    const session = message && message.session && typeof message.session === "object" ? message.session : message;
+    if (!session || typeof session !== "object") {
+      return;
+    }
+    if (!multiplayer.partySession) {
+      multiplayer.partySession = {
+        id: String(session.sessionId || session.id || ""),
+        lobbyId: String(session.lobbyId || ""),
+        code: sanitizeLobbyCode(session.joinCode || session.code || session.lobbyId),
+        joinCode: sanitizeLobbyCode(session.joinCode || session.code || session.lobbyId),
+        maxPlayers: Math.max(1, Math.floor(finiteOr(session.maxPlayers, crazyGamesRoomMaxPlayers))),
+        players: [],
+        pvpMode: String(session.pvpMode || "party-off"),
+        netcodeVersion: Math.max(1, Math.floor(finiteOr(session.netcodeVersion, 1)))
+      };
+    }
+    multiplayer.partySession.id = String(session.sessionId || session.id || multiplayer.partySession.id || "");
+    multiplayer.partySession.lobbyId = String(session.lobbyId || multiplayer.partySession.lobbyId || "");
+    multiplayer.partySession.code = sanitizeLobbyCode(session.joinCode || session.code || multiplayer.partySession.code || multiplayer.partySession.lobbyId);
+    multiplayer.partySession.joinCode = multiplayer.partySession.code;
+    multiplayer.partySession.maxPlayers = Math.max(1, Math.floor(finiteOr(session.maxPlayers, multiplayer.partySession.maxPlayers || crazyGamesRoomMaxPlayers)));
+    multiplayer.partySession.players = Array.isArray(session.players)
+      ? session.players.map(normalizeLobbyPlayer).filter(Boolean)
+      : multiplayer.partySession.players || [];
+    multiplayer.partySession.pvpMode = String(session.pvpMode || multiplayer.partySession.pvpMode || "party-off");
+    multiplayer.partySession.netcodeVersion = Math.max(1, Math.floor(finiteOr(session.netcodeVersion, multiplayer.partySession.netcodeVersion || 1)));
+    multiplayer.partyJoinCode = multiplayer.partySession.joinCode;
+    multiplayer.partyHostId = String(session.hostPlayerId || multiplayer.partyHostId || player.id);
+    multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
+    updateSettingsJoinCodeUi();
+  }
+
   function applyPartyStart(message) {
     const session = message && message.session && typeof message.session === "object" ? message.session : message;
     const difficulty = difficultyDefinitions[session.difficulty] ? session.difficulty : selectedLobbyDifficulty();
     multiplayer.partySession = {
       id: String(session.sessionId || session.id || ""),
       lobbyId: String(session.lobbyId || ""),
+      code: sanitizeLobbyCode(session.joinCode || session.code || session.lobbyId),
+      joinCode: sanitizeLobbyCode(session.joinCode || session.code || session.lobbyId),
+      maxPlayers: Math.max(1, Math.floor(finiteOr(session.maxPlayers, crazyGamesRoomMaxPlayers))),
       players: Array.isArray(session.players) ? session.players.map(normalizeLobbyPlayer).filter(Boolean) : lobbyPlayers(),
-      pvpMode: String(session.pvpMode || "party-off")
+      pvpMode: String(session.pvpMode || "party-off"),
+      netcodeVersion: Math.max(1, Math.floor(finiteOr(session.netcodeVersion, 1)))
     };
+    multiplayer.partyJoinCode = multiplayer.partySession.joinCode;
     multiplayer.partyMode = "party";
     multiplayer.partyHostId = String(session.hostPlayerId || message.hostPlayerId || player.id);
     multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
     multiplayer.partyPlayerSnapshots.clear();
-    multiplayer.partyBodyAuthority.clear();
+    multiplayer.partyPhysicsSessions.clear();
+    multiplayer.partyInputSeqByPlayer.clear();
+    multiplayer.localPartyPhysicsSessions.clear();
+    multiplayer.partyPhysicsSeq = 0;
     multiplayer.partyInputTimer = 0;
     multiplayer.partyInputSeq = 0;
     multiplayer.partyLastInputSnapshot = null;
@@ -4368,6 +5120,24 @@
     resetLocalWorldState();
     resetLifeStats();
     resetDeathState();
+
+    if (isPartyV2Session(multiplayer.partySession) && startMultiplayerV2(message)) {
+      runState.active = true;
+      gamePaused = false;
+      persistence.saveTimer = persistenceSaveInterval;
+      persistence.pollTimer = persistencePollInterval;
+      setDifficultyScreenOpen(false);
+      resetMouseButtons();
+      lastTime = performance.now();
+      updateHud();
+      updateSettingsJoinCodeUi();
+      connectMultiplayer();
+      maybeNotifyText("Joined server-authoritative shared world.");
+      clearCrazyGamesRoomState("party-start-v2");
+      return;
+    }
+
+    resetMultiplayerV2State();
 
     if (message.snapshot && typeof message.snapshot === "object") {
       if (message.snapshot.world) {
@@ -4386,15 +5156,22 @@
     resetMouseButtons();
     lastTime = performance.now();
     updateHud();
+    updateSettingsJoinCodeUi();
     connectMultiplayer();
     maybeNotifyText(isPartyHost() ? "Shared world started." : "Joined shared world.");
     clearCrazyGamesRoomState("party-start");
   }
 
   function applyPartyHostChanged(message) {
+    if (message && message.session) {
+      applyPartyState(message);
+    }
     multiplayer.partyHostId = String(message.hostPlayerId || "");
     multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
-    multiplayer.partyBodyAuthority.clear();
+    multiplayer.partyPhysicsSessions.clear();
+    multiplayer.partyInputSeqByPlayer.clear();
+    multiplayer.localPartyPhysicsSessions.clear();
+    multiplayer.partyPhysicsSeq = 0;
     maybeNotifyText(isPartyHost() ? "You are now host." : "Host migrated.");
     if (message.snapshot && isPartyHost()) {
       applyWorldSnapshot(message.snapshot.world);
@@ -4405,9 +5182,12 @@
     if (!isPartySessionActive() || isPartyHost()) {
       return;
     }
+    if (!joinedPlayerIsolationAllows("hostWorldSnapshots")) {
+      return;
+    }
     const snapshot = message.snapshot && typeof message.snapshot === "object" ? message.snapshot : message;
     if (snapshot.world) {
-      applyWorldSnapshot(snapshot.world, { smoothParticles: true });
+      applyWorldSnapshot(snapshot.world, { smoothParticles: true, smoothEntities: true });
     }
     if (snapshot.player) {
       applyPartyPlayerSnapshot({
@@ -4424,6 +5204,18 @@
       return;
     }
     const source = message.snapshot && typeof message.snapshot === "object" ? message.snapshot : message;
+    if (!joinedPlayerIsolationAllows("partyPlayerSnapshots")) {
+      applyPartyPlayerVisualSnapshot(message, source);
+      return;
+    }
+    const inputSeq = partyInputSeqFromSnapshot(source);
+    if (inputSeq > 0) {
+      const previousSeq = multiplayer.partyInputSeqByPlayer.get(fromPlayerId) || 0;
+      if (inputSeq < previousSeq) {
+        return;
+      }
+      multiplayer.partyInputSeqByPlayer.set(fromPlayerId, inputSeq);
+    }
     multiplayer.partyPlayerSnapshots.set(fromPlayerId, {
       playerId: fromPlayerId,
       snapshot: source,
@@ -4448,11 +5240,376 @@
         rockets: [],
         fighters: [],
         structures: [],
-        rivalProjectiles: []
+        rivalProjectiles: [],
+        techPickups: [],
+        healthPickups: []
       }
     });
     remote.seenAt = performance.now();
     addRemoteSnapshotFrame(remote, remote.snapshot, remote.seenAt / 1000);
+  }
+
+  function applyPartyPlayerVisualSnapshot(message, source) {
+    const fromPlayerId = String(message.fromPlayerId || message.playerId || "");
+    const playerSource = source && source.player && typeof source.player === "object" ? source.player : source;
+    const incomingPlayer = normalizeRemotePlayerSnapshot(playerSource);
+    if (!fromPlayerId || !incomingPlayer) {
+      return;
+    }
+
+    const remote = getRemoteUniverse("solo:" + fromPlayerId);
+    remote.playerId = fromPlayerId;
+    remote.publicName = message.publicName || message.fromName || remote.publicName || fromPlayerId;
+    remote.partySessionId = multiplayer.partySession ? multiplayer.partySession.id : "";
+    remote.teamId = message.teamId || remote.teamId || "";
+    remote.transform = remote.transform || createRemoteTransform(0, 0, 1, "overlap", multiplayer.anomaly ? "anomaly" : "party");
+    remote.displayTransform = remote.displayTransform || { ...remote.transform };
+
+    const previousSnapshot = remote.snapshot || normalizeRemoteSnapshot({
+      player: incomingPlayer,
+      world: {
+        particles: [],
+        alienoids: [],
+        ufos: [],
+        rambots: [],
+        engineers: [],
+        teslas: [],
+        rockets: [],
+        fighters: [],
+        structures: [],
+        rivalProjectiles: [],
+        techPickups: [],
+        healthPickups: []
+      }
+    });
+    const previousPlayer = previousSnapshot && previousSnapshot.player ? previousSnapshot.player : incomingPlayer;
+    const visualPlayer = {
+      ...previousPlayer,
+      id: incomingPlayer.id || previousPlayer.id || fromPlayerId,
+      name: incomingPlayer.name || previousPlayer.name || remote.publicName,
+      aimAngle: incomingPlayer.aimAngle,
+      aimLocalAngle: incomingPlayer.aimLocalAngle,
+      visualAimLocalAngle: incomingPlayer.visualAimLocalAngle,
+      cameraRoll: incomingPlayer.cameraRoll,
+      equippedTool: incomingPlayer.equippedTool,
+      toolMode: incomingPlayer.toolMode,
+      toolActive: incomingPlayer.toolActive,
+      moving: incomingPlayer.moving,
+      crouching: incomingPlayer.crouching
+    };
+
+    remote.snapshot = {
+      player: visualPlayer,
+      world: previousSnapshot.world || {
+        particles: [],
+        alienoids: [],
+        ufos: [],
+        rambots: [],
+        engineers: [],
+        teslas: [],
+        rockets: [],
+        fighters: [],
+        structures: [],
+        rivalProjectiles: [],
+        techPickups: [],
+        healthPickups: []
+      }
+    };
+    remote.seenAt = performance.now();
+    addRemoteSnapshotFrame(remote, remote.snapshot, remote.seenAt / 1000);
+  }
+
+  function partySessionIncludesPlayer(playerId) {
+    const id = String(playerId || "");
+    return Boolean(
+      id &&
+      multiplayer.partySession &&
+      Array.isArray(multiplayer.partySession.players) &&
+      multiplayer.partySession.players.some((entry) => {
+        if (!entry) {
+          return false;
+        }
+        return String(entry.playerId || entry.id || entry) === id;
+      })
+    );
+  }
+
+  function partyPhysicsRequestOwner(message) {
+    return String(message && (message.fromPlayerId || message.playerId || message.ownerPlayerId) || "");
+  }
+
+  function partyPhysicsRequestSeq(message) {
+    return Math.max(0, Math.floor(finiteOr(message && message.seq, 0)));
+  }
+
+  function partyPhysicsRequestActor(message) {
+    return normalizeRemotePlayerSnapshot(message && message.actor);
+  }
+
+  function partyPhysicsCorrectionLimit(type, entity) {
+    const radius = Math.max(1, finiteOr(entity && entity.radius, 1));
+    if (normalizePartyEntityType(type) === "particle" && entity && entity.tier && entity.tier.solid) {
+      return Math.max(720, radius * 5.2);
+    }
+    return Math.max(980, radius * 7.5);
+  }
+
+  function hostLocalPartyPhysicsConflict(type, entity) {
+    if (!isPartyHost() || !entity || !canUseSuctionControls()) {
+      return false;
+    }
+    const state = localPartyGadgetState(buildPersistentPayload(false).player);
+    if (!state) {
+      return false;
+    }
+    const cleanType = normalizePartyEntityType(type);
+    if (cleanType === "particle" && state.landedBodyId === entity.id && (state.left || state.right)) {
+      return true;
+    }
+    if (!state.active) {
+      return false;
+    }
+    if (cleanType === "particle" && !partyGadgetCanAffectParticle(state, entity)) {
+      return false;
+    }
+    const probe = partyGadgetParticleProbe(state, entity, { padding: 24 });
+    return Boolean(probe.force || probe.bucket);
+  }
+
+  function validatePartyPhysicsRequest(message, options) {
+    if (!isPartyHost()) {
+      return { ok: false, reason: "not-host" };
+    }
+    const owner = partyPhysicsRequestOwner(message);
+    if (!partySessionIncludesPlayer(owner)) {
+      return { ok: false, reason: "not-party-member" };
+    }
+    const type = normalizePartyEntityType(message && message.entityType);
+    const id = partyEntityId(message && message.entityId);
+    const incoming = normalizePartyEntityState(type, message && message.state);
+    const entity = findPartyEntity(type, id);
+    if (!type || !id || !incoming || incoming.id !== id || !entity) {
+      return { ok: false, reason: "missing-entity", type, id, owner };
+    }
+    const now = performance.now();
+    const current = partyPhysicsSession(type, id, now);
+    const seq = partyPhysicsRequestSeq(message);
+    if (current && current.playerId && current.playerId !== owner) {
+      return { ok: false, reason: "claimed", type, id, owner, entity };
+    }
+    if (current && seq > 0 && finiteOr(current.seq, 0) > 0 && seq < finiteOr(current.seq, 0)) {
+      return { ok: false, reason: "stale", type, id, owner, entity };
+    }
+    if (!(options && options.allowExistingOwner) && hostLocalPartyPhysicsConflict(type, entity) && owner !== player.id) {
+      return { ok: false, reason: "host-local-control", type, id, owner, entity };
+    }
+
+    const actor = partyPhysicsRequestActor(message);
+    if (!actor) {
+      return { ok: false, reason: "missing-actor", type, id, owner, entity };
+    }
+    const reach = gadgetForceReach + Math.max(300, finiteOr(entity.radius, 1) * 3.4);
+    const hostDistance = Math.hypot(entity.x - actor.x, entity.y - actor.y);
+    const incomingDistance = Math.hypot(incoming.x - actor.x, incoming.y - actor.y);
+    if (Math.min(hostDistance, incomingDistance) > reach) {
+      return { ok: false, reason: "out-of-range", type, id, owner, entity };
+    }
+
+    const correctionDistance = Math.hypot(incoming.x - entity.x, incoming.y - entity.y);
+    if (correctionDistance > partyPhysicsCorrectionLimit(type, entity)) {
+      return { ok: false, reason: "correction-too-large", type, id, owner, entity };
+    }
+
+    return { ok: true, type, id, owner, entity, incoming, seq, actor };
+  }
+
+  function applyAcceptedPartyPhysicsSession(validation, message) {
+    const now = performance.now();
+    const active = message && message.active !== false;
+    const lease = active ? partyPhysicsSessionActiveHoldMs : partyFollowerPredictionHoldMs;
+    const key = partyEntityKey(validation.type, validation.id);
+    multiplayer.partyPhysicsSessions.set(key, {
+      type: validation.type,
+      id: validation.id,
+      key,
+      playerId: validation.owner,
+      seq: validation.seq,
+      expiresAt: now + lease,
+      accepted: true,
+      receivedAt: now
+    });
+
+    const solidParticle = validation.type === "particle" && validation.entity && validation.entity.tier && validation.entity.tier.solid;
+    applyPartyEntityMotionState(validation.entity, validation.incoming, {
+      positionBlend: solidParticle ? 0.86 : 0.94,
+      velocityBlend: solidParticle ? 0.82 : 0.92
+    });
+    if (validation.type === "particle") {
+      validation.entity.gadgetStabilized = false;
+    }
+    return validation.entity;
+  }
+
+  function sendPartyPhysicsHostAuthority(action, validation, entity) {
+    sendMultiplayer({
+      type: "party.physics.authority",
+      action,
+      entityType: validation.type,
+      entityId: validation.id,
+      ownerPlayerId: validation.owner,
+      seq: validation.seq,
+      state: entity ? serializePartyEntity(validation.type, entity) : null
+    });
+  }
+
+  function sendPartyPhysicsHostReject(message, reason, entity) {
+    const type = normalizePartyEntityType(message && message.entityType);
+    const id = partyEntityId(message && message.entityId);
+    sendMultiplayer({
+      type: "party.physics.reject",
+      targetPlayerId: partyPhysicsRequestOwner(message),
+      entityType: type,
+      entityId: id,
+      seq: partyPhysicsRequestSeq(message),
+      reason,
+      state: entity ? serializePartyEntity(type, entity) : null
+    });
+  }
+
+  function handlePartyPhysicsSessionRequest(message) {
+    const validation = validatePartyPhysicsRequest(message, {
+      allowExistingOwner: message && message.type === "party.physics.state"
+    });
+    if (!validation.ok) {
+      sendPartyPhysicsHostReject(message, validation.reason, validation.entity);
+      return;
+    }
+    const entity = applyAcceptedPartyPhysicsSession(validation, message);
+    sendPartyPhysicsHostAuthority(message.type === "party.physics.start" ? "start" : "state", validation, entity);
+  }
+
+  function handlePartyPhysicsEndRequest(message) {
+    if (!isPartyHost()) {
+      return;
+    }
+    const owner = partyPhysicsRequestOwner(message);
+    const type = normalizePartyEntityType(message && message.entityType);
+    const id = partyEntityId(message && message.entityId);
+    const key = partyEntityKey(type, id);
+    const entity = findPartyEntity(type, id);
+    const claim = key ? partyPhysicsSession(type, id, performance.now()) : null;
+    if ((!claim || claim.playerId !== owner) && message && message.reason === "collected" && type === "healthPickup") {
+      const validation = validatePartyPhysicsRequest(message, { allowExistingOwner: true });
+      if (!validation.ok) {
+        sendPartyPhysicsHostReject(message, validation.reason, validation.entity);
+        return;
+      }
+      removePartyEntity(type, id);
+      multiplayer.partyPhysicsSessions.delete(key);
+      sendPartyPhysicsHostAuthority("remove", validation, entity);
+      return;
+    }
+    if (!owner || !key || !claim || claim.playerId !== owner) {
+      sendPartyPhysicsHostReject(message, "end-not-owned", entity);
+      return;
+    }
+    const incoming = normalizePartyEntityState(type, message && message.state);
+    if (incoming && entity) {
+      applyPartyEntityMotionState(entity, incoming, { positionBlend: 0.58, velocityBlend: 0.68 });
+    }
+    multiplayer.partyPhysicsSessions.delete(key);
+    sendPartyPhysicsHostAuthority("end", { type, id, owner, seq: partyPhysicsRequestSeq(message) }, entity);
+  }
+
+  function applyPartyPhysicsAuthority(message) {
+    if (!isPartySessionActive()) {
+      return;
+    }
+    if (!joinedPlayerIsolationAllows("partyPhysicsAuthority")) {
+      return;
+    }
+    const type = normalizePartyEntityType(message && message.entityType);
+    const id = partyEntityId(message && message.entityId);
+    const key = partyEntityKey(type, id);
+    const owner = String(message && message.ownerPlayerId || "");
+    const action = String(message && message.action || "update");
+    if (!type || !id || !key || !owner) {
+      return;
+    }
+    const now = performance.now();
+    const entity = findPartyEntity(type, id);
+    const incoming = normalizePartyEntityState(type, message && message.state);
+
+    if (action === "end" || action === "release" || action === "remove") {
+      multiplayer.partyPhysicsSessions.delete(key);
+      if (owner === player.id) {
+        multiplayer.localPartyPhysicsSessions.delete(key);
+      }
+      if (action === "remove") {
+        if (type === "healthPickup") {
+          multiplayer.claimedHealthPickupIds.add(String(id));
+        }
+        removePartyEntity(type, id);
+        return;
+      }
+      if (entity && incoming) {
+        applyPartyEntityMotionState(entity, incoming, { positionBlend: owner === player.id ? 0.28 : 0.58, velocityBlend: 0.64 });
+        markEntitySmoothingTarget(entity, incoming, now);
+      }
+      return;
+    }
+
+    multiplayer.partyPhysicsSessions.set(key, {
+      type,
+      id,
+      key,
+      playerId: owner,
+      seq: partyPhysicsRequestSeq(message),
+      expiresAt: now + partyPhysicsSessionActiveHoldMs,
+      accepted: true,
+      receivedAt: now
+    });
+
+    if (owner === player.id) {
+      const localClaim = multiplayer.localPartyPhysicsSessions.get(key);
+      if (localClaim) {
+        localClaim.accepted = true;
+        localClaim.expiresAt = Math.max(finiteOr(localClaim.expiresAt, 0), now + partyPhysicsSessionLocalHoldMs);
+      }
+      return;
+    }
+
+    if (entity && incoming) {
+      applyPartyEntityMotionState(entity, incoming, { positionBlend: 0.72, velocityBlend: 0.78 });
+      markEntitySmoothingTarget(entity, incoming, now);
+    }
+  }
+
+  function applyPartyPhysicsReject(message) {
+    if (!joinedPlayerIsolationAllows("partyPhysicsRejects")) {
+      return;
+    }
+    const targetPlayerId = String(message && message.targetPlayerId || "");
+    if (targetPlayerId && targetPlayerId !== player.id) {
+      return;
+    }
+    const type = normalizePartyEntityType(message && message.entityType);
+    const id = partyEntityId(message && message.entityId);
+    const key = partyEntityKey(type, id);
+    if (!key) {
+      return;
+    }
+    multiplayer.localPartyPhysicsSessions.delete(key);
+    const claim = multiplayer.partyPhysicsSessions.get(key);
+    if (claim && claim.playerId === player.id) {
+      multiplayer.partyPhysicsSessions.delete(key);
+    }
+    const entity = findPartyEntity(type, id);
+    const incoming = normalizePartyEntityState(type, message && message.state);
+    if (entity && incoming) {
+      applyPartyEntityMotionState(entity, incoming, { positionBlend: 0.84, velocityBlend: 0.9 });
+      markEntitySmoothingTarget(entity, incoming, performance.now());
+    }
   }
 
   function copyTextToClipboard(text, successMessage) {
@@ -4476,9 +5633,14 @@
       return;
     }
     multiplayer.partySession = null;
+    multiplayer.partyJoinCode = "";
     multiplayer.partyMode = "solo";
     multiplayer.partyHostId = "";
     multiplayer.partyPlayerSnapshots.clear();
+    multiplayer.partyPhysicsSessions.clear();
+    multiplayer.partyInputSeqByPlayer.clear();
+    multiplayer.localPartyPhysicsSessions.clear();
+    multiplayer.partyPhysicsSeq = 0;
     multiplayer.partyInputTimer = 0;
     multiplayer.anomaly = null;
     applyDifficulty(id);
@@ -4492,6 +5654,7 @@
     setDifficultyScreenOpen(false);
     lastTime = performance.now();
     updateHud();
+    updateSettingsJoinCodeUi();
     void refreshLeaderboard(true);
     await savePersistentState({ includeWorld: true });
     connectMultiplayer();
@@ -4532,7 +5695,9 @@
     nextStructureId = 1;
     nextRivalProjectileId = 1;
     nextTechPickupId = 1;
+    nextHealthPickupId = 1;
     multiplayer.claimedTechPickupIds.clear();
+    multiplayer.claimedHealthPickupIds.clear();
     spawnTimer = 0;
 
     resetMobSpawnTimers();
@@ -4720,6 +5885,9 @@
     if (multiplayer.pendingJoinRoomId) {
       return "Joining friend room";
     }
+    if (multiplayer.serverUnavailable && !multiplayer.connected) {
+      return serverMaintenanceMessage;
+    }
     if (multiplayer.roomCreatePending) {
       return "Multiplayer On";
     }
@@ -4740,8 +5908,8 @@
     }
     if (multiplayerStatus) {
       multiplayerStatus.textContent = text;
-      multiplayerStatus.classList.toggle("is-success", enabled && text !== "Room full");
-      multiplayerStatus.classList.toggle("is-error", text === "Room full");
+      multiplayerStatus.classList.toggle("is-success", enabled && text !== "Room full" && !multiplayer.serverUnavailable);
+      multiplayerStatus.classList.toggle("is-error", text === "Room full" || multiplayer.serverUnavailable);
     }
     if (multiplayerPanelStatus) {
       multiplayerPanelStatus.textContent = text;
@@ -4751,8 +5919,8 @@
     }
     const panelRow = multiplayerPanelStatus ? multiplayerPanelStatus.closest(".social-panel__multiplayer") : null;
     if (panelRow) {
-      panelRow.classList.toggle("is-on", enabled && text !== "Room full");
-      panelRow.classList.toggle("is-full", text === "Room full");
+      panelRow.classList.toggle("is-on", enabled && text !== "Room full" && !multiplayer.serverUnavailable);
+      panelRow.classList.toggle("is-full", text === "Room full" || multiplayer.serverUnavailable);
     }
   }
 
@@ -5539,7 +6707,12 @@
       await refreshAccountSaves();
       setManualSaveStatus(createNew ? "Account created." : "Logged in.", "success");
     } catch (error) {
-      setManualSaveStatus(error instanceof Error ? error.message.replace(/^Request failed \d+:?\s*/, "") : "Account request failed.", "error");
+      const message = isServerMaintenanceError(error)
+        ? serverMaintenanceMessage
+        : error instanceof Error
+        ? error.message.replace(/^Request failed \d+:?\s*/, "")
+        : "Account request failed.";
+      setManualSaveStatus(message, "error");
     } finally {
       setAccountBusy(false);
     }
@@ -5588,7 +6761,7 @@
       });
       accountState.saves = Array.isArray(data.saves) ? data.saves : [];
     } catch (error) {
-      setManualSaveStatus("Could not load saved games.", "error");
+      setManualSaveStatus(backendErrorMessage(error, "Could not load saved games."), "error");
       console.warn("Clusternauts save list failed.", error);
     } finally {
       accountState.savesLoading = false;
@@ -5691,7 +6864,7 @@
       return true;
     } catch (error) {
       console.warn("Clusternauts manual save failed.", error);
-      setManualSaveStatus("Could not save this game.", "error");
+      setManualSaveStatus(backendErrorMessage(error, "Could not save this game."), "error");
       return false;
     }
   }
@@ -5714,7 +6887,7 @@
       await savePersistentState({ includeWorld: true });
       await waitForPersistenceIdle();
       if (!persistence.online) {
-        setManualSaveStatus("Could not save guest progress.", "error");
+        setManualSaveStatus(persistence.serverUnavailable ? serverMaintenanceMessage : "Could not save guest progress.", "error");
         return false;
       }
       setManualSaveStatus("Guest progress saved.", "success");
@@ -5966,9 +7139,11 @@
       const data = await fetchPersistentJson("/api/world/state?playerId=" + encodeURIComponent(player.id));
       applyPersistentPayload(data, { includePlayer: true });
       persistence.online = true;
+      persistence.serverUnavailable = false;
       persistence.storage = data.storage || "database";
     } catch (error) {
       persistence.online = false;
+      persistence.serverUnavailable = isServerMaintenanceError(error);
       persistence.storage = "none";
       console.warn("Clusternauts persistence unavailable.", error);
     } finally {
@@ -5986,9 +7161,11 @@
     try {
       const data = await fetchPersistentJson("/api/world/state?playerId=" + encodeURIComponent(player.id));
       persistence.online = true;
+      persistence.serverUnavailable = false;
       persistence.storage = data.storage || persistence.storage;
-    } catch {
+    } catch (error) {
       persistence.online = false;
+      persistence.serverUnavailable = isServerMaintenanceError(error);
     } finally {
       persistence.loadInFlight = false;
     }
@@ -6009,9 +7186,11 @@
         body: JSON.stringify(buildPersistentPayload(includeWorld))
       });
       persistence.online = true;
+      persistence.serverUnavailable = false;
       persistence.storage = data.storage || persistence.storage;
-    } catch {
+    } catch (error) {
       persistence.online = false;
+      persistence.serverUnavailable = isServerMaintenanceError(error);
     } finally {
       persistence.saveInFlight = false;
     }
@@ -6032,9 +7211,17 @@
     }, 2500);
 
     try {
-      const response = await fetch(apiUrl(url), Object.assign({}, options, { signal: controller.signal }));
+      let response;
+      try {
+        response = await fetch(apiUrl(url), Object.assign({}, options, { signal: controller.signal }));
+      } catch (error) {
+        throw createServerMaintenanceError(error);
+      }
 
       if (!response.ok) {
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          throw createServerMaintenanceError(response.status);
+        }
         let detail = "";
         try {
           const errorBody = await response.json();
@@ -6066,10 +7253,15 @@
       const data = await fetchPersistentJson("/api/leaderboard?limit=40");
       leaderboard.entries = Array.isArray(data.entries) ? data.entries.map(normalizeLeaderboardEntry).filter(Boolean) : [];
       leaderboard.lastRefreshAt = now;
+      leaderboard.statusMessage = "";
       if (leaderboard.open) {
         renderLeaderboard();
       }
     } catch (error) {
+      leaderboard.statusMessage = backendErrorMessage(error, "Leaderboard unavailable.");
+      if (leaderboard.open) {
+        renderLeaderboard();
+      }
       console.warn("Clusternauts leaderboard unavailable.", error);
     } finally {
       leaderboard.refreshInFlight = false;
@@ -6111,12 +7303,14 @@
       });
       leaderboard.entries = Array.isArray(data.entries) ? data.entries.map(normalizeLeaderboardEntry).filter(Boolean) : leaderboard.entries;
       leaderboard.lastRefreshAt = performance.now();
+      leaderboard.statusMessage = "";
       if (leaderboard.open) {
         renderLeaderboard();
       }
       deathState.leaderboardSubmitted = true;
       return true;
     } catch (error) {
+      leaderboard.statusMessage = backendErrorMessage(error, "Could not save this run.");
       console.warn("Clusternauts leaderboard submit failed.", error);
       leaderboard.submittedDeathKey = "";
       return false;
@@ -6353,7 +7547,7 @@
       deathLeaderboardButton.classList.remove("is-loading", "is-saved");
     }
     if (deathLeaderboardStatus) {
-      deathLeaderboardStatus.textContent = "Could not save this run.";
+      deathLeaderboardStatus.textContent = leaderboard.statusMessage || "Could not save this run.";
     }
   }
 
@@ -6577,10 +7771,23 @@
     resetDeathState();
     deathState.resetInFlight = false;
     lastTime = performance.now();
+    const respawnSnapshot = buildPersistentPayload(false).player;
+    if (isMultiplayerV2Active() && mpV2Sim && typeof mpV2Sim.respawnPlayer === "function") {
+      mpV2Sim.respawnPlayer(multiplayer.v2.state, player.id, respawnSnapshot);
+      multiplayer.v2.authoritativeState = mpV2Sim.serializeState(multiplayer.v2.state);
+      multiplayer.v2.ignoreDeathEventsBeforeTick = Math.max(
+        Math.floor(finiteOr(multiplayer.v2.ignoreDeathEventsBeforeTick, 0)),
+        Math.floor(finiteOr(multiplayer.v2.lastServerTick, 0)),
+        Math.floor(finiteOr(multiplayer.v2.state && multiplayer.v2.state.tick, 0))
+      );
+      multiplayer.v2.pendingInputs = [];
+      multiplayer.v2.fixedAccumulator = 0;
+      syncMultiplayerV2StateToGame({ snapLocal: true });
+    }
     sendMultiplayer({
       type: "party.respawn",
       snapshot: {
-        player: buildPersistentPayload(false).player
+        player: respawnSnapshot
       }
     });
     maybeNotifyText("Respawned.");
@@ -6682,8 +7889,8 @@
         multiplayer.players = Array.isArray(data.players) ? data.players : [];
         renderPlayerSearch();
       }
-    } catch {
-      renderPlayerSearch("Search unavailable.");
+    } catch (error) {
+      renderPlayerSearch(backendErrorMessage(error, "Search unavailable."));
     }
   }
 
@@ -6846,6 +8053,12 @@
     }
 
     leaderboardList.textContent = "";
+    if (leaderboard.statusMessage) {
+      const status = document.createElement("div");
+      status.className = "leaderboard-row";
+      status.textContent = leaderboard.statusMessage;
+      leaderboardList.append(status);
+    }
     collectLeaderboardEntries().forEach((entry, index) => {
       const row = document.createElement("div");
       const rank = document.createElement("span");
@@ -7011,6 +8224,91 @@
     return String(token || "").trim().replace(/_/g, " ").toLowerCase();
   }
 
+  const spawnBodyCommandNames = bodyTiers
+    .filter((tier) => tier.threshold > 0)
+    .map((tier) => tier.name.replace(/\s+/g, "-"));
+  const spawnMobCommandNames = ["alienoid", "ufo", "rambot", "tesla", "engineer", "satellite", "rocket", "fighter"];
+
+  function normalizeSpawnCommandToken(token) {
+    return String(token || "").trim().toLowerCase().replace(/[-_\s]+/g, "");
+  }
+
+  function mobKindForCommandToken(token) {
+    const normalized = normalizeSpawnCommandToken(token);
+    if (normalized === "alien" || normalized === "alienoid") return "alienoid";
+    if (normalized === "ufo") return "ufo";
+    if (normalized === "rambot") return "rambot";
+    if (normalized === "tesla") return "tesla";
+    if (normalized === "engineer") return "engineer";
+    if (normalized === "satellite") return "satellite";
+    if (normalized === "rocket" || normalized === "rocketship") return "rocket";
+    if (normalized === "fighter" || normalized === "fightership") return "fighter";
+    return "";
+  }
+
+  function mobLabelForKind(kind) {
+    if (kind === "ufo") return "UFO";
+    if (kind === "rambot") return "Rambot";
+    if (kind === "tesla") return "Tesla";
+    if (kind === "engineer") return "Engineer";
+    if (kind === "satellite") return "Satellite";
+    if (kind === "rocket") return "Rocket ship";
+    if (kind === "fighter") return "Fighter ship";
+    return "Alienoid";
+  }
+
+  function parseSpawnTargetAndAmount(rawTarget) {
+    const parts = String(rawTarget || "").trim().split(/\s+/).filter(Boolean);
+    let amount = 1;
+    if (parts.length > 1) {
+      const maybeAmount = Math.floor(Number(parts[parts.length - 1]));
+      if (Number.isFinite(maybeAmount) && maybeAmount > 0) {
+        amount = clamp(maybeAmount, 1, 100);
+        parts.pop();
+      }
+    }
+    return {
+      target: parts.join(" "),
+      amount
+    };
+  }
+
+  function completeSpawnCommand() {
+    if (!commandInput) {
+      return;
+    }
+    const command = commandInput.value;
+    const match = command.match(/^\/spawn\s+(body|mob)(?:\s+(.+))?$/i);
+    if (!match) {
+      commandInput.value = "/spawn ";
+      commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
+      updateCommandHint();
+      return;
+    }
+    const category = match[1].toLowerCase();
+    const names = category === "mob" ? spawnMobCommandNames : spawnBodyCommandNames;
+    const rawTarget = String(match[2] || "").trim();
+    const amountMatch = rawTarget.match(/^(.*?)(?:\s+(\d+))?$/);
+    const partialTarget = amountMatch ? amountMatch[1].trim() : rawTarget;
+    const amountSuffix = amountMatch && amountMatch[2] ? " " + amountMatch[2] : "";
+    const partial = normalizeSpawnCommandToken(partialTarget);
+    const matches = names.filter((name) => !partial || normalizeSpawnCommandToken(name).startsWith(partial));
+    if (!matches.length) {
+      updateCommandHint();
+      return;
+    }
+    if (!multiplayer.commandCompletions.length || multiplayer.commandCompletions.join("|") !== matches.join("|")) {
+      multiplayer.commandCompletions = matches;
+      multiplayer.commandCompletionIndex = 0;
+    } else {
+      multiplayer.commandCompletionIndex = (multiplayer.commandCompletionIndex + 1) % multiplayer.commandCompletions.length;
+    }
+    const selected = multiplayer.commandCompletions[multiplayer.commandCompletionIndex];
+    commandInput.value = "/spawn " + category + " " + selected + amountSuffix;
+    commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
+    updateCommandHint();
+  }
+
   function matchingTeleportPlayers(partial) {
     const normalized = normalizeCommandPlayerToken(partial);
     return knownTeleportPlayers().filter((candidate) => {
@@ -7033,7 +8331,7 @@
 
     const value = commandInput.value.trim();
     if (!value) {
-      commandHint.textContent = "Available: /tp <player>, /spawn body <type>, /tech <type> <amount>, /reset all";
+      commandHint.textContent = "Available: /tp <player>, /spawn mob <type> <amount>, /spawn body <type> <amount>, /tech <type> <amount>, /reset all";
       return;
     }
 
@@ -7043,7 +8341,7 @@
     }
 
     if (/^\/spawn(\s|$)/i.test(value)) {
-      commandHint.textContent = "Bodies: rock, boulder, asteroid, dwarf-moon, moon, planet";
+      commandHint.textContent = "Mobs: alienoid, ufo, rambot, tesla, engineer, satellite, rocket, fighter. Bodies: rock, boulder, asteroid, dwarf-moon, moon, planet.";
       return;
     }
 
@@ -7053,7 +8351,7 @@
     }
 
     if (!/^\/tp(\s|$)/i.test(value)) {
-      commandHint.textContent = "Available: /tp <player>, /spawn body <type>, /tech <type> <amount>, /reset all";
+      commandHint.textContent = "Available: /tp <player>, /spawn mob <type> <amount>, /spawn body <type> <amount>, /tech <type> <amount>, /reset all";
       return;
     }
 
@@ -7081,6 +8379,10 @@
 
     const command = commandInput.value;
     if (!/^\/tp(\s|$)/i.test(command)) {
+      if (/^\/spawn(\s|$)/i.test(command)) {
+        completeSpawnCommand();
+        return;
+      }
       commandInput.value = "/tp ";
       updateCommandHint();
       return;
@@ -7159,7 +8461,7 @@
     }
 
     if (!/^\/tp(\s|$)/i.test(command)) {
-      maybeNotifyText("Unknown command. Try /tp <player>, /spawn body <type>, /tech <type> <amount>, or /reset all.");
+      maybeNotifyText("Unknown command. Try /tp <player>, /spawn mob <type> <amount>, /spawn body <type> <amount>, /tech <type> <amount>, or /reset all.");
       setCommandOpen(false);
       return;
     }
@@ -7176,36 +8478,124 @@
     setCommandOpen(false);
   }
 
-  function executeSpawnCommand(command) {
-    const match = command.match(/^\/spawn\s+body(?:\s+(.+))?$/i);
-    const typeToken = match && match[1] ? match[1].trim() : "";
-    if (!match || !typeToken) {
-      maybeNotifyText("Use /spawn body rock, boulder, asteroid, dwarf-moon, moon, or planet.");
-      updateCommandHint();
-      return;
+  function sendPartyCommand(payload) {
+    if (!payload || !isPartySessionActive()) {
+      return false;
     }
+    return sendMultiplayer({
+      type: "party.command",
+      roomId: multiplayer.v2.roomId || (multiplayer.partySession && multiplayer.partySession.id) || "",
+      ...payload
+    });
+  }
 
-    const tier = bodyTierForCommandToken(typeToken);
-    if (!tier) {
-      maybeNotifyText("Unknown body type. Try rock, boulder, asteroid, dwarf-moon, moon, or planet.");
-      return;
+  function spawnBodyFromCommand(tier, source) {
+    if (!tier || !source) {
+      return null;
     }
-
     const mass = Math.max(1, tier.threshold);
-    const aimAngle = getCursorAimAngle();
-    const direction = cameraLocalToWorld(Math.cos(aimAngle), Math.sin(aimAngle));
+    const direction = {
+      x: finiteOr(source.directionX, 1),
+      y: finiteOr(source.directionY, 0)
+    };
+    const directionLength = Math.hypot(direction.x, direction.y) || 1;
+    const dirX = direction.x / directionLength;
+    const dirY = direction.y / directionLength;
     const radius = radiusFromMass(mass);
-    const distance = Math.max(180, player.radius + radius + 120);
+    const originRadius = Math.max(1, finiteOr(source.radius, player.radius));
+    const distance = Math.max(180, originRadius + radius + 120);
+    const sideOffset = (((nextParticleId - 1) % 7) - 3) * Math.min(radius * 0.9 + 18, 160);
     const body = createParticle(
-      player.x + direction.x * distance,
-      player.y + direction.y * distance,
+      finiteOr(source.x, player.x) + dirX * distance - dirY * sideOffset,
+      finiteOr(source.y, player.y) + dirY * distance + dirX * sideOffset,
       mass,
       randomParticleColor()
     );
     body.vx = 0;
     body.vy = 0;
     particles.push(body);
-    maybeNotifyText("Spawned " + tier.article + " " + tier.name + ".");
+    return body;
+  }
+
+  function spawnMobFromCommand(kind, source) {
+    const anchor = {
+      x: finiteOr(source && source.x, player.x),
+      y: finiteOr(source && source.y, player.y),
+      vx: finiteOr(player.vx, 0),
+      vy: finiteOr(player.vy, 0),
+      radius: finiteOr(source && source.radius, player.radius)
+    };
+    spawnMobByKind(kind, anchor);
+  }
+
+  function localSpawnCommandSource() {
+    const aimAngle = getCursorAimAngle();
+    const direction = cameraLocalToWorld(Math.cos(aimAngle), Math.sin(aimAngle));
+    return {
+      x: player.x,
+      y: player.y,
+      radius: player.radius,
+      directionX: direction.x,
+      directionY: direction.y
+    };
+  }
+
+  function executeSpawnCommand(command) {
+    const match = command.match(/^\/spawn\s+(body|mob)(?:\s+(.+))?$/i);
+    const category = match && match[1] ? match[1].toLowerCase() : "";
+    const parsed = parseSpawnTargetAndAmount(match && match[2] ? match[2] : "");
+    if (!match || !parsed.target) {
+      maybeNotifyText("Use /spawn mob alienoid 3 or /spawn body asteroid 2.");
+      updateCommandHint();
+      return;
+    }
+
+    const source = localSpawnCommandSource();
+    if (category === "mob") {
+      const kind = mobKindForCommandToken(parsed.target);
+      if (!kind) {
+        maybeNotifyText("Unknown mob. Try alienoid, ufo, rambot, tesla, engineer, satellite, rocket, or fighter.");
+        return;
+      }
+      if (isMultiplayerV2Active() || isSharedWorldFollower()) {
+        const sent = sendPartyCommand({
+          command: "spawnMob",
+          mob: kind,
+          amount: parsed.amount,
+          source
+        });
+        maybeNotifyText(sent ? "Spawned " + parsed.amount + " " + mobLabelForKind(kind) + (parsed.amount === 1 ? "." : "s.") : "Multiplayer command unavailable.");
+        return;
+      }
+      for (let i = 0; i < parsed.amount; i += 1) {
+        spawnMobFromCommand(kind, source);
+      }
+      maybeNotifyText("Spawned " + parsed.amount + " " + mobLabelForKind(kind) + (parsed.amount === 1 ? "." : "s."));
+      void savePersistentState({ includeWorld: true });
+      return;
+    }
+
+    const tier = bodyTierForCommandToken(parsed.target);
+    if (!tier) {
+      maybeNotifyText("Unknown body type. Try rock, boulder, asteroid, dwarf-moon, moon, or planet.");
+      return;
+    }
+
+    if (isMultiplayerV2Active() || isSharedWorldFollower()) {
+      const sent = sendPartyCommand({
+        command: "spawnBody",
+        body: tier.name,
+        amount: parsed.amount,
+        source
+      });
+      maybeNotifyText(sent ? "Spawned " + parsed.amount + " " + tier.name + (parsed.amount === 1 ? "." : "s.") : "Multiplayer command unavailable.");
+      return;
+    }
+
+    for (let i = 0; i < parsed.amount; i += 1) {
+      spawnBodyFromCommand(tier, source);
+    }
+    maybeNotifyText("Spawned " + parsed.amount + " " + tier.name + (parsed.amount === 1 ? "." : "s."));
     void savePersistentState({ includeWorld: true });
   }
 
@@ -7218,21 +8608,8 @@
     return techTypes.find((tech) => tech.key.replace(/[-_\s]+/g, "") === normalized) || null;
   }
 
-  function executeTechCommand(command) {
-    const match = command.match(/^\/tech\s+([^\s]+)(?:\s+([^\s]+))?$/i);
-    const techToken = match && match[1] ? match[1] : "";
-    const normalizedTechToken = techToken.toLowerCase();
-    const amountToken = match && match[2] ? match[2] : "";
-    const tech = techTypeForCommandToken(techToken);
-    const amount = Math.floor(Number(amountToken));
-
-    if ((!tech && normalizedTechToken !== "all") || !Number.isFinite(amount) || amount <= 0) {
-      maybeNotifyText("Use /tech all 10, /tech weapon 10, /tech suction 25, etc.");
-      updateCommandHint();
-      return;
-    }
-
-    if (normalizedTechToken === "all") {
+  function addTechFromCommand(tech, amount, all) {
+    if (all) {
       for (const techType of techTypes) {
         techInventory[techType.key] = Math.max(0, Math.floor(techInventory[techType.key] || 0)) + amount;
       }
@@ -7246,6 +8623,67 @@
     updateTechUi();
     maybeNotifyText("Added " + amount + " " + tech.label.toLowerCase() + ".");
     void savePersistentState({ includeWorld: false });
+  }
+
+  function executeTechCommand(command) {
+    const match = command.match(/^\/tech\s+([^\s]+)(?:\s+([^\s]+))?$/i);
+    const techToken = match && match[1] ? match[1] : "";
+    const normalizedTechToken = techToken.toLowerCase();
+    const amountToken = match && match[2] ? match[2] : "";
+    const tech = techTypeForCommandToken(techToken);
+    const amount = Math.floor(Number(amountToken));
+    const all = normalizedTechToken === "all";
+
+    if ((!tech && !all) || !Number.isFinite(amount) || amount <= 0) {
+      maybeNotifyText("Use /tech all 10, /tech weapon 10, /tech suction 25, etc.");
+      updateCommandHint();
+      return;
+    }
+
+    if (isMultiplayerV2Active()) {
+      const sent = sendPartyCommand({
+        command: "tech",
+        tech: all ? "all" : tech.key,
+        amount
+      });
+      maybeNotifyText(sent ? (all ? "Added " + amount + " of every tech type." : "Added " + amount + " " + tech.label.toLowerCase() + ".") : "Multiplayer command unavailable.");
+      return;
+    }
+
+    addTechFromCommand(tech, amount, all);
+  }
+
+  function handlePartyCommand(message) {
+    if (!isPartyHost() || isMultiplayerV2Active()) {
+      return;
+    }
+    const command = String(message && message.command || "");
+    if (command !== "spawnBody" && command !== "spawnMob") {
+      return;
+    }
+    const amount = clamp(Math.max(1, Math.floor(finiteOr(message.amount, 1))), 1, 100);
+    const source = message.source && typeof message.source === "object" ? message.source : {};
+    if (command === "spawnMob") {
+      const kind = mobKindForCommandToken(message.mob);
+      if (!kind) {
+        return;
+      }
+      for (let i = 0; i < amount; i += 1) {
+        spawnMobFromCommand(kind, source);
+      }
+      maybeNotifyText((message.publicName || "A player") + " spawned " + amount + " " + mobLabelForKind(kind) + (amount === 1 ? "." : "s."));
+      void savePersistentState({ includeWorld: true });
+      return;
+    }
+    const tier = bodyTierForCommandToken(message.body);
+    if (!tier) {
+      return;
+    }
+    for (let i = 0; i < amount; i += 1) {
+      spawnBodyFromCommand(tier, source);
+    }
+    maybeNotifyText((message.publicName || "A player") + " spawned " + amount + " " + tier.name + (amount === 1 ? "." : "s."));
+    void savePersistentState({ includeWorld: true });
   }
 
   async function executeResetCommand(target) {
@@ -7336,7 +8774,9 @@
 
     socket.addEventListener("open", function () {
       multiplayer.connected = true;
+      multiplayer.serverUnavailable = false;
       multiplayer.reconnectDelay = 1.5;
+      updateMultiplayerModeUi();
       sendMultiplayer({
         type: "hello",
         playerId: player.id,
@@ -7377,9 +8817,16 @@
     }
 
     multiplayer.connected = false;
+    multiplayer.serverUnavailable = true;
     multiplayer.socket = null;
     multiplayer.reconnectTimer = multiplayer.reconnectDelay;
     multiplayer.reconnectDelay = Math.min(12, multiplayer.reconnectDelay * 1.5);
+    notifyServerMaintenance();
+    updateMultiplayerModeUi();
+    if (multiplayer.lobby || multiplayer.lobbyCreatePending || multiplayer.lobbyJoinPending) {
+      setLobbyStatus(serverMaintenanceMessage, "error");
+      renderLobby();
+    }
     if (multiplayer.lobby && multiplayer.lobby.code) {
       multiplayer.lobbyJoinPending = multiplayer.lobby.code;
     }
@@ -7439,6 +8886,9 @@
       updateOnlineUi();
       if (multiplayer.panelOpen) {
         void refreshPlayerSearch();
+      }
+      if (multiplayer.lobby) {
+        void refreshLobbyPlayerSearch();
       }
       return;
     }
@@ -7519,6 +8969,20 @@
       return;
     }
 
+    if (message.type === "party.state") {
+      applyPartyState(message);
+      return;
+    }
+
+    if (message.type === "mp.v2.snapshot") {
+      applyMultiplayerV2Snapshot(message);
+      return;
+    }
+
+    if (message.type === "mp.v2.event") {
+      return;
+    }
+
     if (message.type === "party.host.changed") {
       applyPartyHostChanged(message);
       return;
@@ -7541,6 +9005,31 @@
 
     if (message.type === "party.tech.claimed") {
       applyTechPickupClaim(message);
+      return;
+    }
+
+    if (message.type === "party.command") {
+      handlePartyCommand(message);
+      return;
+    }
+
+    if (message.type === "party.physics.start" || message.type === "party.physics.state") {
+      handlePartyPhysicsSessionRequest(message);
+      return;
+    }
+
+    if (message.type === "party.physics.end") {
+      handlePartyPhysicsEndRequest(message);
+      return;
+    }
+
+    if (message.type === "party.physics.authority") {
+      applyPartyPhysicsAuthority(message);
+      return;
+    }
+
+    if (message.type === "party.physics.reject") {
+      applyPartyPhysicsReject(message);
       return;
     }
 
@@ -8371,6 +9860,12 @@
     );
   }
 
+  function partyInputSeqFromSnapshot(snapshot) {
+    const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+    const gadget = source.gadget && typeof source.gadget === "object" ? source.gadget : null;
+    return Math.max(0, Math.floor(finiteOr(gadget && gadget.seq, 0)));
+  }
+
   function isFriendlyPartyPlayer(playerId) {
     if (!playerId || !isPartySessionActive()) {
       return false;
@@ -8391,6 +9886,10 @@
     return isDuelingWith(remote.playerId);
   }
 
+  function canDamageRemotePlayerFromPve(remote) {
+    return Boolean(remote && remote.playerId);
+  }
+
   function canReceiveDamageFromPlayer(fromPlayerId, fromTeamId) {
     if (!fromPlayerId) {
       return true;
@@ -8404,92 +9903,419 @@
     return isDuelingWith(fromPlayerId);
   }
 
-  function collectPartyGadgetIntentIds(state) {
-    if (!state) {
-      return { candidateIds: [], bucketIds: [] };
+  function normalizeEntityEffectSourceKind(effect) {
+    const kind = typeof (effect && effect.sourceKind) === "string" ? effect.sourceKind : "";
+    if (kind === "player" || kind === "mob" || kind === "environment" || kind === "gadget") {
+      return kind;
     }
-
-    const candidates = [];
-    const buckets = [];
-    for (const particle of particles) {
-      if (!partyGadgetCanAffectParticle(state, particle)) {
-        continue;
-      }
-
-      const probe = partyGadgetParticleProbe(state, particle, { padding: 42 });
-      if (probe.force || probe.bucket) {
-        candidates.push({ id: particle.id, score: probe.score });
-      }
-      if (probe.bucket) {
-        buckets.push({ id: particle.id, score: probe.score });
-      }
+    if (effect && effect.pvpOnly === true) {
+      return "player";
     }
-
-    const byScore = (a, b) => a.score - b.score;
-    return {
-      candidateIds: candidates.sort(byScore).slice(0, partyGadgetCandidateLimit).map((entry) => entry.id),
-      bucketIds: buckets.sort(byScore).slice(0, partyGadgetBucketLimit).map((entry) => entry.id)
-    };
+    if (effect && effect.entityType === "player" && (finiteOr(effect.damage, 0) > 0 || finiteOr(effect.toolDisable, 0) > 0)) {
+      return "player";
+    }
+    return "gadget";
   }
 
-  function serializePartyAuthorityBody(body) {
-    if (!body) {
+  function canReceiveRemotePlayerEffect(message, effect) {
+    const damage = Math.max(0, finiteOr(effect && effect.damage, 0));
+    const toolDisable = Math.max(0, finiteOr(effect && effect.toolDisable, 0));
+    if (damage <= 0 && toolDisable <= 0) {
+      return true;
+    }
+
+    const sourceKind = normalizeEntityEffectSourceKind(effect);
+    if (sourceKind !== "player" && effect.pvpOnly !== true) {
+      return true;
+    }
+    return canReceiveDamageFromPlayer(message.fromPlayerId, message.fromTeamId);
+  }
+
+  function remoteEffectCause(effect, fallback) {
+    const cause = typeof (effect && effect.cause) === "string" ? effect.cause.trim().slice(0, 60) : "";
+    return cause || fallback || "Contact fire";
+  }
+
+  function normalizePartyEntityType(type) {
+    const value = String(type || "");
+    if (value === "body" || value === "rock" || value === "boulder") {
+      return "particle";
+    }
+    if (value === "rival") {
+      return "alienoid";
+    }
+    if (value === "projectile") {
+      return "rivalProjectile";
+    }
+    if (
+      value === "particle" ||
+      value === "techPickup" ||
+      value === "healthPickup" ||
+      value === "rivalProjectile" ||
+      value === "alienoid" ||
+      value === "ufo" ||
+      value === "rambot" ||
+      value === "engineer" ||
+      value === "tesla" ||
+      value === "rocket" ||
+      value === "fighter"
+    ) {
+      return value;
+    }
+    return "";
+  }
+
+  function partyEntityId(id) {
+    return Math.max(1, Math.floor(finiteOr(id, 0)));
+  }
+
+  function partyEntityKey(type, id) {
+    const cleanType = normalizePartyEntityType(type);
+    const cleanId = partyEntityId(id);
+    return cleanType && cleanId ? cleanType + ":" + cleanId : "";
+  }
+
+  function partyEntityCollection(type) {
+    switch (normalizePartyEntityType(type)) {
+      case "particle":
+        return particles;
+      case "techPickup":
+        return techPickups;
+      case "healthPickup":
+        return healthPickups;
+      case "rivalProjectile":
+        return rivalProjectiles;
+      case "alienoid":
+        return rivals;
+      case "ufo":
+        return ufos;
+      case "rambot":
+        return rambots;
+      case "engineer":
+        return engineers;
+      case "tesla":
+        return teslas;
+      case "rocket":
+        return rockets;
+      case "fighter":
+        return fighters;
+      default:
+        return null;
+    }
+  }
+
+  function findPartyEntity(type, id) {
+    const collection = partyEntityCollection(type);
+    const cleanId = partyEntityId(id);
+    if (!collection || !cleanId) {
+      return null;
+    }
+    return collection.find((entity) => entity && partyEntityId(entity.id) === cleanId) || null;
+  }
+
+  function removePartyEntity(type, id) {
+    const collection = partyEntityCollection(type);
+    const cleanId = partyEntityId(id);
+    if (!collection || !cleanId) {
+      return null;
+    }
+    const index = collection.findIndex((entity) => entity && partyEntityId(entity.id) === cleanId);
+    if (index < 0) {
+      return null;
+    }
+    const entity = collection[index];
+    collection.splice(index, 1);
+    return entity;
+  }
+
+  function serializePartyEntity(type, entity) {
+    const cleanType = normalizePartyEntityType(type);
+    if (!entity || !cleanType) {
+      return null;
+    }
+    if (cleanType === "particle") {
+      return serializeParticle(entity);
+    }
+    if (cleanType === "techPickup") {
+      return serializeTechPickup(entity);
+    }
+    if (cleanType === "healthPickup") {
+      return serializeHealthPickup(entity);
+    }
+    if (cleanType === "rivalProjectile") {
+      return serializeProjectile(entity);
+    }
+    if (cleanType === "alienoid") {
+      return serializeRival(entity);
+    }
+    if (cleanType === "ufo") {
+      return serializeUfo(entity);
+    }
+    if (cleanType === "rambot") {
+      return serializeRambot(entity);
+    }
+    if (cleanType === "engineer") {
+      return serializeEngineer(entity);
+    }
+    if (cleanType === "tesla") {
+      return serializeTesla(entity);
+    }
+    if (cleanType === "rocket") {
+      return serializeRocket(entity);
+    }
+    if (cleanType === "fighter") {
+      return serializeFighter(entity);
+    }
+    return null;
+  }
+
+  function normalizePartyEntityState(type, state) {
+    const cleanType = normalizePartyEntityType(type);
+    const source = state && typeof state === "object" ? state : {};
+    const id = partyEntityId(source.id);
+    if (!cleanType || !id) {
       return null;
     }
     return {
-      id: body.id,
-      x: finiteOr(body.x, 0),
-      y: finiteOr(body.y, 0),
-      vx: finiteOr(body.vx, 0),
-      vy: finiteOr(body.vy, 0)
+      ...source,
+      id,
+      x: clamp(finiteOr(source.x, 0), -1000000, 1000000),
+      y: clamp(finiteOr(source.y, 0), -1000000, 1000000),
+      vx: clamp(finiteOr(source.vx, 0), -2200, 2200),
+      vy: clamp(finiteOr(source.vy, 0), -2200, 2200),
+      radius: Math.max(1, finiteOr(source.radius, 1))
     };
   }
 
-  function collectPartyAuthorityBodies(ids, landedBodyId) {
-    const bodies = [];
-    const seen = new Set();
-    const addBody = (id) => {
-      const cleanId = Math.max(1, Math.floor(finiteOr(id, 0)));
-      if (!cleanId || seen.has(cleanId) || bodies.length >= partyAuthorityBodyLimit) {
-        return;
-      }
-      const body = bodyById(cleanId);
-      if (!body || isUfoBeamCargo(body)) {
-        return;
-      }
-      seen.add(cleanId);
-      const snapshot = serializePartyAuthorityBody(body);
-      if (snapshot) {
-        bodies.push(snapshot);
-      }
-    };
+  function applyPartyEntityMotionState(entity, incoming, options) {
+    if (!entity || !incoming) {
+      return false;
+    }
+    const positionBlend = clamp(finiteOr(options && options.positionBlend, 1), 0, 1);
+    const velocityBlend = clamp(finiteOr(options && options.velocityBlend, positionBlend), 0, 1);
+    entity.x += (finiteOr(incoming.x, entity.x) - entity.x) * positionBlend;
+    entity.y += (finiteOr(incoming.y, entity.y) - entity.y) * positionBlend;
+    entity.vx += (finiteOr(incoming.vx, entity.vx) - entity.vx) * velocityBlend;
+    entity.vy += (finiteOr(incoming.vy, entity.vy) - entity.vy) * velocityBlend;
+    if (Number.isFinite(Number(incoming.life)) && Number.isFinite(Number(entity.life)) && options && options.copyLife) {
+      entity.life = Math.max(0, finiteOr(incoming.life, entity.life));
+    }
+    return true;
+  }
 
-    if (landedBodyId) {
-      addBody(landedBodyId);
+  function prunePartyPhysicsSessions(now) {
+    const time = finiteOr(now, performance.now());
+    for (const [key, session] of multiplayer.partyPhysicsSessions) {
+      if (
+        !session ||
+        finiteOr(session.expiresAt, 0) <= time ||
+        !findPartyEntity(session.type, session.id)
+      ) {
+        multiplayer.partyPhysicsSessions.delete(key);
+      }
     }
-    for (const id of ids.bucketIds || []) {
-      addBody(id);
+    for (const [key, session] of multiplayer.localPartyPhysicsSessions) {
+      if (
+        !session ||
+        finiteOr(session.expiresAt, 0) <= time ||
+        !findPartyEntity(session.type, session.id)
+      ) {
+        if (session && !session.endSent) {
+          sendPartyPhysicsEnd(session, "expired");
+        }
+        multiplayer.localPartyPhysicsSessions.delete(key);
+        const shared = multiplayer.partyPhysicsSessions.get(key);
+        if (shared && shared.playerId === player.id) {
+          multiplayer.partyPhysicsSessions.delete(key);
+        }
+      }
     }
-    for (const id of ids.candidateIds || []) {
-      addBody(id);
+  }
+
+  function partyPhysicsSession(type, id, now) {
+    prunePartyPhysicsSessions(now);
+    const key = partyEntityKey(type, id);
+    return key ? multiplayer.partyPhysicsSessions.get(key) || null : null;
+  }
+
+  function localPartyPhysicsSession(type, id, now) {
+    prunePartyPhysicsSessions(now);
+    const key = partyEntityKey(type, id);
+    return key ? multiplayer.localPartyPhysicsSessions.get(key) || null : null;
+  }
+
+  function hasLocalPartyPhysicsSession(type, id, now) {
+    const session = localPartyPhysicsSession(type, id, now);
+    return Boolean(session && session.playerId === player.id);
+  }
+
+  function partyPhysicsSnapshotActor() {
+    return buildPersistentPayload(false).player;
+  }
+
+  function sendPartyPhysicsMessage(kind, session, entity, extra) {
+    if (!session || !isPartySessionActive()) {
+      return false;
     }
-    return bodies;
+    const state = entity ? serializePartyEntity(session.type, entity) : null;
+    const payload = {
+      type: kind,
+      entityType: session.type,
+      entityId: session.id,
+      seq: session.seq,
+      state,
+      actor: (extra && extra.actor) || session.actor || partyPhysicsSnapshotActor(),
+      mode: (extra && extra.mode) || session.mode || "idle",
+      active: extra && Object.prototype.hasOwnProperty.call(extra, "active") ? extra.active !== false : session.active !== false
+    };
+    if (extra && extra.reason) {
+      payload.reason = extra.reason;
+    }
+    return sendMultiplayer(payload);
+  }
+
+  function sendPartyPhysicsEnd(session, reason) {
+    if (!session || session.endSent) {
+      return false;
+    }
+    const sent = sendPartyPhysicsMessage("party.physics.end", session, findPartyEntity(session.type, session.id), {
+      reason: reason || "ended",
+      active: false
+    });
+    session.endSent = sent || session.endSent;
+    return sent;
+  }
+
+  function markLocalPartyPhysicsSession(type, entity, now, options) {
+    if (!isSharedWorldFollower() || !entity) {
+      return null;
+    }
+    if (!joinedPlayerIsolationAllows("localPhysicsLeases")) {
+      return null;
+    }
+    const cleanType = normalizePartyEntityType(type);
+    const cleanId = partyEntityId(entity.id);
+    const key = partyEntityKey(cleanType, cleanId);
+    if (!key) {
+      return null;
+    }
+
+    const time = finiteOr(now, performance.now());
+    prunePartyPhysicsSessions(time);
+    let session = multiplayer.localPartyPhysicsSessions.get(key);
+    if (!session) {
+      session = {
+        type: cleanType,
+        id: cleanId,
+        key,
+        playerId: player.id,
+        seq: ++multiplayer.partyPhysicsSeq,
+        expiresAt: time + partyPhysicsSessionLocalHoldMs,
+        lastSentAt: 0,
+        startSent: false,
+        accepted: false,
+        endSent: false,
+        mode: options && options.mode ? options.mode : "idle",
+        active: !(options && options.active === false),
+        actor: options && options.actor ? options.actor : null
+      };
+      multiplayer.localPartyPhysicsSessions.set(key, session);
+    }
+
+    session.expiresAt = Math.max(finiteOr(session.expiresAt, 0), time + partyPhysicsSessionLocalHoldMs);
+    session.mode = options && options.mode ? options.mode : session.mode;
+    session.active = !(options && options.active === false);
+    session.actor = options && options.actor ? options.actor : session.actor;
+    session.endSent = false;
+    multiplayer.partyPhysicsSessions.set(key, {
+      ...session,
+      local: true
+    });
+
+    const force = options && options.force;
+    const elapsed = time - finiteOr(session.lastSentAt, 0);
+    const messageType = session.startSent ? "party.physics.state" : "party.physics.start";
+    if (force || !session.lastSentAt || elapsed >= partyPhysicsSessionUpdateIntervalMs) {
+      const sent = sendPartyPhysicsMessage(messageType, session, entity, {
+        actor: session.actor,
+        mode: session.mode,
+        active: session.active
+      });
+      if (sent) {
+        session.lastSentAt = time;
+        session.startSent = true;
+      }
+    }
+    return session;
+  }
+
+  function releaseLocalPartyPhysicsSession(type, id, reason) {
+    const key = partyEntityKey(type, id);
+    if (!key) {
+      return false;
+    }
+    const session = multiplayer.localPartyPhysicsSessions.get(key);
+    if (!session) {
+      return false;
+    }
+    sendPartyPhysicsEnd(session, reason || "ended");
+    multiplayer.localPartyPhysicsSessions.delete(key);
+    const shared = multiplayer.partyPhysicsSessions.get(key);
+    if (shared && shared.playerId === player.id) {
+      multiplayer.partyPhysicsSessions.delete(key);
+    }
+    return true;
+  }
+
+  function clearLocalPartyPhysicsSession(type, id) {
+    const key = partyEntityKey(type, id);
+    if (!key) {
+      return false;
+    }
+    multiplayer.localPartyPhysicsSessions.delete(key);
+    const shared = multiplayer.partyPhysicsSessions.get(key);
+    if (shared && shared.playerId === player.id) {
+      multiplayer.partyPhysicsSessions.delete(key);
+    }
+    return true;
+  }
+
+  function releaseMissingLocalPartyPhysicsSessions(activeKeys, reason) {
+    const keep = activeKeys || new Set();
+    for (const [key, session] of Array.from(multiplayer.localPartyPhysicsSessions.entries())) {
+      if (!keep.has(key)) {
+        releaseLocalPartyPhysicsSession(session.type, session.id, reason || "inactive");
+      }
+    }
   }
 
   function buildLocalPartyGadgetSnapshot(playerSnapshot, seq) {
+    if (!joinedPlayerIsolationAllows("partyInputGadgetState")) {
+      return {
+        seq,
+        sentAt: performance.now(),
+        active: false,
+        mode: "idle",
+        aimAngle: finiteOr(playerSnapshot && playerSnapshot.aimAngle, 0),
+        x: finiteOr(playerSnapshot && playerSnapshot.x, player.x),
+        y: finiteOr(playerSnapshot && playerSnapshot.y, player.y),
+        vx: finiteOr(playerSnapshot && playerSnapshot.vx, player.vx),
+        vy: finiteOr(playerSnapshot && playerSnapshot.vy, player.vy),
+        landedBodyId: 0,
+        landedThrustDirection: 0,
+        suckFactor: 1,
+        blowFactor: 1
+      };
+    }
     const state = localPartyGadgetState(playerSnapshot);
     const mode = state ? state.mode : "idle";
     const active = Boolean(state && state.active);
-    const ids = state
-      ? collectPartyGadgetIntentIds(state)
-      : { candidateIds: [], bucketIds: [] };
+    const now = performance.now();
     const landedThrustDirection = state && state.landedBodyId && (state.left || state.right) ? (state.left ? 1 : -1) : 0;
-    const authorityBodies = active || landedThrustDirection || ids.bucketIds.length
-      ? collectPartyAuthorityBodies(ids, landedThrustDirection ? state.landedBodyId : 0)
-      : [];
 
     return {
       seq,
+      sentAt: now,
       active,
       mode,
       aimAngle: finiteOr(playerSnapshot && playerSnapshot.aimAngle, 0),
@@ -8497,9 +10323,6 @@
       y: finiteOr(playerSnapshot && playerSnapshot.y, player.y),
       vx: finiteOr(playerSnapshot && playerSnapshot.vx, player.vx),
       vy: finiteOr(playerSnapshot && playerSnapshot.vy, player.vy),
-      candidateIds: ids.candidateIds,
-      bucketIds: ids.bucketIds,
-      authorityBodies,
       landedBodyId: state && state.landedBodyId ? state.landedBodyId : 0,
       landedThrustDirection,
       suckFactor: state ? state.suckFactor : 1,
@@ -8542,10 +10365,7 @@
 
   function partyInputIntervalFor(snapshot) {
     const gadget = snapshot && snapshot.gadget;
-    if (
-      (gadget && (gadget.active || gadget.landedThrustDirection || (gadget.bucketIds && gadget.bucketIds.length) || (gadget.authorityBodies && gadget.authorityBodies.length))) ||
-      partyInputMotionSharp(snapshot)
-    ) {
+    if ((gadget && (gadget.active || gadget.landedThrustDirection)) || partyInputMotionSharp(snapshot)) {
       return partyActiveInputInterval;
     }
     return partyInputInterval;
@@ -8574,18 +10394,16 @@
         gadget &&
         (
           gadget.active ||
-          gadget.landedThrustDirection ||
-          (Array.isArray(gadget.bucketIds) && gadget.bucketIds.length) ||
-          (Array.isArray(gadget.authorityBodies) && gadget.authorityBodies.length)
+          gadget.landedThrustDirection
         ) &&
-        now - finiteOr(entry.receivedAt, 0) <= partyGadgetIntentAssistMs
+        now - finiteOr(entry.receivedAt, 0) <= partyGadgetIntentFreshMs
       ) {
         return true;
       }
       if (
         remotePlayer &&
         isPartyGadgetActiveMode(remotePlayer.toolMode) &&
-        now - finiteOr(entry.receivedAt, 0) <= partyGadgetIntentAssistMs
+        now - finiteOr(entry.receivedAt, 0) <= partyGadgetIntentFreshMs
       ) {
         return true;
       }
@@ -8603,6 +10421,9 @@
     }
 
     multiplayer.partyRespawnInvulnerableTimer = Math.max(0, multiplayer.partyRespawnInvulnerableTimer - dt);
+    if (isPartySessionActive()) {
+      prunePartyPhysicsSessions(performance.now());
+    }
 
     if (!multiplayer.socket && multiplayer.reconnectTimer <= 0) {
       connectMultiplayer();
@@ -8613,7 +10434,7 @@
     }
 
     multiplayer.partyInputTimer -= dt;
-    if (multiplayer.connected && isPartySessionActive() && multiplayer.partyInputTimer <= 0) {
+    if (multiplayer.connected && isPartySessionActive() && !isMultiplayerV2Active() && joinedPlayerIsolationAllows("partyInput") && multiplayer.partyInputTimer <= 0) {
       const snapshot = buildPartyInputSnapshot(multiplayer.partyInputSeq + 1);
       const inputInterval = partyInputIntervalFor(snapshot);
       multiplayer.partyInputTimer = inputInterval;
@@ -8636,14 +10457,14 @@
     }
     if (multiplayer.connected && multiplayer.snapshotTimer <= 0) {
       multiplayer.snapshotTimer = snapshotInterval;
-      const snapshot = isSharedWorldFollower() ? buildPersistentPayload(false) : buildRealtimeSnapshot();
+      const snapshot = isMultiplayerV2Active() || isSharedWorldFollower() ? buildPersistentPayload(false) : buildRealtimeSnapshot();
       sendMultiplayer({
         type: "input",
         multiplayerOptIn: Boolean(multiplayer.friendJoinsEnabled),
         snapshot
       });
       if (isPartySessionActive()) {
-        if (isPartyHost()) {
+        if (isPartyHost() && !isMultiplayerV2Active()) {
           sendMultiplayer({
             type: "party.world.snapshot",
             snapshot
@@ -8814,7 +10635,9 @@
         rockets: Array.isArray(world.rockets) ? world.rockets.map(normalizeRocketSnapshot).filter(Boolean) : [],
         fighters: Array.isArray(world.fighters) ? world.fighters.map(normalizeFighterSnapshot).filter(Boolean) : [],
         structures: Array.isArray(world.structures) ? world.structures.map(normalizeStructureSnapshot).filter(Boolean) : [],
-        rivalProjectiles: Array.isArray(world.rivalProjectiles) ? world.rivalProjectiles.map(normalizeProjectileSnapshot).filter(Boolean) : []
+        rivalProjectiles: Array.isArray(world.rivalProjectiles) ? world.rivalProjectiles.map(normalizeProjectileSnapshot).filter(Boolean) : [],
+        techPickups: Array.isArray(world.techPickups) ? world.techPickups.map(normalizeTechPickupSnapshot).filter(Boolean) : [],
+        healthPickups: Array.isArray(world.healthPickups) ? world.healthPickups.map(normalizeHealthPickupSnapshot).filter(Boolean) : []
       }
     };
   }
@@ -8826,9 +10649,16 @@
 
     const maxHealth = clamp(finiteOr(snapshot.maxHealth, 100), 1, 100);
     const maxEnergy = clamp(finiteOr(snapshot.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
+    const energy = clamp(finiteOr(snapshot.energy, maxEnergy), 0, maxEnergy);
     const equippedTool = toolCatalog.some((tool) => tool.id === snapshot.equippedTool) ? snapshot.equippedTool : null;
     const toolMode = ["pull", "push", "hold", "fire", "idle"].includes(snapshot.toolMode) ? snapshot.toolMode : "idle";
-    const activeToolMode = equippedTool ? toolMode : "idle";
+    const activeToolMode = equippedTool && actorCanAffordMultiplayerToolMode({ energy }, equippedTool, toolMode) ? toolMode : "idle";
+    const camera = finiteOr(snapshot.cameraRoll, 0);
+    const hasAimAngle = Number.isFinite(Number(snapshot.aimAngle));
+    const hasAimLocalAngle = Number.isFinite(Number(snapshot.aimLocalAngle));
+    const aimAngle = hasAimAngle ? finiteOr(snapshot.aimAngle, 0) : finiteOr(snapshot.aimLocalAngle, 0) - camera;
+    const aimLocalAngle = hasAimLocalAngle ? finiteOr(snapshot.aimLocalAngle, 0) : null;
+    const visualAimLocalAngle = hasAimLocalAngle ? aimLocalAngle : aimAngle + camera;
     return {
       id: typeof snapshot.id === "string" ? snapshot.id : "",
       name: typeof snapshot.name === "string" ? snapshot.name : "Player",
@@ -8839,16 +10669,18 @@
       radius: finiteOr(snapshot.radius, 34),
       health: clamp(finiteOr(snapshot.health, maxHealth), 0, maxHealth),
       maxHealth,
-      energy: clamp(finiteOr(snapshot.energy, maxEnergy), 0, maxEnergy),
+      energy,
       maxEnergy,
       landed: normalizeLandingSnapshot(snapshot.landed),
       walkCycle: finiteOr(snapshot.walkCycle, snapshot.landed && snapshot.landed.walkCycle),
-      cameraRoll: finiteOr(snapshot.cameraRoll, 0),
+      cameraRoll: camera,
       hasCommunicationRelay: Boolean(snapshot.hasCommunicationRelay),
-      aimAngle: finiteOr(snapshot.aimAngle, finiteOr(snapshot.aimLocalAngle, 0) - finiteOr(snapshot.cameraRoll, 0)),
+      aimAngle,
+      aimLocalAngle,
+      visualAimLocalAngle,
       equippedTool,
       toolMode: activeToolMode,
-      toolActive: Boolean(equippedTool && (snapshot.toolActive || activeToolMode !== "idle")),
+      toolActive: Boolean(equippedTool && activeToolMode !== "idle" && (snapshot.toolActive || activeToolMode !== "idle")),
       moving: Boolean(snapshot.moving),
       crouching: Boolean(snapshot.crouching)
     };
@@ -8875,7 +10707,9 @@
       return remote.snapshot;
     }
 
-    const renderAt = now - remoteSnapshotRenderDelay;
+    const renderDelay = isMultiplayerV2Active() ? multiplayerV2RemoteSnapshotRenderDelay : remoteSnapshotRenderDelay;
+    const extrapolateLimit = isMultiplayerV2Active() ? multiplayerV2RemoteSnapshotExtrapolateLimit : remoteSnapshotExtrapolateLimit;
+    const renderAt = now - renderDelay;
     let previousFrame = null;
     let nextFrame = null;
 
@@ -8894,7 +10728,7 @@
     }
 
     if (!nextFrame) {
-      const lead = clamp(renderAt - previousFrame.receivedAt, 0, remoteSnapshotExtrapolateLimit);
+      const lead = clamp(renderAt - previousFrame.receivedAt, 0, extrapolateLimit);
       return interpolateRemoteSnapshot(previousFrame.snapshot, previousFrame.snapshot, 1, lead);
     }
 
@@ -8917,7 +10751,7 @@
         toSnapshot && toSnapshot.player,
         progress,
         lead,
-        { angleKeys: ["cameraRoll", "aimAngle"], scalarKeys: ["radius", "health", "maxHealth", "energy", "maxEnergy", "walkCycle"] }
+        { angleKeys: ["cameraRoll", "aimAngle", "aimLocalAngle", "visualAimLocalAngle"], scalarKeys: ["radius", "health", "maxHealth", "energy", "maxEnergy", "walkCycle"] }
       ),
       world: {
         particles: interpolateRemoteEntityList(fromWorld.particles, toWorld.particles, progress, lead, {
@@ -8957,6 +10791,13 @@
         }),
         rivalProjectiles: interpolateRemoteEntityList(fromWorld.rivalProjectiles, toWorld.rivalProjectiles, progress, lead, {
           scalarKeys: ["radius", "length", "life", "maxLife"]
+        }),
+        techPickups: interpolateRemoteEntityList(fromWorld.techPickups, toWorld.techPickups, progress, lead, {
+          angleKeys: ["rotation"],
+          scalarKeys: ["radius", "life", "maxLife"]
+        }),
+        healthPickups: interpolateRemoteEntityList(fromWorld.healthPickups, toWorld.healthPickups, progress, lead, {
+          scalarKeys: ["radius", "heal", "life", "maxLife"]
         })
       }
     };
@@ -9103,64 +10944,76 @@
       .concat(world.fighters || []);
   }
 
-  function collectRemoteSharedBodies() {
-    const bodies = [];
+  let remoteContactCache = null;
 
+  function remoteContactCacheForFrame() {
+    const now = performance.now();
+    if (
+      remoteContactCache &&
+      remoteContactCache.time === now &&
+      remoteContactCache.remoteCount === multiplayer.remoteUniverses.size
+    ) {
+      return remoteContactCache;
+    }
+
+    const sharedBodies = [];
+    const combatPlayers = [];
     for (const remote of multiplayer.remoteUniverses.values()) {
       if (!isRemoteUniverseInteractive(remote)) {
         continue;
       }
 
       const snapshot = displaySnapshotFor(remote);
-      const world = snapshot && snapshot.world ? snapshot.world : null;
-      if (!world || !Array.isArray(world.particles)) {
+      const transform = displayTransformFor(remote);
+      if (!snapshot || !transform) {
         continue;
       }
 
-      const transform = displayTransformFor(remote);
-      for (const particle of world.particles || []) {
-        if (!isMappedBody(particle)) {
-          continue;
-        }
+      const world = snapshot.world || {};
+      if (Array.isArray(world.particles)) {
+        for (const particle of world.particles) {
+          if (!isMappedBody(particle)) {
+            continue;
+          }
 
-        const body = transformedRemoteEntity(particle, transform);
-        if (Math.hypot(body.x - player.x, body.y - player.y) > multiplayer.bubbleRadius + 1800) {
-          continue;
-        }
+          const body = transformedRemoteEntity(particle, transform);
+          if (Math.hypot(body.x - player.x, body.y - player.y) > multiplayer.bubbleRadius + 1800) {
+            continue;
+          }
 
-        bodies.push({
+          sharedBodies.push({
+            remote,
+            source: particle,
+            body
+          });
+        }
+      }
+
+      if (snapshot.player && snapshot.player.health > 0) {
+        combatPlayers.push({
+          local: false,
           remote,
-          source: particle,
-          body
+          player: transformedRemoteEntity(snapshot.player, transform),
+          publicName: remote.publicName || snapshot.player.name || "Contact"
         });
       }
     }
 
-    return bodies;
+    remoteContactCache = {
+      time: now,
+      remoteCount: multiplayer.remoteUniverses.size,
+      sharedBodies,
+      combatPlayers
+    };
+    return remoteContactCache;
+  }
+
+  function collectRemoteSharedBodies() {
+    return remoteContactCacheForFrame().sharedBodies;
   }
 
   function collectRemoteCombatPlayers() {
-    const targets = [];
-
-    for (const remote of multiplayer.remoteUniverses.values()) {
-      if (!isRemoteUniverseInteractive(remote)) {
-        continue;
-      }
-
-      const snapshot = displaySnapshotFor(remote);
-      if (!snapshot || !snapshot.player || snapshot.player.health <= 0) {
-        continue;
-      }
-
-      targets.push({
-        local: false,
-        remote,
-        player: transformedRemoteEntity(snapshot.player, displayTransformFor(remote)),
-        publicName: remote.publicName || snapshot.player.name || "Contact"
-      });
-    }
-
-    return targets;
+    return remoteContactCacheForFrame().combatPlayers;
   }
 
   function collectCombatPlayerTargets() {
@@ -9215,6 +11068,9 @@
     if (!isSharedWorldFollower() || !multiplayer.partyHostId || !effect) {
       return;
     }
+    if (!joinedPlayerIsolationAllows("relayHostEntityEffects")) {
+      return;
+    }
 
     sendMultiplayer({
       type: "entity.effect",
@@ -9252,6 +11108,7 @@
     const aim = getAim();
     const funnel = getFunnel(aim);
     const suctionActive = canUseSuctionControls() && isGadgetButtonPressed();
+    const localGadgetState = suctionActive ? localGadgetStateForFrame(aim, funnel) : null;
 
     for (const remote of multiplayer.remoteUniverses.values()) {
       const snapshot = displaySnapshotFor(remote);
@@ -9259,7 +11116,7 @@
         continue;
       }
 
-      if (suctionActive && applyRemoteGadgetEffect(remote, aim, funnel, dt)) {
+      if (suctionActive && applyRemoteGadgetEffect(remote, localGadgetState, dt)) {
         multiplayer.effectTimer = remoteEffectInterval;
         return;
       }
@@ -9271,18 +11128,22 @@
     }
   }
 
-  function applyRemoteGadgetEffect(remote, aim, funnel, dt) {
+  function applyRemoteGadgetEffect(remote, localGadgetState, dt) {
     const snapshot = displaySnapshotFor(remote);
     const particlesSnapshot = snapshot && snapshot.world ? snapshot.world.particles || [] : [];
+    const transform = displayTransformFor(remote);
     for (const particle of particlesSnapshot) {
       if (!isMappedBody(particle)) {
         continue;
       }
 
-      const localBody = transformedRemoteEntity(particle, displayTransformFor(remote));
+      const localBody = transformedRemoteEntity(particle, transform);
+      if (!gadgetStateMayReachTarget(localGadgetState, localBody, 0)) {
+        continue;
+      }
       const beforeVx = localBody.vx;
       const beforeVy = localBody.vy;
-      applyGadgetForces(localBody, aim, funnel, dt);
+      applyActorGadgetForces(localBody, localGadgetState, dt);
 
       const impulseX = localBody.vx - beforeVx;
       const impulseY = localBody.vy - beforeVy;
@@ -9293,6 +11154,7 @@
       sendRemoteEntityEffect(remote, {
         entityType: "particle",
         entityId: particle.id,
+        sourceKind: "gadget",
         impulseX,
         impulseY
       });
@@ -9304,10 +11166,13 @@
         continue;
       }
 
-      const localMob = transformedRemoteEntity(mob, displayTransformFor(remote));
+      const localMob = transformedRemoteEntity(mob, transform);
+      if (!gadgetStateMayReachTarget(localGadgetState, localMob, 0)) {
+        continue;
+      }
       const beforeVx = localMob.vx;
       const beforeVy = localMob.vy;
-      applyGadgetForces(localMob, aim, funnel, dt);
+      applyActorGadgetForces(localMob, localGadgetState, dt);
 
       const impulseX = localMob.vx - beforeVx;
       const impulseY = localMob.vy - beforeVy;
@@ -9318,6 +11183,7 @@
       sendRemoteEntityEffect(remote, {
         entityType: mob.kind,
         entityId: mob.id,
+        sourceKind: "gadget",
         impulseX,
         impulseY
       });
@@ -9380,6 +11246,7 @@
         sendRemoteEntityEffect(remote, {
           entityType: mob.kind,
           entityId: mob.id,
+          sourceKind: "player",
           damage: laser.damage || playerWeaponDefaults.damage,
           impulseX: dirX * (laser.knockback || playerWeaponDefaults.knockback),
           impulseY: dirY * (laser.knockback || playerWeaponDefaults.knockback),
@@ -9409,11 +11276,14 @@
       }
 
       const remotePlayer = transformedRemoteEntity(snapshot.player, transform);
-      const playerDist = distanceToSegment(remotePlayer.x, remotePlayer.y, tailX, tailY, laser.x, laser.y);
+      const playerDist = distanceToPlayerHurtboxSegment(remotePlayer, tailX, tailY, laser.x, laser.y);
 
-      if (canDamageRemotePlayer(remote) && playerDist < (remotePlayer.radius || 34) * 0.72 + laser.radius) {
+      if (canDamageRemotePlayer(remote) && playerDist < (remotePlayer.radius || 34) * playerProjectileHurtboxScale + laser.radius) {
         sendRemoteEntityEffect(remote, {
           entityType: "player",
+          sourceKind: "player",
+          pvpOnly: true,
+          cause: "Contact fire",
           damage: laser.damage || playerWeaponDefaults.damage,
           impulseX: dirX * (laser.knockback || playerWeaponDefaults.knockback),
           impulseY: dirY * (laser.knockback || playerWeaponDefaults.knockback),
@@ -9451,7 +11321,7 @@
     const toolDisable = Math.max(0, finiteOr(effect.toolDisable, 0));
 
     if (effect.entityType === "player") {
-      if ((damage > 0 || toolDisable > 0) && !canReceiveDamageFromPlayer(message.fromPlayerId, message.fromTeamId)) {
+      if (!canReceiveRemotePlayerEffect(message, effect)) {
         return;
       }
       if (multiplayer.partyRespawnInvulnerableTimer > 0 && damage > 0) {
@@ -9464,11 +11334,11 @@
       player.vy += impulseY;
       if (damage > 0 && player.hitCooldown <= 0) {
         damageLocalPlayer(damage, {
-          cause: "Contact fire",
+          cause: remoteEffectCause(effect, normalizeEntityEffectSourceKind(effect) === "mob" ? "Hostile contact" : "Contact fire"),
           cooldown: 0.7,
           flash: 0.3
         });
-        maybeNotifyText("Hull hit by " + (message.fromPlayerId || "a contact") + ".");
+        maybeNotifyText("Hull hit by " + remoteEffectCause(effect, message.fromPlayerId || "a contact") + ".");
       }
       if (toolDisable > 0) {
         jamLocalPlayerTools(toolDisable);
@@ -9532,13 +11402,7 @@
 
   function buildPersistentPayload(includeWorld) {
     const aim = getAim();
-    const toolMode = areToolsDisabled()
-      ? "idle"
-      : isWeaponTool(equippedToolId)
-      ? mouse.left && hasPlayerEnergy() ? "fire" : "idle"
-      : canUseSuctionControls()
-      ? mouse.middle ? "hold" : mouse.left ? "pull" : mouse.right ? "push" : "idle"
-      : "idle";
+    const toolMode = multiplayerLocalToolModeForInput();
     const payload = {
       playerId: player.id,
       player: {
@@ -9587,6 +11451,7 @@
         structures: structures.map(serializeStructure),
         rivalProjectiles: rivalProjectiles.map(serializeProjectile),
         techPickups: techPickups.map(serializeTechPickup),
+        healthPickups: healthPickups.map(serializeHealthPickup),
         starDust: starDust.map(serializeStar),
         nextParticleId,
         nextAlienoidId: nextRivalId,
@@ -9599,6 +11464,7 @@
         nextStructureId,
         nextRivalProjectileId,
         nextTechPickupId,
+        nextHealthPickupId,
         difficulty: runState.difficultyId,
         mobSpawnTimers: { ...mobSpawnTimers },
         mobDefeatsByKind: { ...mobDefeatsByKind }
@@ -9660,7 +11526,7 @@
     const alienoidSnapshots = Array.isArray(snapshot.alienoids) ? snapshot.alienoids : snapshot.rivals;
     if (Array.isArray(alienoidSnapshots)) {
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(rivals, alienoidSnapshots, normalizeRivalSnapshot);
+        applySmoothedEntitySnapshots(rivals, alienoidSnapshots, normalizeRivalSnapshot, { entityType: "alienoid" });
       } else {
         rivals.length = 0;
         rivals.push(...alienoidSnapshots.map(normalizeRivalSnapshot).filter(Boolean));
@@ -9669,7 +11535,7 @@
 
     if (Array.isArray(snapshot.ufos)) {
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(ufos, snapshot.ufos, normalizeUfoSnapshot);
+        applySmoothedEntitySnapshots(ufos, snapshot.ufos, normalizeUfoSnapshot, { entityType: "ufo" });
       } else {
         ufos.length = 0;
         ufos.push(...snapshot.ufos.map(normalizeUfoSnapshot).filter(Boolean));
@@ -9678,7 +11544,7 @@
 
     if (Array.isArray(snapshot.rambots)) {
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(rambots, snapshot.rambots, normalizeRambotSnapshot);
+        applySmoothedEntitySnapshots(rambots, snapshot.rambots, normalizeRambotSnapshot, { entityType: "rambot" });
       } else {
         rambots.length = 0;
         rambots.push(...snapshot.rambots.map(normalizeRambotSnapshot).filter(Boolean));
@@ -9687,7 +11553,7 @@
 
     if (Array.isArray(snapshot.engineers)) {
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(engineers, snapshot.engineers, normalizeEngineerSnapshot);
+        applySmoothedEntitySnapshots(engineers, snapshot.engineers, normalizeEngineerSnapshot, { entityType: "engineer" });
       } else {
         engineers.length = 0;
         engineers.push(...snapshot.engineers.map(normalizeEngineerSnapshot).filter(Boolean));
@@ -9696,7 +11562,7 @@
 
     if (Array.isArray(snapshot.teslas)) {
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(teslas, snapshot.teslas, normalizeTeslaSnapshot);
+        applySmoothedEntitySnapshots(teslas, snapshot.teslas, normalizeTeslaSnapshot, { entityType: "tesla" });
       } else {
         teslas.length = 0;
         teslas.push(...snapshot.teslas.map(normalizeTeslaSnapshot).filter(Boolean));
@@ -9705,7 +11571,7 @@
 
     if (Array.isArray(snapshot.rockets)) {
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(rockets, snapshot.rockets, normalizeRocketSnapshot);
+        applySmoothedEntitySnapshots(rockets, snapshot.rockets, normalizeRocketSnapshot, { entityType: "rocket" });
       } else {
         rockets.length = 0;
         rockets.push(...snapshot.rockets.map(normalizeRocketSnapshot).filter(Boolean));
@@ -9714,7 +11580,7 @@
 
     if (Array.isArray(snapshot.fighters)) {
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(fighters, snapshot.fighters, normalizeFighterSnapshot);
+        applySmoothedEntitySnapshots(fighters, snapshot.fighters, normalizeFighterSnapshot, { entityType: "fighter" });
       } else {
         fighters.length = 0;
         fighters.push(...snapshot.fighters.map(normalizeFighterSnapshot).filter(Boolean));
@@ -9728,7 +11594,7 @@
 
     if (Array.isArray(snapshot.rivalProjectiles)) {
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(rivalProjectiles, snapshot.rivalProjectiles, normalizeProjectileSnapshot, { snapDistance: 520 });
+        applySmoothedEntitySnapshots(rivalProjectiles, snapshot.rivalProjectiles, normalizeProjectileSnapshot, { snapDistance: 520, entityType: "rivalProjectile" });
       } else {
         rivalProjectiles.length = 0;
         rivalProjectiles.push(...snapshot.rivalProjectiles.map(normalizeProjectileSnapshot).filter(Boolean));
@@ -9738,10 +11604,20 @@
     if (Array.isArray(snapshot.techPickups)) {
       const pickupSnapshots = snapshot.techPickups.filter((pickup) => !multiplayer.claimedTechPickupIds.has(String(pickup && pickup.id)));
       if (shouldSmoothWorldEntities(options)) {
-        applySmoothedEntitySnapshots(techPickups, pickupSnapshots, normalizeTechPickupSnapshot, { snapDistance: 520 });
+        applySmoothedEntitySnapshots(techPickups, pickupSnapshots, normalizeTechPickupSnapshot, { snapDistance: 520, entityType: "techPickup" });
       } else {
         techPickups.length = 0;
         techPickups.push(...pickupSnapshots.map(normalizeTechPickupSnapshot).filter(Boolean));
+      }
+    }
+
+    if (Array.isArray(snapshot.healthPickups)) {
+      const pickupSnapshots = snapshot.healthPickups.filter((pickup) => !multiplayer.claimedHealthPickupIds.has(String(pickup && pickup.id)));
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(healthPickups, pickupSnapshots, normalizeHealthPickupSnapshot, { snapDistance: 520, entityType: "healthPickup" });
+      } else {
+        healthPickups.length = 0;
+        healthPickups.push(...pickupSnapshots.map(normalizeHealthPickupSnapshot).filter(Boolean));
       }
     }
 
@@ -9788,6 +11664,10 @@
     nextTechPickupId = Math.max(
       Number(snapshot.nextTechPickupId) || 1,
       techPickups.reduce((largest, pickup) => Math.max(largest, finiteOr(pickup.id, 0) + 1), 1)
+    );
+    nextHealthPickupId = Math.max(
+      Number(snapshot.nextHealthPickupId) || 1,
+      healthPickups.reduce((largest, pickup) => Math.max(largest, finiteOr(pickup.id, 0) + 1), 1)
     );
 
     applyMobSpawnTimers(snapshot.mobSpawnTimers);
@@ -9846,11 +11726,29 @@
 
     const now = performance.now();
     const nextParticles = [];
+    const seenIds = new Set();
     for (const incoming of normalized) {
       const existing = existingById.get(incoming.id);
       if (!existing) {
         markParticleSmoothingTarget(incoming, incoming, now);
         nextParticles.push(incoming);
+        seenIds.add(incoming.id);
+        continue;
+      }
+
+      seenIds.add(incoming.id);
+      if (hasLocalPartyPhysicsSession("particle", existing.id, now)) {
+        const displayX = existing.x;
+        const displayY = existing.y;
+        const displayVx = existing.vx;
+        const displayVy = existing.vy;
+        Object.assign(existing, incoming);
+        existing.x = displayX;
+        existing.y = displayY;
+        existing.vx = displayVx;
+        existing.vy = displayVy;
+        markParticleSmoothingTarget(existing, incoming, now);
+        nextParticles.push(existing);
         continue;
       }
 
@@ -9875,6 +11773,12 @@
       nextParticles.push(existing);
     }
 
+    for (const particle of particles) {
+      if (!seenIds.has(particle.id) && hasLocalPartyPhysicsSession("particle", particle.id, now)) {
+        clearLocalPartyPhysicsSession("particle", particle.id);
+      }
+    }
+
     particles.length = 0;
     particles.push(...nextParticles);
   }
@@ -9894,12 +11798,31 @@
 
     const now = performance.now();
     const snapDistance = options && Number.isFinite(Number(options.snapDistance)) ? Number(options.snapDistance) : 900;
+    const entityType = options && options.entityType ? normalizePartyEntityType(options.entityType) : "";
     const nextEntities = [];
+    const seenIds = new Set();
     for (const incoming of normalized) {
       const existing = existingById.get(String(incoming.id));
       if (!existing) {
         markEntitySmoothingTarget(incoming, incoming, now);
         nextEntities.push(incoming);
+        seenIds.add(String(incoming.id));
+        continue;
+      }
+
+      seenIds.add(String(incoming.id));
+      if (entityType && hasLocalPartyPhysicsSession(entityType, incoming.id, now)) {
+        const displayX = existing.x;
+        const displayY = existing.y;
+        const displayVx = existing.vx;
+        const displayVy = existing.vy;
+        Object.assign(existing, incoming);
+        existing.x = displayX;
+        existing.y = displayY;
+        existing.vx = displayVx;
+        existing.vy = displayVy;
+        markEntitySmoothingTarget(existing, incoming, now);
+        nextEntities.push(existing);
         continue;
       }
 
@@ -9917,6 +11840,20 @@
       existing.vy = displayVy;
       markEntitySmoothingTarget(existing, incoming, now);
       nextEntities.push(existing);
+    }
+
+    if (entityType) {
+      for (const entity of collection) {
+        if (
+          entity &&
+          entity.id !== undefined &&
+          entity.id !== null &&
+          !seenIds.has(String(entity.id)) &&
+          hasLocalPartyPhysicsSession(entityType, entity.id, now)
+        ) {
+          clearLocalPartyPhysicsSession(entityType, entity.id);
+        }
+      }
     }
 
     collection.length = 0;
@@ -9957,6 +11894,9 @@
     const now = performance.now();
 
     for (const particle of particles) {
+      if (hasLocalPartyPhysicsSession("particle", particle.id, now)) {
+        continue;
+      }
       if (!Number.isFinite(particle._partyTargetX) || !Number.isFinite(particle._partyTargetY)) {
         continue;
       }
@@ -9987,15 +11927,16 @@
       particle.y += (targetY - particle.y) * positionBlend * correctionScale;
     }
 
-    updateSmoothedEntityCollection(rivals, dt, { positionBlend, velocityBlend });
-    updateSmoothedEntityCollection(ufos, dt, { positionBlend, velocityBlend });
-    updateSmoothedEntityCollection(rambots, dt, { positionBlend, velocityBlend });
-    updateSmoothedEntityCollection(engineers, dt, { positionBlend, velocityBlend });
-    updateSmoothedEntityCollection(teslas, dt, { positionBlend, velocityBlend });
-    updateSmoothedEntityCollection(rockets, dt, { positionBlend, velocityBlend });
-    updateSmoothedEntityCollection(fighters, dt, { positionBlend, velocityBlend });
-    updateSmoothedEntityCollection(rivalProjectiles, dt, { positionBlend, velocityBlend, tickLife: true, maxAge: 0.12, snapDistance: 520 });
-    updateSmoothedEntityCollection(techPickups, dt, { positionBlend, velocityBlend, tickLife: true, tickRotation: true, maxAge: 0.18, snapDistance: 520 });
+    updateSmoothedEntityCollection(rivals, dt, { positionBlend, velocityBlend, entityType: "alienoid" });
+    updateSmoothedEntityCollection(ufos, dt, { positionBlend, velocityBlend, entityType: "ufo" });
+    updateSmoothedEntityCollection(rambots, dt, { positionBlend, velocityBlend, entityType: "rambot" });
+    updateSmoothedEntityCollection(engineers, dt, { positionBlend, velocityBlend, entityType: "engineer" });
+    updateSmoothedEntityCollection(teslas, dt, { positionBlend, velocityBlend, entityType: "tesla" });
+    updateSmoothedEntityCollection(rockets, dt, { positionBlend, velocityBlend, entityType: "rocket" });
+    updateSmoothedEntityCollection(fighters, dt, { positionBlend, velocityBlend, entityType: "fighter" });
+    updateSmoothedEntityCollection(rivalProjectiles, dt, { positionBlend, velocityBlend, tickLife: true, maxAge: 0.12, snapDistance: 520, entityType: "rivalProjectile" });
+    updateSmoothedEntityCollection(techPickups, dt, { positionBlend, velocityBlend, tickLife: true, tickRotation: true, maxAge: 0.18, snapDistance: 520, entityType: "techPickup" });
+    updateSmoothedEntityCollection(healthPickups, dt, { positionBlend, velocityBlend, tickLife: true, maxAge: 0.18, snapDistance: 520, entityType: "healthPickup" });
   }
 
   function updateFollowerGadgetPrediction(dt) {
@@ -10006,18 +11947,29 @@
     const snapshot = buildPersistentPayload(false);
     const state = localPartyGadgetState(snapshot.player);
     if (!state) {
+      releaseMissingLocalPartyPhysicsSessions(new Set(), "inactive");
       return;
     }
 
     const now = performance.now();
     const controlledBodyIds = new Set();
+    const activeEntityKeys = new Set();
+    const predictionState = state;
+    const authorityOptions = {
+      actor: snapshot.player,
+      mode: state.mode,
+      active: state.active
+    };
     if (state.landedBodyId && (state.left || state.right)) {
       const body = bodyById(state.landedBodyId);
       const direction = state.left ? 1 : -1;
       const strengthFactor = state.left ? state.suckFactor : state.blowFactor;
       if (applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor)) {
+        integrateFollowerPredictedEntity(body, dt);
         controlledBodyIds.add(body.id);
         markFollowerPredictedParticle(body, now);
+        markLocalPartyPhysicsSession("particle", body, now, authorityOptions);
+        activeEntityKeys.add(partyEntityKey("particle", body.id));
       }
     }
 
@@ -10025,22 +11977,61 @@
       if (!partyGadgetCanAffectParticle(state, particle)) {
         continue;
       }
+      if (!gadgetStateMayReachTarget(predictionState, particle, 24)) {
+        continue;
+      }
 
-      const probe = partyGadgetParticleProbe(state, particle, { padding: 24 });
-      let predicted = false;
+      const probe = partyGadgetParticleProbe(predictionState, particle, { padding: 24 });
+      let forcePredicted = false;
+      let bucketPredicted = false;
       if (state.active && probe.force) {
-        predicted = applyActorGadgetForces(particle, state, dt) || predicted;
+        forcePredicted = applyActorGadgetForces(particle, predictionState, dt) || forcePredicted;
+      }
+      if (forcePredicted) {
+        integrateFollowerPredictedEntity(particle, dt);
       }
       if (probe.bucket) {
-        resolveActorFunnelBucket(particle, state, dt);
-        predicted = true;
+        bucketPredicted = resolveActorFunnelBucket(particle, predictionState, dt) || bucketPredicted;
       }
-      if (predicted) {
+      if (forcePredicted || bucketPredicted) {
         controlledBodyIds.add(particle.id);
         markFollowerPredictedParticle(particle, now);
       }
+      if (forcePredicted) {
+        markLocalPartyPhysicsSession("particle", particle, now, authorityOptions);
+        activeEntityKeys.add(partyEntityKey("particle", particle.id));
+      }
     }
 
+    const predictPickup = (type, pickup) => {
+      if (!pickup) {
+        return;
+      }
+      const key = partyEntityKey(type, pickup.id);
+      if (!gadgetStateMayReachTarget(predictionState, pickup, 18)) {
+        return;
+      }
+      const probe = partyGadgetParticleProbe(predictionState, pickup, { padding: 18 });
+      if (!state.active || !probe.force) {
+        return;
+      }
+      if (applyActorGadgetForces(pickup, predictionState, dt, { captureInFunnel: false })) {
+        integrateFollowerPredictedEntity(pickup, dt);
+        markLocalPartyPhysicsSession(type, pickup, now, authorityOptions);
+        if (key) {
+          activeEntityKeys.add(key);
+        }
+      }
+    };
+
+    for (const pickup of techPickups) {
+      predictPickup("techPickup", pickup);
+    }
+    for (const pickup of healthPickups) {
+      predictPickup("healthPickup", pickup);
+    }
+
+    releaseMissingLocalPartyPhysicsSessions(activeEntityKeys, "inactive");
     resolveFollowerControlledBodyCollisions(controlledBodyIds);
   }
 
@@ -10095,9 +12086,13 @@
     const velocityBlend = options && Number.isFinite(Number(options.velocityBlend)) ? Number(options.velocityBlend) : 1 - Math.pow(0.0015, dt);
     const maxAge = options && Number.isFinite(Number(options.maxAge)) ? Number(options.maxAge) : 0.18;
     const snapDistance = options && Number.isFinite(Number(options.snapDistance)) ? Number(options.snapDistance) : 900;
+    const entityType = options && options.entityType ? normalizePartyEntityType(options.entityType) : "";
     const now = performance.now();
 
     for (const entity of collection) {
+      if (entityType && hasLocalPartyPhysicsSession(entityType, entity.id, now)) {
+        continue;
+      }
       if (!Number.isFinite(entity._partyTargetX) || !Number.isFinite(entity._partyTargetY)) {
         continue;
       }
@@ -10131,6 +12126,38 @@
       entity.x += (targetX - entity.x) * positionBlend;
       entity.y += (targetY - entity.y) * positionBlend;
     }
+  }
+
+  function integrateFollowerPredictedEntity(entity, dt) {
+    if (!entity) {
+      return false;
+    }
+
+    if (entity.tier) {
+      if (entity.gadgetStabilized && length(entity.vx, entity.vy) > gadgetStabilizedBreakSpeed) {
+        entity.gadgetStabilized = false;
+      }
+      if (!entity.gadgetStabilized || !entity.tier.solid) {
+        entity.vx += Math.sin(finiteOr(entity.wobble, 0) + performance.now() * 0.0007) * 4 * dt;
+        entity.vy += Math.cos(finiteOr(entity.wobble, 0) * 1.7 + performance.now() * 0.0006) * 4 * dt;
+      }
+      const dragBase = entity.tier.solid
+        ? clamp(0.9 + Math.log10(Math.max(10, finiteOr(entity.mass, 1))) * 0.014, 0.9, 0.955)
+        : 0.82;
+      entity.vx *= Math.pow(dragBase, dt);
+      entity.vy *= Math.pow(dragBase, dt);
+      if (entity.gadgetStabilized && entity.tier.solid && length(entity.vx, entity.vy) <= gadgetStabilizedBreakSpeed) {
+        entity.vx = 0;
+        entity.vy = 0;
+      }
+    } else {
+      entity.vx *= Math.pow(0.9, dt);
+      entity.vy *= Math.pow(0.9, dt);
+    }
+
+    entity.x += finiteOr(entity.vx, 0) * dt;
+    entity.y += finiteOr(entity.vy, 0) * dt;
+    return true;
   }
 
   function serializeRival(rival) {
@@ -10340,6 +12367,21 @@
       life: pickup.life,
       maxLife: pickup.maxLife,
       rotation: pickup.rotation,
+      wobble: pickup.wobble
+    };
+  }
+
+  function serializeHealthPickup(pickup) {
+    return {
+      id: pickup.id,
+      x: pickup.x,
+      y: pickup.y,
+      vx: pickup.vx,
+      vy: pickup.vy,
+      radius: pickup.radius,
+      heal: pickup.heal,
+      life: pickup.life,
+      maxLife: pickup.maxLife,
       wobble: pickup.wobble
     };
   }
@@ -10766,6 +12808,25 @@
     };
   }
 
+  function normalizeHealthPickupSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+
+    return {
+      id: Math.max(1, Math.floor(finiteOr(snapshot.id, nextHealthPickupId))),
+      x: finiteOr(snapshot.x, 0),
+      y: finiteOr(snapshot.y, 0),
+      vx: finiteOr(snapshot.vx, 0),
+      vy: finiteOr(snapshot.vy, 0),
+      radius: finiteOr(snapshot.radius, 14),
+      heal: clamp(finiteOr(snapshot.heal, healthPickupHeal), 1, 100),
+      life: clamp(finiteOr(snapshot.life, healthPickupLifetime), 0, healthPickupLifetime),
+      maxLife: Math.max(0.1, finiteOr(snapshot.maxLife, healthPickupLifetime)),
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
+    };
+  }
+
   function normalizeStarSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== "object") {
       return null;
@@ -10846,46 +12907,103 @@
     return 3;
   }
 
+  function addUniquePlayerAnchor(anchors, seenPlayerIds, anchor) {
+    if (!anchor || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
+      return;
+    }
+
+    const playerId = String(anchor.playerId || "");
+    if (playerId) {
+      if (seenPlayerIds.has(playerId)) {
+        return;
+      }
+      seenPlayerIds.add(playerId);
+    }
+
+    anchors.push({
+      x: anchor.x,
+      y: anchor.y,
+      vx: finiteOr(anchor.vx, 0),
+      vy: finiteOr(anchor.vy, 0),
+      playerId
+    });
+  }
+
+  function addRemoteUniversePlayerAnchors(anchors, seenPlayerIds) {
+    if (!multiplayer.remoteUniverses.size) {
+      return;
+    }
+
+    const now = performance.now();
+    for (const remote of multiplayer.remoteUniverses.values()) {
+      if (!remote || now - finiteOr(remote.seenAt, 0) > 2200) {
+        continue;
+      }
+
+      const transform = displayTransformFor(remote);
+      if (!transform || transform.alpha <= 0.02) {
+        continue;
+      }
+
+      const snapshot = displaySnapshotFor(remote);
+      const remotePlayer = normalizeRemotePlayerSnapshot(snapshot && snapshot.player);
+      if (!remotePlayer || remotePlayer.health <= 0) {
+        continue;
+      }
+
+      const transformed = transformedRemoteEntity(remotePlayer, transform);
+      addUniquePlayerAnchor(anchors, seenPlayerIds, {
+        x: transformed.x,
+        y: transformed.y,
+        vx: transformed.vx,
+        vy: transformed.vy,
+        playerId: remote.playerId || remotePlayer.id
+      });
+    }
+  }
+
   function activePartyPlayerAnchors() {
-    const anchors = [{
+    const anchors = [];
+    const seenPlayerIds = new Set();
+    addUniquePlayerAnchor(anchors, seenPlayerIds, {
       x: player.x,
       y: player.y,
       vx: player.vx,
       vy: player.vy,
       playerId: player.id
-    }];
+    });
 
-    if (!isPartyHost() || !multiplayer.partyPlayerSnapshots.size) {
-      return anchors;
+    if (isPartyHost() && multiplayer.partyPlayerSnapshots.size) {
+      const now = performance.now();
+      for (const [playerId, entry] of multiplayer.partyPlayerSnapshots) {
+        if (!entry || now - finiteOr(entry.receivedAt, 0) > 2200) {
+          continue;
+        }
+
+        const source = entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : {};
+        const remotePlayer = normalizeRemotePlayerSnapshot(source.player || source);
+        if (!remotePlayer || remotePlayer.health <= 0) {
+          continue;
+        }
+        addUniquePlayerAnchor(anchors, seenPlayerIds, {
+          x: remotePlayer.x,
+          y: remotePlayer.y,
+          vx: remotePlayer.vx,
+          vy: remotePlayer.vy,
+          playerId
+        });
+      }
     }
 
-    const now = performance.now();
-    for (const [playerId, entry] of multiplayer.partyPlayerSnapshots) {
-      if (!entry || now - finiteOr(entry.receivedAt, 0) > 2200) {
-        continue;
-      }
-
-      const source = entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : {};
-      const remotePlayer = normalizeRemotePlayerSnapshot(source.player || source);
-      if (!remotePlayer) {
-        continue;
-      }
-      anchors.push({
-        x: remotePlayer.x,
-        y: remotePlayer.y,
-        vx: remotePlayer.vx,
-        vy: remotePlayer.vy,
-        playerId
-      });
-    }
-
+    addRemoteUniversePlayerAnchors(anchors, seenPlayerIds);
     return anchors;
   }
 
   function activeMobSpawnAnchors() {
     const anchors = [];
+    const seenPlayerIds = new Set();
     if (!deathState.active && player.health > 0) {
-      anchors.push({
+      addUniquePlayerAnchor(anchors, seenPlayerIds, {
         x: player.x,
         y: player.y,
         vx: player.vx,
@@ -10909,7 +13027,7 @@
         if (!remotePlayer || remotePlayer.health <= 0) {
           continue;
         }
-        anchors.push({
+        addUniquePlayerAnchor(anchors, seenPlayerIds, {
           x: remotePlayer.x,
           y: remotePlayer.y,
           vx: remotePlayer.vx,
@@ -10919,8 +13037,10 @@
       }
     }
 
+    addRemoteUniversePlayerAnchors(anchors, seenPlayerIds);
+
     if (!anchors.length) {
-      anchors.push({
+      addUniquePlayerAnchor(anchors, seenPlayerIds, {
         x: player.x,
         y: player.y,
         vx: player.vx,
@@ -10936,11 +13056,7 @@
     const source = Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors();
     const counts = source.map(() => 0);
 
-    for (const mob of allCombatMobs()) {
-      if (!mob || mob.health <= 0) {
-        continue;
-      }
-
+    for (const mob of liveMobsForSpawnPlacement()) {
       let bestIndex = 0;
       let bestDistance = Infinity;
       for (let i = 0; i < source.length; i += 1) {
@@ -10963,6 +13079,33 @@
     return candidates[Math.floor(Math.random() * candidates.length)] || source[0] || player;
   }
 
+  function effectiveMobAnchorCount(anchors) {
+    const source = Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors();
+    const clusterRadius = particleDensityRadius() * 0.95;
+    const clusters = [];
+
+    for (const anchor of source) {
+      let cluster = null;
+      for (const candidate of clusters) {
+        if (Math.hypot(anchor.x - candidate.x, anchor.y - candidate.y) <= clusterRadius) {
+          cluster = candidate;
+          break;
+        }
+      }
+
+      if (!cluster) {
+        clusters.push({ x: anchor.x, y: anchor.y, count: 1 });
+        continue;
+      }
+
+      cluster.x = (cluster.x * cluster.count + anchor.x) / (cluster.count + 1);
+      cluster.y = (cluster.y * cluster.count + anchor.y) / (cluster.count + 1);
+      cluster.count += 1;
+    }
+
+    return clusters.reduce((total, cluster) => total + 1 + Math.max(0, cluster.count - 1) * 0.42, 0) || 1;
+  }
+
   function nearestPartyAnchorDistance(x, y, anchors) {
     const source = Array.isArray(anchors) && anchors.length ? anchors : activePartyPlayerAnchors();
     let nearest = Infinity;
@@ -10975,12 +13118,102 @@
     return nearest;
   }
 
+  function mobCollectionByKind(kind) {
+    if (kind === "ufo") {
+      return ufos;
+    }
+    if (kind === "rambot") {
+      return rambots;
+    }
+    if (kind === "engineer") {
+      return engineers;
+    }
+    if (kind === "tesla") {
+      return teslas;
+    }
+    if (kind === "satellite" || kind === "rocket") {
+      return rockets;
+    }
+    if (kind === "fighter") {
+      return fighters;
+    }
+    return rivals;
+  }
+
+  function liveMobCount(kind) {
+    let count = 0;
+    for (const mob of mobCollectionByKind(kind)) {
+      if (mob && mob.health > 0 && (kind !== "satellite" && kind !== "rocket" || mob.kind === kind)) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  let liveMobSpawnCache = null;
+
+  function liveMobsForSpawnPlacement() {
+    const now = performance.now();
+    const collectionSize = rivals.length + ufos.length + rambots.length + engineers.length + teslas.length + rockets.length + fighters.length;
+    if (
+      liveMobSpawnCache &&
+      liveMobSpawnCache.time === now &&
+      liveMobSpawnCache.collectionSize === collectionSize
+    ) {
+      return liveMobSpawnCache.mobs;
+    }
+
+    const mobs = [];
+    for (const collection of [rivals, ufos, rambots, engineers, teslas, rockets, fighters]) {
+      for (const mob of collection) {
+        if (mob && mob.health > 0) {
+          mobs.push(mob);
+        }
+      }
+    }
+    liveMobSpawnCache = {
+      time: now,
+      collectionSize,
+      mobs
+    };
+    return mobs;
+  }
+
+  function effectiveParticleAnchorCount(anchors) {
+    const source = Array.isArray(anchors) && anchors.length ? anchors : activePartyPlayerAnchors();
+    const clusterRadius = particleDensityRadius() * 0.72;
+    const clusters = [];
+
+    for (const anchor of source) {
+      let cluster = null;
+      for (const candidate of clusters) {
+        if (Math.hypot(anchor.x - candidate.x, anchor.y - candidate.y) <= clusterRadius) {
+          cluster = candidate;
+          break;
+        }
+      }
+
+      if (!cluster) {
+        clusters.push({ x: anchor.x, y: anchor.y, count: 1 });
+        continue;
+      }
+
+      cluster.x = (cluster.x * cluster.count + anchor.x) / (cluster.count + 1);
+      cluster.y = (cluster.y * cluster.count + anchor.y) / (cluster.count + 1);
+      cluster.count += 1;
+    }
+
+    return clusters.reduce((total, cluster) => total + 1 + Math.max(0, cluster.count - 1) * 0.28, 0) || 1;
+  }
+
   function activeParticleTargetCount(anchorCount) {
-    const count = Math.max(1, Math.floor(finiteOr(anchorCount, 1)));
+    const count = Array.isArray(anchorCount)
+      ? effectiveParticleAnchorCount(anchorCount)
+      : Math.max(1, finiteOr(anchorCount, 1));
     if (!isPartyHost()) {
       return targetParticles;
     }
-    return Math.round(targetParticles * (0.92 + Math.max(0, count - 1) * 0.82));
+    return Math.round(targetParticles * (0.92 + Math.max(0, count - 1) * 0.48));
   }
 
   function particleDensityRadius() {
@@ -10993,19 +13226,76 @@
     return Boolean(particle && particle.tier && !particle.tier.solid && !isUfoBeamCargo(particle));
   }
 
-  function countAmbientParticlesNearAnchor(anchor, radius) {
-    const radiusSq = radius * radius;
-    let count = 0;
+  let ambientDensityCache = null;
+
+  function ambientDensityCellKey(cellX, cellY) {
+    return cellX + ":" + cellY;
+  }
+
+  function ambientDensityGrid() {
+    const cellSize = 480;
+    const now = performance.now();
+    if (
+      ambientDensityCache &&
+      ambientDensityCache.time === now &&
+      ambientDensityCache.particleCount === particles.length
+    ) {
+      return ambientDensityCache;
+    }
+
+    const cells = new Map();
     for (const particle of particles) {
       if (!isAmbientDensityParticle(particle)) {
         continue;
       }
+      const cellX = Math.floor(particle.x / cellSize);
+      const cellY = Math.floor(particle.y / cellSize);
+      const key = ambientDensityCellKey(cellX, cellY);
+      if (!cells.has(key)) {
+        cells.set(key, []);
+      }
+      cells.get(key).push(particle);
+    }
+
+    ambientDensityCache = {
+      time: now,
+      particleCount: particles.length,
+      cellSize,
+      cells
+    };
+    return ambientDensityCache;
+  }
+
+  function forAmbientParticlesNear(x, y, radius, callback) {
+    const grid = ambientDensityGrid();
+    const cellSize = grid.cellSize;
+    const minX = Math.floor((x - radius) / cellSize);
+    const maxX = Math.floor((x + radius) / cellSize);
+    const minY = Math.floor((y - radius) / cellSize);
+    const maxY = Math.floor((y + radius) / cellSize);
+    for (let cellX = minX; cellX <= maxX; cellX += 1) {
+      for (let cellY = minY; cellY <= maxY; cellY += 1) {
+        const bucket = grid.cells.get(ambientDensityCellKey(cellX, cellY));
+        if (!bucket) {
+          continue;
+        }
+        for (const particle of bucket) {
+          callback(particle);
+        }
+      }
+    }
+  }
+
+  function countAmbientParticlesNearAnchor(anchor, radius) {
+    const radiusSq = radius * radius;
+    let count = 0;
+    forAmbientParticlesNear(anchor.x, anchor.y, radius, function (particle) {
       const dx = particle.x - anchor.x;
       const dy = particle.y - anchor.y;
       if (dx * dx + dy * dy <= radiusSq) {
         count += 1;
       }
-    }
+    });
     return count;
   }
 
@@ -11017,7 +13307,7 @@
   function mostUnderdenseParticleAnchor(anchors) {
     const source = Array.isArray(anchors) && anchors.length ? anchors : activePartyPlayerAnchors();
     const densityRadius = particleDensityRadius();
-    const localTarget = localParticleTargetPerAnchor(source.length);
+    const localTarget = localParticleTargetPerAnchor(effectiveParticleAnchorCount(source));
     let best = null;
 
     for (const anchor of source) {
@@ -11033,48 +13323,62 @@
     return best || { anchor: source[0] || player, localCount: 0, localTarget, score: 0 };
   }
 
-  function nearestAmbientParticleDistance(x, y) {
+  function ambientParticleDensityAt(x, y) {
+    const crowdRadius = 480;
+    const crowdRadiusSq = crowdRadius * crowdRadius;
     let nearest = Infinity;
-    for (const particle of particles) {
-      if (!isAmbientDensityParticle(particle)) {
-        continue;
-      }
-      const distance = Math.hypot(x - particle.x, y - particle.y);
+    let crowdCount = 0;
+    forAmbientParticlesNear(x, y, crowdRadius, function (particle) {
+      const dx = x - particle.x;
+      const dy = y - particle.y;
+      const distanceSq = dx * dx + dy * dy;
+      const distance = Math.sqrt(distanceSq);
       if (distance < nearest) {
         nearest = distance;
       }
-    }
-    return nearest;
+      if (distanceSq <= crowdRadiusSq) {
+        crowdCount += 1;
+      }
+    });
+    return { nearest, crowdCount };
   }
 
   function chooseParticleSpawnPoint(anchor) {
     const source = anchor || randomPartySpawnAnchor();
-    const spawnWidth = Math.max(640, finiteOr(width, 0));
-    const spawnHeight = Math.max(360, finiteOr(height, 0));
+    const anchors = activePartyPlayerAnchors();
+    const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
+    const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
+    const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
     const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
+    const minPlayerDistance = viewportRadius + 140;
+    const preferredParticleSpacing = 170;
     const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
     const moving = speed > 45;
     const travel = moving ? normalize(source.vx, source.vy) : { x: 0, y: 0 };
     let best = null;
 
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    for (let attempt = 0; attempt < 22; attempt += 1) {
       const aheadBias = moving && Math.random() < 0.58;
       const angle = aheadBias
         ? Math.atan2(travel.y, travel.x) + randomRange(-1.05, 1.05)
         : randomRange(0, Math.PI * 2);
-      const offscreenBias = moving && Math.random() < 0.42;
-      const minDist = offscreenBias ? viewportRadius * 0.86 : viewportRadius * 0.18;
-      const maxDist = offscreenBias
-        ? viewportRadius * 1.5 + clamp(speed * 1.15, 0, 760)
-        : viewportRadius * 1.02;
+      const minDist = minPlayerDistance * randomRange(1, 1.16);
+      const maxDist = viewportRadius * 1.85 + clamp(speed * 1.15, 0, 760);
       const dist = randomRange(minDist, maxDist);
-      const ahead = moving ? clamp(speed * randomRange(0.12, offscreenBias ? 1.45 : 0.72), 0, 920) : 0;
-      const drift = rotatePoint(randomRange(-170, 170), randomRange(-170, 170), angle + Math.PI / 2);
+      const ahead = moving ? clamp(speed * randomRange(0.18, 1.35), 0, 920) : 0;
+      const drift = rotatePoint(randomRange(-220, 220), randomRange(-220, 220), angle + Math.PI / 2);
       const x = source.x + travel.x * ahead + Math.cos(angle) * dist + drift.x;
       const y = source.y + travel.y * ahead + Math.sin(angle) * dist + drift.y;
-      const nearest = nearestAmbientParticleDistance(x, y);
-      const distanceFromAnchor = Math.hypot(x - source.x, y - source.y);
-      const score = nearest + (offscreenBias ? 70 : 0) - Math.max(0, 260 - distanceFromAnchor) * 2.8;
+      const nearestPlayer = nearestPartyAnchorDistance(x, y, anchors);
+      const density = ambientParticleDensityAt(x, y);
+      const tooCloseToPlayer = Math.max(0, minPlayerDistance - nearestPlayer);
+      const spacingPenalty = Math.max(0, preferredParticleSpacing - density.nearest);
+      const score =
+        nearestPlayer * 0.16 +
+        density.nearest * 1.25 -
+        density.crowdCount * 135 -
+        tooCloseToPlayer * 7.5 -
+        spacingPenalty * 3.2;
       if (!best || score > best.score) {
         best = { x, y, angle, score };
       }
@@ -11105,9 +13409,9 @@
   function seedParticles() {
     particles.length = 0;
     const anchors = activePartyPlayerAnchors();
-    const targetCount = activeParticleTargetCount(anchors.length);
+    const targetCount = activeParticleTargetCount(anchors);
     for (let i = 0; i < targetCount; i += 1) {
-      spawnParticleNearPlayer();
+      spawnParticleNearPlayer(anchors.length > 1 ? mostUnderdenseParticleAnchor(anchors).anchor : undefined);
     }
   }
 
@@ -11323,6 +13627,7 @@
     const angle = randomRange(0, Math.PI * 2);
     const burst = randomRange(70, 145);
     return {
+      id: nextHealthPickupId++,
       x,
       y,
       vx: vx * 0.18 + Math.cos(angle) * burst,
@@ -11431,11 +13736,17 @@
   }
 
   function emitMobDamageParticles(mob, damage, hitColor) {
-    if (!mob || damage <= 0 || particles.length > targetParticles * 3) {
+    const particleBudget = isPartySessionActive() || multiplayer.remoteUniverses.size
+      ? targetParticles * 1.9
+      : targetParticles * 3;
+    if (!mob || damage <= 0 || particles.length > particleBudget) {
       return;
     }
 
-    const count = Math.floor(randomRange(mobDamageParticleMin, mobDamageParticleMax + 1));
+    const maxCount = isPartySessionActive() || multiplayer.remoteUniverses.size
+      ? Math.max(1, Math.min(2, mobDamageParticleMax))
+      : mobDamageParticleMax;
+    const count = Math.floor(randomRange(mobDamageParticleMin, maxCount + 1));
     const baseColor = mob.color || hitColor || randomParticleColor();
     const particleColor = hitColor ? mixColor(baseColor, hitColor, 3, 2) : ejectedParticleColor(mob);
 
@@ -11575,76 +13886,137 @@
     applyRivalSurfaceConstraint(rival);
   }
 
-  function spawnAlienoidNearPlayer(anchor) {
-    const spawn = randomOffscreenPoint(110, 360, anchor);
+  function nearestMobDistance(x, y, kind) {
+    let nearestSq = Infinity;
+    for (const mob of liveMobsForSpawnPlacement()) {
+      const sameKind = kind === "alienoid"
+        ? mob.kind === "alienoid"
+        : kind === "satellite" || kind === "rocket"
+        ? mob.kind === kind
+        : mob.kind === kind;
+      const weight = sameKind ? 1 : 0.55;
+      const dx = x - mob.x;
+      const dy = y - mob.y;
+      const distanceSq = (dx * dx + dy * dy) / (weight * weight);
+      if (distanceSq < nearestSq) {
+        nearestSq = distanceSq;
+      }
+    }
+    return Math.sqrt(nearestSq);
+  }
+
+  function chooseMobSpawnPoint(kind, margin, spread, anchor, spawnAnchors) {
+    const source = anchor || leastPopulatedMobSpawnAnchor(activeMobSpawnAnchors());
+    const anchors = Array.isArray(spawnAnchors) && spawnAnchors.length ? spawnAnchors : activeMobSpawnAnchors();
+    const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
+    const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
+    const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
+    const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
+    const minPlayerDistance = viewportRadius + Math.max(120, margin);
+    const maxDistance = minPlayerDistance + Math.max(420, spread);
+    const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
+    const moving = speed > 50;
+    const travel = moving ? normalize(source.vx, source.vy) : { x: 0, y: 0 };
+    let best = null;
+
+    const attemptLimit = liveMobsForSpawnPlacement().length > 24 ? 14 : 20;
+    for (let attempt = 0; attempt < attemptLimit; attempt += 1) {
+      const aheadBias = moving && Math.random() < 0.5;
+      const angle = aheadBias
+        ? Math.atan2(travel.y, travel.x) + randomRange(-1.15, 1.15)
+        : randomRange(0, Math.PI * 2);
+      const dist = randomRange(minPlayerDistance, maxDistance);
+      const ahead = moving ? clamp(speed * randomRange(0.12, 1.2), 0, 760) : 0;
+      const drift = rotatePoint(randomRange(-220, 220), randomRange(-220, 220), angle + Math.PI / 2);
+      const x = source.x + travel.x * ahead + Math.cos(angle) * dist + drift.x;
+      const y = source.y + travel.y * ahead + Math.sin(angle) * dist + drift.y;
+      const nearestPlayer = nearestPartyAnchorDistance(x, y, anchors);
+      const nearestMob = nearestMobDistance(x, y, kind);
+      const tooCloseToPlayer = Math.max(0, minPlayerDistance - nearestPlayer);
+      const tooFarFromSource = Math.max(0, Math.hypot(x - source.x, y - source.y) - maxDistance * 1.15);
+      const score =
+        nearestPlayer * 0.18 +
+        nearestMob * 0.62 -
+        tooCloseToPlayer * 10 -
+        tooFarFromSource * 1.4;
+      if (!best || score > best.score) {
+        best = { x, y, score };
+      }
+    }
+
+    return best || randomOffscreenPoint(margin, spread, source);
+  }
+
+  function spawnAlienoidNearPlayer(anchor, anchors) {
+    const spawn = chooseMobSpawnPoint("alienoid", 110, 360, anchor, anchors);
     rivals.push(createRival(spawn.x, spawn.y));
   }
 
-  function spawnUfoNearPlayer(anchor) {
-    const spawn = randomOffscreenPoint(180, 520, anchor);
+  function spawnUfoNearPlayer(anchor, anchors) {
+    const spawn = chooseMobSpawnPoint("ufo", 180, 520, anchor, anchors);
     ufos.push(createUfo(spawn.x, spawn.y));
   }
 
-  function spawnRambotNearPlayer(anchor) {
-    const spawn = randomOffscreenPoint(220, 620, anchor);
+  function spawnRambotNearPlayer(anchor, anchors) {
+    const spawn = chooseMobSpawnPoint("rambot", 220, 620, anchor, anchors);
     rambots.push(createRambot(spawn.x, spawn.y));
   }
 
-  function spawnEngineerNearPlayer(anchor) {
-    const spawn = randomOffscreenPoint(210, 600, anchor);
+  function spawnEngineerNearPlayer(anchor, anchors) {
+    const spawn = chooseMobSpawnPoint("engineer", 210, 600, anchor, anchors);
     engineers.push(createEngineer(spawn.x, spawn.y));
   }
 
-  function spawnTeslaNearPlayer(anchor) {
-    const spawn = randomOffscreenPoint(190, 560, anchor);
+  function spawnTeslaNearPlayer(anchor, anchors) {
+    const spawn = chooseMobSpawnPoint("tesla", 190, 560, anchor, anchors);
     teslas.push(createTesla(spawn.x, spawn.y));
   }
 
-  function spawnSatelliteNearPlayer(anchor) {
-    const spawn = randomOffscreenPoint(230, 680, anchor);
+  function spawnSatelliteNearPlayer(anchor, anchors) {
+    const spawn = chooseMobSpawnPoint("satellite", 230, 680, anchor, anchors);
     rockets.push(createSatellite(spawn.x, spawn.y));
   }
 
-  function spawnRocketNearPlayer(anchor) {
-    const spawn = randomOffscreenPoint(320, 900, anchor);
+  function spawnRocketNearPlayer(anchor, anchors) {
+    const spawn = chooseMobSpawnPoint("rocket", 320, 900, anchor, anchors);
     rockets.push(createRocket(spawn.x, spawn.y));
   }
 
-  function spawnFighterNearPlayer(anchor) {
-    const spawn = randomOffscreenPoint(260, 760, anchor);
+  function spawnFighterNearPlayer(anchor, anchors) {
+    const spawn = chooseMobSpawnPoint("fighter", 260, 760, anchor, anchors);
     fighters.push(createFighter(spawn.x, spawn.y));
   }
 
-  function spawnMobByKind(kind, anchor) {
+  function spawnMobByKind(kind, anchor, anchors) {
     if (kind === "ufo") {
-      spawnUfoNearPlayer(anchor);
+      spawnUfoNearPlayer(anchor, anchors);
       return;
     }
     if (kind === "rambot") {
-      spawnRambotNearPlayer(anchor);
+      spawnRambotNearPlayer(anchor, anchors);
       return;
     }
     if (kind === "engineer") {
-      spawnEngineerNearPlayer(anchor);
+      spawnEngineerNearPlayer(anchor, anchors);
       return;
     }
     if (kind === "tesla") {
-      spawnTeslaNearPlayer(anchor);
+      spawnTeslaNearPlayer(anchor, anchors);
       return;
     }
     if (kind === "satellite") {
-      spawnSatelliteNearPlayer(anchor);
+      spawnSatelliteNearPlayer(anchor, anchors);
       return;
     }
     if (kind === "rocket") {
-      spawnRocketNearPlayer(anchor);
+      spawnRocketNearPlayer(anchor, anchors);
       return;
     }
     if (kind === "fighter") {
-      spawnFighterNearPlayer(anchor);
+      spawnFighterNearPlayer(anchor, anchors);
       return;
     }
-    spawnAlienoidNearPlayer(anchor);
+    spawnAlienoidNearPlayer(anchor, anchors);
   }
 
   function isMobTierUnlocked(kind) {
@@ -11672,9 +14044,30 @@
     return Math.max(1, Math.round(rawLimit * activeDifficulty().mobBatchScale));
   }
 
+  function baseLiveMobCap(kind) {
+    if (kind === "alienoid") {
+      return 5;
+    }
+    if (kind === "ufo") {
+      return 4;
+    }
+    if (kind === "rambot" || kind === "engineer" || kind === "tesla") {
+      return 3;
+    }
+    return 2;
+  }
+
+  function maxLiveMobCount(kind, anchors) {
+    const interval = difficultyMobSpawnInterval(kind) || 120;
+    const growth = Math.min(5, Math.floor(currentLifeSeconds() / Math.max(45, interval * 3.5)));
+    const effectiveCount = Math.min(crazyGamesRoomMaxPlayers, effectiveMobAnchorCount(anchors));
+    const playerScale = 1 + Math.max(0, effectiveCount - 1) * 0.3;
+    return Math.max(1, Math.round((baseLiveMobCap(kind) + growth) * playerScale * activeDifficulty().mobBatchScale));
+  }
+
   function maxMobSpawnBatchSize(kind, playerCount) {
-    const count = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Math.floor(finiteOr(playerCount, 1))));
-    return baseMobSpawnBatchLimit(kind) * count;
+    const count = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, finiteOr(playerCount, 1)));
+    return Math.max(1, Math.round(baseMobSpawnBatchLimit(kind) * (1 + Math.max(0, count - 1) * 0.55)));
   }
 
   function mobSpawnBonusSlotChanceScale(bonusSlot) {
@@ -11701,10 +14094,15 @@
   }
 
   function mobSpawnBatchSize(kind, playerCount) {
-    const count = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Math.floor(finiteOr(playerCount, 1))));
+    const count = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, finiteOr(playerCount, 1)));
     const batchLimit = baseMobSpawnBatchLimit(kind);
-    let batchSize = 0;
-    for (let i = 0; i < count; i += 1) {
+    let batchSize = rollMobSpawnBatchSize(kind, batchLimit);
+    const bonusRolls = Math.floor(Math.max(0, count - 1));
+    for (let i = 0; i < bonusRolls; i += 1) {
+      batchSize += Math.random() < 0.55 ? rollMobSpawnBatchSize(kind, batchLimit) : 0;
+    }
+    const fractionalBonus = Math.max(0, count - 1) - bonusRolls;
+    if (fractionalBonus > 0 && Math.random() < fractionalBonus * 0.55) {
       batchSize += rollMobSpawnBatchSize(kind, batchLimit);
     }
     return Math.min(maxMobSpawnBatchSize(kind, count), Math.max(1, batchSize));
@@ -11712,7 +14110,7 @@
 
   function updateMobSpawns(dt) {
     const anchors = activeMobSpawnAnchors();
-    const playerCount = anchors.length;
+    const playerCount = effectiveMobAnchorCount(anchors);
     for (const kind of Object.keys(mobSpawnIntervals)) {
       if (!isMobTierUnlocked(kind)) {
         mobSpawnTimers[kind] = Math.max(0, mobSpawnTimers[kind] - dt);
@@ -11721,9 +14119,10 @@
 
       mobSpawnTimers[kind] -= dt;
       while (mobSpawnTimers[kind] <= 0) {
-        const batchSize = mobSpawnBatchSize(kind, playerCount);
+        const remainingSlots = maxLiveMobCount(kind, anchors) - liveMobCount(kind);
+        const batchSize = Math.max(0, Math.min(remainingSlots, mobSpawnBatchSize(kind, playerCount)));
         for (let i = 0; i < batchSize; i += 1) {
-          spawnMobByKind(kind, leastPopulatedMobSpawnAnchor(anchors));
+          spawnMobByKind(kind, leastPopulatedMobSpawnAnchor(anchors), anchors);
         }
         mobSpawnTimers[kind] += difficultyMobSpawnInterval(kind);
       }
@@ -13420,6 +15819,25 @@
     }, dt, options);
   }
 
+  function localGadgetStateForFrame(aim, funnel) {
+    const enabled = canUseSuctionControls();
+    return {
+      playerId: player.id || "",
+      actor: player,
+      aimWorld: aim.world,
+      funnel,
+      left: enabled && mouse.left,
+      middle: enabled && mouse.middle,
+      right: enabled && mouse.right,
+      suckFactor: currentGadgetSuckFactor(),
+      blowFactor: currentGadgetBlowFactor(),
+      bucketActive: enabled,
+      bucketPadding: 0,
+      landedBodyId: player.landed ? player.landed.bodyId : null,
+      active: enabled && (mouse.left || mouse.middle || mouse.right)
+    };
+  }
+
   function isPartyGadgetActiveMode(mode) {
     return mode === "pull" || mode === "push" || mode === "hold";
   }
@@ -13431,67 +15849,48 @@
     return mode;
   }
 
-  function normalizePartyGadgetIdList(list, limit) {
-    if (!Array.isArray(list)) {
-      return [];
-    }
-
-    const ids = [];
-    const seen = new Set();
-    for (const value of list) {
-      const id = Math.max(1, Math.floor(finiteOr(value, 0)));
-      if (!id || seen.has(id)) {
-        continue;
-      }
-      seen.add(id);
-      ids.push(id);
-      if (ids.length >= limit) {
-        break;
-      }
-    }
-    return ids;
+  function multiplayerEnergyCheckDt(dt) {
+    return clamp(Number.isFinite(Number(dt)) ? finiteOr(dt, 1 / 60) : 1 / 60, 0.001, 0.05);
   }
 
-  function partyGadgetIdSet(list, limit) {
-    return new Set(normalizePartyGadgetIdList(list, limit));
+  function multiplayerContinuousEnergyCost(rate, dt) {
+    return Math.max(0, finiteOr(rate, 0)) * multiplayerEnergyCheckDt(dt);
   }
 
-  function normalizePartyAuthorityBodies(list) {
-    if (!Array.isArray(list)) {
-      return [];
+  function multiplayerToolModeEnergyCost(equippedTool, mode, dt) {
+    if (!mode || mode === "idle") {
+      return 0;
     }
-
-    const bodies = [];
-    const seen = new Set();
-    for (const entry of list) {
-      if (!entry || typeof entry !== "object") {
-        continue;
-      }
-      const id = Math.max(1, Math.floor(finiteOr(entry.id, 0)));
-      if (!id || seen.has(id)) {
-        continue;
-      }
-      seen.add(id);
-      bodies.push({
-        id,
-        x: clamp(finiteOr(entry.x, 0), -1000000, 1000000),
-        y: clamp(finiteOr(entry.y, 0), -1000000, 1000000),
-        vx: clamp(finiteOr(entry.vx, 0), -1200, 1200),
-        vy: clamp(finiteOr(entry.vy, 0), -1200, 1200)
-      });
-      if (bodies.length >= partyAuthorityBodyLimit) {
-        break;
-      }
+    if (equippedTool === defaultToolId && isPartyGadgetActiveMode(mode)) {
+      return multiplayerContinuousEnergyCost(suctionEnergyDrain, dt);
     }
-    return bodies;
+    if (mode === "fire") {
+      const weapon = weaponByToolId(equippedTool);
+      return weapon ? Math.max(0, finiteOr(weapon.energyCost, playerWeaponDefaults.energyCost)) : Infinity;
+    }
+    return Infinity;
   }
 
-  function partyGadgetHasCandidate(state, target) {
-    return Boolean(state && target && state.candidateIds && state.candidateIds.has(target.id));
+  function actorCanAffordMultiplayerToolMode(actor, equippedTool, mode, dt) {
+    const cost = multiplayerToolModeEnergyCost(equippedTool, mode, dt);
+    return finiteOr(actor && actor.energy, 0) >= cost;
   }
 
-  function partyGadgetHasBucketTarget(state, target) {
-    return Boolean(state && target && state.bucketIds && state.bucketIds.has(target.id));
+  function multiplayerLocalToolModeForInput(dt) {
+    if (areToolsDisabled()) {
+      return "idle";
+    }
+    if (isWeaponTool(equippedToolId)) {
+      return mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt) ? "fire" : "idle";
+    }
+    if (!isSuctionEquipped() || !actorCanAffordMultiplayerToolMode(player, defaultToolId, "pull", dt)) {
+      return "idle";
+    }
+    return mouse.middle ? "hold" : mouse.left ? "pull" : mouse.right ? "push" : "idle";
+  }
+
+  function canSendMultiplayerBoostInput(dt) {
+    return isJetpackBoostPressed() && player.energy >= multiplayerContinuousEnergyCost(jetpackBoostEnergyDrain, dt);
   }
 
   function actorFromPartyPlayerSnapshot(snapshot) {
@@ -13550,24 +15949,20 @@
 
     const intent = gadget && typeof gadget === "object" ? gadget : null;
     const mode = normalizePartyGadgetMode(intent && intent.mode ? intent.mode : actor.toolMode);
-    const active = isPartyGadgetActiveMode(mode) && actor.energy > 0 && (!intent || intent.active !== false);
-    const assistFresh = Boolean(
-      intent &&
-      Number.isFinite(Number(receivedAt)) &&
-      performance.now() - receivedAt <= partyGadgetIntentAssistMs
-    );
+    const active = isPartyGadgetActiveMode(mode) &&
+      actorCanAffordMultiplayerToolMode(actor, defaultToolId, mode, options && options.dt) &&
+      (!intent || intent.active !== false);
     const aimAngle = finiteOr(intent && intent.aimAngle, actor.aimAngle);
     const aimWorld = normalize(Math.cos(aimAngle), Math.sin(aimAngle));
     const gadgetActor = partyGadgetActorFromIntent(actor, intent, receivedAt, {
       lead: options && Number.isFinite(Number(options.lead)) ? options.lead : 0,
       maxLead: options && Number.isFinite(Number(options.maxLead)) ? options.maxLead : 0
     });
-    const candidateIds = assistFresh ? partyGadgetIdSet(intent.candidateIds, partyGadgetCandidateLimit) : new Set();
-    const bucketIds = assistFresh ? partyGadgetIdSet(intent.bucketIds, partyGadgetBucketLimit) : new Set();
-    const authorityBodies = assistFresh ? normalizePartyAuthorityBodies(intent.authorityBodies) : [];
-
     return {
       playerId: actor.id || "",
+      seq: Math.max(0, Math.floor(finiteOr(intent && intent.seq, 0))),
+      sentAt: finiteOr(intent && intent.sentAt, 0),
+      receivedAt: finiteOr(receivedAt, performance.now()),
       actor: gadgetActor,
       aimWorld,
       funnel: actorFunnel(gadgetActor, aimWorld),
@@ -13578,12 +15973,6 @@
       blowFactor: finiteOr(options && options.blowFactor, 1),
       bucketActive: true,
       bucketPadding: finiteOr(options && options.bucketPadding, 0),
-      candidateIds,
-      bucketIds,
-      authorityBodies,
-      candidateReachPadding: candidateIds.size || bucketIds.size ? 120 : 0,
-      candidateSidePadding: candidateIds.size || bucketIds.size ? 46 : 0,
-      bucketAssistPadding: bucketIds.size ? 34 : 0,
       landedBodyId: actor.landed ? actor.landed.bodyId : null,
       mode,
       active
@@ -13709,21 +16098,14 @@
     const mouthDist = length(toMouthX, toMouthY);
     const pushResponse = bodyPushResponse(target);
     const captureInFunnel = options.captureInFunnel !== false;
-    const candidateAssist = partyGadgetHasCandidate(state, target);
-    const bucketAssist = partyGadgetHasBucketTarget(state, target);
-    const reachAssist = candidateAssist || bucketAssist ? finiteOr(state.candidateReachPadding, 0) : 0;
-    const sideAssist = candidateAssist || bucketAssist ? finiteOr(state.candidateSidePadding, 0) : 0;
-    const bucketAssistPadding = bucketAssist ? finiteOr(state.bucketAssistPadding, 0) : 0;
-    const assistedConeWidth = coneWidth + sideAssist;
-    const assistedInCone = forward > -70 - reachAssist * 0.25 && forward < gadgetForceReach + reachAssist && side < assistedConeWidth;
 
-    if (middleActive && (inCone || assistedInCone)) {
+    if (middleActive && inCone) {
       const holdX = actor.x + aimWorld.x * gadgetHoldReach;
       const holdY = actor.y + aimWorld.y * gadgetHoldReach;
       const toHoldX = holdX - target.x;
       const toHoldY = holdY - target.y;
       const holdDistance = length(toHoldX, toHoldY);
-      const coneStrength = clamp(1 - side / Math.max(1, assistedConeWidth), 0, 1);
+      const coneStrength = clamp(1 - side / Math.max(1, coneWidth), 0, 1);
       const response = Math.max(0.22, pushResponse);
       const desiredSpeed = clamp(holdDistance * 5.4, 0, 520);
       const hold = normalize(toHoldX, toHoldY);
@@ -13750,15 +16132,15 @@
       target.gadgetStabilized = false;
     }
 
-    if (leftActive && (inCone || assistedInCone)) {
+    if (leftActive && inCone) {
       const pull = normalize(toMouthX, toMouthY);
-      const coneStrength = clamp(1 - side / Math.max(1, assistedConeWidth), 0, 1);
-      const distanceStrength = clamp(1 - mouthDist / (620 + reachAssist), 0.16, 1);
+      const coneStrength = clamp(1 - side / Math.max(1, coneWidth), 0, 1);
+      const distanceStrength = clamp(1 - mouthDist / 620, 0.16, 1);
       const force = 1180 * finiteOr(state.suckFactor, 1) * coneStrength * distanceStrength * pushResponse;
       target.vx += pull.x * force * dt;
       target.vy += pull.y * force * dt;
 
-      if (captureInFunnel && mouthDist < funnel.radius + target.radius * 2.2 + bucketAssistPadding) {
+      if (captureInFunnel && mouthDist < funnel.radius + target.radius * 2.2) {
         const cup = normalize(toMouthX, toMouthY);
         const ringTarget = Math.max(0, funnel.radius * 0.42 - target.radius * 0.22);
         const current = mouthDist || 1;
@@ -13770,8 +16152,8 @@
       }
     }
 
-    if (rightActive && forward > -20 - reachAssist * 0.25 && forward < 470 + reachAssist && side < coneWidth * 0.9 + sideAssist) {
-      const blastFalloff = clamp(1 - Math.max(0, forward) / (520 + reachAssist), 0.22, 1);
+    if (rightActive && forward > -20 && forward < 470 && side < coneWidth * 0.9) {
+      const blastFalloff = clamp(1 - Math.max(0, forward) / 520, 0.22, 1);
       const sidePush = normalize(sideX, sideY);
       const force = 1450 * finiteOr(state.blowFactor, 1) * blastFalloff * pushResponse;
       target.vx += (aimWorld.x * force + sidePush.x * 120 * pushResponse) * dt;
@@ -13861,9 +16243,7 @@
     const backHalf = funnelShape.backHalf;
     const rimX = funnelShape.rimX;
     const rimHalf = funnelShape.rimHalf;
-    const requestedBucketPadding =
-      Math.max(0, finiteOr(state.bucketPadding, 0)) +
-      (partyGadgetHasBucketTarget(state, target) ? Math.max(0, finiteOr(state.bucketAssistPadding, 0)) : 0);
+    const requestedBucketPadding = Math.max(0, finiteOr(state.bucketPadding, 0));
     const bucketPadding = requestedBucketPadding > 0
       ? clamp(target.radius * 0.35, 5, requestedBucketPadding)
       : 0;
@@ -13932,7 +16312,7 @@
     target.y = actor.y + aimWorld.y * resolvedState.x + normal.y * resolvedState.y;
     target.vx = finiteOr(actor.vx, 0) + aimWorld.x * resolvedState.vx + normal.x * resolvedState.vy;
     target.vy = finiteOr(actor.vy, 0) + aimWorld.y * resolvedState.vx + normal.y * resolvedState.vy;
-    return true;
+    return insideCup || touchedBucket;
   }
 
   function isValidParticleState(particle) {
@@ -14043,7 +16423,7 @@
 
   function partyGadgetStateForPlayer(remotePlayer, gadget, receivedAt) {
     return partyGadgetStateFromActor(remotePlayer, gadget, receivedAt, {
-      bucketPadding: partyRemoteBucketPadding,
+      bucketPadding: 0,
       suckFactor: finiteOr(gadget && gadget.suckFactor, 1),
       blowFactor: finiteOr(gadget && gadget.blowFactor, 1),
       lead: gadget && gadget.active ? partyRemoteGadgetPredictionLead : 0,
@@ -14060,93 +16440,15 @@
     );
   }
 
-  function prunePartyBodyAuthority(now) {
-    for (const [bodyId, claim] of multiplayer.partyBodyAuthority) {
-      if (!claim || finiteOr(claim.expiresAt, 0) <= now || !bodyById(bodyId)) {
-        multiplayer.partyBodyAuthority.delete(bodyId);
-      }
-    }
-  }
-
-  function partyBodyAuthorityOwner(bodyId, now) {
-    const claim = multiplayer.partyBodyAuthority.get(bodyId);
-    if (!claim || finiteOr(claim.expiresAt, 0) <= now) {
-      multiplayer.partyBodyAuthority.delete(bodyId);
-      return "";
-    }
-    return claim.playerId || "";
-  }
-
-  function partyStateCanClaimBody(state, body, incoming, now) {
-    if (!state || !state.playerId || !body || !incoming) {
-      return false;
-    }
-    if (
-      incoming.id !== state.landedBodyId &&
-      !partyGadgetHasCandidate(state, body) &&
-      !partyGadgetHasBucketTarget(state, body)
-    ) {
+  function gadgetStateMayReachTarget(state, target, padding) {
+    if (!state || !state.actor || !target) {
       return false;
     }
 
-    const currentOwner = partyBodyAuthorityOwner(body.id, now);
-    if (currentOwner && currentOwner !== state.playerId) {
-      return false;
-    }
-
-    const actor = state.actor || player;
-    const reach = gadgetForceReach + Math.max(260, finiteOr(body.radius, 1) * 2.5);
-    const hostDistance = Math.hypot(body.x - actor.x, body.y - actor.y);
-    const incomingDistance = Math.hypot(incoming.x - actor.x, incoming.y - actor.y);
-    if (Math.min(hostDistance, incomingDistance) > reach) {
-      return false;
-    }
-
-    const correctionDistance = Math.hypot(incoming.x - body.x, incoming.y - body.y);
-    if (correctionDistance > Math.max(1400, finiteOr(body.radius, 1) * 9)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function applyPartyAuthorityBodyState(body, incoming) {
-    const correctionDistance = Math.hypot(incoming.x - body.x, incoming.y - body.y);
-    const directDistance = Math.max(720, finiteOr(body.radius, 1) * 5);
-    const blend = correctionDistance <= directDistance ? 1 : 0.72;
-
-    body.x += (incoming.x - body.x) * blend;
-    body.y += (incoming.y - body.y) * blend;
-    body.vx = finiteOr(incoming.vx, body.vx);
-    body.vy = finiteOr(incoming.vy, body.vy);
-    body.gadgetStabilized = false;
-  }
-
-  function applyPartyBodyAuthorityUpdates(states) {
-    if (!isPartyHost() || !Array.isArray(states) || !states.length) {
-      return;
-    }
-
-    const now = performance.now();
-    prunePartyBodyAuthority(now);
-
-    for (const state of states) {
-      if (!state || !state.playerId || !Array.isArray(state.authorityBodies)) {
-        continue;
-      }
-      for (const incoming of state.authorityBodies) {
-        const body = bodyById(incoming.id);
-        if (!partyStateCanClaimBody(state, body, incoming, now)) {
-          continue;
-        }
-
-        multiplayer.partyBodyAuthority.set(body.id, {
-          playerId: state.playerId,
-          expiresAt: now + partyBodyAuthorityHoldMs
-        });
-        applyPartyAuthorityBodyState(body, incoming);
-      }
-    }
+    const reach = gadgetForceReach + Math.max(0, finiteOr(target.radius, 0)) + Math.max(0, finiteOr(padding, 0)) + 180;
+    const dx = target.x - state.actor.x;
+    const dy = target.y - state.actor.y;
+    return dx * dx + dy * dy <= reach * reach;
   }
 
   function pruneExcessAmbientParticles(anchors, maxParticleBudget) {
@@ -14191,14 +16493,13 @@
     const aim = getAim();
     const funnel = getFunnel(aim);
     const landedBodyId = player.landed ? player.landed.bodyId : null;
-    const suctionActive = canUseSuctionControls();
+    const localGadgetState = localGadgetStateForFrame(aim, funnel);
+    const suctionActive = localGadgetState.active;
     const vacuumBucketActive = hasVacuumBucketCollider();
     const partyGadgetStates = activePartyGadgetStates();
     const partySpawnAnchors = activePartyPlayerAnchors();
-    const activeTargetParticles = activeParticleTargetCount(partySpawnAnchors.length);
+    const activeTargetParticles = activeParticleTargetCount(partySpawnAnchors);
     const maxParticleBudget = Math.round(activeTargetParticles * 1.28);
-    applyPartyBodyAuthorityUpdates(partyGadgetStates);
-    const authorityNow = performance.now();
 
     pruneInvalidParticles();
     spawnTimer -= dt;
@@ -14220,14 +16521,16 @@
         particle.ufoSapTimer = Math.max(0, finiteOr(particle.ufoSapTimer, 0) - dt);
       }
 
-      if (suctionActive && !isLandedBody && !isUfoBeamCargo(particle)) {
-        applyGadgetForces(particle, aim, funnel, dt);
+      if (
+        suctionActive &&
+        !isLandedBody &&
+        !isUfoBeamCargo(particle) &&
+        gadgetStateMayReachTarget(localGadgetState, particle, 0)
+      ) {
+        applyActorGadgetForces(particle, localGadgetState, dt);
       }
       for (const state of partyGadgetStates) {
-        if (partyBodyAuthorityOwner(particle.id, authorityNow) === state.playerId) {
-          continue;
-        }
-        if (partyGadgetCanAffectParticle(state, particle)) {
+        if (partyGadgetCanAffectParticle(state, particle) && state.active && gadgetStateMayReachTarget(state, particle, 0)) {
           applyActorGadgetForces(particle, state, dt);
         }
       }
@@ -14251,14 +16554,16 @@
       }
       particle.x += particle.vx * dt;
       particle.y += particle.vy * dt;
-      if (vacuumBucketActive && !isLandedBody && !isUfoBeamCargo(particle)) {
-        resolveFunnelBucket(particle, aim, dt);
+      if (
+        vacuumBucketActive &&
+        !isLandedBody &&
+        !isUfoBeamCargo(particle) &&
+        gadgetStateMayReachTarget(localGadgetState, particle, 0)
+      ) {
+        resolveActorFunnelBucket(particle, localGadgetState, dt);
       }
       for (const state of partyGadgetStates) {
-        if (partyBodyAuthorityOwner(particle.id, authorityNow) === state.playerId) {
-          continue;
-        }
-        if (state.bucketActive && partyGadgetCanAffectParticle(state, particle)) {
+        if (state.bucketActive && partyGadgetCanAffectParticle(state, particle) && gadgetStateMayReachTarget(state, particle, 0)) {
           resolveActorFunnelBucket(particle, state, dt);
         }
       }
@@ -14412,26 +16717,53 @@
 
   function mergeParticles() {
     let mergesThisFrame = 0;
+    let restartScan = true;
 
-    for (let i = 0; i < particles.length; i += 1) {
-      const a = particles[i];
+    while (restartScan) {
+      restartScan = false;
+      const maxRadius = particles.reduce((largest, particle) => Math.max(largest, finiteOr(particle && particle.radius, 0)), 0);
+      const order = particles
+        .map((particle, index) => ({ index, x: finiteOr(particle && particle.x, 0) }))
+        .sort((a, b) => a.x - b.x);
+      const allowBounceResolution = mergesThisFrame === 0;
 
-      for (let j = i + 1; j < particles.length; j += 1) {
-        const b = particles[j];
-        if (shouldSkipParticleMerge(a, b)) {
+      mergeScan:
+      for (let orderIndex = 0; orderIndex < order.length; orderIndex += 1) {
+        const i = order[orderIndex].index;
+        const a = particles[i];
+        if (!a) {
           continue;
         }
+        const maxDx = a.radius + maxRadius;
 
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const minDist = a.radius + b.radius;
-
-        if (dx * dx + dy * dy <= minDist * minDist) {
-          const absorbingPair = absorbingCollisionPair(a, b);
-          if (!absorbingPair) {
-            resolveBodyBounce(a, b, dx, dy, minDist);
+        for (let nextIndex = orderIndex + 1; nextIndex < order.length; nextIndex += 1) {
+          const j = order[nextIndex].index;
+          const b = particles[j];
+          if (!b || i === j) {
             continue;
           }
+          if (b.x - a.x > maxDx) {
+            break;
+          }
+          if (shouldSkipParticleMerge(a, b)) {
+            continue;
+          }
+
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const minDist = a.radius + b.radius;
+          if (Math.abs(dy) > minDist) {
+            continue;
+          }
+
+          if (dx * dx + dy * dy <= minDist * minDist) {
+            const absorbingPair = absorbingCollisionPair(a, b);
+            if (!absorbingPair) {
+              if (allowBounceResolution) {
+                resolveBodyBounce(a, b, dx, dy, minDist);
+              }
+              continue;
+            }
 
           recordPlayerAbsorption(absorbingPair.absorber, absorbingPair.absorbed);
           const mass = absorbingPair.absorber.mass + absorbingPair.absorbed.mass;
@@ -14508,13 +16840,14 @@
           if (clusternautsTestConfig) {
             clusternautsTestCounters.particleMerges += 1;
           }
-          j = i;
-
           if (mergesThisFrame > 8) {
             return;
           }
+          restartScan = true;
+          break mergeScan;
         }
       }
+    }
     }
   }
 
@@ -14524,6 +16857,10 @@
       if (sparks[i].life <= 0) {
         sparks.splice(i, 1);
       }
+    }
+    const sparkBudget = isPartySessionActive() || multiplayer.remoteUniverses.size ? 96 : 150;
+    if (sparks.length > sparkBudget) {
+      sparks.splice(0, sparks.length - sparkBudget);
     }
   }
 
@@ -14537,17 +16874,34 @@
     return playerPickupDistance(pickup) < pickup.radius + 43;
   }
 
+  function awardHealthPickup(pickup) {
+    if (!pickup) {
+      return;
+    }
+    player.health = Math.min(player.maxHealth, player.health + Math.max(0, finiteOr(pickup.heal, healthPickupHeal)));
+    playSound("pickupHealth");
+    sparks.push({
+      x: player.x,
+      y: player.y,
+      radius: 46,
+      color: { r: 101, g: 245, b: 154 },
+      life: 0.26,
+      maxLife: 0.26
+    });
+  }
+
   function updateHealthPickups(dt) {
     const aim = getAim();
     const funnel = getFunnel(aim);
-    const suctionActive = canUseSuctionControls();
+    const localGadgetState = localGadgetStateForFrame(aim, funnel);
+    const suctionActive = localGadgetState.active;
 
     for (let i = healthPickups.length - 1; i >= 0; i -= 1) {
       const pickup = healthPickups[i];
       pickup.life -= dt;
 
-      if (suctionActive) {
-        applyGadgetForces(pickup, aim, funnel, dt, { captureInFunnel: false });
+      if (suctionActive && gadgetStateMayReachTarget(localGadgetState, pickup, 0)) {
+        applyActorGadgetForces(pickup, localGadgetState, dt, { captureInFunnel: false });
       }
 
       const toPlayerX = player.x - pickup.x;
@@ -14567,16 +16921,7 @@
       pickup.y += pickup.vy * dt;
 
       if (canHeal && playerCanCollectPickup(pickup)) {
-        player.health = Math.min(player.maxHealth, player.health + pickup.heal);
-        playSound("pickupHealth");
-        sparks.push({
-          x: player.x,
-          y: player.y,
-          radius: 46,
-          color: { r: 101, g: 245, b: 154 },
-          life: 0.26,
-          maxLife: 0.26
-        });
+        awardHealthPickup(pickup);
         healthPickups.splice(i, 1);
         continue;
       }
@@ -14592,15 +16937,16 @@
   function updateTechPickups(dt) {
     const aim = getAim();
     const funnel = getFunnel(aim);
-    const suctionActive = canUseSuctionControls();
+    const localGadgetState = localGadgetStateForFrame(aim, funnel);
+    const suctionActive = localGadgetState.active;
 
     for (let i = techPickups.length - 1; i >= 0; i -= 1) {
       const pickup = techPickups[i];
       pickup.life -= dt;
       pickup.rotation += (1.4 + Math.sin(pickup.wobble) * 0.4) * dt;
 
-      if (suctionActive) {
-        applyGadgetForces(pickup, aim, funnel, dt, { captureInFunnel: false });
+      if (suctionActive && gadgetStateMayReachTarget(localGadgetState, pickup, 0)) {
+        applyActorGadgetForces(pickup, localGadgetState, dt, { captureInFunnel: false });
       }
 
       const toPlayerX = player.x - pickup.x;
@@ -14661,6 +17007,30 @@
     }
   }
 
+  function updateFollowerHealthPickups() {
+    for (let i = healthPickups.length - 1; i >= 0; i -= 1) {
+      const pickup = healthPickups[i];
+      if (!pickup || multiplayer.claimedHealthPickupIds.has(String(pickup.id))) {
+        healthPickups.splice(i, 1);
+        continue;
+      }
+      if (player.health < player.maxHealth && playerCanCollectPickup(pickup)) {
+        if (!requestHealthPickupClaim(pickup)) {
+          continue;
+        }
+        awardHealthPickup(pickup);
+        healthPickups.splice(i, 1);
+        continue;
+      }
+
+      const fromPlayer = Math.hypot(pickup.x - player.x, pickup.y - player.y);
+      const cullDistance = Math.max(width, height) * 1.55 + 900;
+      if (pickup.life <= 0 || fromPlayer > cullDistance) {
+        healthPickups.splice(i, 1);
+      }
+    }
+  }
+
   function requestTechPickupClaim(pickup) {
     if (!pickup || multiplayer.claimedTechPickupIds.has(String(pickup.id))) {
       return false;
@@ -14677,6 +17047,31 @@
       multiplayer.claimedTechPickupIds.delete(String(pickup.id));
     }
     return sent;
+  }
+
+  function requestHealthPickupClaim(pickup) {
+    if (!pickup || multiplayer.claimedHealthPickupIds.has(String(pickup.id))) {
+      return false;
+    }
+    const now = performance.now();
+    const actor = buildPersistentPayload(false).player;
+    const session = markLocalPartyPhysicsSession("healthPickup", pickup, now, {
+      actor,
+      mode: "idle",
+      active: false,
+      force: true
+    });
+    if (!session) {
+      return false;
+    }
+    const sent = sendPartyPhysicsEnd(session, "collected");
+    if (!sent) {
+      return false;
+    }
+    multiplayer.claimedHealthPickupIds.add(String(pickup.id));
+    multiplayer.localPartyPhysicsSessions.delete(session.key);
+    multiplayer.partyPhysicsSessions.delete(session.key);
+    return true;
   }
 
   function awardTechPickup(pickup) {
@@ -14757,19 +17152,14 @@
         continue;
       }
 
-      const dx = player.x - particle.x;
-      const dy = player.y - particle.y;
-      const rawDist = Math.hypot(dx, dy);
-      const dist = rawDist || 1;
-      const minDist = player.radius + solidBodyContactRadius(particle);
-
-      if (dist >= minDist) {
+      const contact = playerCircleHurtboxContact(player, particle.x, particle.y, solidBodyContactRadius(particle), playerBodyHurtboxScale);
+      if (!contact) {
         continue;
       }
 
-      const nx = rawDist ? dx / dist : 1;
-      const ny = rawDist ? dy / dist : 0;
-      const overlap = minDist - dist;
+      const nx = contact.nx;
+      const ny = contact.ny;
+      const overlap = contact.overlap;
       const bodyShare = clamp(4 / (particle.mass + 4), 0.03, 0.28);
       const playerShare = 1 - bodyShare;
 
@@ -14798,19 +17188,14 @@
         continue;
       }
 
-      const dx = player.x - particle.x;
-      const dy = player.y - particle.y;
-      const rawDist = Math.hypot(dx, dy);
-      const dist = rawDist || 1;
-      const minDist = player.radius + solidBodyContactRadius(particle);
-
-      if (dist >= minDist) {
+      const contact = playerCircleHurtboxContact(player, particle.x, particle.y, solidBodyContactRadius(particle), playerBodyHurtboxScale);
+      if (!contact) {
         continue;
       }
 
-      const nx = rawDist ? dx / dist : 1;
-      const ny = rawDist ? dy / dist : 0;
-      const overlap = minDist - dist;
+      const nx = contact.nx;
+      const ny = contact.ny;
+      const overlap = contact.overlap;
 
       player.x += nx * overlap;
       player.y += ny * overlap;
@@ -14921,6 +17306,8 @@
     sendThrottledRemoteEntityEffect(contact.remote, keyPrefix + ":" + contact.source.id, 0.18, {
       entityType: "particle",
       entityId: contact.source.id,
+      sourceKind: "environment",
+      cause: "Shared body impact",
       impulseX: -nx * impulse,
       impulseY: -ny * impulse
     });
@@ -14929,25 +17316,26 @@
   function resolveRemoteBodyPlayerCollisions() {
     for (const contact of collectRemoteSharedBodies()) {
       const body = contact.body;
-      const dx = player.x - body.x;
-      const dy = player.y - body.y;
-      const rawDist = Math.hypot(dx, dy);
-      const dist = rawDist || 1;
-      const minDist = player.radius + (body.tier.solid ? solidBodyContactRadius(body) : body.radius * 1.08);
-
-      if (dist >= minDist) {
+      const bodyContact = playerCircleHurtboxContact(
+        player,
+        body.x,
+        body.y,
+        body.tier.solid ? solidBodyContactRadius(body) : body.radius * 1.08,
+        playerBodyHurtboxScale
+      );
+      if (!bodyContact) {
         continue;
       }
 
-      const nx = rawDist ? dx / dist : 1;
-      const ny = rawDist ? dy / dist : 0;
+      const nx = bodyContact.nx;
+      const ny = bodyContact.ny;
       const relativeVelocity = (player.vx - body.vx) * nx + (player.vy - body.vy) * ny;
       const incomingSpeed = Math.max(0, -relativeVelocity);
       const bodySpeed = Math.hypot(body.vx, body.vy);
       const impactSpeed = Math.max(incomingSpeed, bodySpeed);
 
       if (body.tier.solid) {
-        const overlap = minDist - dist;
+        const overlap = bodyContact.overlap;
         player.x += nx * overlap * 0.82;
         player.y += ny * overlap * 0.82;
 
@@ -15442,6 +17830,7 @@
           sendPartyHostEntityEffect({
             entityType: mob.kind,
             entityId: mob.id,
+            sourceKind: "player",
             damage: laser.damage || playerWeaponDefaults.damage,
             impulseX: dirX * knockback,
             impulseY: dirY * knockback,
@@ -15740,6 +18129,109 @@
     const closestX = ax + abx * t;
     const closestY = ay + aby * t;
     return Math.hypot(px - closestX, py - closestY);
+  }
+
+  function pointToSegmentContact(px, py, ax, ay, bx, by) {
+    const abx = bx - ax;
+    const aby = by - ay;
+    const abLenSq = abx * abx + aby * aby || 1;
+    const t = clamp(((px - ax) * abx + (py - ay) * aby) / abLenSq, 0, 1);
+    const closestX = ax + abx * t;
+    const closestY = ay + aby * t;
+    const dx = closestX - px;
+    const dy = closestY - py;
+    const distance = Math.hypot(dx, dy);
+    return {
+      x: closestX,
+      y: closestY,
+      distance,
+      nx: distance ? dx / distance : 1,
+      ny: distance ? dy / distance : 0
+    };
+  }
+
+  function playerHurtboxDownVector(targetPlayer) {
+    if (targetPlayer && targetPlayer.landed && Number.isFinite(Number(targetPlayer.landed.angle))) {
+      const angle = finiteOr(targetPlayer.landed.angle, 0) + Math.PI;
+      return { x: Math.cos(angle), y: Math.sin(angle) };
+    }
+
+    const angle = targetPlayer === player
+      ? Math.PI / 2 - cameraRoll
+      : finiteOr(targetPlayer && targetPlayer.cameraRoll, 0) - cameraRoll + Math.PI / 2;
+    return { x: Math.cos(angle), y: Math.sin(angle) };
+  }
+
+  function playerHurtboxSegment(targetPlayer) {
+    const down = playerHurtboxDownVector(targetPlayer);
+    const x = finiteOr(targetPlayer && targetPlayer.x, player.x);
+    const y = finiteOr(targetPlayer && targetPlayer.y, player.y);
+    return {
+      ax: x + down.x * playerHurtboxTopOffset,
+      ay: y + down.y * playerHurtboxTopOffset,
+      bx: x + down.x * playerHurtboxBottomOffset,
+      by: y + down.y * playerHurtboxBottomOffset
+    };
+  }
+
+  function distanceBetweenSegments(ax, ay, bx, by, cx, cy, dx, dy) {
+    function orientation(px, py, qx, qy, rx, ry) {
+      const value = (qy - py) * (rx - qx) - (qx - px) * (ry - qy);
+      if (Math.abs(value) < 0.000001) {
+        return 0;
+      }
+      return value > 0 ? 1 : 2;
+    }
+
+    function onSegment(px, py, qx, qy, rx, ry) {
+      return qx <= Math.max(px, rx) + 0.000001 &&
+        qx + 0.000001 >= Math.min(px, rx) &&
+        qy <= Math.max(py, ry) + 0.000001 &&
+        qy + 0.000001 >= Math.min(py, ry);
+    }
+
+    const o1 = orientation(ax, ay, bx, by, cx, cy);
+    const o2 = orientation(ax, ay, bx, by, dx, dy);
+    const o3 = orientation(cx, cy, dx, dy, ax, ay);
+    const o4 = orientation(cx, cy, dx, dy, bx, by);
+
+    if (
+      (o1 !== o2 && o3 !== o4) ||
+      (o1 === 0 && onSegment(ax, ay, cx, cy, bx, by)) ||
+      (o2 === 0 && onSegment(ax, ay, dx, dy, bx, by)) ||
+      (o3 === 0 && onSegment(cx, cy, ax, ay, dx, dy)) ||
+      (o4 === 0 && onSegment(cx, cy, bx, by, dx, dy))
+    ) {
+      return 0;
+    }
+
+    return Math.min(
+      distanceToSegment(ax, ay, cx, cy, dx, dy),
+      distanceToSegment(bx, by, cx, cy, dx, dy),
+      distanceToSegment(cx, cy, ax, ay, bx, by),
+      distanceToSegment(dx, dy, ax, ay, bx, by)
+    );
+  }
+
+  function distanceToPlayerHurtboxSegment(targetPlayer, ax, ay, bx, by) {
+    const hurtbox = playerHurtboxSegment(targetPlayer);
+    return distanceBetweenSegments(ax, ay, bx, by, hurtbox.ax, hurtbox.ay, hurtbox.bx, hurtbox.by);
+  }
+
+  function playerCircleHurtboxContact(targetPlayer, cx, cy, circleRadius, playerScale) {
+    const hurtbox = playerHurtboxSegment(targetPlayer);
+    const contact = pointToSegmentContact(cx, cy, hurtbox.ax, hurtbox.ay, hurtbox.bx, hurtbox.by);
+    const playerRadius = Math.max(1, finiteOr(targetPlayer && targetPlayer.radius, player.radius)) * playerScale;
+    const minDist = playerRadius + Math.max(0, finiteOr(circleRadius, 0));
+    if (contact.distance >= minDist) {
+      return null;
+    }
+
+    return Object.assign(contact, {
+      overlap: minDist - contact.distance,
+      minDist,
+      playerRadius
+    });
   }
 
   function segmentBodyIntersection(body, ax, ay, bx, by, padding) {
@@ -16977,8 +19469,8 @@
         continue;
       }
 
-      const dist = distanceToSegment(player.x, player.y, tailX, tailY, projectile.x, projectile.y);
       const playerHitScale = projectile.rocket ? 0.86 : 0.72;
+      const dist = distanceToPlayerHurtboxSegment(player, tailX, tailY, projectile.x, projectile.y);
       const hitDistance = player.radius * playerHitScale + hitRadius;
       const overlapsPlayer = dist < hitDistance;
       const canDamagePlayer = player.hitCooldown <= 0 || (projectile.rocket && player.hitCooldown <= 0.16);
@@ -17029,11 +19521,11 @@
 
       let hitRemotePlayer = false;
       for (const target of collectRemoteCombatPlayers()) {
-        if (!canDamageRemotePlayer(target.remote)) {
+        if (!canDamageRemotePlayerFromPve(target.remote)) {
           continue;
         }
         const remotePlayer = target.player;
-        const remoteDist = distanceToSegment(remotePlayer.x, remotePlayer.y, tailX, tailY, projectile.x, projectile.y);
+        const remoteDist = distanceToPlayerHurtboxSegment(remotePlayer, tailX, tailY, projectile.x, projectile.y);
         const remoteHitDistance = (remotePlayer.radius || player.radius) * playerHitScale + hitRadius;
 
         if (remoteDist >= remoteHitDistance) {
@@ -17042,6 +19534,8 @@
 
         sendRemoteEntityEffect(target.remote, {
           entityType: "player",
+          sourceKind: "mob",
+          cause: projectile.cause || "Alienoid laser",
           damage: Math.max(0, finiteOr(projectile.damage, rivalProjectileDamage)),
           impulseX: dirX * 190 + projectile.vx * 0.34,
           impulseY: dirY * 190 + projectile.vy * 0.34,
@@ -17563,6 +20057,8 @@
     if (target && !target.local && target.remote) {
       sendRemoteEntityEffect(target.remote, {
         entityType: "player",
+        sourceKind: "mob",
+        cause: "Rambot charge",
         damage: difficultyMobDamage(rambotImpactDamage),
         impulseX: nx * 360 + rambot.vx * 0.48,
         impulseY: ny * 360 + rambot.vy * 0.48,
@@ -18010,6 +20506,8 @@
     if (target && !target.local && target.remote) {
       sendRemoteEntityEffect(target.remote, {
         entityType: "player",
+        sourceKind: "mob",
+        cause: "Rocket ship",
         damage: difficultyMobDamage(rocketImpactDamage),
         impulseX: nx * 420 + rocket.vx * 0.52,
         impulseY: ny * 420 + rocket.vy * 0.52,
@@ -20828,52 +23326,51 @@
       const sharedBodyAlpha = transform.phase === "overlap" ? sharedEntityAlpha : alpha;
       const remotePlayerAlpha = transformAlpha * (transform.phase === "overlap" ? 0.9 : 0.48);
       const world = snapshot.world;
+      const renderRadius = remoteUniverseRenderRadius();
+      const renderRadiusSq = renderRadius * renderRadius;
       ctx.save();
       ctx.globalAlpha = sharedBodyAlpha;
       ctx.globalCompositeOperation = "lighter";
 
+      let remoteBodiesDrawn = 0;
       for (const particle of world.particles) {
         if (!isMappedBody(particle)) {
           continue;
         }
         const transformed = transformedRemoteEntity(particle, transform);
-        if (Math.hypot(transformed.x - player.x, transformed.y - player.y) > multiplayer.bubbleRadius + 1800) {
+        if (distanceSqToPlayer(transformed) > renderRadiusSq) {
           continue;
         }
         drawBody(transformed, time);
+        remoteBodiesDrawn += 1;
+        if (remoteBodiesDrawn >= 32) {
+          break;
+        }
       }
 
       ctx.globalCompositeOperation = "source-over";
+      let remoteStructuresDrawn = 0;
       for (const structure of world.structures || []) {
         const transformed = transformedRemoteEntity(structure, transform);
+        if (distanceSqToPlayer(transformed) > renderRadiusSq) {
+          continue;
+        }
         drawRemoteStructure(transformed, time);
+        remoteStructuresDrawn += 1;
+        if (remoteStructuresDrawn >= 24) {
+          break;
+        }
       }
 
       ctx.globalAlpha = sharedEntityAlpha;
-      for (const projectile of world.rivalProjectiles || []) {
-        drawRivalProjectile(transformedRemoteEntity(projectile, transform));
-      }
-      for (const ufo of world.ufos || []) {
-        drawUfo(transformedRemoteEntity(ufo, transform), time);
-      }
-      for (const rambot of world.rambots || []) {
-        drawRambot(transformedRemoteEntity(rambot, transform), time);
-      }
-      for (const engineer of world.engineers || []) {
-        drawEngineer(transformedRemoteEntity(engineer, transform), time);
-      }
-      for (const tesla of world.teslas || []) {
-        drawTesla(transformedRemoteEntity(tesla, transform), time);
-      }
-      for (const rocket of world.rockets || []) {
-        drawRocket(transformedRemoteEntity(rocket, transform), time);
-      }
-      for (const fighter of world.fighters || []) {
-        drawFighter(transformedRemoteEntity(fighter, transform), time);
-      }
-      for (const rival of world.alienoids || []) {
-        drawRival(transformedRemoteEntity(rival, transform), time);
-      }
+      drawRemoteEntityCollection(world.rivalProjectiles, transform, drawRivalProjectile, time, 24, renderRadiusSq);
+      drawRemoteEntityCollection(world.ufos, transform, drawUfo, time, 10, renderRadiusSq);
+      drawRemoteEntityCollection(world.rambots, transform, drawRambot, time, 10, renderRadiusSq);
+      drawRemoteEntityCollection(world.engineers, transform, drawEngineer, time, 10, renderRadiusSq);
+      drawRemoteEntityCollection(world.teslas, transform, drawTesla, time, 10, renderRadiusSq);
+      drawRemoteEntityCollection(world.rockets, transform, drawRocket, time, 10, renderRadiusSq);
+      drawRemoteEntityCollection(world.fighters, transform, drawFighter, time, 10, renderRadiusSq);
+      drawRemoteEntityCollection(world.alienoids, transform, drawRival, time, 14, renderRadiusSq);
 
       if (snapshot.player) {
         ctx.globalAlpha = remotePlayerAlpha;
@@ -20884,6 +23381,35 @@
     }
 
     ctx.restore();
+  }
+
+  function distanceSqToPlayer(entity) {
+    const dx = finiteOr(entity && entity.x, player.x) - player.x;
+    const dy = finiteOr(entity && entity.y, player.y) - player.y;
+    return dx * dx + dy * dy;
+  }
+
+  function remoteUniverseRenderRadius() {
+    const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
+    return Math.hypot(width, height) / zoom * 0.75 + 1600;
+  }
+
+  function drawRemoteEntityCollection(collection, transform, drawFn, time, limit, radiusSq) {
+    if (!Array.isArray(collection) || !collection.length) {
+      return;
+    }
+    let drawn = 0;
+    for (const entity of collection) {
+      const transformed = transformedRemoteEntity(entity, transform);
+      if (distanceSqToPlayer(transformed) > radiusSq) {
+        continue;
+      }
+      drawFn(transformed, time);
+      drawn += 1;
+      if (drawn >= limit) {
+        return;
+      }
+    }
   }
 
   function drawRemoteStructure(structure, time) {
@@ -21317,8 +23843,21 @@
     ctx.restore();
   }
 
+  function remotePlayerVisualAimAngle(remotePlayer) {
+    if (Number.isFinite(Number(remotePlayer.visualAimLocalAngle))) {
+      return finiteOr(remotePlayer.visualAimLocalAngle, 0) - cameraRoll;
+    }
+    if (Number.isFinite(Number(remotePlayer.aimAngle))) {
+      return finiteOr(remotePlayer.aimAngle, 0);
+    }
+    if (Number.isFinite(Number(remotePlayer.aimLocalAngle))) {
+      return finiteOr(remotePlayer.aimLocalAngle, 0) - finiteOr(remotePlayer.cameraRoll, 0);
+    }
+    return Math.atan2(remotePlayer.vy || 0, remotePlayer.vx || 1);
+  }
+
   function drawRemotePlayer(remotePlayer, publicName, time) {
-    const aimAngle = finiteOr(remotePlayer.aimAngle, Math.atan2(remotePlayer.vy || 0, remotePlayer.vx || 1));
+    const aimAngle = remotePlayerVisualAimAngle(remotePlayer);
     const bodyRotation = remoteBodyRotation(remotePlayer);
     const bob = remotePlayerBob(remotePlayer, time);
 
@@ -21897,7 +24436,7 @@
 
     const centerX = width / 2;
     const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
-    const active = !areToolsDisabled() && isGadgetButtonPressed();
+    const active = canUseSuctionControls() && isGadgetButtonPressed();
     const energyColor = mouse.middle ? "#8fffd0" : mouse.right ? "#ffb35c" : "#67edff";
 
     ctx.save();
@@ -22178,6 +24717,7 @@
       }
 
       const alpha = clamp(transform.alpha, 0, 1);
+      let remoteMapBodies = 0;
       for (const body of snapshot.world.particles) {
         if (!isMappedBody(body)) {
           continue;
@@ -22187,6 +24727,10 @@
           alpha,
           publicName: remote.publicName
         });
+        remoteMapBodies += 1;
+        if (remoteMapBodies >= 18) {
+          break;
+        }
       }
 
       if (snapshot.player) {
@@ -22461,6 +25005,10 @@
 
   function stepGameplaySimulation(dt, options) {
     const includeExternalSystems = !options || options.includeExternalSystems !== false;
+    if (isMultiplayerV2Active()) {
+      stepMultiplayerV2Simulation(dt, includeExternalSystems);
+      return;
+    }
     if (isSharedWorldFollower()) {
       stepSharedWorldFollowerSimulation(dt, includeExternalSystems);
       return;
@@ -22511,12 +25059,21 @@
     updatePlayer(dt);
     updateGadgetAim(dt);
     updateEquippedTool(dt);
-    updatePlayerLasers(dt, { relaySharedWorldHits: true });
-    updateFollowerWorldSmoothing(dt);
-    updateFollowerGadgetPrediction(dt);
-    updateFollowerTechPickups();
+    updatePlayerLasers(dt, { relaySharedWorldHits: joinedPlayerIsolationAllows("relayHostEntityEffects") });
+    if (joinedPlayerIsolationAllows("followerWorldSmoothing")) {
+      updateFollowerWorldSmoothing(dt);
+    }
+    if (joinedPlayerIsolationAllows("followerGadgetPrediction")) {
+      updateFollowerGadgetPrediction(dt);
+    }
+    if (joinedPlayerIsolationAllows("followerPickupPrediction")) {
+      updateFollowerTechPickups();
+      updateFollowerHealthPickups();
+    }
     applyLandedSurfaceConstraint();
-    resolveFollowerPlayerBodyCollisions();
+    if (joinedPlayerIsolationAllows("followerBodyCollisions")) {
+      resolveFollowerPlayerBodyCollisions();
+    }
     updateSparks(dt);
 
     if (includeExternalSystems) {
@@ -22526,7 +25083,9 @@
   }
 
   function tick(now) {
-    const dt = Math.min(0.033, (now - lastTime) / 1000 || 0);
+    const frameDt = Math.max(0, (now - lastTime) / 1000 || 0);
+    const dt = Math.min(0.033, frameDt);
+    const gameplayDt = isMultiplayerV2Active() ? multiplayerV2FrameDt(frameDt) : dt;
     lastTime = now;
 
     if (!runState.active) {
@@ -22569,7 +25128,7 @@
       return;
     }
 
-    stepGameplaySimulation(dt);
+    stepGameplaySimulation(gameplayDt);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
@@ -22648,7 +25207,11 @@
         health: player.health,
         maxHealth: player.maxHealth,
         energy: player.energy,
-        maxEnergy: player.maxEnergy
+        maxEnergy: player.maxEnergy,
+        aimAngle: Math.atan2(getAim().world.y, getAim().world.x),
+        aimLocalAngle: getAim().angle,
+        hitCooldown: player.hitCooldown,
+        respawnInvulnerable: multiplayer.partyRespawnInvulnerableTimer
       },
       particles: {
         count: particles.length,
@@ -22677,6 +25240,170 @@
         playerAbsorptions: lifeStats.absorbedParticleCount,
         mobsDefeated: lifeStats.mobsDefeated
       }
+    };
+  }
+
+  function normalizeClusternautsTestPartyPlayers(players) {
+    const source = Array.isArray(players) && players.length ? players : [player.id];
+    return source.map((entry) => {
+      if (typeof entry === "string") {
+        return {
+          playerId: entry,
+          publicName: entry,
+          online: true
+        };
+      }
+      const playerId = String(entry && entry.playerId || "");
+      return playerId
+        ? {
+            playerId,
+            publicName: String(entry.publicName || playerId),
+            online: entry.online !== false
+          }
+        : null;
+    }).filter(Boolean);
+  }
+
+  function configureClusternautsTestParty(options) {
+    const config = options || {};
+    player.id = String(config.playerId || player.id || "local-player");
+    multiplayer.universeId = "solo:" + player.id;
+    multiplayer.partyHostId = String(config.hostPlayerId || player.id);
+    multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
+    multiplayer.partySession = {
+      id: String(config.sessionId || "test-party"),
+      lobbyId: "",
+      players: normalizeClusternautsTestPartyPlayers(config.players || [multiplayer.partyHostId, player.id]),
+      pvpMode: String(config.pvpMode || "party-off"),
+      netcodeVersion: Math.max(1, Math.floor(finiteOr(config.netcodeVersion, 1)))
+    };
+    multiplayer.partyMode = "party";
+    multiplayer.partyPlayerSnapshots.clear();
+    multiplayer.partyPhysicsSessions.clear();
+    multiplayer.partyInputSeqByPlayer.clear();
+    multiplayer.localPartyPhysicsSessions.clear();
+    multiplayer.partyPhysicsSeq = 0;
+    multiplayer.duels.clear();
+    multiplayer.anomaly = config.anomalyTeamId
+      ? {
+          id: "test-anomaly",
+          teamId: String(config.anomalyTeamId),
+          phase: "overlap",
+          endsAt: Date.now() + 60000
+        }
+      : null;
+  }
+
+  function configureClusternautsTestPlayerState(options) {
+    const config = options || {};
+    if (Number.isFinite(Number(config.health))) {
+      player.health = clamp(Number(config.health), 0, player.maxHealth);
+    }
+    if (Number.isFinite(Number(config.maxHealth))) {
+      player.maxHealth = clamp(Number(config.maxHealth), 1, 100);
+      player.health = clamp(player.health, 0, player.maxHealth);
+    }
+    if (Number.isFinite(Number(config.hitCooldown))) {
+      player.hitCooldown = Math.max(0, Number(config.hitCooldown));
+    }
+    if (Number.isFinite(Number(config.respawnInvulnerable))) {
+      multiplayer.partyRespawnInvulnerableTimer = Math.max(0, Number(config.respawnInvulnerable));
+    }
+  }
+
+  function setClusternautsTestParticles(list) {
+    particles.length = 0;
+    for (const entry of Array.isArray(list) ? list : []) {
+      const particle = normalizeParticleSnapshot(entry);
+      if (particle) {
+        particles.push(particle);
+      }
+    }
+    nextParticleId = Math.max(
+      nextParticleId,
+      particles.reduce((largest, particle) => Math.max(largest, finiteOr(particle.id, 0) + 1), 1)
+    );
+    return particles.map(serializeParticle);
+  }
+
+  function setClusternautsTestTechPickups(list) {
+    techPickups.length = 0;
+    for (const entry of Array.isArray(list) ? list : []) {
+      const pickup = normalizeTechPickupSnapshot(entry);
+      if (pickup) {
+        techPickups.push(pickup);
+      }
+    }
+    nextTechPickupId = Math.max(
+      nextTechPickupId,
+      techPickups.reduce((largest, pickup) => Math.max(largest, finiteOr(pickup.id, 0) + 1), 1)
+    );
+    return techPickups.map(serializeTechPickup);
+  }
+
+  function setClusternautsTestHealthPickups(list) {
+    healthPickups.length = 0;
+    for (const entry of Array.isArray(list) ? list : []) {
+      const pickup = normalizeHealthPickupSnapshot(entry);
+      if (pickup) {
+        healthPickups.push(pickup);
+      }
+    }
+    nextHealthPickupId = Math.max(
+      nextHealthPickupId,
+      healthPickups.reduce((largest, pickup) => Math.max(largest, finiteOr(pickup.id, 0) + 1), 1)
+    );
+    return healthPickups.map(serializeHealthPickup);
+  }
+
+  function createClusternautsTestPartyState(config) {
+    const source = config || {};
+    const actor = source.actor && typeof source.actor === "object"
+      ? {
+          id: String(source.playerId || source.actor.id || "remote-player"),
+          x: finiteOr(source.actor.x, 0),
+          y: finiteOr(source.actor.y, 0),
+          vx: finiteOr(source.actor.vx, 0),
+          vy: finiteOr(source.actor.vy, 0),
+          radius: finiteOr(source.actor.radius, player.radius),
+          equippedTool: defaultToolId,
+          toolMode: source.mode || "pull",
+          energy: finiteOr(source.actor.energy, 100),
+          landed: normalizeLandingSnapshot(source.actor.landed),
+          aimAngle: finiteOr(source.actor.aimAngle, 0)
+        }
+      : {
+          id: String(source.playerId || "remote-player"),
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          radius: player.radius,
+          equippedTool: defaultToolId,
+          toolMode: source.mode || "pull",
+          energy: 100,
+          landed: null,
+          aimAngle: finiteOr(source.aimAngle, 0)
+        };
+    const aimWorld = normalize(Math.cos(finiteOr(source.aimAngle, actor.aimAngle)), Math.sin(finiteOr(source.aimAngle, actor.aimAngle)));
+    return {
+      playerId: actor.id,
+      seq: Math.max(0, Math.floor(finiteOr(source.seq, 0))),
+      sentAt: finiteOr(source.sentAt, performance.now()),
+      receivedAt: performance.now() - Math.max(0, finiteOr(source.receivedAgoMs, 0)),
+      actor,
+      aimWorld,
+      funnel: actorFunnel(actor, aimWorld),
+      left: source.mode !== "push" && source.mode !== "hold",
+      middle: source.mode === "hold",
+      right: source.mode === "push",
+      active: source.active !== false,
+      suckFactor: finiteOr(source.suckFactor, 1),
+      blowFactor: finiteOr(source.blowFactor, 1),
+      bucketActive: source.bucketActive !== false,
+      bucketPadding: finiteOr(source.bucketPadding, 0),
+      landedBodyId: Math.max(0, Math.floor(finiteOr(source.landedBodyId, actor.landed ? actor.landed.bodyId : 0))),
+      mode: source.mode || "pull"
     };
   }
 
@@ -22724,6 +25451,223 @@
           stepGameplaySimulation(seconds, { includeExternalSystems: false });
         }
         return createClusternautsFrameRateSnapshot();
+      },
+      frame: function (dt) {
+        const seconds = Math.max(0, finiteOr(dt, 0));
+        const now = performance.now();
+        if (!runState.active) {
+          return createClusternautsFrameRateSnapshot();
+        }
+        if (deathState.active) {
+          updateDeath(seconds);
+        } else if (!gamePaused) {
+          stepGameplaySimulation(seconds, { includeExternalSystems: false });
+        }
+        updateRemoteVisualTransforms(seconds);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+        drawBackground();
+        drawParticles(now);
+        drawRemoteUniverses(now);
+        drawRivals(now);
+        drawPlayer(now);
+        drawVignette();
+        drawMapOverlay();
+        updateHud();
+        return createClusternautsFrameRateSnapshot();
+      },
+      configureParty: function (options) {
+        configureClusternautsTestParty(options);
+        return createClusternautsFrameRateSnapshot();
+      },
+      startMultiplayerV2: function (options) {
+        const source = options && typeof options === "object" ? options : {};
+        if (!multiplayer.partySession) {
+          configureClusternautsTestParty({ netcodeVersion: 2 });
+        }
+        multiplayer.partySession.netcodeVersion = 2;
+        return startMultiplayerV2({
+          roomId: String(source.roomId || multiplayer.partySession.id || "test-v2"),
+          session: multiplayer.partySession,
+          snapshot: source.snapshot || buildPersistentPayload(true)
+        });
+      },
+      multiplayerV2State: function () {
+        return multiplayer.v2.state && mpV2Sim ? mpV2Sim.serializeState(multiplayer.v2.state) : null;
+      },
+      setPlayerState: function (options) {
+        configureClusternautsTestPlayerState(options);
+        return createClusternautsFrameRateSnapshot();
+      },
+      advancePartyTimers: function (dt) {
+        multiplayer.partyRespawnInvulnerableTimer = Math.max(0, multiplayer.partyRespawnInvulnerableTimer - Math.max(0, finiteOr(dt, 0)));
+        return createClusternautsFrameRateSnapshot();
+      },
+      setDuel: function (playerId, enabled) {
+        const id = String(playerId || "");
+        if (id && enabled) {
+          multiplayer.duels.add(id);
+        } else if (id) {
+          multiplayer.duels.delete(id);
+        }
+        return createClusternautsFrameRateSnapshot();
+      },
+      applyEntityEffect: function (message) {
+        const source = message && typeof message === "object" ? message : {};
+        applyRemoteEntityEffect({
+          fromPlayerId: String(source.fromPlayerId || ""),
+          fromTeamId: String(source.fromTeamId || ""),
+          targetUniverseId: multiplayer.universeId,
+          effect: source.effect || source
+        });
+        return createClusternautsFrameRateSnapshot();
+      },
+      setParticles: setClusternautsTestParticles,
+      getParticles: function () {
+        return particles.map(serializeParticle);
+      },
+      setTechPickups: setClusternautsTestTechPickups,
+      getTechPickups: function () {
+        return techPickups.map(serializeTechPickup);
+      },
+      setHealthPickups: setClusternautsTestHealthPickups,
+      getHealthPickups: function () {
+        return healthPickups.map(serializeHealthPickup);
+      },
+      localPhysicsOwner: function (type, id) {
+        const session = localPartyPhysicsSession(type, id, performance.now());
+        return session ? session.playerId || "" : "";
+      },
+      partyPhysicsOwner: function (type, id) {
+        const session = partyPhysicsSession(type, id, performance.now());
+        return session ? session.playerId || "" : "";
+      },
+      applyWorldSnapshot: function (world, options) {
+        applyWorldSnapshot(world || {}, options || { smoothParticles: true, smoothEntities: true });
+        return {
+          particles: particles.map(serializeParticle),
+          techPickups: techPickups.map(serializeTechPickup),
+          healthPickups: healthPickups.map(serializeHealthPickup)
+        };
+      },
+      applyPartyWorldSnapshot: function (message) {
+        applyPartyWorldSnapshot(message || {});
+        return {
+          particles: particles.map(serializeParticle),
+          techPickups: techPickups.map(serializeTechPickup),
+          healthPickups: healthPickups.map(serializeHealthPickup)
+        };
+      },
+      applyPartyPlayerSnapshot: function (message) {
+        applyPartyPlayerSnapshot(message || {});
+        return createClusternautsFrameRateSnapshot();
+      },
+      applyRemoteSnapshot: function (message) {
+        applyRemoteSnapshot(message || {});
+        updateRemoteVisualTransforms(0);
+        return createClusternautsFrameRateSnapshot();
+      },
+      remotePlayerSnapshot: function (playerId) {
+        const remote = multiplayer.remoteUniverses.get("solo:" + String(playerId || ""));
+        return remote && remote.snapshot && remote.snapshot.player ? { ...remote.snapshot.player } : null;
+      },
+      setJoinedPlayerIsolation: function (options) {
+        return configureJoinedPlayerIsolation(options || {});
+      },
+      joinedPlayerIsolation: function () {
+        return {
+          active: isJoinedPlayerIsolationActive(),
+          enabled: joinedPlayerIsolation.enabled,
+          components: { ...joinedPlayerIsolation.components }
+        };
+      },
+      applyPartyPhysicsRequest: function (options) {
+        const source = options && typeof options === "object" ? options : {};
+        handlePartyPhysicsSessionRequest({
+          type: source.messageType || "party.physics.start",
+          fromPlayerId: String(source.playerId || "joiner"),
+          entityType: source.entityType || "particle",
+          entityId: source.entityId,
+          seq: Math.max(0, Math.floor(finiteOr(source.seq, 1))),
+          state: source.state || null,
+          actor: source.actor || { id: String(source.playerId || "joiner"), x: 0, y: 0, vx: 0, vy: 0, radius: player.radius, equippedTool: defaultToolId, toolMode: source.mode || "pull", energy: 100, aimAngle: 0 },
+          mode: source.mode || "pull",
+          active: source.active !== false,
+          reason: source.reason || ""
+        });
+        return {
+          owner: source.entityType && source.entityId ? (partyPhysicsSession(source.entityType, source.entityId, performance.now()) || {}).playerId || "" : "",
+          particles: particles.map(serializeParticle),
+          techPickups: techPickups.map(serializeTechPickup),
+          healthPickups: healthPickups.map(serializeHealthPickup)
+        };
+      },
+      endPartyPhysicsRequest: function (options) {
+        const source = options && typeof options === "object" ? options : {};
+        handlePartyPhysicsEndRequest({
+          type: "party.physics.end",
+          fromPlayerId: String(source.playerId || "joiner"),
+          entityType: source.entityType || "particle",
+          entityId: source.entityId,
+          seq: Math.max(0, Math.floor(finiteOr(source.seq, 1))),
+          state: source.state || null,
+          actor: source.actor || { id: String(source.playerId || "joiner"), x: 0, y: 0, vx: 0, vy: 0, radius: player.radius, equippedTool: defaultToolId, toolMode: source.mode || "pull", energy: 100, aimAngle: 0 },
+          mode: source.mode || "pull",
+          active: source.active !== false,
+          reason: source.reason || "ended"
+        });
+        return {
+          owner: source.entityType && source.entityId ? (partyPhysicsSession(source.entityType, source.entityId, performance.now()) || {}).playerId || "" : "",
+          particles: particles.map(serializeParticle),
+          techPickups: techPickups.map(serializeTechPickup),
+          healthPickups: healthPickups.map(serializeHealthPickup)
+        };
+      },
+      applyPartyPhysicsAuthority: function (message) {
+        applyPartyPhysicsAuthority(message || {});
+        return {
+          particles: particles.map(serializeParticle),
+          techPickups: techPickups.map(serializeTechPickup),
+          healthPickups: healthPickups.map(serializeHealthPickup)
+        };
+      },
+      applyPartyPhysicsReject: function (message) {
+        applyPartyPhysicsReject(message || {});
+        return {
+          particles: particles.map(serializeParticle),
+          techPickups: techPickups.map(serializeTechPickup),
+          healthPickups: healthPickups.map(serializeHealthPickup)
+        };
+      },
+      rememberBucketBodies: function (bodyIds) {
+        return buildPartyInputSnapshot(multiplayer.partyInputSeq + 1);
+      },
+      previewPartyInput: function (seq) {
+        return buildPartyInputSnapshot(Math.max(1, Math.floor(finiteOr(seq, multiplayer.partyInputSeq + 1))));
+      },
+      applyPartyGadgetForces: function (options) {
+        const source = options && typeof options === "object" ? options : {};
+        const state = createClusternautsTestPartyState(source);
+        const body = bodyById(Math.max(1, Math.floor(finiteOr(source.bodyId, 0))));
+        const changed = applyActorGadgetForces(body, state, Math.max(0, finiteOr(source.dt, 1 / 30)), source.forceOptions || {});
+        return {
+          changed,
+          particles: particles.map(serializeParticle)
+        };
+      },
+      mergeParticles: function () {
+        mergeParticles();
+        return particles.map(serializeParticle);
+      },
+      resolvePartyBucket: function (options) {
+        const source = options && typeof options === "object" ? options : {};
+        const state = createClusternautsTestPartyState(source);
+        const body = bodyById(Math.max(1, Math.floor(finiteOr(source.bodyId, 0))));
+        const changed = resolveActorFunnelBucket(body, state, Math.max(0, finiteOr(source.dt, 1 / 30)));
+        return {
+          changed,
+          particles: particles.map(serializeParticle)
+        };
       },
       snapshot: createClusternautsFrameRateSnapshot
     };
@@ -22854,6 +25798,13 @@
   if (multiplayerPanelToggle) {
     multiplayerPanelToggle.addEventListener("click", function () {
       setFriendJoinsEnabled(!multiplayer.friendJoinsEnabled, "panel-toggle");
+    });
+  }
+
+  if (copySettingsJoinCodeButton) {
+    copySettingsJoinCodeButton.addEventListener("click", function () {
+      copyTextToClipboard(activePartyJoinCode(), "World code copied.");
+      maybeNotifyText("World code copied.");
     });
   }
 
@@ -23454,14 +26405,16 @@
   });
 
   window.addEventListener("mousemove", function (event) {
-    const rect = canvas.getBoundingClientRect();
-    mouse.x = event.clientX - rect.left;
-    mouse.y = event.clientY - rect.top;
-    mouse.seen = true;
+    updatePointerAimFromEvent(event);
   });
 
   window.addEventListener("pointerdown", beginTouchControl, { passive: false });
-  window.addEventListener("pointermove", updateTouchControl, { passive: false });
+  window.addEventListener("pointermove", function (event) {
+    if (!isTouchGameplayPointer(event)) {
+      updatePointerAimFromEvent(event);
+    }
+    updateTouchControl(event);
+  }, { passive: false });
   window.addEventListener("pointerup", endTouchControl, { passive: false });
   window.addEventListener("pointercancel", endTouchControl, { passive: false });
   window.addEventListener("selectstart", function (event) {
@@ -23483,6 +26436,8 @@
     if (isGameplayPointerBlocked(event)) {
       return;
     }
+
+    updatePointerAimFromEvent(event);
 
     if (activePlacementRecipeId) {
       event.preventDefault();
@@ -23541,6 +26496,8 @@
     if (isGameplayPointerBlocked(event)) {
       return;
     }
+
+    updatePointerAimFromEvent(event);
 
     if (event.button === 0) {
       mouse.left = false;

@@ -1572,6 +1572,7 @@ select {
 
 .settings-panel__range,
 .settings-panel__check,
+.settings-panel__join-code,
 .settings-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1581,6 +1582,7 @@ select {
 
 .settings-panel__range span,
 .settings-panel__check span,
+.settings-panel__join-code span,
 .settings-row__label,
 .settings-panel__section-title {
   overflow: hidden;
@@ -1589,6 +1591,20 @@ select {
   font-weight: 900;
   line-height: 1.1;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-panel__join-code {
+  grid-template-columns: minmax(0, 1fr) minmax(72px, auto) auto;
+}
+
+.settings-panel__join-code strong {
+  color: #ffe56f;
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-align: right;
   white-space: nowrap;
 }
 

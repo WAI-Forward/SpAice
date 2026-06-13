@@ -9,6 +9,10 @@
     "package:crazygames": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-crazygames.ps1",
     "start": "node server.js",
     "test:menu:lobby": "node tests/menu-lobby-contract.test.js",
+    "test:multiplayer:death-respawn": "node tests/multiplayer-death-respawn.test.js",
+    "test:multiplayer:energy": "node tests/multiplayer-energy-gating.test.js",
+    "test:multiplayer:benchmark": "node tests/multiplayer-performance-benchmark.test.js",
+    "test:multiplayer:responsiveness": "node tests/multiplayer-responsiveness.test.js",
     "test:physics:framerate": "node tests/crazygames-framerate-consistency.test.js"
   },
   "dependencies": {
