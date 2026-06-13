@@ -140,6 +140,8 @@ function createDefaultWorldState() {
       rocket: 840,
       fighter: 960
     },
+    mobSpawnRestTimer: 0,
+    mobSpawnRestCooldownTimer: 150,
     mobDefeatsByKind: {
       alienoid: 0,
       ufo: 0,
@@ -1985,6 +1987,10 @@ function normalizeWorldState(snapshot) {
     nextTechPickupId: Math.max(1, Math.floor(Number(source.nextTechPickupId) || 1)),
     nextHealthPickupId: Math.max(1, Math.floor(Number(source.nextHealthPickupId) || 1)),
     mobSpawnTimers: normalizeMobSpawnTimers(source.mobSpawnTimers),
+    mobSpawnRestTimer: clampNumber(source.mobSpawnRestTimer, 0, 24),
+    mobSpawnRestCooldownTimer: Number.isFinite(Number(source.mobSpawnRestCooldownTimer))
+      ? clampNumber(source.mobSpawnRestCooldownTimer, 0, 150)
+      : 150,
     mobDefeatsByKind: normalizeMobDefeatsByKind(source.mobDefeatsByKind),
     lastEvolvedAt: clampNumber(source.lastEvolvedAt, 0, Date.now()) || Date.now()
   };
@@ -2409,8 +2415,12 @@ function normalizeProjectile(source) {
     life: clampNumber(source.life, 0, 20),
     maxLife: clampNumber(source.maxLife, 0, 20),
     damage: Number.isFinite(Number(source.damage)) ? clampNumber(source.damage, 0, 200) : 10,
+    knockback: clampNumber(source.knockback, 0, 1000),
     toolDisable: clampNumber(source.toolDisable, 0, 20),
     cause: sanitizeText(source.cause, 64) || "",
+    sourcePlayerId: sanitizeText(source.sourcePlayerId, 80) || "",
+    weaponLabel: sanitizeText(source.weaponLabel, 64) || "",
+    piercesMobs: Boolean(source.piercesMobs),
     lightning: Boolean(source.lightning),
     rocket: Boolean(source.rocket)
   };
@@ -3184,6 +3194,11 @@ async function handleSocketMessage(client, message) {
 
   if (message.type === "mp.v2.input") {
     handlePartyV2Input(client, message);
+    return;
+  }
+
+  if (message.type === "mp.v2.action") {
+    handlePartyV2Action(client, message);
     return;
   }
 
@@ -4147,6 +4162,71 @@ function handlePartyV2Input(client, message) {
   room.lastTouchedAt = Date.now();
 }
 
+function sanitizePartyV2Placement(source) {
+  const placement = source && typeof source === "object" ? source : {};
+  return {
+    bodyId: Math.max(0, Math.floor(clampNumber(placement.bodyId, 0, 1000000000))),
+    angle: clampNumber(placement.angle, -Math.PI * 64, Math.PI * 64)
+  };
+}
+
+function handlePartyV2Action(client, message) {
+  const session = partySessions.get(client.partySessionId);
+  if (!session || !isPartyV2Session(session) || !session.players.includes(client.playerId)) {
+    return;
+  }
+
+  const room = partyV2Rooms.get(session.id);
+  if (!room) {
+    return;
+  }
+
+  if (message.roomId && message.roomId !== session.id && message.roomId !== session.lobbyId) {
+    return;
+  }
+
+  addPartyV2Player(room, session, client.playerId);
+
+  const action = sanitizeText(message.action, 32);
+  let changed = false;
+  if (action === "craftTool") {
+    changed = mpV2Sim.craftTool(room.state, client.playerId, sanitizeText(message.recipeId, 64));
+  } else if (action === "upgradeTool") {
+    changed = mpV2Sim.upgradeTool(
+      room.state,
+      client.playerId,
+      sanitizeText(message.toolId, 64),
+      sanitizeText(message.upgradeId, 64)
+    );
+  } else if (action === "setEquippedTools") {
+    const equippedTools = Array.isArray(message.equippedTools)
+      ? message.equippedTools.map((toolId) => sanitizeText(toolId, 64)).slice(0, 8)
+      : [];
+    changed = mpV2Sim.setEquippedTools(
+      room.state,
+      client.playerId,
+      sanitizeText(message.equippedTool, 64),
+      equippedTools
+    );
+  } else if (action === "placeStructure") {
+    changed = mpV2Sim.placeStructure(
+      room.state,
+      client.playerId,
+      sanitizeText(message.recipeId, 64),
+      sanitizePartyV2Placement(message.placement),
+      sanitizePartyV2Placement(message.linkedPlacement)
+    );
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  room.lastTouchedAt = Date.now();
+  session.worldSnapshot = buildPartyV2StartSnapshot(room);
+  sendPartyV2Snapshot(session, room);
+}
+
 function popPartyV2Input(room, playerId) {
   const queue = room.inputQueues.get(playerId) || [];
   let next = null;
@@ -4191,7 +4271,11 @@ function stepPartyV2RoomsOnce() {
     }
 
     const stepStart = monotonicMs();
-    mpV2Sim.step(room.state, inputs, { dt: mpV2Sim.TICK_DT, enableMobs: true });
+    mpV2Sim.step(room.state, inputs, {
+      dt: mpV2Sim.TICK_DT,
+      enableMobs: true,
+      duels: partyV2DuelPairsForSession(session)
+    });
     if (room.perf) {
       room.perf.stepMsEma = smoothMetric(room.perf.stepMsEma, monotonicMs() - stepStart, 0.18);
       room.perf.entityCount = partyV2EntityCount(room.state.world);
@@ -5069,6 +5153,21 @@ async function handlePlayerInteractionChoice(client, message) {
 
 function interactionPairKey(a, b) {
   return [a, b].sort().join("|");
+}
+
+function partyV2DuelPairsForSession(session) {
+  if (!session || !Array.isArray(session.players) || !session.players.length) {
+    return [];
+  }
+  const partyPlayers = new Set(session.players);
+  const pairs = [];
+  for (const key of activePlayerDuels) {
+    const [a, b] = String(key || "").split("|");
+    if (a && b && partyPlayers.has(a) && partyPlayers.has(b)) {
+      pairs.push(key);
+    }
+  }
+  return pairs;
 }
 
 function relayInteractionRequest(fromClient, targetClient, choice) {

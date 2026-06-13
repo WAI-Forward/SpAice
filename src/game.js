@@ -144,6 +144,7 @@
   const deathLeaderboardButton = document.getElementById("deathLeaderboardButton");
   const deathLeaderboardStatus = document.getElementById("deathLeaderboardStatus");
   const playAgainButton = document.getElementById("playAgainButton");
+  const deathMainMenuButton = document.getElementById("deathMainMenuButton");
   const externalBackendOrigin = "https://36ff-92-29-230-204.ngrok-free.app";
   const serverMaintenanceMessage = "Server is down for maintenance.  Please try again later";
   const crazyGamesState = {
@@ -191,7 +192,8 @@
   };
   const clusternautsTestCounters = {
     particleMerges: 0,
-    bodyBounces: 0
+    bodyBounces: 0,
+    buildMenuRenders: 0
   };
   let lastClientErrorReportAt = -Infinity;
   let lastServerMaintenanceNoticeAt = -Infinity;
@@ -531,6 +533,7 @@
   const bodyImpactBaseKnockback = 145;
   const bodyImpactMaxKnockback = 320;
   const solidBodyDamageSpeed = 92;
+  const solidBodyPlayerDamageSpeed = 520;
   const weaponSlowDecay = 0.18;
   const weaponSlowMax = 0.58;
   const rivalProjectileSpeed = 360;
@@ -539,7 +542,7 @@
   const rambotImpactDamage = 18;
   const rambotImpactSpeed = 260;
   const playerHurtboxTopOffset = -38;
-  const playerHurtboxBottomOffset = 94;
+  const playerHurtboxBottomOffset = 112;
   const playerProjectileHurtboxScale = 0.72;
   const playerBodyHurtboxScale = 0.86;
   const engineerHealRange = 620;
@@ -591,6 +594,7 @@
   const spannerDismantleEnergyDrain = 10;
   const spannerStrikeEnergyCost = 7;
   const jetpackBoostEnergyDrain = 20;
+  const playerContinuousEnergyActivationCost = 2;
   const jetpackBoostThrustMultiplier = 1.42;
   const jetpackBoostSpeedMultiplier = 1.38;
   const playerBaseMaxEnergy = 100;
@@ -670,11 +674,17 @@
   const baseMaxMobSpawnBatchSize = 3;
   const mobSpawnCapGrowthIntervalMultiplier = 10;
   const thirdMobSpawnChanceScale = 0.45;
+  const mobSpawnRestDuration = 24;
+  const mobSpawnRestCooldown = 150;
   const ufoTractorRange = 520;
   const ufoTractorWidth = 118;
   const ufoTractorForce = 2350;
   const ufoBeamMaxTurn = 1.15;
   const ufoBodyDrainRate = 1.8;
+  const ufoSapFragmentMass = 1;
+  const ufoSapMaxFragmentsPerBurst = 3;
+  const ufoSapSourceGraceDuration = 0.45;
+  const ufoSapCargoDuration = 3.25;
   const ufoUndersideDamage = 14;
   const mobDamageParticleMin = 2;
   const mobDamageParticleMax = 4;
@@ -1102,6 +1112,7 @@
       fixedAccumulator: 0,
       sendAccumulator: 0,
       pendingInputs: [],
+      landRequested: "",
       lastServerTick: 0,
       lastAckInputSeq: 0,
       ignoreDeathEventsBeforeTick: 0,
@@ -1183,6 +1194,7 @@
   let toolUpgradeLevels = createDefaultToolUpgradeLevels();
   let toolFireCooldown = 0;
   let toolDisabledTimer = 0;
+  let playerContinuousEnergyLocked = false;
   const mobSpawnTimers = {
     alienoid: mobSpawnIntervals.alienoid,
     ufo: mobSpawnIntervals.ufo,
@@ -1193,6 +1205,8 @@
     rocket: mobSpawnIntervals.rocket,
     fighter: mobSpawnIntervals.fighter
   };
+  let mobSpawnRestTimer = 0;
+  let mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
   const mobDefeatsByKind = {
     alienoid: 0,
     ufo: 0,
@@ -1676,6 +1690,7 @@
     mouse.left = false;
     mouse.middle = false;
     mouse.right = false;
+    playerContinuousEnergyLocked = false;
     resetTouchControlState();
   }
 
@@ -1708,6 +1723,7 @@
     mouse.left = false;
     mouse.middle = false;
     mouse.right = false;
+    playerContinuousEnergyLocked = false;
   }
 
   function suppressTouchToolsUntilEnergyReturns() {
@@ -2856,6 +2872,37 @@
     return levels;
   }
 
+  function toolIdListsEqual(first, second) {
+    if (!Array.isArray(first) || !Array.isArray(second) || first.length !== second.length) {
+      return false;
+    }
+
+    for (let index = 0; index < first.length; index += 1) {
+      if (first[index] !== second[index]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function toolUpgradeLevelsEqual(first, second) {
+    const left = first && typeof first === "object" ? first : {};
+    const right = second && typeof second === "object" ? second : {};
+
+    for (const [toolId, upgrades] of Object.entries(toolUpgradeDefinitions)) {
+      const leftToolLevels = left[toolId] && typeof left[toolId] === "object" ? left[toolId] : {};
+      const rightToolLevels = right[toolId] && typeof right[toolId] === "object" ? right[toolId] : {};
+      for (const upgrade of upgrades) {
+        if (Math.max(0, finiteOr(leftToolLevels[upgrade.id], 0)) !== Math.max(0, finiteOr(rightToolLevels[upgrade.id], 0))) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
   function toolUpgradeOptions(toolId) {
     return toolUpgradeDefinitions[toolId] || [];
   }
@@ -2912,6 +2959,16 @@
       return;
     }
 
+    if (isMultiplayerV2Active() && sendMultiplayerV2BuildAction({
+      action: "upgradeTool",
+      toolId,
+      upgradeId
+    })) {
+      playSound("craft");
+      maybeNotifyText(toolById(toolId).shortName + " " + upgrade.name.toLowerCase() + " upgraded.");
+      return;
+    }
+
     spendUpgradeCost(upgrade);
     if (!toolUpgradeLevels[toolId]) {
       toolUpgradeLevels[toolId] = {};
@@ -2935,7 +2992,7 @@
   }
 
   function canUseSuctionControls() {
-    return isSuctionEquipped() && !areToolsDisabled() && canSpendPlayerEnergy(suctionEnergyDrain / 60);
+    return isSuctionEquipped() && !areToolsDisabled() && canUseContinuousPlayerEnergy(suctionEnergyDrain);
   }
 
   function hasVacuumBucketCollider() {
@@ -2943,7 +3000,7 @@
   }
 
   function isSpannerEquipped() {
-    return equippedToolId === "spanner" && !areToolsDisabled() && hasPlayerEnergy();
+    return equippedToolId === "spanner" && !areToolsDisabled() && canUseContinuousPlayerEnergy(spannerRepairEnergyDrain);
   }
 
   function weaponByToolId(toolId) {
@@ -3221,6 +3278,7 @@
       return;
     }
 
+    clusternautsTestCounters.buildMenuRenders += 1;
     updateBuildFilterTabs();
     buildMenuList.textContent = "";
 
@@ -3309,6 +3367,15 @@
       return;
     }
 
+    if (isMultiplayerV2Active() && sendMultiplayerV2BuildAction({
+      action: "setEquippedTools",
+      equippedTool: toolId,
+      equippedTools: serializeEquippedToolInventory()
+    })) {
+      playSound("select");
+      return;
+    }
+
     equippedToolId = toolId;
     toolFireCooldown = Math.min(toolFireCooldown, (equippedWeapon() || playerWeaponDefaults).cooldown);
     updateToolHotbar();
@@ -3331,6 +3398,18 @@
       return;
     }
 
+    if (isMultiplayerV2Active()) {
+      const nextHotbarToolIds = isToolEquipped(toolId) ? hotbarToolIds.slice() : hotbarToolIds.concat(toolId);
+      if (sendMultiplayerV2BuildAction({
+        action: "setEquippedTools",
+        equippedTool: toolId,
+        equippedTools: nextHotbarToolIds
+      })) {
+        playSound("select");
+        return;
+      }
+    }
+
     if (!isToolEquipped(toolId)) {
       hotbarToolIds.push(toolId);
     }
@@ -3340,6 +3419,19 @@
   function unequipTool(toolId) {
     if (!isToolEquipped(toolId)) {
       return;
+    }
+
+    if (isMultiplayerV2Active()) {
+      const nextHotbarToolIds = hotbarToolIds.filter((equippedId) => equippedId !== toolId);
+      const nextEquippedToolId = equippedToolId === toolId ? nextHotbarToolIds[0] || defaultToolId : equippedToolId;
+      if (sendMultiplayerV2BuildAction({
+        action: "setEquippedTools",
+        equippedTool: nextEquippedToolId,
+        equippedTools: nextHotbarToolIds
+      })) {
+        playSound("select");
+        return;
+      }
     }
 
     hotbarToolIds = hotbarToolIds.filter((equippedId) => equippedId !== toolId);
@@ -3438,6 +3530,15 @@
 
     if (isStructureRecipe(recipe)) {
       startStructurePlacement(recipe.id);
+      return;
+    }
+
+    if (isMultiplayerV2Active() && sendMultiplayerV2BuildAction({
+      action: "craftTool",
+      recipeId: recipe.id
+    })) {
+      playSound("craft");
+      maybeNotifyText(recipe.name + " crafted.");
       return;
     }
 
@@ -3667,17 +3768,36 @@
       ? tools.filter((toolId, index) => toolCatalog.some((tool) => tool.id === toolId) && tools.indexOf(toolId) === index)
       : [];
 
-    unlockedToolIds = validTools.includes(defaultToolId) ? validTools : [defaultToolId].concat(validTools);
-    const hotbarSource = Array.isArray(equippedTools) ? equippedTools : unlockedToolIds;
-    hotbarToolIds = hotbarSource.filter((toolId, index) => hasTool(toolId) && hotbarSource.indexOf(toolId) === index);
-    equippedToolId = hotbarToolIds.includes(equipped) ? equipped : hotbarToolIds[0] || null;
+    const nextUnlockedToolIds = validTools.includes(defaultToolId) ? validTools : [defaultToolId].concat(validTools);
+    const hotbarSource = Array.isArray(equippedTools) ? equippedTools : nextUnlockedToolIds;
+    const nextHotbarToolIds = hotbarSource.filter((toolId, index) => nextUnlockedToolIds.includes(toolId) && hotbarSource.indexOf(toolId) === index);
+    const nextEquippedToolId = nextHotbarToolIds.includes(equipped) ? equipped : nextHotbarToolIds[0] || null;
+
+    if (
+      toolIdListsEqual(unlockedToolIds, nextUnlockedToolIds) &&
+      toolIdListsEqual(hotbarToolIds, nextHotbarToolIds) &&
+      equippedToolId === nextEquippedToolId
+    ) {
+      return false;
+    }
+
+    unlockedToolIds = nextUnlockedToolIds;
+    hotbarToolIds = nextHotbarToolIds;
+    equippedToolId = nextEquippedToolId;
     updateToolHotbar();
     renderBuildMenu();
+    return true;
   }
 
   function applyToolUpgrades(snapshot) {
-    toolUpgradeLevels = normalizeToolUpgrades(snapshot);
+    const nextToolUpgradeLevels = normalizeToolUpgrades(snapshot);
+    if (toolUpgradeLevelsEqual(toolUpgradeLevels, nextToolUpgradeLevels)) {
+      return false;
+    }
+
+    toolUpgradeLevels = nextToolUpgradeLevels;
     renderBuildMenu();
+    return true;
   }
 
   function applyTechInventory(snapshot) {
@@ -3720,6 +3840,8 @@
     for (const kind of Object.keys(mobSpawnIntervals)) {
       mobSpawnTimers[kind] = difficultyMobSpawnInterval(kind);
     }
+    mobSpawnRestTimer = 0;
+    mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
   }
 
   function setDifficultyScreenOpen(open) {
@@ -3964,6 +4086,7 @@
   }
 
   async function continueGuestProgress() {
+    resetSoloMultiplayerSession();
     resetLocalPlayerState();
     resetLocalWorldState();
     resetLifeStats();
@@ -4568,6 +4691,15 @@
     return Boolean(multiplayer.v2.active && multiplayer.v2.roomId && mpV2Sim);
   }
 
+  function requestLandingToggle() {
+    if (isMultiplayerV2Active()) {
+      multiplayer.v2.landRequested = player.landed ? "takeoff" : "land";
+      return true;
+    }
+    toggleLanding();
+    return true;
+  }
+
   function resetMultiplayerV2State() {
     multiplayer.v2.active = false;
     multiplayer.v2.roomId = "";
@@ -4578,11 +4710,38 @@
     multiplayer.v2.fixedAccumulator = 0;
     multiplayer.v2.sendAccumulator = 0;
     multiplayer.v2.pendingInputs = [];
+    multiplayer.v2.landRequested = "";
     multiplayer.v2.lastServerTick = 0;
     multiplayer.v2.lastAckInputSeq = 0;
     multiplayer.v2.ignoreDeathEventsBeforeTick = 0;
     multiplayer.v2.visualBlend = null;
     multiplayer.v2.eventKeys = new Map();
+  }
+
+  function resetSoloMultiplayerSession() {
+    resetMultiplayerV2State();
+    multiplayer.partySession = null;
+    multiplayer.partyJoinCode = "";
+    multiplayer.partyMode = "solo";
+    multiplayer.partyHostId = "";
+    multiplayer.partyHostUniverseId = "";
+    multiplayer.partyPlayerSnapshots.clear();
+    multiplayer.partyPhysicsSessions.clear();
+    multiplayer.partyInputSeqByPlayer.clear();
+    multiplayer.localPartyPhysicsSessions.clear();
+    multiplayer.partyPhysicsSeq = 0;
+    multiplayer.partyInputTimer = 0;
+    multiplayer.partyInputSeq = 0;
+    multiplayer.partyLastInputSnapshot = null;
+    multiplayer.partySnapshotTimer = 0;
+    multiplayer.partyRespawnInvulnerableTimer = 0;
+    multiplayer.duels.clear();
+    multiplayer.anomaly = null;
+    multiplayer.lobby = null;
+    multiplayer.lobbyInviteLink = "";
+    multiplayer.lobbyLoadedSnapshot = null;
+    multiplayer.lobbyLoadedSaveName = "";
+    updateSettingsJoinCodeUi();
   }
 
   function multiplayerV2EventKey(event) {
@@ -4668,6 +4827,10 @@
         playSound("mobHit", { throttleKey: "mpV2MobHit", throttle: 0.04 });
       } else if (event.type === "mob.defeated") {
         playSound("mobDestroyed", { throttleKey: "mpV2MobDestroyed", throttle: 0.08 });
+      } else if (event.type === "player.shot") {
+        playSound("laser", { throttleKey: "mpV2PlayerShot:" + String(event.projectileId || ""), throttle: 0.02 });
+      } else if (event.type === "player.hitByPlayerProjectile") {
+        playSound("mobHit", { throttleKey: "mpV2PlayerProjectileHit", throttle: 0.06 });
       } else if (event.type === "body.merged") {
         processMultiplayerV2BodyMergeEvent(event);
       } else if (event.type === "pickup.tech" && String(event.playerId || "") === player.id) {
@@ -4720,8 +4883,13 @@
   }
 
   function buildMultiplayerV2Input(seq) {
+    if (!isContinuousPlayerEnergyInputPressed()) {
+      playerContinuousEnergyLocked = false;
+    }
     const aim = getAim();
     const toolMode = multiplayerLocalToolModeForInput();
+    const landAction = multiplayer.v2.landRequested === "takeoff" ? "takeoff" : multiplayer.v2.landRequested === "land" ? "land" : "";
+    multiplayer.v2.landRequested = "";
     return {
       playerId: player.id,
       roomId: multiplayer.v2.roomId,
@@ -4736,6 +4904,8 @@
         down: isMovementKeyPressed("down"),
         left: isMovementKeyPressed("left"),
         right: isMovementKeyPressed("right"),
+        land: Boolean(landAction),
+        landAction,
         boost: canSendMultiplayerBoostInput(),
         pull: toolMode === "pull",
         push: toolMode === "push",
@@ -4747,6 +4917,17 @@
 
   function multiplayerV2FrameDt(dt) {
     return Math.min(multiplayerV2MaxFrameDt, Math.max(0, finiteOr(dt, 0)));
+  }
+
+  function multiplayerV2DuelPairsForPrediction() {
+    const pairs = [];
+    for (const peerId of multiplayer.duels || []) {
+      const ids = [player.id, String(peerId || "")].filter(Boolean).sort();
+      if (ids.length === 2 && ids[0] !== ids[1]) {
+        pairs.push(ids.join("|"));
+      }
+    }
+    return pairs;
   }
 
   function frameRateIndependentBlend(perFrameBlend, dt) {
@@ -4773,6 +4954,44 @@
       toolMode: input.toolMode,
       buttons: input.buttons
     });
+  }
+
+  function applyLocalMultiplayerV2BuildAction(action) {
+    if (!mpV2Sim || !isMultiplayerV2Active() || !multiplayer.v2.state || !action || typeof action !== "object") {
+      return false;
+    }
+
+    let changed = false;
+    if (action.action === "craftTool") {
+      changed = mpV2Sim.craftTool(multiplayer.v2.state, player.id, action.recipeId);
+    } else if (action.action === "upgradeTool") {
+      changed = mpV2Sim.upgradeTool(multiplayer.v2.state, player.id, action.toolId, action.upgradeId);
+    } else if (action.action === "setEquippedTools") {
+      changed = mpV2Sim.setEquippedTools(multiplayer.v2.state, player.id, action.equippedTool, action.equippedTools);
+    } else if (action.action === "placeStructure") {
+      changed = mpV2Sim.placeStructure(multiplayer.v2.state, player.id, action.recipeId, action.placement, action.linkedPlacement);
+    }
+
+    if (changed) {
+      syncMultiplayerV2StateToGame({ snapLocal: true });
+    }
+    return changed;
+  }
+
+  function sendMultiplayerV2BuildAction(action) {
+    if (!isMultiplayerV2Active() || !action || typeof action !== "object") {
+      return false;
+    }
+
+    const sent = sendMultiplayer({
+      type: "mp.v2.action",
+      roomId: multiplayer.v2.roomId,
+      ...action
+    });
+    if (sent) {
+      applyLocalMultiplayerV2BuildAction(action);
+    }
+    return sent;
   }
 
   function multiplayerV2WorldEntityCount(world) {
@@ -4837,7 +5056,8 @@
     const replayInputs = multiplayer.v2.pendingInputs.map((input) => Object.assign({}, input));
     multiplayer.v2.state = mpV2Sim.replayFromSnapshot(multiplayer.v2.authoritativeState, replayInputs, {
       dt: mpV2Sim.TICK_DT,
-      enableMobs: true
+      enableMobs: true,
+      duels: multiplayerV2DuelPairsForPrediction()
     });
     syncMultiplayerV2StateToGame({ previousLocalX: oldX, previousLocalY: oldY, blendDt: mpV2Sim.TICK_DT });
     updateMultiplayerV2Perf({
@@ -4858,12 +5078,13 @@
       const previousX = Number.isFinite(options && options.previousLocalX) ? options.previousLocalX : player.x;
       const previousY = Number.isFinite(options && options.previousLocalY) ? options.previousLocalY : player.y;
       const snapLocal = Boolean(options && options.snapLocal);
+      const localLanding = normalizeLandingSnapshot(local.landed);
       const error = Math.hypot(local.x - previousX, local.y - previousY);
       const correctionBlend = frameRateIndependentBlend(
         multiplayerV2LocalCorrectionBlendPerFrame,
         options && options.blendDt
       );
-      const blend = !snapLocal && error < 360 ? correctionBlend : 1;
+      const blend = !snapLocal && !localLanding && error < 360 ? correctionBlend : 1;
       player.x = previousX + (finiteOr(local.x, previousX) - previousX) * blend;
       player.y = previousY + (finiteOr(local.y, previousY) - previousY) * blend;
       player.vx = finiteOr(local.vx, player.vx);
@@ -4874,11 +5095,15 @@
       player.maxEnergy = clamp(finiteOr(local.maxEnergy, player.maxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
       player.energy = clamp(finiteOr(local.energy, player.energy), 0, player.maxEnergy);
       player.hitCooldown = Math.max(0, finiteOr(local.hitCooldown, player.hitCooldown || 0));
-      player.landed = null;
+      player.landed = localLanding;
       player.walkCycle = finiteOr(local.walkCycle, player.walkCycle);
+      cameraRoll = player.landed ? surfaceCameraRollForAngle(player.landed.angle) : finiteOr(local.cameraRoll, cameraRoll);
       syncTechInventoryFromMultiplayerV2(local.tech);
       applyToolInventory(local.tools, local.equippedTool, local.equippedTools);
       applyToolUpgrades(local.toolUpgrades);
+      if (!deathState.active && previousHealth > player.health && player.health > 0) {
+        playSound("hit", { throttleKey: "mpV2LocalDamage", throttle: 0.08 });
+      }
       if (!deathState.active && previousHealth > 0 && player.health <= 0) {
         beginPlayerDeath("Hull failure");
       }
@@ -5026,7 +5251,11 @@
       while (multiplayer.v2.pendingInputs.length > 180) {
         multiplayer.v2.pendingInputs.shift();
       }
-      mpV2Sim.step(multiplayer.v2.state, { [player.id]: input }, { dt: mpV2Sim.TICK_DT, enableMobs: true });
+      mpV2Sim.step(multiplayer.v2.state, { [player.id]: input }, {
+        dt: mpV2Sim.TICK_DT,
+        enableMobs: true,
+        duels: multiplayerV2DuelPairsForPrediction()
+      });
       processMultiplayerV2Events(multiplayer.v2.state && multiplayer.v2.state.events);
       sendMultiplayerV2Input(input);
       stepped += 1;
@@ -5632,17 +5861,7 @@
     if (runState.active) {
       return;
     }
-    multiplayer.partySession = null;
-    multiplayer.partyJoinCode = "";
-    multiplayer.partyMode = "solo";
-    multiplayer.partyHostId = "";
-    multiplayer.partyPlayerSnapshots.clear();
-    multiplayer.partyPhysicsSessions.clear();
-    multiplayer.partyInputSeqByPlayer.clear();
-    multiplayer.localPartyPhysicsSessions.clear();
-    multiplayer.partyPhysicsSeq = 0;
-    multiplayer.partyInputTimer = 0;
-    multiplayer.anomaly = null;
+    resetSoloMultiplayerSession();
     applyDifficulty(id);
     runState.active = true;
     resetLocalPlayerState();
@@ -6966,6 +7185,7 @@
       clearCrazyGamesRoomState("restart-game");
 
       clearStoredNetworkIdentity();
+      resetSoloMultiplayerSession();
       runState.active = false;
       gamePaused = false;
       resetLocalPlayerState();
@@ -7032,6 +7252,7 @@
         return;
       }
 
+      resetSoloMultiplayerSession();
       resetLocalPlayerState();
       resetLocalWorldState();
       resetLifeStats();
@@ -7079,6 +7300,7 @@
     gadgetAngle = -0.32;
     toolFireCooldown = 0;
     toolDisabledTimer = 0;
+    playerContinuousEnergyLocked = false;
 
     for (const tech of techTypes) {
       techInventory[tech.key] = 0;
@@ -7500,7 +7722,14 @@
       deathLeaderboardStatus.textContent = "";
     }
     if (playAgainButton) {
+      playAgainButton.disabled = false;
       playAgainButton.textContent = multiplayerDeath ? "Respawn" : "Play again";
+      playAgainButton.classList.remove("is-loading");
+    }
+    if (deathMainMenuButton) {
+      deathMainMenuButton.disabled = false;
+      deathMainMenuButton.textContent = "Exit to main menu";
+      deathMainMenuButton.classList.remove("is-loading");
     }
   }
 
@@ -7676,16 +7905,27 @@
     }
   }
 
-  async function hardResetAfterDeath() {
+  async function hardResetAfterDeath(options) {
     if (deathState.resetInFlight) {
       return;
     }
 
+    const config = options && typeof options === "object" ? options : {};
+    const loadingButton = config.button || playAgainButton;
+    const nextStartMenuView = config.startMenuView || "main";
+    const loadingText = config.loadingText || "Resetting...";
+    const doneText = config.doneText || (loadingButton === deathMainMenuButton ? "Exit to main menu" : "Play again");
+
     deathState.resetInFlight = true;
     if (playAgainButton) {
       playAgainButton.disabled = true;
-      playAgainButton.textContent = "Resetting...";
-      playAgainButton.classList.add("is-loading");
+    }
+    if (deathMainMenuButton) {
+      deathMainMenuButton.disabled = true;
+    }
+    if (loadingButton) {
+      loadingButton.textContent = loadingText;
+      loadingButton.classList.add("is-loading");
     }
 
     const previousPlayerId = player.id;
@@ -7716,9 +7956,12 @@
       multiplayer.profile = null;
       multiplayer.universeId = "";
       multiplayer.remoteUniverses.clear();
+      clearCrazyGamesRoomState("death-reset");
 
       clearStoredNetworkIdentity();
+      resetSoloMultiplayerSession();
       runState.active = false;
+      gamePaused = false;
       resetLocalPlayerState();
       resetLocalWorldState();
       resetLifeStats();
@@ -7726,8 +7969,10 @@
       persistence.saveTimer = persistenceSaveInterval;
       persistence.pollTimer = persistencePollInterval;
       resetDeathState();
-      setStartMenuView("main", { push: false });
+      setStartMenuView(nextStartMenuView, { push: false });
       setDifficultyScreenOpen(true);
+      resetMouseButtons();
+      lastTime = performance.now();
       void refreshLeaderboard(true);
       updateHud();
     } catch (error) {
@@ -7739,7 +7984,140 @@
         playAgainButton.textContent = "Play again";
         playAgainButton.classList.remove("is-loading");
       }
+      if (deathMainMenuButton) {
+        deathMainMenuButton.disabled = false;
+        deathMainMenuButton.textContent = "Exit to main menu";
+        deathMainMenuButton.classList.remove("is-loading");
+      }
+      if (loadingButton && loadingButton !== playAgainButton && loadingButton !== deathMainMenuButton) {
+        loadingButton.textContent = doneText;
+        loadingButton.classList.remove("is-loading");
+      }
     }
+  }
+
+  function exitDeathToMainMenu() {
+    if (deathState.resetInFlight) {
+      return;
+    }
+    void hardResetAfterDeath({
+      button: deathMainMenuButton,
+      loadingText: "Exiting...",
+      doneText: "Exit to main menu",
+      startMenuView: "main"
+    });
+  }
+
+  function chooseMultiplayerRespawnPoint(deathX, deathY) {
+    const minRespawnDistance = 2400;
+    const maxRespawnDistance = 5600;
+    const idealRespawnDistance = 3600;
+    const idealObjectClearance = 1100;
+    let best = null;
+
+    function clearanceFromEntity(x, y, entity, extraPadding) {
+      if (!entity) {
+        return Infinity;
+      }
+      const entityX = Number(entity.x);
+      const entityY = Number(entity.y);
+      if (!Number.isFinite(entityX) || !Number.isFinite(entityY)) {
+        return Infinity;
+      }
+      const radius = Math.max(0, finiteOr(entity.radius, 0)) + Math.max(0, finiteOr(extraPadding, 0));
+      return Math.hypot(x - entityX, y - entityY) - radius;
+    }
+
+    function objectClearanceAt(x, y) {
+      let clearance = Infinity;
+
+      function considerCollection(collection, padding) {
+        if (!Array.isArray(collection)) {
+          return;
+        }
+        for (const entity of collection) {
+          clearance = Math.min(clearance, clearanceFromEntity(x, y, entity, padding));
+        }
+      }
+
+      considerCollection(particles, 420);
+      considerCollection(rivals, 360);
+      considerCollection(ufos, 360);
+      considerCollection(rambots, 360);
+      considerCollection(engineers, 360);
+      considerCollection(teslas, 360);
+      considerCollection(rockets, 360);
+      considerCollection(fighters, 360);
+      considerCollection(techPickups, 220);
+      considerCollection(healthPickups, 220);
+
+      for (const structure of structures) {
+        if (!structure || structure.health <= 0) {
+          continue;
+        }
+        const structureRadius = typeof structureHitRadius === "function" ? structureHitRadius(structure) : 48;
+        clearance = Math.min(clearance, clearanceFromEntity(x, y, Object.assign({}, structure, { radius: structureRadius }), 360));
+      }
+
+      for (const anchor of activePartyPlayerAnchors()) {
+        if (!anchor || anchor.playerId === player.id) {
+          continue;
+        }
+        clearance = Math.min(clearance, clearanceFromEntity(x, y, anchor, 620));
+      }
+
+      return Number.isFinite(clearance) ? clearance : idealObjectClearance;
+    }
+
+    function considerCandidate(x, y) {
+      const deathDistance = Math.hypot(x - deathX, y - deathY);
+      if (deathDistance < minRespawnDistance) {
+        return;
+      }
+      const clearance = objectClearanceAt(x, y);
+      const clearanceScore = Math.min(clearance, idealObjectClearance) * 2.4;
+      const distanceScore = deathDistance * 0.32 - Math.abs(deathDistance - idealRespawnDistance) * 0.38;
+      const score = clearanceScore + distanceScore + randomRange(0, 180);
+      if (!best || score > best.score) {
+        best = {
+          x,
+          y,
+          score,
+          clearance,
+          deathDistance
+        };
+      }
+    }
+
+    for (let i = 0; i < 96; i += 1) {
+      const angle = randomRange(0, Math.PI * 2);
+      const distance = randomRange(minRespawnDistance, maxRespawnDistance);
+      considerCandidate(
+        deathX + Math.cos(angle) * distance,
+        deathY + Math.sin(angle) * distance
+      );
+    }
+
+    for (let i = 0; i < 12; i += 1) {
+      const angle = (Math.PI * 2 * i) / 12 + randomRange(-0.12, 0.12);
+      considerCandidate(
+        deathX + Math.cos(angle) * idealRespawnDistance,
+        deathY + Math.sin(angle) * idealRespawnDistance
+      );
+    }
+
+    if (best) {
+      return {
+        x: best.x,
+        y: best.y
+      };
+    }
+
+    const fallbackAngle = randomRange(0, Math.PI * 2);
+    return {
+      x: deathX + Math.cos(fallbackAngle) * idealRespawnDistance,
+      y: deathY + Math.sin(fallbackAngle) * idealRespawnDistance
+    };
   }
 
   function respawnMultiplayerPlayer() {
@@ -7748,18 +8126,11 @@
     }
 
     deathState.resetInFlight = true;
-    const spawnBody = findNearestProgressBody();
-    let spawnX = player.x + randomRange(-180, 180);
-    let spawnY = player.y + randomRange(-180, 180);
-    if (spawnBody) {
-      const angle = Math.atan2(player.y - spawnBody.y, player.x - spawnBody.x) || 0;
-      spawnX = spawnBody.x + Math.cos(angle) * (spawnBody.radius + player.radius + 18);
-      spawnY = spawnBody.y + Math.sin(angle) * (spawnBody.radius + player.radius + 18);
-    }
+    const spawn = chooseMultiplayerRespawnPoint(player.x, player.y);
     resetLocalPlayerState();
     resetLifeStats();
-    player.x = spawnX;
-    player.y = spawnY;
+    player.x = spawn.x;
+    player.y = spawn.y;
     player.vx = 0;
     player.vy = 0;
     player.health = player.maxHealth;
@@ -11467,6 +11838,8 @@
         nextHealthPickupId,
         difficulty: runState.difficultyId,
         mobSpawnTimers: { ...mobSpawnTimers },
+        mobSpawnRestTimer,
+        mobSpawnRestCooldownTimer,
         mobDefeatsByKind: { ...mobDefeatsByKind }
       };
     }
@@ -11671,6 +12044,7 @@
     );
 
     applyMobSpawnTimers(snapshot.mobSpawnTimers);
+    applyMobSpawnRestState(snapshot);
     applyMobDefeatsByKind(snapshot.mobDefeatsByKind);
   }
 
@@ -11713,7 +12087,13 @@
       color: particle.color,
       textureSeed: particle.textureSeed,
       wobble: particle.wobble,
-      pulse: particle.pulse
+      pulse: particle.pulse,
+      spawnSizeScale: particle.spawnSizeScale,
+      ufoSapTimer: particle.ufoSapTimer,
+      ufoSapSourceGraceTimer: particle.ufoSapSourceGraceTimer,
+      ufoExtractedById: particle.ufoExtractedById,
+      ufoExtractedFromId: particle.ufoExtractedFromId,
+      ufoSapParticleBuffer: particle.ufoSapParticleBuffer
     };
   }
 
@@ -12015,7 +12395,7 @@
       if (!state.active || !probe.force) {
         return;
       }
-      if (applyActorGadgetForces(pickup, predictionState, dt, { captureInFunnel: false })) {
+      if (applyActorGadgetForces(pickup, predictionState, dt, { captureInFunnel: false, pullTowardActor: type === "techPickup" })) {
         integrateFollowerPredictedEntity(pickup, dt);
         markLocalPartyPhysicsSession(type, pickup, now, authorityOptions);
         if (key) {
@@ -12455,7 +12835,13 @@
       textureSeed: finiteOr(snapshot.textureSeed, Math.random() * 1000),
       color: normalizeColorSnapshot(snapshot.color, randomParticleColor()),
       wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
-      pulse: finiteOr(snapshot.pulse, randomRange(0.8, 1.25))
+      pulse: finiteOr(snapshot.pulse, randomRange(0.8, 1.25)),
+      spawnSizeScale: finiteOr(snapshot.spawnSizeScale, 1),
+      ufoSapTimer: Math.max(0, finiteOr(snapshot.ufoSapTimer, 0)),
+      ufoSapSourceGraceTimer: Math.max(0, finiteOr(snapshot.ufoSapSourceGraceTimer, 0)),
+      ufoExtractedById: Math.max(0, Math.floor(finiteOr(snapshot.ufoExtractedById, 0))),
+      ufoExtractedFromId: Math.max(0, Math.floor(finiteOr(snapshot.ufoExtractedFromId, 0))),
+      ufoSapParticleBuffer: Math.max(0, finiteOr(snapshot.ufoSapParticleBuffer, 0))
     };
     normalizeBodyEnergy(particle);
     return particle;
@@ -12740,6 +13126,15 @@
     }
   }
 
+  function applyMobSpawnRestState(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return;
+    }
+
+    mobSpawnRestTimer = clamp(finiteOr(snapshot.mobSpawnRestTimer, mobSpawnRestTimer), 0, mobSpawnRestDuration);
+    mobSpawnRestCooldownTimer = clamp(finiteOr(snapshot.mobSpawnRestCooldownTimer, mobSpawnRestCooldownTimer), 0, mobSpawnRestCooldown);
+  }
+
   function applyMobDefeatsByKind(snapshot) {
     if (!snapshot || typeof snapshot !== "object") {
       return;
@@ -12773,8 +13168,12 @@
       life: finiteOr(snapshot.life, 1),
       maxLife: finiteOr(snapshot.maxLife, 2.2),
       damage: finiteOr(snapshot.damage, rivalProjectileDamage),
+      knockback: finiteOr(snapshot.knockback, 0),
       toolDisable: finiteOr(snapshot.toolDisable, 0),
       cause: typeof snapshot.cause === "string" ? snapshot.cause : "",
+      sourcePlayerId: typeof snapshot.sourcePlayerId === "string" ? snapshot.sourcePlayerId : "",
+      weaponLabel: typeof snapshot.weaponLabel === "string" ? snapshot.weaponLabel : "",
+      piercesMobs: Boolean(snapshot.piercesMobs),
       lightning: Boolean(snapshot.lightning),
       rocket: Boolean(snapshot.rocket)
     };
@@ -12878,8 +13277,10 @@
     const angle = randomRange(0, Math.PI * 2);
     const speed = randomRange(5, 36);
     const tier = tierForMass(mass);
+    const id = nextParticleId++;
+    const textureSeed = Math.random() * 1000;
     const particle = {
-      id: nextParticleId++,
+      id,
       x,
       y,
       vx: Math.cos(angle) * speed,
@@ -12887,10 +13288,11 @@
       mass,
       radius: radiusFromMass(mass),
       tier,
-      textureSeed: Math.random() * 1000,
+      textureSeed,
       color,
       wobble: randomRange(0, Math.PI * 2),
-      pulse: randomRange(0.8, 1.25)
+      pulse: randomRange(0.8, 1.25),
+      spawnSizeScale: ambientSpawnSizeScale(id, textureSeed)
     };
     normalizeBodyEnergy(particle);
     return particle;
@@ -12905,6 +13307,18 @@
       return 2;
     }
     return 3;
+  }
+
+  function ambientSpawnSizeScale(id, textureSeed) {
+    const wave = Math.sin(id * 12.9898 + textureSeed * 78.233) * 43758.5453;
+    const unit = wave - Math.floor(wave);
+    if (unit < 0.74) {
+      return 1;
+    }
+    if (unit < 0.94) {
+      return 1.08;
+    }
+    return 1.16;
   }
 
   function addUniquePlayerAnchor(anchors, seenPlayerIds, anchor) {
@@ -13222,8 +13636,30 @@
     return Math.hypot(spawnWidth, spawnHeight) * 0.62 + 260;
   }
 
+  function particlePlayfieldRadius() {
+    const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
+    const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
+    const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
+    const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
+    return Math.max(1420, Math.min(particleDensityRadius() + 320, viewportRadius + 760));
+  }
+
+  function useParticlePlayfieldFill() {
+    return isPartySessionActive() || multiplayer.remoteUniverses.size > 0;
+  }
+
   function isAmbientDensityParticle(particle) {
     return Boolean(particle && particle.tier && !particle.tier.solid && !isUfoBeamCargo(particle));
+  }
+
+  function countAmbientParticles() {
+    let count = 0;
+    for (const particle of particles) {
+      if (isAmbientDensityParticle(particle)) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   let ambientDensityCache = null;
@@ -13300,13 +13736,16 @@
   }
 
   function localParticleTargetPerAnchor(anchorCount) {
-    const count = Math.max(1, Math.floor(finiteOr(anchorCount, 1)));
-    return Math.round(targetParticles * (isPartyHost() ? clamp(0.54 + 0.08 / count, 0.52, 0.62) : 0.62));
+    if (!useParticlePlayfieldFill()) {
+      const count = Math.max(1, Math.floor(finiteOr(anchorCount, 1)));
+      return Math.round(targetParticles * (isPartyHost() ? clamp(0.54 + 0.08 / count, 0.52, 0.62) : 0.62));
+    }
+    return Math.round(targetParticles * (isPartyHost() ? 0.32 : 0.38));
   }
 
   function mostUnderdenseParticleAnchor(anchors) {
     const source = Array.isArray(anchors) && anchors.length ? anchors : activePartyPlayerAnchors();
-    const densityRadius = particleDensityRadius();
+    const densityRadius = useParticlePlayfieldFill() ? particlePlayfieldRadius() : particleDensityRadius();
     const localTarget = localParticleTargetPerAnchor(effectiveParticleAnchorCount(source));
     let best = null;
 
@@ -13314,7 +13753,7 @@
       const localCount = countAmbientParticlesNearAnchor(anchor, densityRadius);
       const speed = Math.hypot(finiteOr(anchor.vx, 0), finiteOr(anchor.vy, 0));
       const deficit = localTarget - localCount;
-      const score = deficit + clamp(speed / 240, 0, 2.2);
+      const score = deficit + clamp(speed / 480, 0, 0.75);
       if (!best || score > best.score) {
         best = { anchor, localCount, localTarget, score };
       }
@@ -13340,10 +13779,45 @@
         crowdCount += 1;
       }
     });
-    return { nearest, crowdCount };
+    return { nearest: Number.isFinite(nearest) ? nearest : crowdRadius, crowdCount };
   }
 
-  function chooseParticleSpawnPoint(anchor) {
+  function particlePatchNoise(cellX, cellY, salt) {
+    const wave = Math.sin(cellX * 127.1 + cellY * 311.7 + salt * 74.3) * 43758.5453;
+    return wave - Math.floor(wave);
+  }
+
+  function particlePatchAffinityAt(x, y) {
+    const cellSize = 1850;
+    const cellX = Math.floor(x / cellSize);
+    const cellY = Math.floor(y / cellSize);
+    let affinity = 0;
+
+    for (let yOffset = -1; yOffset <= 1; yOffset += 1) {
+      for (let xOffset = -1; xOffset <= 1; xOffset += 1) {
+        const patchX = cellX + xOffset;
+        const patchY = cellY + yOffset;
+        const roll = particlePatchNoise(patchX, patchY, 0);
+        if (roll < 0.58) {
+          continue;
+        }
+
+        const centerX = (patchX + particlePatchNoise(patchX, patchY, 1)) * cellSize;
+        const centerY = (patchY + particlePatchNoise(patchX, patchY, 2)) * cellSize;
+        const radius = 720 + particlePatchNoise(patchX, patchY, 3) * 620;
+        const distance = Math.hypot(x - centerX, y - centerY);
+        const falloff = clamp(1 - distance / radius, 0, 1);
+        const strength = 0.68 + particlePatchNoise(patchX, patchY, 4) * 0.52;
+        affinity += falloff * falloff * strength;
+      }
+    }
+
+    return clamp(affinity, 0, 1);
+  }
+
+  function chooseParticleSpawnPoint(anchor, options) {
+    const localFill = Boolean(options && options.localFill);
+    const playfieldFill = Boolean(options && options.playfieldFill);
     const source = anchor || randomPartySpawnAnchor();
     const anchors = activePartyPlayerAnchors();
     const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
@@ -13352,6 +13826,7 @@
     const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
     const minPlayerDistance = viewportRadius + 140;
     const preferredParticleSpacing = 170;
+    const localFillRadius = particlePlayfieldRadius();
     const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
     const moving = speed > 45;
     const travel = moving ? normalize(source.vx, source.vy) : { x: 0, y: 0 };
@@ -13362,23 +13837,45 @@
       const angle = aheadBias
         ? Math.atan2(travel.y, travel.x) + randomRange(-1.05, 1.05)
         : randomRange(0, Math.PI * 2);
-      const minDist = minPlayerDistance * randomRange(1, 1.16);
-      const maxDist = viewportRadius * 1.85 + clamp(speed * 1.15, 0, 760);
+      const baseMinDist = minPlayerDistance * randomRange(1, 1.16);
+      const playfieldMinDist = Math.max(viewportRadius * 0.86, localFillRadius * 0.48);
+      const minDist = localFill
+        ? Math.min(baseMinDist, Math.max(playfieldFill ? playfieldMinDist : 120, localFillRadius * (playfieldFill ? 0.48 : 0.74)))
+        : baseMinDist;
+      const broadMaxDist = viewportRadius * 1.85 + clamp(speed * 1.15, 0, 760);
+      const maxDist = localFill ? Math.max(minDist + 60, Math.min(broadMaxDist, localFillRadius * 0.92)) : broadMaxDist;
       const dist = randomRange(minDist, maxDist);
       const ahead = moving ? clamp(speed * randomRange(0.18, 1.35), 0, 920) : 0;
-      const drift = rotatePoint(randomRange(-220, 220), randomRange(-220, 220), angle + Math.PI / 2);
-      const x = source.x + travel.x * ahead + Math.cos(angle) * dist + drift.x;
-      const y = source.y + travel.y * ahead + Math.sin(angle) * dist + drift.y;
+      const driftRange = localFill ? 110 : 220;
+      const drift = rotatePoint(randomRange(-driftRange, driftRange), randomRange(-driftRange, driftRange), angle + Math.PI / 2);
+      let x = source.x + travel.x * ahead + Math.cos(angle) * dist + drift.x;
+      let y = source.y + travel.y * ahead + Math.sin(angle) * dist + drift.y;
+      if (localFill) {
+        const localDx = x - source.x;
+        const localDy = y - source.y;
+        const localDistance = Math.hypot(localDx, localDy);
+        const maxLocalDistance = Math.max(120, localFillRadius * 0.96);
+        if (localDistance > maxLocalDistance) {
+          const scale = (maxLocalDistance * randomRange(0.9, 0.99)) / localDistance;
+          x = source.x + localDx * scale;
+          y = source.y + localDy * scale;
+        }
+      }
       const nearestPlayer = nearestPartyAnchorDistance(x, y, anchors);
       const density = ambientParticleDensityAt(x, y);
+      const patchAffinity = particlePatchAffinityAt(x, y);
       const tooCloseToPlayer = Math.max(0, minPlayerDistance - nearestPlayer);
-      const spacingPenalty = Math.max(0, preferredParticleSpacing - density.nearest);
+      const patchWeight = localFill ? 0.24 : 1;
+      const preferredSpacing = preferredParticleSpacing * (1 - patchAffinity * 0.38);
+      const spacingPenalty = Math.max(0, preferredSpacing - density.nearest);
       const score =
         nearestPlayer * 0.16 +
-        density.nearest * 1.25 -
-        density.crowdCount * 135 -
+        density.nearest * (1.08 - patchAffinity * 0.48) +
+        patchAffinity * 720 * patchWeight -
+        density.crowdCount * (135 - patchAffinity * 88) -
+        (1 - patchAffinity) * 105 * patchWeight -
         tooCloseToPlayer * 7.5 -
-        spacingPenalty * 3.2;
+        spacingPenalty * (3.2 - patchAffinity * 1.1);
       if (!best || score > best.score) {
         best = { x, y, angle, score };
       }
@@ -13387,9 +13884,9 @@
     return best || { x: source.x, y: source.y, angle: randomRange(0, Math.PI * 2), score: 0 };
   }
 
-  function spawnParticleNearPlayer(anchor) {
+  function spawnParticleNearPlayer(anchor, options) {
     const source = anchor || randomPartySpawnAnchor();
-    const spawnPoint = chooseParticleSpawnPoint(source);
+    const spawnPoint = chooseParticleSpawnPoint(source, options);
     const particle = createParticle(
       spawnPoint.x,
       spawnPoint.y,
@@ -13399,6 +13896,30 @@
     particle.vx += finiteOr(source.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(6, 26);
     particle.vy += finiteOr(source.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(6, 26);
     particles.push(particle);
+  }
+
+  function recycleParticleNearPlayer(particle, anchor, options) {
+    if (!particle) {
+      return false;
+    }
+    const id = particle.id;
+    const source = anchor || randomPartySpawnAnchor();
+    const spawnPoint = chooseParticleSpawnPoint(source, options);
+    const replacement = createParticle(
+      spawnPoint.x,
+      spawnPoint.y,
+      randomAmbientParticleMass(),
+      randomParticleColor()
+    );
+    replacement.id = id;
+    replacement.spawnSizeScale = ambientSpawnSizeScale(replacement.id, replacement.textureSeed);
+    replacement.vx += finiteOr(source.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(6, 26);
+    replacement.vy += finiteOr(source.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(6, 26);
+    Object.keys(particle).forEach(function (key) {
+      delete particle[key];
+    });
+    Object.assign(particle, replacement);
+    return true;
   }
 
   function randomPartySpawnAnchor() {
@@ -13411,7 +13932,10 @@
     const anchors = activePartyPlayerAnchors();
     const targetCount = activeParticleTargetCount(anchors);
     for (let i = 0; i < targetCount; i += 1) {
-      spawnParticleNearPlayer(anchors.length > 1 ? mostUnderdenseParticleAnchor(anchors).anchor : undefined);
+      spawnParticleNearPlayer(anchors.length > 1 ? mostUnderdenseParticleAnchor(anchors).anchor : undefined, {
+        localFill: anchors.length > 1,
+        playfieldFill: anchors.length > 1 && useParticlePlayfieldFill()
+      });
     }
   }
 
@@ -13853,6 +14377,13 @@
     return Math.min(damageCap, baseDamage + speedDamage + massDamage);
   }
 
+  function solidBodyPlayerImpactDamage(body, impactSpeed, baseDamage) {
+    const mass = Math.max(1, finiteOr(body.mass, 1));
+    const speedDamage = Math.max(0, impactSpeed - solidBodyPlayerDamageSpeed) * 0.16;
+    const massDamage = Math.sqrt(mass) * 0.55;
+    return Math.min(80, baseDamage + speedDamage + massDamage);
+  }
+
   function knockMob(mob, nx, ny, force) {
     if (mob.landed) {
       mob.landed = null;
@@ -14108,8 +14639,28 @@
     return Math.min(maxMobSpawnBatchSize(kind, count), Math.max(1, batchSize));
   }
 
+  function updateMobSpawnRest(dt) {
+    if (mobSpawnRestTimer > 0) {
+      mobSpawnRestTimer = Math.max(0, mobSpawnRestTimer - dt);
+      return true;
+    }
+
+    mobSpawnRestCooldownTimer = Math.max(0, mobSpawnRestCooldownTimer - dt);
+    if (mobSpawnRestCooldownTimer > 0) {
+      return false;
+    }
+
+    mobSpawnRestTimer = mobSpawnRestDuration;
+    mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
+    return true;
+  }
+
   function updateMobSpawns(dt) {
     const anchors = activeMobSpawnAnchors();
+    if (updateMobSpawnRest(dt)) {
+      return;
+    }
+
     const playerCount = effectiveMobAnchorCount(anchors);
     for (const kind of Object.keys(mobSpawnIntervals)) {
       if (!isMobTierUnlocked(kind)) {
@@ -14514,6 +15065,31 @@
     return player.energy > Math.max(0, amount);
   }
 
+  function continuousPlayerEnergyCost(rate, dt = 1 / 60) {
+    return Math.max(0, finiteOr(rate, 0)) * Math.max(0, finiteOr(dt, 0));
+  }
+
+  function continuousPlayerEnergyActivationCost(rate, dt = 1 / 60) {
+    return Math.max(playerContinuousEnergyActivationCost, continuousPlayerEnergyCost(rate, dt));
+  }
+
+  function isContinuousPlayerEnergyInputPressed() {
+    return (
+      (isSuctionEquipped() && isGadgetButtonPressed()) ||
+      (equippedToolId === "spanner" && (mouse.left || mouse.right)) ||
+      isTouchBoostPressed() ||
+      keys.has("ShiftLeft") ||
+      keys.has("ShiftRight")
+    );
+  }
+
+  function canUseContinuousPlayerEnergy(rate, dt = 1 / 60) {
+    if (playerContinuousEnergyLocked) {
+      return false;
+    }
+    return canSpendPlayerEnergy(continuousPlayerEnergyActivationCost(rate, dt));
+  }
+
   function spendPlayerEnergy(amount) {
     const cost = Math.max(0, finiteOr(amount, 0));
     if (cost <= 0) {
@@ -14534,6 +15110,18 @@
 
   function drainPlayerEnergy(rate, dt) {
     return spendPlayerEnergy(Math.max(0, finiteOr(rate, 0)) * Math.max(0, finiteOr(dt, 0)));
+  }
+
+  function drainContinuousPlayerEnergy(rate, dt) {
+    if (!canUseContinuousPlayerEnergy(rate, dt)) {
+      playerContinuousEnergyLocked = true;
+      return false;
+    }
+    if (!drainPlayerEnergy(rate, dt)) {
+      playerContinuousEnergyLocked = true;
+      return false;
+    }
+    return true;
   }
 
   function notifyEnergyDepleted() {
@@ -15174,10 +15762,51 @@
         return false;
       }
 
+      if (isMultiplayerV2Active()) {
+        if (!sendMultiplayerV2BuildAction({
+          action: "placeStructure",
+          recipeId: recipe.id,
+          placement: {
+            bodyId: firstPlacement.bodyId,
+            angle: firstPlacement.angle
+          },
+          linkedPlacement: {
+            bodyId: placement.bodyId,
+            angle: placement.angle
+          }
+        })) {
+          maybeNotifyText("Reconnect before placing " + recipe.name.toLowerCase() + ".");
+          return false;
+        }
+        pendingTetherAnchor = null;
+        activePlacementRecipeId = null;
+        playSound("place");
+        maybeNotifyText(recipe.name + " placed.");
+        return true;
+      }
+
       spendRecipeCost(recipe);
       structures.push(createStructure(recipe, firstPlacement, placement));
       pendingTetherAnchor = null;
     } else {
+      if (isMultiplayerV2Active()) {
+        if (!sendMultiplayerV2BuildAction({
+          action: "placeStructure",
+          recipeId: recipe.id,
+          placement: {
+            bodyId: placement.bodyId,
+            angle: placement.angle
+          }
+        })) {
+          maybeNotifyText("Reconnect before placing " + recipe.name.toLowerCase() + ".");
+          return false;
+        }
+        activePlacementRecipeId = null;
+        playSound("place");
+        maybeNotifyText(recipe.name + " placed.");
+        return true;
+      }
+
       spendRecipeCost(recipe);
       structures.push(createStructure(recipe, placement));
     }
@@ -15728,19 +16357,23 @@
   }
 
   function updateToolEnergyUsage(dt) {
+    if (!isContinuousPlayerEnergyInputPressed()) {
+      playerContinuousEnergyLocked = false;
+    }
+
     if (areToolsDisabled() || buildMenuOpen) {
       return;
     }
 
     if (touchControlState.active) {
-      if (touchControlState.toolsSuppressed && hasPlayerEnergy()) {
+      if (touchControlState.toolsSuppressed && canUseContinuousPlayerEnergy(suctionEnergyDrain, dt)) {
         touchControlState.toolsSuppressed = false;
       }
       refreshTouchFireButtons();
     }
 
     if (isSuctionEquipped() && isGadgetButtonPressed()) {
-      if (!drainPlayerEnergy(suctionEnergyDrain, dt)) {
+      if (!drainContinuousPlayerEnergy(suctionEnergyDrain, dt)) {
         suppressTouchToolsUntilEnergyReturns();
         notifyEnergyDepleted();
       }
@@ -15783,7 +16416,13 @@
       const local = normalize(localX, localY);
       const world = cameraLocalToWorld(local.x, local.y);
       const suctionActive = canUseSuctionControls() && isGadgetButtonPressed();
-      const boosting = !suctionActive && isJetpackBoostPressed() && drainPlayerEnergy(jetpackBoostEnergyDrain, dt);
+      let boosting = false;
+      if (!suctionActive && isJetpackBoostPressed()) {
+        boosting = drainContinuousPlayerEnergy(jetpackBoostEnergyDrain, dt);
+        if (!boosting) {
+          notifyEnergyDepleted();
+        }
+      }
       const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
       const thrust = 640 * (suctionActive ? 0.56 : 1) * (boosting ? jetpackBoostThrustMultiplier : 1) * weaponSlowFactor;
       player.vx += world.x * thrust * dt;
@@ -15792,7 +16431,7 @@
 
     const speed = length(player.vx, player.vy);
     const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
-    const boostSpeed = isJetpackBoostPressed() && hasPlayerEnergy() ? jetpackBoostSpeedMultiplier : 1;
+    const boostSpeed = isJetpackBoostPressed() && canUseContinuousPlayerEnergy(jetpackBoostEnergyDrain, dt) ? jetpackBoostSpeedMultiplier : 1;
     const maxSpeed = vacuumHoldActive ? 0 : ((canUseSuctionControls() && isGadgetButtonPressed()) ? 275 : 430 * boostSpeed) * weaponSlowFactor;
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
@@ -15857,12 +16496,16 @@
     return Math.max(0, finiteOr(rate, 0)) * multiplayerEnergyCheckDt(dt);
   }
 
+  function multiplayerContinuousEnergyActivationCost(rate, dt) {
+    return Math.max(playerContinuousEnergyActivationCost, multiplayerContinuousEnergyCost(rate, dt));
+  }
+
   function multiplayerToolModeEnergyCost(equippedTool, mode, dt) {
     if (!mode || mode === "idle") {
       return 0;
     }
     if (equippedTool === defaultToolId && isPartyGadgetActiveMode(mode)) {
-      return multiplayerContinuousEnergyCost(suctionEnergyDrain, dt);
+      return multiplayerContinuousEnergyActivationCost(suctionEnergyDrain, dt);
     }
     if (mode === "fire") {
       const weapon = weaponByToolId(equippedTool);
@@ -15873,6 +16516,9 @@
 
   function actorCanAffordMultiplayerToolMode(actor, equippedTool, mode, dt) {
     const cost = multiplayerToolModeEnergyCost(equippedTool, mode, dt);
+    if (actor === player && playerContinuousEnergyLocked && equippedTool === defaultToolId && isPartyGadgetActiveMode(mode)) {
+      return false;
+    }
     return finiteOr(actor && actor.energy, 0) >= cost;
   }
 
@@ -15884,13 +16530,23 @@
       return mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt) ? "fire" : "idle";
     }
     if (!isSuctionEquipped() || !actorCanAffordMultiplayerToolMode(player, defaultToolId, "pull", dt)) {
+      if (isSuctionEquipped() && isGadgetButtonPressed()) {
+        playerContinuousEnergyLocked = true;
+      }
       return "idle";
     }
     return mouse.middle ? "hold" : mouse.left ? "pull" : mouse.right ? "push" : "idle";
   }
 
   function canSendMultiplayerBoostInput(dt) {
-    return isJetpackBoostPressed() && player.energy >= multiplayerContinuousEnergyCost(jetpackBoostEnergyDrain, dt);
+    if (!isJetpackBoostPressed()) {
+      return false;
+    }
+    if (playerContinuousEnergyLocked || player.energy < multiplayerContinuousEnergyActivationCost(jetpackBoostEnergyDrain, dt)) {
+      playerContinuousEnergyLocked = true;
+      return false;
+    }
+    return true;
   }
 
   function actorFromPartyPlayerSnapshot(snapshot) {
@@ -16098,6 +16754,7 @@
     const mouthDist = length(toMouthX, toMouthY);
     const pushResponse = bodyPushResponse(target);
     const captureInFunnel = options.captureInFunnel !== false;
+    const pullTowardActor = options.pullTowardActor === true;
 
     if (middleActive && inCone) {
       const holdX = actor.x + aimWorld.x * gadgetHoldReach;
@@ -16133,14 +16790,20 @@
     }
 
     if (leftActive && inCone) {
-      const pull = normalize(toMouthX, toMouthY);
+      const pullTargetX = pullTowardActor ? actor.x : funnel.x;
+      const pullTargetY = pullTowardActor ? actor.y : funnel.y;
+      const toPullTargetX = pullTargetX - target.x;
+      const toPullTargetY = pullTargetY - target.y;
+      const pullDistance = length(toPullTargetX, toPullTargetY);
+      const pull = normalize(toPullTargetX, toPullTargetY);
       const coneStrength = clamp(1 - side / Math.max(1, coneWidth), 0, 1);
-      const distanceStrength = clamp(1 - mouthDist / 620, 0.16, 1);
-      const force = 1180 * finiteOr(state.suckFactor, 1) * coneStrength * distanceStrength * pushResponse;
+      const distanceStrength = clamp(1 - pullDistance / 620, pullTowardActor ? 0.28 : 0.16, 1);
+      const baseForce = pullTowardActor ? 1660 : 1180;
+      const force = baseForce * finiteOr(state.suckFactor, 1) * coneStrength * distanceStrength * pushResponse;
       target.vx += pull.x * force * dt;
       target.vy += pull.y * force * dt;
 
-      if (captureInFunnel && mouthDist < funnel.radius + target.radius * 2.2) {
+      if (!pullTowardActor && captureInFunnel && mouthDist < funnel.radius + target.radius * 2.2) {
         const cup = normalize(toMouthX, toMouthY);
         const ringTarget = Math.max(0, funnel.radius * 0.42 - target.radius * 0.22);
         const current = mouthDist || 1;
@@ -16435,8 +17098,7 @@
     return Boolean(
       state &&
       particle &&
-      particle.id !== state.landedBodyId &&
-      !isUfoBeamCargo(particle)
+      particle.id !== state.landedBodyId
     );
   }
 
@@ -16452,11 +17114,12 @@
   }
 
   function pruneExcessAmbientParticles(anchors, maxParticleBudget) {
-    if (particles.length <= maxParticleBudget) {
+    let ambientCount = countAmbientParticles();
+    if (ambientCount <= maxParticleBudget) {
       return;
     }
 
-    for (let remaining = particles.length - maxParticleBudget; remaining > 0; remaining -= 1) {
+    for (let remaining = ambientCount - maxParticleBudget; remaining > 0; remaining -= 1) {
       let removeIndex = -1;
       let removeScore = -Infinity;
 
@@ -16478,7 +17141,25 @@
         return;
       }
       particles.splice(removeIndex, 1);
+      ambientCount -= 1;
     }
+  }
+
+  function farthestRecyclableAmbientParticle(anchors, keepRadius) {
+    let best = null;
+    let bestDistance = -Infinity;
+    for (const particle of particles) {
+      if (!particle || !particle.tier || particle.tier.name !== "particle" || finiteOr(particle.ufoSapTimer, 0) > 0) {
+        continue;
+      }
+      const distance = nearestPartyAnchorDistance(particle.x, particle.y, anchors);
+      if (distance <= keepRadius || distance <= bestDistance) {
+        continue;
+      }
+      best = particle;
+      bestDistance = distance;
+    }
+    return best;
   }
 
   function pruneInvalidParticles() {
@@ -16500,17 +17181,26 @@
     const partySpawnAnchors = activePartyPlayerAnchors();
     const activeTargetParticles = activeParticleTargetCount(partySpawnAnchors);
     const maxParticleBudget = Math.round(activeTargetParticles * 1.28);
+    const playfieldFill = useParticlePlayfieldFill();
+    const localFillRadius = playfieldFill ? particlePlayfieldRadius() : particleDensityRadius();
 
     pruneInvalidParticles();
+    let ambientParticleCount = countAmbientParticles();
     spawnTimer -= dt;
     while (spawnTimer <= 0) {
       const underdense = mostUnderdenseParticleAnchor(partySpawnAnchors);
       const needsLocalFill = underdense.score > 0.5 && underdense.localCount < underdense.localTarget;
-      if (particles.length >= activeTargetParticles && (!needsLocalFill || particles.length >= maxParticleBudget)) {
-        break;
+      if (ambientParticleCount >= activeTargetParticles && (!needsLocalFill || ambientParticleCount >= maxParticleBudget)) {
+        const recycled = needsLocalFill && playfieldFill ? farthestRecyclableAmbientParticle(partySpawnAnchors, localFillRadius * 1.18) : null;
+        if (!recycled || !recycleParticleNearPlayer(recycled, underdense.anchor, { localFill: true, playfieldFill: true })) {
+          break;
+        }
+        spawnTimer += 0.035;
+        continue;
       }
-      spawnParticleNearPlayer(needsLocalFill ? underdense.anchor : randomPartySpawnAnchor());
-      const deficit = clamp((activeTargetParticles - particles.length) / Math.max(1, activeTargetParticles), 0, 1);
+      spawnParticleNearPlayer(needsLocalFill ? underdense.anchor : randomPartySpawnAnchor(), { localFill: needsLocalFill, playfieldFill: needsLocalFill && playfieldFill });
+      ambientParticleCount += 1;
+      const deficit = clamp((activeTargetParticles - ambientParticleCount) / Math.max(1, activeTargetParticles), 0, 1);
       spawnTimer += needsLocalFill ? 0.035 : 0.11 - deficit * 0.07;
     }
 
@@ -16520,11 +17210,13 @@
       if (particle.ufoSapTimer !== undefined) {
         particle.ufoSapTimer = Math.max(0, finiteOr(particle.ufoSapTimer, 0) - dt);
       }
+      if (particle.ufoSapSourceGraceTimer !== undefined) {
+        particle.ufoSapSourceGraceTimer = Math.max(0, finiteOr(particle.ufoSapSourceGraceTimer, 0) - dt);
+      }
 
       if (
         suctionActive &&
         !isLandedBody &&
-        !isUfoBeamCargo(particle) &&
         gadgetStateMayReachTarget(localGadgetState, particle, 0)
       ) {
         applyActorGadgetForces(particle, localGadgetState, dt);
@@ -16557,7 +17249,6 @@
       if (
         vacuumBucketActive &&
         !isLandedBody &&
-        !isUfoBeamCargo(particle) &&
         gadgetStateMayReachTarget(localGadgetState, particle, 0)
       ) {
         resolveActorFunnelBucket(particle, localGadgetState, dt);
@@ -16570,8 +17261,11 @@
 
       const fromPlayer = nearestPartyAnchorDistance(particle.x, particle.y, partySpawnAnchors);
       const cullDistance = Math.max(width, height) * 1.85 + 1600;
-      if (!particle.tier.solid && fromPlayer > cullDistance && particles.length > activeTargetParticles * 0.82) {
+      if (!particle.tier.solid && fromPlayer > cullDistance && ambientParticleCount > activeTargetParticles * 0.82) {
         particles.splice(i, 1);
+        if (isAmbientDensityParticle(particle)) {
+          ambientParticleCount -= 1;
+        }
       }
     }
 
@@ -16609,6 +17303,17 @@
     return particle && finiteOr(particle.ufoSapTimer, 0) > 0;
   }
 
+  function isFreshUfoSapSourcePair(a, b) {
+    return Boolean(
+      a &&
+      b &&
+      (
+        (finiteOr(a.ufoSapSourceGraceTimer, 0) > 0 && Math.max(0, Math.floor(finiteOr(a.ufoExtractedFromId, 0))) === b.id) ||
+        (finiteOr(b.ufoSapSourceGraceTimer, 0) > 0 && Math.max(0, Math.floor(finiteOr(b.ufoExtractedFromId, 0))) === a.id)
+      )
+    );
+  }
+
   function canUfoTractorAffectParticle(particle) {
     if (!particle || !particle.tier) {
       return false;
@@ -16631,7 +17336,7 @@
   }
 
   function shouldSkipParticleMerge(a, b) {
-    return isUfoBeamCargo(a) || isUfoBeamCargo(b);
+    return isFreshUfoSapSourcePair(a, b);
   }
 
   function areBodiesDirectlyTethered(a, b) {
@@ -16901,7 +17606,7 @@
       pickup.life -= dt;
 
       if (suctionActive && gadgetStateMayReachTarget(localGadgetState, pickup, 0)) {
-        applyActorGadgetForces(pickup, localGadgetState, dt, { captureInFunnel: false });
+        applyActorGadgetForces(pickup, localGadgetState, dt, { captureInFunnel: false, pullTowardActor: true });
       }
 
       const toPlayerX = player.x - pickup.x;
@@ -17301,6 +18006,12 @@
       : Math.min(90, baseDamage + Math.max(0, impactSpeed - rivalBodyImpactSpeed) * 0.16 + Math.sqrt(body.mass) * 0.62);
   }
 
+  function sharedBodyPlayerImpactDamage(body, impactSpeed, baseDamage) {
+    return body && body.tier && body.tier.solid
+      ? solidBodyPlayerImpactDamage(body, impactSpeed, baseDamage)
+      : Math.min(90, baseDamage + Math.max(0, impactSpeed - rivalBodyImpactSpeed) * 0.16 + Math.sqrt(body.mass) * 0.62);
+  }
+
   function sendSharedBodyImpactEffect(contact, keyPrefix, nx, ny, impactSpeed) {
     const impulse = 70 + impactSpeed * 0.28;
     sendThrottledRemoteEntityEffect(contact.remote, keyPrefix + ":" + contact.source.id, 0.18, {
@@ -17351,7 +18062,7 @@
         continue;
       }
 
-      const damageThreshold = body.tier.solid ? solidBodyDamageSpeed : projectileDamageSpeed;
+      const damageThreshold = body.tier.solid ? solidBodyPlayerDamageSpeed : projectileDamageSpeed;
       if (impactSpeed < damageThreshold || player.hitCooldown > 0) {
         continue;
       }
@@ -17360,7 +18071,7 @@
         detachFromBody(170);
       }
 
-      const damage = sharedBodyImpactDamage(body, impactSpeed, 10);
+      const damage = sharedBodyPlayerImpactDamage(body, impactSpeed, 10);
       player.vx += nx * (120 + impactSpeed * 0.32);
       player.vy += ny * (120 + impactSpeed * 0.32);
       damageLocalPlayer(damage, {
@@ -17526,7 +18237,13 @@
   }
 
   function repairWithSpanner(dt) {
-    if (!isSpannerEquipped() || !mouse.left || buildMenuOpen) {
+    if (equippedToolId !== "spanner" || areToolsDisabled() || !mouse.left || buildMenuOpen) {
+      return false;
+    }
+
+    if (!canUseContinuousPlayerEnergy(spannerRepairEnergyDrain, dt)) {
+      playerContinuousEnergyLocked = true;
+      notifyEnergyDepleted();
       return false;
     }
 
@@ -17535,7 +18252,7 @@
       return false;
     }
 
-    if (!drainPlayerEnergy(spannerRepairEnergyDrain, dt)) {
+    if (!drainContinuousPlayerEnergy(spannerRepairEnergyDrain, dt)) {
       notifyEnergyDepleted();
       return false;
     }
@@ -17615,7 +18332,13 @@
   }
 
   function dismantleStructureWithSpanner(dt) {
-    if (!isSpannerEquipped() || !mouse.right || buildMenuOpen) {
+    if (equippedToolId !== "spanner" || areToolsDisabled() || !mouse.right || buildMenuOpen) {
+      return false;
+    }
+
+    if (!canUseContinuousPlayerEnergy(spannerDismantleEnergyDrain, dt)) {
+      playerContinuousEnergyLocked = true;
+      notifyEnergyDepleted();
       return false;
     }
 
@@ -17624,7 +18347,7 @@
       return false;
     }
 
-    if (!drainPlayerEnergy(spannerDismantleEnergyDrain, dt)) {
+    if (!drainContinuousPlayerEnergy(spannerDismantleEnergyDrain, dt)) {
       notifyEnergyDepleted();
       return false;
     }
@@ -19725,7 +20448,7 @@
   function emitUfoSapParticles(ufo, body, lostMass, pullStrength, centerStrength) {
     body.ufoSapParticleBuffer = Math.max(0, finiteOr(body.ufoSapParticleBuffer, 0)) + lostMass;
 
-    if (body.ufoSapParticleBuffer <= 0) {
+    if (body.ufoSapParticleBuffer < ufoSapFragmentMass) {
       return;
     }
 
@@ -19734,16 +20457,22 @@
     const toUfo = normalize(originX - body.x, originY - body.y);
     const tangentX = -toUfo.y;
     const tangentY = toUfo.x;
-    const surfaceX = body.x + toUfo.x * Math.max(1, body.radius + 2);
-    const surfaceY = body.y + toUfo.y * Math.max(1, body.radius + 2);
     const pullSpeed = 170 + pullStrength * 170 + centerStrength * 120;
-    const particlesToEmit = Math.min(5, Math.max(1, Math.ceil(body.ufoSapParticleBuffer / 0.32)));
+    const particlesToEmit = Math.min(
+      ufoSapMaxFragmentsPerBurst,
+      Math.max(1, Math.floor(body.ufoSapParticleBuffer / ufoSapFragmentMass))
+    );
     let remainingMass = body.ufoSapParticleBuffer;
+    let sparkX = body.x + toUfo.x * Math.max(1, body.radius + 2);
+    let sparkY = body.y + toUfo.y * Math.max(1, body.radius + 2);
 
     for (let i = 0; i < particlesToEmit; i += 1) {
       const remainingParticles = particlesToEmit - i;
       const fragmentMass = remainingMass / remainingParticles;
       remainingMass -= fragmentMass;
+      const fragmentRadius = radiusFromMass(fragmentMass);
+      const surfaceX = body.x + toUfo.x * Math.max(1, body.radius + fragmentRadius + 5);
+      const surfaceY = body.y + toUfo.y * Math.max(1, body.radius + fragmentRadius + 5);
       const side = randomRange(-body.radius * 0.1, body.radius * 0.1);
       const jitter = randomRange(-34, 34);
       const particle = emitMassParticle(
@@ -19756,15 +20485,18 @@
       );
       particle.ufoExtractedById = ufo.id;
       particle.ufoExtractedFromId = body.id;
-      particle.ufoSapTimer = 3.25;
+      particle.ufoSapTimer = ufoSapCargoDuration;
+      particle.ufoSapSourceGraceTimer = ufoSapSourceGraceDuration;
       particle.wobble = ufo.wobble + randomRange(-0.45, 0.45);
+      sparkX = surfaceX;
+      sparkY = surfaceY;
     }
 
     body.ufoSapParticleBuffer = Math.max(0, remainingMass);
 
     sparks.push({
-      x: surfaceX,
-      y: surfaceY,
+      x: sparkX,
+      y: sparkY,
       radius: Math.max(14, Math.min(42, body.radius * 0.16)),
       color: ufo.color,
       life: 0.18,
@@ -21153,7 +21885,8 @@
 
   function drawBody(particle, time) {
     const pulse = 1 + Math.sin(time * 0.004 * particle.pulse + particle.id) * 0.035;
-    const radius = particle.radius * pulse;
+    const spawnSizeScale = particle.tier.name === "particle" ? clamp(finiteOr(particle.spawnSizeScale, 1), 1, 1.18) : 1;
+    const radius = particle.radius * pulse * spawnSizeScale;
 
     if (particle.tier.name === "particle") {
       drawTinyParticle(particle, radius);
@@ -25147,6 +25880,7 @@
   function resetClusternautsTestCounters() {
     clusternautsTestCounters.particleMerges = 0;
     clusternautsTestCounters.bodyBounces = 0;
+    clusternautsTestCounters.buildMenuRenders = 0;
   }
 
   function configureClusternautsTestInput(input) {
@@ -25210,6 +25944,10 @@
         maxEnergy: player.maxEnergy,
         aimAngle: Math.atan2(getAim().world.y, getAim().world.x),
         aimLocalAngle: getAim().angle,
+        landed: normalizeLandingSnapshot(player.landed),
+        walkCycle: player.walkCycle,
+        cameraRoll,
+        bodyRotation: typeof playerSurfaceRotation === "function" ? playerSurfaceRotation() : 0,
         hitCooldown: player.hitCooldown,
         respawnInvulnerable: multiplayer.partyRespawnInvulnerableTimer
       },
@@ -25237,6 +25975,7 @@
       events: {
         particleMerges: clusternautsTestCounters.particleMerges,
         bodyBounces: clusternautsTestCounters.bodyBounces,
+        buildMenuRenders: clusternautsTestCounters.buildMenuRenders,
         playerAbsorptions: lifeStats.absorbedParticleCount,
         mobsDefeated: lifeStats.mobsDefeated
       }
@@ -25305,6 +26044,13 @@
     }
     if (Number.isFinite(Number(config.hitCooldown))) {
       player.hitCooldown = Math.max(0, Number(config.hitCooldown));
+    }
+    if (Number.isFinite(Number(config.maxEnergy))) {
+      player.maxEnergy = clamp(Number(config.maxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
+      player.energy = clamp(player.energy, 0, player.maxEnergy);
+    }
+    if (Number.isFinite(Number(config.energy))) {
+      player.energy = clamp(Number(config.energy), 0, player.maxEnergy);
     }
     if (Number.isFinite(Number(config.respawnInvulnerable))) {
       multiplayer.partyRespawnInvulnerableTimer = Math.max(0, Number(config.respawnInvulnerable));
@@ -25420,6 +26166,7 @@
           window.innerHeight = Math.max(1, Math.floor(finiteOr(config.viewport.height, window.innerHeight || 720)));
         }
         resize();
+        resetSoloMultiplayerSession();
         applyDifficulty(config.difficulty || defaultDifficultyId);
         resetLocalPlayerState();
         resetLocalWorldState();
@@ -25437,6 +26184,9 @@
       },
       setInput: function (input) {
         configureClusternautsTestInput(input);
+      },
+      requestLandingToggle: function () {
+        return requestLandingToggle();
       },
       step: function (dt) {
         const seconds = Math.max(0, finiteOr(dt, 0));
@@ -25907,7 +26657,7 @@
     touchLandButton.addEventListener("click", function (event) {
       event.preventDefault();
       resetMouseButtons();
-      toggleLanding();
+      requestLandingToggle();
       updateTouchLandButton();
     });
   }
@@ -26105,6 +26855,12 @@
       } else {
         void hardResetAfterDeath();
       }
+    });
+  }
+
+  if (deathMainMenuButton) {
+    deathMainMenuButton.addEventListener("click", function () {
+      exitDeathToMainMenu();
     });
   }
 
@@ -26388,7 +27144,7 @@
     if (movementControlCodes.has(event.code) || controlCodes.includes(event.code) || event.code === "ShiftLeft" || event.code === "ShiftRight") {
       event.preventDefault();
       if (event.code === controlCodeFor("land") && !event.repeat) {
-        toggleLanding();
+        requestLandingToggle();
       }
       keys.add(event.code);
     }

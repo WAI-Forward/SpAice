@@ -3048,6 +3048,17 @@ select {
   box-shadow: 0 14px 34px rgba(255, 98, 98, 0.26);
 }
 
+.death-screen__button + .death-screen__button {
+  margin-top: 12px;
+}
+
+.death-screen__button--secondary {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(20, 26, 46, 0.9);
+  color: #f8fbff;
+  box-shadow: none;
+}
+
 .death-screen__button:disabled {
   cursor: default;
   opacity: 0.72;
@@ -3703,5 +3714,9 @@ select {
 
   .death-screen__leaderboard-status {
     display: none;
+  }
+
+  .death-screen__button + .death-screen__button {
+    margin-top: 5px;
   }
 }
