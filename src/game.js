@@ -101,6 +101,9 @@
   const startMenuBack = document.getElementById("startMenuBack");
   const startMenuEyebrow = document.getElementById("startMenuEyebrow");
   const startMenuTitle = document.getElementById("startMenuTitle");
+  const startMenuAccount = document.getElementById("startMenuAccount");
+  const startMenuAccountLabel = document.getElementById("startMenuAccountLabel");
+  const startMenuAccountName = document.getElementById("startMenuAccountName");
   const startSavedGameList = document.getElementById("startSavedGameList");
   const lobbyCodeInput = document.getElementById("lobbyCodeInput");
   const joinLobbyButton = document.getElementById("joinLobbyButton");
@@ -145,11 +148,15 @@
   const deathLeaderboardStatus = document.getElementById("deathLeaderboardStatus");
   const playAgainButton = document.getElementById("playAgainButton");
   const deathMainMenuButton = document.getElementById("deathMainMenuButton");
-  const externalBackendOrigin = "https://36ff-92-29-230-204.ngrok-free.app";
+  const defaultExternalBackendOrigin = "";
+  const ngrokSkipBrowserWarningHeader = "Ngrok-Skip-Browser-Warning";
+  const crazyGamesSdkUrl = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
+  const crazyGamesSdkLoadTimeoutMs = 5000;
   const serverMaintenanceMessage = "Server is down for maintenance.  Please try again later";
   const crazyGamesState = {
     sdk: null,
     initPromise: null,
+    sdkLoadPromise: null,
     initialized: false,
     muteAudio: false,
     gameplayActive: false,
@@ -255,9 +262,12 @@
   const accountState = {
     token: "",
     username: "",
+    displayName: "",
     saves: [],
     busy: false,
     savesLoading: false,
+    sessionLoading: true,
+    waiLinked: false,
     crazyGamesLinked: false
   };
 
@@ -309,12 +319,12 @@
       return;
     }
 
-    fetch(apiUrl("/api/client-error"), {
+    fetch(apiUrl("/api/client-error"), withBackendRequestOptions({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       keepalive: true
-    }).catch(function () {
+    })).catch(function () {
       // If reporting fails, keep the original error as the only console signal.
     });
   }
@@ -349,11 +359,34 @@
   }
 
   function backendOrigin() {
-    return configuredBackendOrigin() || externalBackendOrigin;
+    return configuredBackendOrigin() || defaultExternalBackendOrigin;
   }
 
   function configuredBackendOrigin() {
     return typeof window.CLUSTERNAUTS_BACKEND_ORIGIN === "string" ? window.CLUSTERNAUTS_BACKEND_ORIGIN.replace(/\/+$/, "") : "";
+  }
+
+  function withBackendRequestOptions(options) {
+    const requestOptions = Object.assign({}, options || {});
+    const headers = Object.assign({}, requestOptions.headers || {});
+    if (shouldSkipNgrokBrowserWarning()) {
+      headers[ngrokSkipBrowserWarningHeader] = "1";
+    }
+    requestOptions.headers = headers;
+    return requestOptions;
+  }
+
+  function shouldSkipNgrokBrowserWarning() {
+    if (!shouldUseExternalBackend()) {
+      return false;
+    }
+
+    try {
+      const host = new URL(backendOrigin()).hostname.toLowerCase();
+      return host === "ngrok-free.app" || host.endsWith(".ngrok-free.app") || host === "ngrok.app" || host.endsWith(".ngrok.app");
+    } catch {
+      return false;
+    }
   }
 
   function createServerMaintenanceError(cause) {
@@ -1297,8 +1330,10 @@
       }
       const token = typeof stored.token === "string" ? stored.token : "";
       const username = sanitizeAccountUsername(stored.username);
+      const displayName = sanitizePlayerName(stored.displayName);
+      const waiLinked = stored.waiLinked === true;
       const crazyGamesLinked = stored.crazyGamesLinked === true;
-      return token && username ? { token, username, crazyGamesLinked } : null;
+      return token && username ? { token, username, displayName, waiLinked, crazyGamesLinked } : null;
     } catch {
       return null;
     }
@@ -1314,6 +1349,8 @@
       window.localStorage.setItem(accountSessionStorageKey, JSON.stringify({
         token: accountState.token,
         username: accountState.username,
+        displayName: accountState.displayName,
+        waiLinked: accountState.waiLinked === true,
         crazyGamesLinked: accountState.crazyGamesLinked === true
       }));
     } catch {
@@ -1346,7 +1383,7 @@
 
       return {
         uiScale: clamp(Number(stored.uiScale) || defaults.uiScale, 0.8, 1.3),
-        zoom: clamp(zoom || defaults.zoom, 0.4, 1.75),
+        zoom: clamp(zoom || defaults.zoom, 0.08, 1.75),
         surfaceCameraRotation: stored.surfaceCameraRotation === true,
         touchScreen: typeof stored.touchScreen === "boolean" ? stored.touchScreen : defaults.touchScreen,
         hudEnabled: typeof stored.hudEnabled === "boolean" ? stored.hudEnabled : defaults.hudEnabled,
@@ -2149,12 +2186,13 @@
     };
   }
 
-  const cameraZoomMin = 0.4;
+  const cameraZoomMin = 0.08;
   const cameraZoomDefault = 0.62;
   const cameraZoomMax = 1.75;
   const cameraZoomSliderMid = 100;
   const cameraZoomSliderMax = 200;
   const cameraZoomStep = 1.12;
+  const cameraWheelZoomStep = 1.08;
 
   function sliderValueToCameraZoom(value) {
     const sliderValue = clamp(Number(value) || 0, 0, cameraZoomSliderMax);
@@ -2181,6 +2219,16 @@
 
   function adjustCameraZoom(direction) {
     const multiplier = direction > 0 ? cameraZoomStep : 1 / cameraZoomStep;
+    setCameraZoom(cameraZoom * multiplier);
+  }
+
+  function adjustCameraZoomFromWheel(deltaY) {
+    if (!Number.isFinite(deltaY) || deltaY === 0) {
+      return;
+    }
+    const direction = deltaY > 0 ? -1 : 1;
+    const steps = Math.min(6, Math.max(1, Math.ceil(Math.abs(deltaY) / 100)));
+    const multiplier = Math.pow(cameraWheelZoomStep, steps * direction);
     setCameraZoom(cameraZoom * multiplier);
   }
 
@@ -4780,6 +4828,12 @@
     maybeNotifyTier(tier, previousTier);
   }
 
+  function scoreMultiplayerV2MobDefeat(event) {
+    const kind = String(event && event.kind || "alienoid");
+    lifeStats.mobsDefeated += 1;
+    lifeStats.mobScore += scoreMobKill(kind);
+  }
+
   function multiplayerV2DeathCause(event) {
     const cause = String(event && event.cause || "");
     if (cause === "body-impact") {
@@ -4826,6 +4880,7 @@
       if (event.type === "mob.hit") {
         playSound("mobHit", { throttleKey: "mpV2MobHit", throttle: 0.04 });
       } else if (event.type === "mob.defeated") {
+        scoreMultiplayerV2MobDefeat(event);
         playSound("mobDestroyed", { throttleKey: "mpV2MobDestroyed", throttle: 0.08 });
       } else if (event.type === "player.shot") {
         playSound("laser", { throttleKey: "mpV2PlayerShot:" + String(event.projectileId || ""), throttle: 0.02 });
@@ -5111,6 +5166,7 @@
 
     const syncStart = performance.now();
     syncMultiplayerV2World(state.world);
+    updateLifeStats();
     syncMultiplayerV2RemotePlayers(state);
     updateMultiplayerV2Perf({
       syncMs: performance.now() - syncStart,
@@ -6006,7 +6062,23 @@
       accountSignedIn.hidden = crazyGamesRuntime || !signedIn;
     }
     if (accountNameValue) {
-      accountNameValue.textContent = signedIn ? accountState.username : "Signed out";
+      accountNameValue.textContent = signedIn ? accountState.displayName || accountState.username : "Signed out";
+    }
+    if (startMenuAccount) {
+      startMenuAccount.hidden = false;
+      startMenuAccount.classList.toggle("is-loading", !signedIn && accountState.sessionLoading === true);
+      startMenuAccount.classList.toggle("is-signed-out", !signedIn && accountState.sessionLoading !== true);
+      startMenuAccount.classList.toggle("is-wai-linked", accountState.waiLinked === true);
+    }
+    if (startMenuAccountLabel) {
+      startMenuAccountLabel.textContent = signedIn
+        ? "Signed in as"
+        : accountState.sessionLoading
+        ? "WAi Forward account"
+        : "Not signed in";
+    }
+    if (startMenuAccountName) {
+      renderStartMenuAccountName(signedIn);
     }
     if (accountLoginButton) {
       accountLoginButton.disabled = accountState.busy;
@@ -6025,6 +6097,31 @@
     updateRestartGameUi();
 
     renderSavedGames();
+  }
+
+  function renderStartMenuAccountName(signedIn) {
+    if (!startMenuAccountName) {
+      return;
+    }
+
+    startMenuAccountName.textContent = "";
+    if (signedIn) {
+      startMenuAccountName.textContent = accountState.displayName || accountState.username;
+      return;
+    }
+    if (accountState.sessionLoading) {
+      startMenuAccountName.textContent = "Checking session...";
+      return;
+    }
+
+    const loginLink = document.createElement("a");
+    loginLink.className = "start-menu__account-login";
+    loginLink.href = waiLoginUrl();
+    loginLink.textContent = "login";
+    loginLink.addEventListener("click", function () {
+      setManualSaveStatus("Opening login...", "success");
+    });
+    startMenuAccountName.append(loginLink, document.createTextNode(" to save"));
   }
 
   function sanitizeNetworkIdentity(value) {
@@ -6624,6 +6721,59 @@
     }
   }
 
+  function crazyGamesSdkScriptUrl() {
+    const configured = typeof window.CLUSTERNAUTS_CRAZYGAMES_SDK_URL === "string" ? window.CLUSTERNAUTS_CRAZYGAMES_SDK_URL.trim() : "";
+    return configured || crazyGamesSdkUrl;
+  }
+
+  function waitForCrazyGamesSdkScript() {
+    if (window.CrazyGames && window.CrazyGames.SDK) {
+      return Promise.resolve(window.CrazyGames.SDK);
+    }
+    if (!isCrazyGamesRuntime()) {
+      return Promise.resolve(null);
+    }
+    if (crazyGamesState.sdkLoadPromise) {
+      return crazyGamesState.sdkLoadPromise;
+    }
+
+    crazyGamesState.sdkLoadPromise = new Promise(function (resolve) {
+      const script = document.createElement("script");
+      let settled = false;
+      let timeoutId = 0;
+
+      function finish(sdk) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        resolve(sdk || null);
+      }
+
+      script.src = crazyGamesSdkScriptUrl();
+      script.async = true;
+      script.onload = function () {
+        finish(window.CrazyGames && window.CrazyGames.SDK);
+      };
+      script.onerror = function () {
+        console.warn("CrazyGames SDK script failed to load.");
+        finish(null);
+      };
+
+      timeoutId = setTimeout(function () {
+        console.warn("CrazyGames SDK script timed out.");
+        finish(null);
+      }, crazyGamesSdkLoadTimeoutMs);
+
+      (document.head || document.documentElement).appendChild(script);
+    });
+
+    return crazyGamesState.sdkLoadPromise;
+  }
+
   async function initializeCrazyGamesIntegration() {
     if (crazyGamesState.initPromise) {
       return crazyGamesState.initPromise;
@@ -6640,7 +6790,7 @@
             return null;
           }
         }
-        sdk = sdk || (window.CrazyGames && window.CrazyGames.SDK);
+        sdk = sdk || (window.CrazyGames && window.CrazyGames.SDK) || await waitForCrazyGamesSdkScript();
         if (!sdk) {
           crazyGamesState.authAvailable = false;
           updateAccountUi();
@@ -6834,25 +6984,30 @@
   }
 
   async function bootstrapAccountSession() {
+    accountState.sessionLoading = true;
+    updateAccountUi();
+
     if (isCrazyGamesRuntime()) {
       accountState.token = "";
       accountState.username = "";
+      accountState.displayName = "";
       accountState.saves = [];
+      accountState.sessionLoading = false;
+      accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
       updateAccountUi();
       return;
     }
 
     const stored = readStoredAccountSession();
-    if (!stored) {
+    if (stored) {
+      accountState.token = stored.token;
+      accountState.username = stored.username;
+      accountState.displayName = stored.displayName || "";
+      accountState.waiLinked = stored.waiLinked === true;
+      accountState.crazyGamesLinked = stored.crazyGamesLinked === true;
       updateAccountUi();
-      return;
     }
-
-    accountState.token = stored.token;
-    accountState.username = stored.username;
-    accountState.crazyGamesLinked = stored.crazyGamesLinked === true;
-    updateAccountUi();
 
     try {
       const data = await fetchPersistentJson("/api/auth/session", {
@@ -6863,7 +7018,10 @@
     } catch (error) {
       accountState.token = "";
       accountState.username = "";
+      accountState.displayName = "";
       accountState.saves = [];
+      accountState.sessionLoading = false;
+      accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
       writeStoredAccountSession();
       updateAccountUi();
@@ -6875,6 +7033,9 @@
     const account = data && data.account && typeof data.account === "object" ? data.account : {};
     accountState.token = typeof data.sessionToken === "string" ? data.sessionToken : accountState.token;
     accountState.username = sanitizeAccountUsername(account.username || accountState.username);
+    accountState.displayName = sanitizePlayerName(account.waiDisplayName || account.crazyGamesUsername || account.username || accountState.username);
+    accountState.sessionLoading = false;
+    accountState.waiLinked = account.waiLinked === true;
     accountState.crazyGamesLinked = account.crazyGamesLinked === true;
     adoptLinkedPlayerId(account.linkedPlayerId);
     if (account.crazyGamesUsername) {
@@ -6887,7 +7048,7 @@
     updateAccountUi();
   }
 
-  async function submitAccountAuth(createNew) {
+  async function submitAccountAuth(_createNew) {
     if (isCrazyGamesRuntime()) {
       await promptCrazyGamesLogin();
       return;
@@ -6897,44 +7058,13 @@
       return;
     }
 
-    const username = sanitizeAccountUsername(accountUsernameInput && accountUsernameInput.value);
-    const password = accountPasswordInput ? accountPasswordInput.value : "";
-    if (!username || username.length < 3) {
-      setManualSaveStatus("Enter a username with at least 3 characters.", "error");
-      return;
-    }
-    if (password.length < 6) {
-      setManualSaveStatus("Enter a password with at least 6 characters.", "error");
-      return;
-    }
+    setManualSaveStatus("Opening login...", "success");
+    window.location.href = waiLoginUrl();
+  }
 
-    setAccountBusy(true);
-    try {
-      const data = await fetchPersistentJson(createNew ? "/api/auth/signup" : "/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username,
-          password,
-          playerId: player.id
-        })
-      });
-      applyAccountSession(data);
-      if (accountPasswordInput) {
-        accountPasswordInput.value = "";
-      }
-      await refreshAccountSaves();
-      setManualSaveStatus(createNew ? "Account created." : "Logged in.", "success");
-    } catch (error) {
-      const message = isServerMaintenanceError(error)
-        ? serverMaintenanceMessage
-        : error instanceof Error
-        ? error.message.replace(/^Request failed \d+:?\s*/, "")
-        : "Account request failed.";
-      setManualSaveStatus(message, "error");
-    } finally {
-      setAccountBusy(false);
-    }
+  function waiLoginUrl() {
+    const returnTo = `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`;
+    return `/auth/login?return_to=${encodeURIComponent(returnTo)}`;
   }
 
   async function logoutAccount() {
@@ -6959,7 +7089,10 @@
     } finally {
       accountState.token = "";
       accountState.username = "";
+      accountState.displayName = "";
       accountState.saves = [];
+      accountState.sessionLoading = false;
+      accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
       writeStoredAccountSession();
       setManualSaveStatus("Logged out.", "success");
@@ -7435,7 +7568,7 @@
     try {
       let response;
       try {
-        response = await fetch(apiUrl(url), Object.assign({}, options, { signal: controller.signal }));
+        response = await fetch(apiUrl(url), Object.assign(withBackendRequestOptions(options), { signal: controller.signal }));
       } catch (error) {
         throw createServerMaintenanceError(error);
       }
@@ -13637,7 +13770,7 @@
   }
 
   function particlePlayfieldRadius() {
-    const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
+    const zoom = Math.max(cameraZoomMin, finiteOr(cameraZoom, 1));
     const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
     const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
     const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
@@ -13820,7 +13953,7 @@
     const playfieldFill = Boolean(options && options.playfieldFill);
     const source = anchor || randomPartySpawnAnchor();
     const anchors = activePartyPlayerAnchors();
-    const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
+    const zoom = Math.max(cameraZoomMin, finiteOr(cameraZoom, 1));
     const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
     const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
     const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
@@ -14439,7 +14572,7 @@
   function chooseMobSpawnPoint(kind, margin, spread, anchor, spawnAnchors) {
     const source = anchor || leastPopulatedMobSpawnAnchor(activeMobSpawnAnchors());
     const anchors = Array.isArray(spawnAnchors) && spawnAnchors.length ? spawnAnchors : activeMobSpawnAnchors();
-    const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
+    const zoom = Math.max(cameraZoomMin, finiteOr(cameraZoom, 1));
     const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
     const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
     const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
@@ -17470,6 +17603,12 @@
               continue;
             }
 
+            const absorberIndex = particles.indexOf(absorbingPair.absorber);
+            const absorbedIndex = particles.indexOf(absorbingPair.absorbed);
+            if (absorberIndex < 0 || absorbedIndex < 0 || absorberIndex === absorbedIndex) {
+              continue;
+            }
+
           recordPlayerAbsorption(absorbingPair.absorber, absorbingPair.absorbed);
           const mass = absorbingPair.absorber.mass + absorbingPair.absorbed.mass;
           const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;
@@ -17535,8 +17674,8 @@
             maxLife: 0.42
           });
 
-          particles.splice(j, 1);
-          particles.splice(i, 1, merged);
+          particles[absorberIndex] = merged;
+          particles.splice(absorbedIndex, 1);
           playSound(graduated ? "milestone" : "merge", {
             volume: clamp(0.45 + Math.log2(Math.max(1, mass)) * 0.08, 0.45, 1.1)
           });
@@ -24123,7 +24262,7 @@
   }
 
   function remoteUniverseRenderRadius() {
-    const zoom = Math.max(0.35, finiteOr(cameraZoom, 1));
+    const zoom = Math.max(cameraZoomMin, finiteOr(cameraZoom, 1));
     return Math.hypot(width, height) / zoom * 0.75 + 1600;
   }
 
@@ -27286,12 +27425,9 @@
     if (isGameplayPointerBlocked(event)) {
       return;
     }
-    if (hotbarToolIds.length < 2) {
-      return;
-    }
 
     event.preventDefault();
-    cycleTool(event.deltaY >= 0 ? 1 : -1);
+    adjustCameraZoomFromWheel(event.deltaY);
   }, { passive: false });
 
   async function startGame() {

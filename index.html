@@ -191,11 +191,11 @@
             <div class="settings-panel__section-body" id="settingsSavesSection" hidden>
               <div class="settings-panel__group settings-panel__group--saves">
                 <form class="settings-panel__auth-form" id="accountLoginForm">
-                  <input id="accountUsernameInput" type="text" autocomplete="username" maxlength="24" placeholder="Username">
-                  <input id="accountPasswordInput" type="password" autocomplete="current-password" maxlength="72" placeholder="Password">
+                  <input id="accountUsernameInput" type="text" autocomplete="username" maxlength="24" placeholder="Username" hidden>
+                  <input id="accountPasswordInput" type="password" autocomplete="current-password" maxlength="72" placeholder="Password" hidden>
                   <div class="settings-panel__auth-actions">
                     <button class="settings-panel__save-action" id="accountLoginButton" type="submit">Log in</button>
-                    <button class="settings-panel__save-action" id="accountSignupButton" type="button">Sign up</button>
+                    <button class="settings-panel__save-action" id="accountSignupButton" type="button" hidden>Sign up</button>
                   </div>
                 </form>
                 <div class="settings-panel__crazy-account" id="crazyGamesAccount" hidden>
@@ -302,6 +302,10 @@
           <button class="start-menu__back" id="startMenuBack" type="button" data-menu-action="back">Back</button>
           <p class="difficulty-screen__eyebrow" id="startMenuEyebrow">Clusternauts</p>
           <h1 id="startMenuTitle">Clusternauts</h1>
+          <div class="start-menu__account is-loading" id="startMenuAccount">
+            <span id="startMenuAccountLabel">WAi Forward account</span>
+            <strong id="startMenuAccountName">Checking session...</strong>
+          </div>
         </div>
 
         <div class="start-menu__view is-active" data-menu-view="main">

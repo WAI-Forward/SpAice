@@ -2519,6 +2519,72 @@ select {
   grid-column: 2;
 }
 
+.start-menu__account {
+  grid-column: 2;
+  justify-self: center;
+  display: grid;
+  gap: 2px;
+  width: min(360px, 100%);
+  margin-top: 2px;
+  padding: 10px 12px;
+  border: 1px solid rgba(116, 224, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(9, 24, 45, 0.66);
+  color: rgba(248, 251, 255, 0.78);
+  text-align: center;
+  box-shadow: inset 0 0 22px rgba(116, 224, 255, 0.08);
+}
+
+.start-menu__account[hidden] {
+  display: none;
+}
+
+.start-menu__account span {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.start-menu__account strong {
+  color: #f8fbff;
+  font-size: 15px;
+  font-weight: 950;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.start-menu__account-login {
+  color: #74e0ff;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.start-menu__account-login:hover,
+.start-menu__account-login:focus-visible {
+  color: #f8fbff;
+}
+
+.start-menu__account.is-wai-linked {
+  border-color: rgba(255, 210, 108, 0.46);
+  box-shadow:
+    inset 0 0 22px rgba(255, 210, 108, 0.08),
+    0 12px 34px rgba(255, 210, 108, 0.08);
+}
+
+.start-menu__account.is-loading,
+.start-menu__account.is-signed-out {
+  border-color: rgba(248, 251, 255, 0.2);
+  color: rgba(248, 251, 255, 0.66);
+  box-shadow: inset 0 0 22px rgba(248, 251, 255, 0.05);
+}
+
+.start-menu__account.is-signed-out strong {
+  color: rgba(248, 251, 255, 0.78);
+}
+
 .start-menu__back {
   min-height: 34px;
   padding: 0 12px;

@@ -5,6 +5,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const zlib = require("zlib");
 
 const root = path.resolve(__dirname, "..");
 const mpV2Sim = require(path.join(root, "frontend", "src", "mp-v2-sim.js"));
@@ -23,6 +24,10 @@ const randomSignalCooldownMs = 45000;
 const randomSignalIntervalMs = 10 * 60 * 1000;
 const randomOverlapLifetimeMs = 120000;
 const sessionLifetimeMs = 1000 * 60 * 60 * 24 * 14;
+const websiteUrl = stripTrailingSlash(process.env.WAI_FORWARD_WEBSITE_URL || process.env.WEBSITE_URL || defaultWebsiteUrl());
+const configuredPublicUrl = stripTrailingSlash(process.env.CLUSTERNAUTS_PUBLIC_URL || process.env.PUBLIC_URL || "");
+const coreTokenExchangeSecret = loadCoreTokenExchangeSecret();
+const accountSessionCookie = "clusternauts_session";
 const crazyGamesPublicKeyUrl = "https://sdk.crazygames.com/publicKey.json";
 const overlapRoomMaxPlayers = 4;
 const techKeys = ["suction", "weapon", "plating", "energy", "repair", "target", "propulsion", "shield", "communication"];
@@ -72,6 +77,64 @@ const crazyGamesPublicKeyCache = {
   publicKey: "",
   expiresAt: 0
 };
+
+function defaultWebsiteUrl() {
+  if (process.env.NODE_ENV === "production") {
+    return "https://waiforward.co.uk";
+  }
+  const websiteHost = process.env.WAI_FORWARD_WEBSITE_HOST || process.env.INTERNAL_IP || "192.168.4.26";
+  const websitePort = process.env.WAI_FORWARD_WEBSITE_PORT || process.env.WEBSITE_PORT || "8082";
+  return `http://${websiteHost}:${websitePort}`;
+}
+
+function loadCoreTokenExchangeSecret() {
+  const envSecret =
+    process.env.CORE_TOKEN_EXCHANGE_SECRET ||
+    process.env.CORE_SECRET ||
+    process.env.WAI_CORE_SECRET;
+  const normalizedEnvSecret = normalizeCoreTokenExchangeSecret(envSecret);
+  if (normalizedEnvSecret) return normalizedEnvSecret;
+
+  const candidates = [
+    path.join(root, "data", "core.json"),
+    path.join(root, "..", "Website", "data", "core.json"),
+    path.join(root, "..", "RunWAI", "data", "core.json")
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (!fs.existsSync(candidate)) {
+        continue;
+      }
+      const raw = fs.readFileSync(candidate, "utf8").trim();
+      if (!raw) {
+        continue;
+      }
+      const normalizedSecret = normalizeCoreTokenExchangeSecret(raw);
+      if (normalizedSecret) return normalizedSecret;
+    } catch (error) {
+      console.warn(`Could not load core token exchange secret from ${candidate}: ${error.message}`);
+    }
+  }
+
+  return "";
+}
+
+function normalizeCoreTokenExchangeSecret(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "string") return parsed.trim();
+    if (parsed && typeof parsed === "object" && Object.prototype.hasOwnProperty.call(parsed, "secret")) {
+      return String(parsed.secret || "").trim();
+    }
+    return "";
+  } catch {
+    return raw;
+  }
+}
 
 function logMultiplayer(event, details) {
   if (!multiplayerDebugEnabled) {
@@ -173,6 +236,16 @@ function sendFile(response, filePath) {
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
+  if (request.method === "GET" && url.pathname === "/healthz") {
+    writeJson(response, 200, { ok: true, service: "clusternauts" });
+    return;
+  }
+
+  if (url.pathname === "/auth/login" || url.pathname === "/auth/launch/callback") {
+    void handleWaiAuthRoute(request, response, url);
+    return;
+  }
+
   if (url.pathname.startsWith("/api/")) {
     applyCorsHeaders(request, response);
 
@@ -187,6 +260,11 @@ const server = http.createServer((request, response) => {
 
   if (url.pathname.startsWith("/api/auth/")) {
     void handleAuthRequest(request, response, url);
+    return;
+  }
+
+  if (url.pathname === "/api/account") {
+    void handleAccountRequest(request, response);
     return;
   }
 
@@ -233,6 +311,181 @@ const server = http.createServer((request, response) => {
   sendFile(response, filePath);
 });
 
+async function handleWaiAuthRoute(request, response, url) {
+  try {
+    if (request.method === "GET" && url.pathname === "/auth/login") {
+      redirectToWaiLogin(request, response, url.searchParams.get("return_to"));
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/auth/launch/callback") {
+      await handleWaiLaunchCallback(request, response, url);
+      return;
+    }
+
+    writeJson(response, 405, { ok: false, message: "Method not allowed." });
+  } catch (error) {
+    logClusternautsError("wai auth route error", {
+      path: url.pathname,
+      message: error instanceof Error ? error.message : "unknown error"
+    });
+    writeJson(response, error && Number.isFinite(error.status) ? error.status : 500, {
+      ok: false,
+      message: error instanceof Error ? error.message : "WAi login failed."
+    });
+  }
+}
+
+function redirectToWaiLogin(request, response, returnTo) {
+  const params = new URLSearchParams({
+    app: "clusternauts",
+    callback: safeReturnPath(returnTo)
+  });
+  response.writeHead(302, { Location: `${websiteUrl}/auth/app-launch?${params.toString()}` });
+  response.end();
+}
+
+async function handleWaiLaunchCallback(request, response, url) {
+  const code = sanitizeDebugText(url.searchParams.get("code"), 2048);
+  if (!code) {
+    redirectToWaiLogin(request, response, "/");
+    return;
+  }
+
+  const callback = `${serviceBaseUrl(request)}/auth/launch/callback`;
+  const tokens = await exchangeWaiAuthorizationCode(code, callback);
+  const payload = decodeWaiAccessTokenPayload(tokens && tokens.wf_access_token);
+  if (!payload || !payload.user_id) {
+    throwHttpError(401, "WAi account could not be verified.");
+  }
+
+  const result = await createWaiAccountSession(payload);
+  const returnTo = safeReturnPath(url.searchParams.get("return_to"));
+  response.writeHead(302, {
+    Location: returnTo,
+    "Set-Cookie": buildAccountSessionCookie(request, result.sessionToken)
+  });
+  response.end();
+}
+
+async function exchangeWaiAuthorizationCode(code, callback) {
+  const headers = { "content-type": "application/json" };
+  if (coreTokenExchangeSecret) {
+    headers.authorization = `Bearer ${coreTokenExchangeSecret}`;
+  }
+
+  let result;
+  try {
+    result = await fetch(`${websiteUrl}/auth/token`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ code, callback })
+    });
+  } catch (error) {
+    throwHttpError(503, "Could not reach WAi Forward login.");
+  }
+
+  if (!result.ok) {
+    throwHttpError(401, `WAi login exchange failed with status ${result.status}.`);
+  }
+  return result.json();
+}
+
+async function createWaiAccountSession(payload) {
+  const userId = sanitizeDebugText(String(payload.user_id || ""), 128);
+  const username = sanitizeAccountUsername("wai-" + hashToken(userId).slice(0, 20));
+  const displayName = sanitizeDebugText(payload.display_name || payload.user_name || payload.email || "WAi Forward member", 80);
+  const playerId = sanitizeText("wai-" + hashToken("player:" + userId).slice(0, 20), 80);
+  let account = await getAccount(username);
+
+  if (!account) {
+    account = await createAccount(username, randomToken(32), playerId);
+    account.waiUserId = userId;
+    account.waiEmail = sanitizeDebugText(payload.email, 200);
+    account.waiDisplayName = displayName;
+  }
+
+  account.linkedPlayerId = account.linkedPlayerId || playerId;
+  account.waiUserId = userId;
+  account.waiEmail = sanitizeDebugText(payload.email, 200);
+  account.waiDisplayName = displayName;
+  account.lastLoginAt = Date.now();
+  await saveAccount(account);
+  await linkWaiPlayerProfile(account.linkedPlayerId, payload);
+
+  const token = randomToken(32);
+  await saveAccountSession({
+    tokenHash: hashToken(token),
+    username: account.username,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + sessionLifetimeMs
+  });
+
+  return {
+    ok: true,
+    serverTime: Date.now(),
+    sessionToken: token,
+    account: publicAccount(account)
+  };
+}
+
+async function linkWaiPlayerProfile(playerId, payload) {
+  const cleanPlayerId = sanitizeText(playerId, 80);
+  if (!cleanPlayerId) {
+    return;
+  }
+  const profile = await ensurePlayerProfile(cleanPlayerId);
+  if (!profile) {
+    return;
+  }
+  const displayName = sanitizeDebugText(payload.display_name || payload.user_name || payload.email, 80);
+  profile.waiUserId = sanitizeDebugText(String(payload.user_id || ""), 128);
+  profile.waiEmail = sanitizeDebugText(payload.email, 200);
+  if (displayName) {
+    profile.publicName = displayName;
+  }
+  await saveProfile(profile);
+}
+
+function decodeWaiAccessTokenPayload(token) {
+  const parts = String(token || "").split(".");
+  const compressed = parts[0] === "";
+  const payloadPart = compressed ? parts[1] : parts[0];
+  if (!payloadPart) {
+    return null;
+  }
+
+  try {
+    const payloadBytes = base64UrlToBuffer(payloadPart);
+    const jsonBytes = compressed ? zlib.inflateSync(payloadBytes) : payloadBytes;
+    return JSON.parse(jsonBytes.toString("utf8"));
+  } catch (error) {
+    logClusternautsError("wai token decode failed", { message: error instanceof Error ? error.message : "unknown error" });
+    return null;
+  }
+}
+
+async function handleAccountRequest(request, response) {
+  try {
+    if (request.method !== "GET") {
+      writeJson(response, 405, { ok: false, message: "Account endpoint requires GET." });
+      return;
+    }
+    const session = await requireAccountSession(request);
+    writeJson(response, 200, {
+      ok: true,
+      serverTime: Date.now(),
+      sessionToken: extractSessionToken(request),
+      account: publicAccount(session.account)
+    });
+  } catch (error) {
+    writeJson(response, error && Number.isFinite(error.status) ? error.status : 401, {
+      ok: false,
+      message: error instanceof Error ? error.message : "Log in to use saved games."
+    });
+  }
+}
+
 async function handleAuthRequest(request, response, url) {
   try {
     if (request.method === "GET" && url.pathname === "/api/auth/session") {
@@ -240,6 +493,7 @@ async function handleAuthRequest(request, response, url) {
       writeJson(response, 200, {
         ok: true,
         serverTime: Date.now(),
+        sessionToken: extractSessionToken(request),
         account: publicAccount(session.account)
       });
       return;
@@ -271,6 +525,7 @@ async function handleAuthRequest(request, response, url) {
       if (token) {
         await deleteAccountSession(token);
       }
+      response.setHeader("Set-Cookie", clearAccountSessionCookie(request));
       writeJson(response, 200, { ok: true, serverTime: Date.now() });
       return;
     }
@@ -649,7 +904,7 @@ async function resetPersistentWorldData() {
   }
 
   await ensureDatabaseSchema(pool);
-  const result = await pool.query("DELETE FROM spaice_world_state");
+  const result = await pool.query("DELETE FROM clusternauts_world_state");
   overlaps.clear();
   return {
     ok: true,
@@ -675,7 +930,7 @@ async function resetPersistentPlayerData() {
   }
 
   await ensureDatabaseSchema(pool);
-  const result = await pool.query("DELETE FROM spaice_player_state");
+  const result = await pool.query("DELETE FROM clusternauts_player_state");
   playerCooldowns.clear();
   return {
     ok: true,
@@ -706,8 +961,8 @@ async function resetPersistentAllData() {
   }
 
   await ensureDatabaseSchema(pool);
-  const worldResult = await pool.query("DELETE FROM spaice_world_state");
-  const playerResult = await pool.query("DELETE FROM spaice_player_state");
+  const worldResult = await pool.query("DELETE FROM clusternauts_world_state");
+  const playerResult = await pool.query("DELETE FROM clusternauts_player_state");
   overlaps.clear();
   playerCooldowns.clear();
   return {
@@ -745,11 +1000,11 @@ async function resetPersistentLifeData(playerId) {
   }
 
   await ensureDatabaseSchema(pool);
-  const worldResult = await pool.query("DELETE FROM spaice_world_state WHERE id = $1", [worldId]);
-  const playerResult = await pool.query("DELETE FROM spaice_player_state WHERE player_id = $1", [cleanPlayerId]);
-  const profileResult = await pool.query("DELETE FROM spaice_player_profile WHERE player_id = $1", [cleanPlayerId]);
+  const worldResult = await pool.query("DELETE FROM clusternauts_world_state WHERE id = $1", [worldId]);
+  const playerResult = await pool.query("DELETE FROM clusternauts_player_state WHERE player_id = $1", [cleanPlayerId]);
+  const profileResult = await pool.query("DELETE FROM clusternauts_player_profile WHERE player_id = $1", [cleanPlayerId]);
   await pool.query(
-    `UPDATE spaice_player_profile
+    `UPDATE clusternauts_player_profile
      SET state = jsonb_set(state, '{friends}', COALESCE(state->'friends', '[]'::jsonb) - $1::text),
          updated_at = now()
      WHERE COALESCE(state->'friends', '[]'::jsonb) ? $1::text`,
@@ -811,20 +1066,20 @@ async function loadPersistentState(playerId) {
   }
 
   await ensureDatabaseSchema(pool);
-  const worldResult = await pool.query("SELECT state FROM spaice_world_state WHERE id = $1", [worldId]);
+  const worldResult = await pool.query("SELECT state FROM clusternauts_world_state WHERE id = $1", [worldId]);
   const world = evolveWorldState(normalizeWorldState(worldResult.rows[0] && worldResult.rows[0].state));
 
   await pool.query(
-    `INSERT INTO spaice_world_state (id, state, updated_at)
+    `INSERT INTO clusternauts_world_state (id, state, updated_at)
      VALUES ($1, $2::jsonb, now())
      ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
     [worldId, JSON.stringify(world)]
   );
 
   const player = cleanPlayerId
-    ? (await pool.query("SELECT state FROM spaice_player_state WHERE player_id = $1", [cleanPlayerId])).rows[0]?.state || null
+    ? (await pool.query("SELECT state FROM clusternauts_player_state WHERE player_id = $1", [cleanPlayerId])).rows[0]?.state || null
     : null;
-  const players = (await pool.query("SELECT state FROM spaice_player_state ORDER BY updated_at DESC LIMIT 80")).rows.map(
+  const players = (await pool.query("SELECT state FROM clusternauts_player_state ORDER BY updated_at DESC LIMIT 80")).rows.map(
     (row) => row.state
   );
 
@@ -871,18 +1126,18 @@ async function savePersistentState(playerId, body) {
     world = normalizeWorldState(body.world);
     world.lastEvolvedAt = Date.now();
   } else {
-    const worldResult = await pool.query("SELECT state FROM spaice_world_state WHERE id = $1", [worldId]);
+    const worldResult = await pool.query("SELECT state FROM clusternauts_world_state WHERE id = $1", [worldId]);
     world = evolveWorldState(worldResult.rows[0] && worldResult.rows[0].state);
   }
 
   await pool.query(
-    `INSERT INTO spaice_world_state (id, state, updated_at)
+    `INSERT INTO clusternauts_world_state (id, state, updated_at)
      VALUES ($1, $2::jsonb, now())
      ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
     [worldId, JSON.stringify(world)]
   );
   await pool.query(
-    `INSERT INTO spaice_player_state (player_id, state, updated_at)
+    `INSERT INTO clusternauts_player_state (player_id, state, updated_at)
      VALUES ($1, $2::jsonb, now())
      ON CONFLICT (player_id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
     [cleanPlayerId, JSON.stringify(player)]
@@ -913,7 +1168,7 @@ async function listLeaderboardEntries(limit) {
   await ensureDatabaseSchema(pool);
   const result = await pool.query(
     `SELECT state
-     FROM spaice_leaderboard_entry
+     FROM clusternauts_leaderboard_entry
      ORDER BY score DESC, created_at ASC
      LIMIT $1`,
     [maxEntries]
@@ -940,7 +1195,7 @@ async function saveLeaderboardEntry(source) {
 
   await ensureDatabaseSchema(pool);
   await pool.query(
-    `INSERT INTO spaice_leaderboard_entry (id, player_id, score, state, created_at)
+    `INSERT INTO clusternauts_leaderboard_entry (id, player_id, score, state, created_at)
      VALUES ($1, $2, $3, $4::jsonb, to_timestamp($5 / 1000.0))`,
     [entry.id, entry.playerId, entry.score, JSON.stringify(entry), entry.createdAt]
   );
@@ -1108,7 +1363,7 @@ async function getAccount(username) {
   }
 
   await ensureDatabaseSchema(pool);
-  const result = await pool.query("SELECT state FROM spaice_account WHERE username = $1", [cleanUsername]);
+  const result = await pool.query("SELECT state FROM clusternauts_account WHERE username = $1", [cleanUsername]);
   return normalizeAccount(result.rows[0] && result.rows[0].state);
 }
 
@@ -1130,7 +1385,7 @@ async function getAccountByCrazyGamesId(crazyGamesId) {
   }
 
   await ensureDatabaseSchema(pool);
-  const result = await pool.query("SELECT state FROM spaice_account WHERE state->>'crazyGamesId' = $1 LIMIT 1", [
+  const result = await pool.query("SELECT state FROM clusternauts_account WHERE state->>'crazyGamesId' = $1 LIMIT 1", [
     cleanCrazyGamesId
   ]);
   return normalizeAccount(result.rows[0] && result.rows[0].state);
@@ -1150,7 +1405,7 @@ async function saveAccount(account) {
 
   await ensureDatabaseSchema(pool);
   await pool.query(
-    `INSERT INTO spaice_account (username, state, updated_at)
+    `INSERT INTO clusternauts_account (username, state, updated_at)
      VALUES ($1, $2::jsonb, now())
      ON CONFLICT (username) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
     [normalized.username, JSON.stringify(normalized)]
@@ -1172,7 +1427,7 @@ async function saveAccountSession(session) {
 
   await ensureDatabaseSchema(pool);
   await pool.query(
-    `INSERT INTO spaice_account_session (token_hash, username, state, expires_at, created_at)
+    `INSERT INTO clusternauts_account_session (token_hash, username, state, expires_at, created_at)
      VALUES ($1, $2, $3::jsonb, to_timestamp($4 / 1000.0), now())
      ON CONFLICT (token_hash) DO UPDATE SET state = EXCLUDED.state, expires_at = EXCLUDED.expires_at`,
     [normalized.tokenHash, normalized.username, JSON.stringify(normalized), normalized.expiresAt]
@@ -1198,8 +1453,8 @@ async function requireAccountSession(request) {
     }
   } else {
     await ensureDatabaseSchema(pool);
-    await pool.query("DELETE FROM spaice_account_session WHERE expires_at <= now()");
-    const result = await pool.query("SELECT state FROM spaice_account_session WHERE token_hash = $1", [tokenHash]);
+    await pool.query("DELETE FROM clusternauts_account_session WHERE expires_at <= now()");
+    const result = await pool.query("SELECT state FROM clusternauts_account_session WHERE token_hash = $1", [tokenHash]);
     session = normalizeAccountSession(result.rows[0] && result.rows[0].state);
   }
 
@@ -1224,7 +1479,7 @@ async function deleteAccountSession(token) {
   }
 
   await ensureDatabaseSchema(pool);
-  await pool.query("DELETE FROM spaice_account_session WHERE token_hash = $1", [tokenHash]);
+  await pool.query("DELETE FROM clusternauts_account_session WHERE token_hash = $1", [tokenHash]);
 }
 
 async function listAccountSaves(username) {
@@ -1243,7 +1498,7 @@ async function listAccountSaves(username) {
   await ensureDatabaseSchema(pool);
   const result = await pool.query(
     `SELECT state
-     FROM spaice_account_save
+     FROM clusternauts_account_save
      WHERE username = $1
      ORDER BY updated_at DESC
      LIMIT 80`,
@@ -1303,7 +1558,7 @@ async function saveAccountGame(username, body) {
 
   await ensureDatabaseSchema(pool);
   await pool.query(
-    `INSERT INTO spaice_account_save (id, username, name, state, created_at, updated_at)
+    `INSERT INTO clusternauts_account_save (id, username, name, state, created_at, updated_at)
      VALUES ($1, $2, $3, $4::jsonb, now(), now())
      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, state = EXCLUDED.state, updated_at = now()`,
     [save.metadata.id, cleanUsername, save.metadata.name, JSON.stringify(save)]
@@ -1322,7 +1577,7 @@ async function getAccountSave(username, saveId) {
   }
 
   await ensureDatabaseSchema(pool);
-  const result = await pool.query("SELECT state FROM spaice_account_save WHERE id = $1 AND username = $2", [
+  const result = await pool.query("SELECT state FROM clusternauts_account_save WHERE id = $1 AND username = $2", [
     cleanSaveId,
     cleanUsername
   ]);
@@ -1347,6 +1602,9 @@ function normalizeAccount(source) {
       salt: sanitizeDebugText(password.salt, 128)
     },
     linkedPlayerId: sanitizeText(source.linkedPlayerId, 80),
+    waiUserId: sanitizeDebugText(source.waiUserId, 128),
+    waiEmail: sanitizeDebugText(source.waiEmail, 200),
+    waiDisplayName: sanitizeDebugText(source.waiDisplayName, 80),
     crazyGamesId: sanitizeDebugText(source.crazyGamesId, 128),
     crazyGamesUsername: sanitizeDebugText(source.crazyGamesUsername, 80),
     crazyGamesProfilePictureUrl: sanitizeDebugText(source.crazyGamesProfilePictureUrl, 300),
@@ -1440,6 +1698,9 @@ function publicAccount(account) {
     ? {
         username: normalized.username,
         linkedPlayerId: normalized.linkedPlayerId,
+        waiDisplayName: normalized.waiDisplayName,
+        waiEmail: normalized.waiEmail,
+        waiLinked: Boolean(normalized.waiUserId),
         crazyGamesUsername: normalized.crazyGamesUsername,
         crazyGamesProfilePictureUrl: normalized.crazyGamesProfilePictureUrl,
         crazyGamesLinked: Boolean(normalized.crazyGamesId),
@@ -1451,7 +1712,10 @@ function publicAccount(account) {
 function extractSessionToken(request) {
   const authorization = String(request.headers.authorization || "");
   const match = authorization.match(/^Bearer\s+(.+)$/i);
-  return match ? sanitizeDebugText(match[1], 200) : "";
+  if (match) {
+    return sanitizeDebugText(match[1], 200);
+  }
+  return parseCookies(request.headers.cookie || "")[accountSessionCookie] || "";
 }
 
 function hashToken(token) {
@@ -1556,7 +1820,7 @@ async function ensurePlayerProfile(playerId) {
   }
 
   await ensureDatabaseSchema(pool);
-  const result = await pool.query("SELECT state FROM spaice_player_profile WHERE player_id = $1", [cleanPlayerId]);
+  const result = await pool.query("SELECT state FROM clusternauts_player_profile WHERE player_id = $1", [cleanPlayerId]);
   if (result.rows[0] && result.rows[0].state) {
     return normalizeProfile(result.rows[0].state, cleanPlayerId);
   }
@@ -1610,7 +1874,7 @@ async function saveProfile(profile) {
 
   await ensureDatabaseSchema(pool);
   await pool.query(
-    `INSERT INTO spaice_player_profile (player_id, state, updated_at)
+    `INSERT INTO clusternauts_player_profile (player_id, state, updated_at)
      VALUES ($1, $2::jsonb, now())
      ON CONFLICT (player_id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
     [normalized.playerId, JSON.stringify(normalized)]
@@ -1625,7 +1889,7 @@ async function listProfiles() {
   }
 
   await ensureDatabaseSchema(pool);
-  const result = await pool.query("SELECT player_id, state FROM spaice_player_profile ORDER BY updated_at DESC LIMIT 200");
+  const result = await pool.query("SELECT player_id, state FROM clusternauts_player_profile ORDER BY updated_at DESC LIMIT 200");
   return result.rows.map((row) => normalizeProfile(row.state, row.player_id));
 }
 
@@ -1788,7 +2052,12 @@ async function createDbPool() {
 
 function readDatabaseAddress() {
   if (process.env.CLUSTERNAUTS_DATABASE_URL || process.env.DATABASE_URL) {
-    return normalizeDatabaseAddress(process.env.CLUSTERNAUTS_DATABASE_URL || process.env.DATABASE_URL);
+    return normalizeDatabaseAddress(
+      databaseAddressFromConfigValue(
+        process.env.CLUSTERNAUTS_DATABASE_URL || process.env.DATABASE_URL,
+        "Clusternauts database environment variable"
+      )
+    );
   }
 
   const configPath = path.join(root, "data", "db-uri.json");
@@ -1799,15 +2068,39 @@ function readDatabaseAddress() {
 
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    const key =
-      process.env.CLUSTERNAUTS_DB_TARGET === "prod" || process.env.NODE_ENV === "production"
-        ? "prod_address"
-        : "dev_address";
-    return normalizeDatabaseAddress(config[key]);
+    return normalizeDatabaseAddress(selectDatabaseAddress(config));
   } catch (error) {
     console.warn(`Could not read database config: ${error instanceof Error ? error.message : "invalid JSON"}`);
     return null;
   }
+}
+
+function databaseAddressFromConfigValue(value, source) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return null;
+  }
+  if (!raw.startsWith("{")) {
+    return raw;
+  }
+
+  try {
+    return selectDatabaseAddress(JSON.parse(raw));
+  } catch (error) {
+    console.warn(`Could not read ${source}: ${error instanceof Error ? error.message : "invalid JSON"}`);
+    return null;
+  }
+}
+
+function selectDatabaseAddress(config) {
+  if (!config || typeof config !== "object") {
+    return null;
+  }
+
+  const devAddress = typeof config.dev_address === "string" ? config.dev_address.trim() : "";
+  const prodAddress = typeof config.prod_address === "string" ? config.prod_address.trim() : "";
+  const useProd = process.env.CLUSTERNAUTS_DB_TARGET === "prod" || process.env.NODE_ENV === "production";
+  return useProd ? prodAddress || devAddress : devAddress || prodAddress;
 }
 
 function normalizeDatabaseAddress(address) {
@@ -1820,28 +2113,28 @@ function normalizeDatabaseAddress(address) {
 
 async function ensureDatabaseSchema(pool) {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS spaice_world_state (
+    CREATE TABLE IF NOT EXISTS clusternauts_world_state (
       id text PRIMARY KEY,
       state jsonb NOT NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS spaice_player_state (
+    CREATE TABLE IF NOT EXISTS clusternauts_player_state (
       player_id text PRIMARY KEY,
       state jsonb NOT NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS spaice_player_profile (
+    CREATE TABLE IF NOT EXISTS clusternauts_player_profile (
       player_id text PRIMARY KEY,
       state jsonb NOT NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS spaice_leaderboard_entry (
+    CREATE TABLE IF NOT EXISTS clusternauts_leaderboard_entry (
       id text PRIMARY KEY,
       player_id text NOT NULL,
       score double precision NOT NULL,
@@ -1850,14 +2143,14 @@ async function ensureDatabaseSchema(pool) {
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS spaice_account (
+    CREATE TABLE IF NOT EXISTS clusternauts_account (
       username text PRIMARY KEY,
       state jsonb NOT NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS spaice_account_session (
+    CREATE TABLE IF NOT EXISTS clusternauts_account_session (
       token_hash text PRIMARY KEY,
       username text NOT NULL,
       state jsonb NOT NULL,
@@ -1866,7 +2159,7 @@ async function ensureDatabaseSchema(pool) {
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS spaice_account_save (
+    CREATE TABLE IF NOT EXISTS clusternauts_account_save (
       id text PRIMARY KEY,
       username text NOT NULL,
       name text NOT NULL,
@@ -2720,7 +3013,7 @@ function applyCorsHeaders(request, response) {
 
   response.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Ngrok-Skip-Browser-Warning");
   response.setHeader("Access-Control-Max-Age", "600");
   response.setHeader("Vary", "Origin");
 }
@@ -2754,6 +3047,57 @@ function isCrazyGamesHostName(hostName) {
     host === "crazygamesgame.com" ||
     host.endsWith(".crazygamesgame.com")
   );
+}
+
+function stripTrailingSlash(value) {
+  return String(value || "").replace(/\/+$/, "");
+}
+
+function requestOrigin(request) {
+  const proto = request.headers["x-forwarded-proto"] || "http";
+  const hostName = request.headers["x-forwarded-host"] || request.headers.host || `127.0.0.1:${port}`;
+  return `${proto}://${hostName}`;
+}
+
+function serviceBaseUrl(request) {
+  return configuredPublicUrl || requestOrigin(request);
+}
+
+function safeReturnPath(value) {
+  const pathValue = String(value || "").trim();
+  if (!pathValue || !pathValue.startsWith("/") || pathValue.startsWith("//")) {
+    return "/";
+  }
+  if (pathValue.startsWith("/auth/launch/callback")) {
+    return "/";
+  }
+  return pathValue;
+}
+
+function parseCookies(header) {
+  const cookies = {};
+  for (const part of String(header || "").split(";")) {
+    const index = part.indexOf("=");
+    if (index < 0) {
+      continue;
+    }
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (key) {
+      cookies[key] = decodeURIComponent(value);
+    }
+  }
+  return cookies;
+}
+
+function buildAccountSessionCookie(request, token) {
+  const secure = requestOrigin(request).startsWith("https://") ? "; Secure" : "";
+  return `${accountSessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(sessionLifetimeMs / 1000)}${secure}`;
+}
+
+function clearAccountSessionCookie(request) {
+  const secure = requestOrigin(request).startsWith("https://") ? "; Secure" : "";
+  return `${accountSessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
 }
 
 function throwHttpError(status, message) {

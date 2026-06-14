@@ -13,6 +13,8 @@
     "test:multiplayer:energy": "node tests/multiplayer-energy-gating.test.js",
     "test:multiplayer:benchmark": "node tests/multiplayer-performance-benchmark.test.js",
     "test:multiplayer:responsiveness": "node tests/multiplayer-responsiveness.test.js",
+    "test:crazygames:cors": "node tests/crazygames-cors-contract.test.js",
+    "test:crazygames:package": "node tests/crazygames-package-smoke.test.js",
     "test:physics:framerate": "node tests/crazygames-framerate-consistency.test.js"
   },
   "dependencies": {
