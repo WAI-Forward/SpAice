@@ -1450,9 +1450,10 @@ select {
 .settings-panel__section {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(109, 214, 255, 0.18);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(8, 17, 36, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .settings-panel__section-toggle {
@@ -1464,7 +1465,7 @@ select {
   gap: 10px;
   padding: 0 12px;
   border: 0;
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(18, 31, 56, 0.72);
   color: #f8fbff;
   font: inherit;
   cursor: pointer;
@@ -1486,7 +1487,7 @@ select {
 }
 
 .settings-panel__section.is-open .settings-panel__section-toggle {
-  background: rgba(88, 226, 255, 0.09);
+  background: rgba(44, 82, 118, 0.62);
 }
 
 .settings-panel__section.is-open .settings-panel__section-toggle::after {
@@ -1523,6 +1524,7 @@ select {
   display: grid;
   gap: 10px;
   padding: 10px;
+  background: rgba(4, 9, 24, 0.24);
 }
 
 .settings-panel__section-body[hidden] {
@@ -1535,7 +1537,7 @@ select {
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.065);
 }
 
 .settings-panel__group--controls {
@@ -1649,9 +1651,29 @@ select {
   gap: 8px;
 }
 
-.settings-panel__restart {
+.settings-panel__save-form.is-overwrite {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-panel__save-form.is-overwrite input {
+  display: none;
+}
+
+.settings-panel__save-form.is-overwrite .settings-panel__save-action,
+.settings-panel__exit > .settings-panel__save-action {
+  width: 100%;
+  min-height: 38px;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.settings-panel__exit {
   display: grid;
   gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 158, 191, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 158, 191, 0.075);
 }
 
 .settings-panel__restart-confirm {
@@ -1751,6 +1773,11 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.055);
+}
+
+.settings-panel__save-item.is-current {
+  border-color: rgba(143, 255, 212, 0.34);
+  background: rgba(143, 255, 212, 0.08);
 }
 
 .settings-panel__save-details {

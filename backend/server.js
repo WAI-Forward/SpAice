@@ -163,6 +163,8 @@ const mimeTypes = {
   ".webp": "image/webp",
   ".svg": "image/svg+xml; charset=utf-8"
 };
+const gzipStaticExtensions = new Set([".css", ".html", ".js", ".json", ".svg", ".txt"]);
+const staticCompressionMinBytes = 1024;
 
 function createDefaultWorldState() {
   return {
@@ -219,18 +221,85 @@ function createDefaultWorldState() {
   };
 }
 
-function sendFile(response, filePath) {
-  fs.readFile(filePath, (error, data) => {
-    if (error) {
+function sendFile(request, response, filePath) {
+  fs.stat(filePath, (statError, stats) => {
+    if (statError || !stats.isFile()) {
       response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       response.end("Not found");
       return;
     }
 
-    const type = mimeTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream";
-    response.writeHead(200, { "Content-Type": type });
-    response.end(data);
+    const extension = path.extname(filePath).toLowerCase();
+    const headers = staticFileHeaders(filePath, stats, extension);
+
+    if (request.headers["if-none-match"] === headers.ETag) {
+      response.writeHead(304, headers);
+      response.end();
+      return;
+    }
+
+    fs.readFile(filePath, (readError, data) => {
+      if (readError) {
+        response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        response.end("Not found");
+        return;
+      }
+
+      const shouldGzip = shouldGzipStaticFile(request, extension, data.length);
+      if (!shouldGzip) {
+        headers["Content-Length"] = data.length;
+        response.writeHead(200, headers);
+        response.end(request.method === "HEAD" ? undefined : data);
+        return;
+      }
+
+      zlib.gzip(data, { level: 6 }, (gzipError, compressed) => {
+        if (gzipError) {
+          headers["Content-Length"] = data.length;
+          response.writeHead(200, headers);
+          response.end(request.method === "HEAD" ? undefined : data);
+          return;
+        }
+
+        headers["Content-Encoding"] = "gzip";
+        headers["Content-Length"] = compressed.length;
+        response.writeHead(200, headers);
+        response.end(request.method === "HEAD" ? undefined : compressed);
+      });
+    });
   });
+}
+
+function staticFileHeaders(filePath, stats, extension) {
+  return {
+    "Content-Type": mimeTypes[extension] || "application/octet-stream",
+    "Cache-Control": staticCacheControl(filePath, extension),
+    ETag: staticFileEtag(stats),
+    "Last-Modified": stats.mtime.toUTCString(),
+    Vary: "Accept-Encoding",
+    "X-Content-Type-Options": "nosniff"
+  };
+}
+
+function staticFileEtag(stats) {
+  return `W/"${stats.size.toString(16)}-${Math.floor(stats.mtimeMs).toString(16)}"`;
+}
+
+function staticCacheControl(filePath, extension) {
+  if (path.basename(filePath).toLowerCase() === "index.html" || extension === ".html") {
+    return "no-cache";
+  }
+  if (extension === ".js" || extension === ".css") {
+    return "public, max-age=3600, must-revalidate";
+  }
+  return "public, max-age=86400";
+}
+
+function shouldGzipStaticFile(request, extension, byteLength) {
+  if (!gzipStaticExtensions.has(extension) || byteLength < staticCompressionMinBytes) {
+    return false;
+  }
+  return /\bgzip\b/i.test(String(request.headers["accept-encoding"] || ""));
 }
 
 const server = http.createServer((request, response) => {
@@ -308,7 +377,7 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-  sendFile(response, filePath);
+  sendFile(request, response, filePath);
 });
 
 async function handleWaiAuthRoute(request, response, url) {
@@ -1514,6 +1583,7 @@ async function listAccountSaves(username) {
 async function saveAccountGame(username, body) {
   const cleanUsername = sanitizeAccountUsername(username);
   const name = sanitizeManualSaveName(body && body.name) || "Saved world";
+  const requestedSaveId = sanitizeText(body && body.saveId, 80);
   const sourcePayload = body && body.payload && typeof body.payload === "object" ? body.payload : {};
   const sourcePlayerId = sanitizeText(sourcePayload.playerId, 80);
 
@@ -1522,7 +1592,9 @@ async function saveAccountGame(username, body) {
   }
 
   const savedAt = Date.now();
-  const id = "save-" + randomToken(10);
+  const existingSave = requestedSaveId ? await getAccountSave(cleanUsername, requestedSaveId) : null;
+  const id = existingSave ? existingSave.metadata.id : "save-" + randomToken(10);
+  const createdAt = existingSave ? existingSave.metadata.createdAt : savedAt;
   const payload = {
     playerId: sourcePlayerId,
     player: normalizePlayerSnapshot(sourcePlayerId, sourcePayload.player),
@@ -1542,7 +1614,7 @@ async function saveAccountGame(username, body) {
       difficulty: payload.run.difficulty || payload.world.difficulty || payload.player.difficulty || "medium",
       score: payload.player.score || 1,
       savedAt,
-      createdAt: savedAt
+      createdAt
     },
     payload
   });

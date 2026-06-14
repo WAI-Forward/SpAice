@@ -126,12 +126,12 @@
           <button class="settings-panel__close" id="settingsClose" type="button" aria-label="Close settings">x</button>
         </div>
         <div class="settings-panel__body" data-settings-accordion>
-          <section class="settings-panel__section is-open" data-settings-section="preferences">
-            <button class="settings-panel__section-toggle" type="button" aria-expanded="true" aria-controls="settingsPreferencesSection" data-settings-section-toggle="preferences">
+          <section class="settings-panel__section" data-settings-section="preferences">
+            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsPreferencesSection" data-settings-section-toggle="preferences">
               <span>Preferences</span>
-              <span class="settings-panel__section-summary">Audio, display, multiplayer</span>
+              <span class="settings-panel__section-summary">Audio, display, player bars</span>
             </button>
-            <div class="settings-panel__section-body" id="settingsPreferencesSection">
+            <div class="settings-panel__section-body" id="settingsPreferencesSection" hidden>
               <div class="settings-panel__group">
                 <div class="settings-panel__section-title">Audio</div>
                 <button class="sound-toggle" id="soundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
@@ -149,6 +149,12 @@
                   <output id="zoomValue" for="zoomInput">62%</output>
                 </label>
                 <input id="zoomInput" type="range" min="0" max="200" step="1" value="100">
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="dynamicLightingInput">
+                  <span>Dynamic lighting</span>
+                  <input id="dynamicLightingInput" type="checkbox" checked>
+                </label>
               </div>
               <div class="settings-panel__group">
                 <label class="settings-panel__check" for="surfaceCameraRotationInput">
@@ -169,6 +175,17 @@
                 </label>
               </div>
               <div class="settings-panel__group">
+                <div class="settings-panel__section-title">Player bars</div>
+                <label class="settings-panel__check" for="playerHealthBarInput">
+                  <span>Health bar</span>
+                  <input id="playerHealthBarInput" type="checkbox" checked>
+                </label>
+                <label class="settings-panel__check" for="playerEnergyBarInput">
+                  <span>Energy bar</span>
+                  <input id="playerEnergyBarInput" type="checkbox" checked>
+                </label>
+              </div>
+              <div class="settings-panel__group">
                 <div class="settings-panel__section-title">Multiplayer</div>
                 <label class="settings-panel__check" for="multiplayerToggleInput">
                   <span>Allow friend joins</span>
@@ -183,10 +200,22 @@
               </div>
             </div>
           </section>
+          <section class="settings-panel__section" data-settings-section="controls">
+            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsControlsSection" data-settings-section-toggle="controls">
+              <span>Controls</span>
+              <span class="settings-panel__section-summary">Key bindings</span>
+            </button>
+            <div class="settings-panel__section-body" id="settingsControlsSection" hidden>
+              <div class="settings-panel__group settings-panel__group--controls">
+                <div class="settings-panel__controls" id="controlBindingsList"></div>
+                <button class="settings-panel__reset" id="resetControlsButton" type="button">Reset controls</button>
+              </div>
+            </div>
+          </section>
           <section class="settings-panel__section" data-settings-section="saves">
             <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsSavesSection" data-settings-section-toggle="saves">
               <span>Saves</span>
-              <span class="settings-panel__section-summary">Accounts, save slots, restart</span>
+              <span class="settings-panel__section-summary">Accounts, save slots</span>
             </button>
             <div class="settings-panel__section-body" id="settingsSavesSection" hidden>
               <div class="settings-panel__group settings-panel__group--saves">
@@ -210,34 +239,22 @@
                   <input id="saveGameNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Save name">
                   <button class="settings-panel__save-action" id="saveGameButton" type="submit">Save</button>
                 </form>
-                <div class="settings-panel__restart">
-                  <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameButton" type="button">Restart game</button>
-                  <div class="settings-panel__restart-confirm" id="restartGameConfirm" hidden>
-                    <p id="restartGamePrompt">Save your current game before restarting?</p>
-                    <div class="settings-panel__restart-actions">
-                      <button class="settings-panel__save-action" id="restartGameSaveFirstButton" type="button">Save first</button>
-                      <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameAnywayButton" type="button">Restart</button>
-                      <button class="settings-panel__save-action" id="restartGameCancelButton" type="button">Cancel</button>
-                    </div>
-                  </div>
-                </div>
                 <div class="settings-panel__save-list" id="savedGameList" aria-label="Saved games"></div>
                 <p class="settings-panel__save-status" id="saveGameStatus" aria-live="polite"></p>
               </div>
             </div>
           </section>
-          <section class="settings-panel__section" data-settings-section="controls">
-            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsControlsSection" data-settings-section-toggle="controls">
-              <span>Controls</span>
-              <span class="settings-panel__section-summary">Key bindings</span>
-            </button>
-            <div class="settings-panel__section-body" id="settingsControlsSection" hidden>
-              <div class="settings-panel__group settings-panel__group--controls">
-                <div class="settings-panel__controls" id="controlBindingsList"></div>
-                <button class="settings-panel__reset" id="resetControlsButton" type="button">Reset controls</button>
+          <div class="settings-panel__exit">
+            <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameButton" type="button">Exit to main menu</button>
+            <div class="settings-panel__restart-confirm" id="restartGameConfirm" hidden>
+              <p id="restartGamePrompt">Save your current game before exiting to the main menu?</p>
+              <div class="settings-panel__restart-actions">
+                <button class="settings-panel__save-action" id="restartGameSaveFirstButton" type="button">Save first</button>
+                <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameAnywayButton" type="button">Exit</button>
+                <button class="settings-panel__save-action" id="restartGameCancelButton" type="button">Cancel</button>
               </div>
             </div>
-          </section>
+          </div>
         </div>
       </div>
     </section>
@@ -411,6 +428,12 @@
               <input id="menuZoomInput" type="range" min="0" max="200" step="1" value="100">
             </div>
             <div class="settings-panel__group">
+              <label class="settings-panel__check" for="menuDynamicLightingInput">
+                <span>Dynamic lighting</span>
+                <input id="menuDynamicLightingInput" type="checkbox" checked>
+              </label>
+            </div>
+            <div class="settings-panel__group">
               <label class="settings-panel__check" for="menuSurfaceCameraRotationInput">
                 <span>Rotate camera on surfaces</span>
                 <input id="menuSurfaceCameraRotationInput" type="checkbox">
@@ -420,6 +443,17 @@
               <label class="settings-panel__check" for="menuTouchScreenInput">
                 <span>Touch screen controls</span>
                 <input id="menuTouchScreenInput" type="checkbox">
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Player bars</div>
+              <label class="settings-panel__check" for="menuPlayerHealthBarInput">
+                <span>Health bar</span>
+                <input id="menuPlayerHealthBarInput" type="checkbox" checked>
+              </label>
+              <label class="settings-panel__check" for="menuPlayerEnergyBarInput">
+                <span>Energy bar</span>
+                <input id="menuPlayerEnergyBarInput" type="checkbox" checked>
               </label>
             </div>
             <div class="settings-panel__group">

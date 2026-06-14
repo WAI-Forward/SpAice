@@ -52,9 +52,12 @@
   const uiScaleValue = document.getElementById("uiScaleValue");
   const zoomInput = document.getElementById("zoomInput");
   const zoomValue = document.getElementById("zoomValue");
+  const dynamicLightingInput = document.getElementById("dynamicLightingInput");
   const surfaceCameraRotationInput = document.getElementById("surfaceCameraRotationInput");
   const touchScreenInput = document.getElementById("touchScreenInput");
   const hudEnabledInput = document.getElementById("hudEnabledInput");
+  const playerHealthBarInput = document.getElementById("playerHealthBarInput");
+  const playerEnergyBarInput = document.getElementById("playerEnergyBarInput");
   const multiplayerToggleInput = document.getElementById("multiplayerToggleInput");
   const settingsJoinCodeValue = document.getElementById("settingsJoinCodeValue");
   const copySettingsJoinCodeButton = document.getElementById("copySettingsJoinCodeButton");
@@ -123,8 +126,11 @@
   const menuUiScaleValue = document.getElementById("menuUiScaleValue");
   const menuZoomInput = document.getElementById("menuZoomInput");
   const menuZoomValue = document.getElementById("menuZoomValue");
+  const menuDynamicLightingInput = document.getElementById("menuDynamicLightingInput");
   const menuSurfaceCameraRotationInput = document.getElementById("menuSurfaceCameraRotationInput");
   const menuTouchScreenInput = document.getElementById("menuTouchScreenInput");
+  const menuPlayerHealthBarInput = document.getElementById("menuPlayerHealthBarInput");
+  const menuPlayerEnergyBarInput = document.getElementById("menuPlayerEnergyBarInput");
   const menuResetControlsButton = document.getElementById("menuResetControlsButton");
   const commandPanel = document.getElementById("commandPanel");
   const commandInput = document.getElementById("commandInput");
@@ -202,6 +208,16 @@
     bodyBounces: 0,
     buildMenuRenders: 0
   };
+  const renderPerformance = {
+    frameId: 0,
+    quality: 1,
+    recoveryDelay: 0,
+    lastFrameDt: 1 / 60
+  };
+  const renderBudgets = {
+    tinyParticleGlows: 0,
+    bodyGlows: 0
+  };
   let lastClientErrorReportAt = -Infinity;
   let lastServerMaintenanceNoticeAt = -Infinity;
 
@@ -264,6 +280,9 @@
     username: "",
     displayName: "",
     saves: [],
+    currentSaveId: "",
+    currentSaveName: "",
+    currentSaveUsername: "",
     busy: false,
     savesLoading: false,
     sessionLoading: true,
@@ -1202,6 +1221,11 @@
   let cameraRoll = 0;
   let gadgetAngle = -0.32;
   let lastTime = performance.now();
+  const soloSimulationTickDt = 1 / 60;
+  const soloSimulationMaxFrameDt = 0.1;
+  const soloSimulationMaxAccumulator = soloSimulationTickDt * 5;
+  const soloSimulationMaxCatchUpSteps = 4;
+  let soloSimulationAccumulator = 0;
   let spawnTimer = 0;
   let nextParticleId = 1;
   let nextRivalId = 1;
@@ -1253,6 +1277,78 @@
 
   for (const tech of techTypes) {
     techInventory[tech.key] = 0;
+  }
+
+  function resetRenderPerformance() {
+    renderPerformance.frameId = 0;
+    renderPerformance.quality = 1;
+    renderPerformance.recoveryDelay = 0;
+    renderPerformance.lastFrameDt = 1 / 60;
+    resetRenderBudgets();
+  }
+
+  function resetFrameClock(now) {
+    lastTime = finiteOr(now, performance.now());
+    soloSimulationAccumulator = 0;
+    if (typeof invalidateRenderCaches === "function") {
+      invalidateRenderCaches();
+    }
+  }
+
+  function beginRenderFrame(frameDt) {
+    const dt = clamp(finiteOr(frameDt, 1 / 60), 0, 0.25);
+    renderPerformance.frameId += 1;
+    renderPerformance.lastFrameDt = dt;
+
+    const slowFrameDt = 1 / 45;
+    const verySlowFrameDt = 1 / 30;
+    const targetQuality = dt >= verySlowFrameDt ? 0.48 : dt >= slowFrameDt ? 0.68 : 1;
+
+    if (targetQuality < renderPerformance.quality) {
+      renderPerformance.quality += (targetQuality - renderPerformance.quality) * 0.55;
+      renderPerformance.recoveryDelay = 0.75;
+    } else if (renderPerformance.recoveryDelay > 0) {
+      renderPerformance.recoveryDelay = Math.max(0, renderPerformance.recoveryDelay - dt);
+    } else {
+      renderPerformance.quality += (1 - renderPerformance.quality) * 0.035;
+    }
+
+    renderPerformance.quality = clamp(renderPerformance.quality, 0.42, 1);
+    resetRenderBudgets();
+  }
+
+  function resetRenderBudgets() {
+    const quality = renderQuality();
+    renderBudgets.tinyParticleGlows = Math.round(18 + quality * 48);
+    renderBudgets.bodyGlows = Math.round(8 + quality * 22);
+  }
+
+  function renderQuality() {
+    return clamp(finiteOr(renderPerformance.quality, 1), 0.42, 1);
+  }
+
+  function currentRenderFrameId() {
+    return renderPerformance.frameId;
+  }
+
+  function renderQualityBelow(threshold) {
+    return renderQuality() < finiteOr(threshold, 1);
+  }
+
+  function consumeTinyParticleGlowBudget() {
+    if (renderBudgets.tinyParticleGlows <= 0) {
+      return false;
+    }
+    renderBudgets.tinyParticleGlows -= 1;
+    return true;
+  }
+
+  function consumeBodyGlowBudget() {
+    if (renderBudgets.bodyGlows <= 0) {
+      return false;
+    }
+    renderBudgets.bodyGlows -= 1;
+    return true;
   }
 
   function resize() {
@@ -1366,9 +1462,12 @@
     const defaults = {
       uiScale: 1,
       zoom: 0.62,
+      dynamicLighting: true,
       surfaceCameraRotation: false,
       touchScreen: shouldEnableTouchControlsByDefault(),
       hudEnabled: true,
+      playerHealthBar: true,
+      playerEnergyBar: true,
       controls: Object.assign({}, defaultControlBindings)
     };
 
@@ -1384,9 +1483,12 @@
       return {
         uiScale: clamp(Number(stored.uiScale) || defaults.uiScale, 0.8, 1.3),
         zoom: clamp(zoom || defaults.zoom, 0.08, 1.75),
+        dynamicLighting: typeof stored.dynamicLighting === "boolean" ? stored.dynamicLighting : defaults.dynamicLighting,
         surfaceCameraRotation: stored.surfaceCameraRotation === true,
         touchScreen: typeof stored.touchScreen === "boolean" ? stored.touchScreen : defaults.touchScreen,
         hudEnabled: typeof stored.hudEnabled === "boolean" ? stored.hudEnabled : defaults.hudEnabled,
+        playerHealthBar: typeof stored.playerHealthBar === "boolean" ? stored.playerHealthBar : defaults.playerHealthBar,
+        playerEnergyBar: typeof stored.playerEnergyBar === "boolean" ? stored.playerEnergyBar : defaults.playerEnergyBar,
         controls: normalizeControlBindings(stored.controls)
       };
     } catch (error) {
@@ -1399,9 +1501,12 @@
       window.localStorage.setItem(settingsStorageKey, JSON.stringify({
         uiScale: gameSettings.uiScale,
         zoom: gameSettings.zoom,
+        dynamicLighting: gameSettings.dynamicLighting,
         surfaceCameraRotation: gameSettings.surfaceCameraRotation,
         touchScreen: gameSettings.touchScreen,
         hudEnabled: gameSettings.hudEnabled,
+        playerHealthBar: gameSettings.playerHealthBar,
+        playerEnergyBar: gameSettings.playerEnergyBar,
         controls: gameSettings.controls
       }));
     } catch (error) {
@@ -1558,6 +1663,16 @@
     }
   }
 
+  function updateDynamicLightingUi() {
+    const enabled = gameSettings.dynamicLighting !== false;
+    if (dynamicLightingInput) {
+      dynamicLightingInput.checked = enabled;
+    }
+    if (menuDynamicLightingInput) {
+      menuDynamicLightingInput.checked = enabled;
+    }
+  }
+
   function updateTouchScreenUi() {
     if (touchScreenInput) {
       touchScreenInput.checked = Boolean(gameSettings.touchScreen);
@@ -1586,6 +1701,23 @@
     updateToolHotbar();
   }
 
+  function updatePlayerBarSettingsUi() {
+    const healthBarEnabled = gameSettings.playerHealthBar !== false;
+    const energyBarEnabled = gameSettings.playerEnergyBar !== false;
+    if (playerHealthBarInput) {
+      playerHealthBarInput.checked = healthBarEnabled;
+    }
+    if (playerEnergyBarInput) {
+      playerEnergyBarInput.checked = energyBarEnabled;
+    }
+    if (menuPlayerHealthBarInput) {
+      menuPlayerHealthBarInput.checked = healthBarEnabled;
+    }
+    if (menuPlayerEnergyBarInput) {
+      menuPlayerEnergyBarInput.checked = energyBarEnabled;
+    }
+  }
+
   function surfaceCameraRollForAngle(angle) {
     return gameSettings.surfaceCameraRotation ? cameraRollForSurfaceAngle(angle) : 0;
   }
@@ -1596,6 +1728,12 @@
     if (player.landed) {
       cameraRoll = surfaceCameraRollForAngle(player.landed.angle);
     }
+    writeGameSettings();
+  }
+
+  function applyDynamicLightingSetting(enabled) {
+    gameSettings.dynamicLighting = Boolean(enabled);
+    updateDynamicLightingUi();
     writeGameSettings();
   }
 
@@ -1621,6 +1759,18 @@
     writeGameSettings();
   }
 
+  function applyPlayerHealthBarSetting(enabled) {
+    gameSettings.playerHealthBar = Boolean(enabled);
+    updatePlayerBarSettingsUi();
+    writeGameSettings();
+  }
+
+  function applyPlayerEnergyBarSetting(enabled) {
+    gameSettings.playerEnergyBar = Boolean(enabled);
+    updatePlayerBarSettingsUi();
+    writeGameSettings();
+  }
+
   function setSettingsSectionOpen(sectionName, open) {
     let openedSection = null;
     settingsSections.forEach(function (section) {
@@ -1640,18 +1790,6 @@
     settingsSectionToggles.forEach(function (toggle) {
       toggle.setAttribute("aria-expanded", toggle.dataset.settingsSectionToggle === openedSection ? "true" : "false");
     });
-  }
-
-  function ensureSettingsSectionOpen() {
-    if (!settingsSections.length) {
-      return;
-    }
-    const openSection = settingsSections.find(function (section) {
-      return section.classList.contains("is-open");
-    });
-    if (!openSection) {
-      setSettingsSectionOpen(settingsSections[0].dataset.settingsSection || "", true);
-    }
   }
 
   function setSettingsOpen(open) {
@@ -1674,7 +1812,7 @@
       setBuildMenuOpen(false);
       setSocialPanelOpen(false);
       resetMouseButtons();
-      ensureSettingsSectionOpen();
+      setSettingsSectionOpen("", false);
       updateSettingsJoinCodeUi();
       void refreshAccountSaves();
     }
@@ -2130,10 +2268,21 @@
     }
 
     const visible = canShowTouchLandButton();
-    touchLandButton.classList.toggle("is-visible", visible);
-    touchLandButton.hidden = !visible;
-    touchLandButton.textContent = player.landed ? "Take off" : "Land";
-    touchLandButton.setAttribute("aria-label", player.landed ? "Take off from body" : "Land on nearby body");
+    if (touchLandButton.classList.contains("is-visible") !== visible) {
+      touchLandButton.classList.toggle("is-visible", visible);
+    }
+    if (touchLandButton.hidden === visible) {
+      touchLandButton.hidden = !visible;
+    }
+
+    const label = player.landed ? "Take off" : "Land";
+    const ariaLabel = player.landed ? "Take off from body" : "Land on nearby body";
+    if (touchLandButton.textContent !== label) {
+      touchLandButton.textContent = label;
+    }
+    if (touchLandButton.getAttribute("aria-label") !== ariaLabel) {
+      touchLandButton.setAttribute("aria-label", ariaLabel);
+    }
   }
 
   function beginTouchControl(event) {
@@ -3910,7 +4059,7 @@
     resetMouseButtons();
 
     if (!gamePaused) {
-      lastTime = performance.now();
+      resetFrameClock();
     }
     updateCrazyGamesGameplayState(gamePaused ? "pause" : "resume");
   }
@@ -3923,7 +4072,10 @@
 
   function updateDifficultyUi() {
     if (difficultyValue) {
-      difficultyValue.textContent = activeDifficulty().label;
+      const label = activeDifficulty().label;
+      if (difficultyValue.textContent !== label) {
+        difficultyValue.textContent = label;
+      }
     }
   }
 
@@ -3990,8 +4142,10 @@
   function syncMenuSettingsControls() {
     applyUiScale(gameSettings.uiScale);
     updateZoomUi();
+    updateDynamicLightingUi();
     updateSurfaceCameraRotationUi();
     updateHudEnabledUi();
+    updatePlayerBarSettingsUi();
     updateSoundToggle();
   }
 
@@ -4145,7 +4299,7 @@
     persistence.pollTimer = persistencePollInterval;
     setDifficultyScreenOpen(false);
     resetMouseButtons();
-    lastTime = performance.now();
+    resetFrameClock();
     updateHud();
     connectMultiplayer();
     maybeNotifyText("Guest progress loaded.");
@@ -4248,6 +4402,7 @@
   function createLobby(options) {
     const loadedSnapshot = options && options.loadedSnapshot && typeof options.loadedSnapshot === "object" ? options.loadedSnapshot : null;
     const loadedSaveName = loadedSnapshot ? String(options.loadedSaveName || "saved world") : "";
+    clearCurrentAccountSave();
     setFriendJoinsEnabled(true, "lobby-create", { persist: true, notify: false, startRun: false });
     multiplayer.lobbyCreatePending = true;
     multiplayer.lobbyJoinPending = "";
@@ -4268,6 +4423,7 @@
       return;
     }
     setFriendJoinsEnabled(true, "lobby-join", { persist: true, notify: false, startRun: false });
+    clearCurrentAccountSave();
     multiplayer.lobbyCreatePending = false;
     multiplayer.lobbyJoinPending = cleanCode;
     multiplayer.lobbyLoadedSnapshot = null;
@@ -4789,6 +4945,7 @@
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
     multiplayer.lobbyLoadedSaveName = "";
+    clearCurrentAccountSave();
     updateSettingsJoinCodeUi();
   }
 
@@ -5399,6 +5556,7 @@
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
     multiplayer.lobbyLoadedSaveName = "";
+    clearCurrentAccountSave();
 
     applyDifficulty(difficulty);
     resetLocalPlayerState();
@@ -5413,7 +5571,7 @@
       persistence.pollTimer = persistencePollInterval;
       setDifficultyScreenOpen(false);
       resetMouseButtons();
-      lastTime = performance.now();
+      resetFrameClock();
       updateHud();
       updateSettingsJoinCodeUi();
       connectMultiplayer();
@@ -5439,7 +5597,7 @@
     persistence.pollTimer = persistencePollInterval;
     setDifficultyScreenOpen(false);
     resetMouseButtons();
-    lastTime = performance.now();
+    resetFrameClock();
     updateHud();
     updateSettingsJoinCodeUi();
     connectMultiplayer();
@@ -5927,7 +6085,7 @@
     persistence.saveTimer = persistenceSaveInterval;
     persistence.pollTimer = persistencePollInterval;
     setDifficultyScreenOpen(false);
-    lastTime = performance.now();
+    resetFrameClock();
     updateHud();
     updateSettingsJoinCodeUi();
     void refreshLeaderboard(true);
@@ -5981,6 +6139,7 @@
 
     seedStarDust();
     seedParticles();
+    resetFrameClock();
   }
 
   function resetLifeStats() {
@@ -6036,9 +6195,67 @@
     return Boolean(accountState.token && accountState.username);
   }
 
+  function currentAccountSave() {
+    if (!isAccountSignedIn() || !accountState.currentSaveId || accountState.currentSaveUsername !== accountState.username) {
+      return null;
+    }
+    return {
+      id: accountState.currentSaveId,
+      name: accountState.currentSaveName || "Saved world",
+      username: accountState.currentSaveUsername
+    };
+  }
+
+  function setCurrentAccountSave(save) {
+    const metadata = save && typeof save === "object" ? save : {};
+    const id = String(metadata.id || "").trim();
+    if (!id || !isAccountSignedIn()) {
+      clearCurrentAccountSave();
+      return;
+    }
+
+    accountState.currentSaveId = id;
+    accountState.currentSaveName = sanitizeManualSaveName(metadata.name) || "Saved world";
+    accountState.currentSaveUsername = sanitizeAccountUsername(metadata.username || accountState.username);
+    updateAccountUi();
+  }
+
+  function clearCurrentAccountSave() {
+    accountState.currentSaveId = "";
+    accountState.currentSaveName = "";
+    accountState.currentSaveUsername = "";
+    updateAccountUi();
+  }
+
   function setAccountBusy(busy) {
     accountState.busy = Boolean(busy);
     updateAccountUi();
+  }
+
+  function renderManualSaveForm() {
+    const currentSave = currentAccountSave();
+    if (saveGameForm) {
+      saveGameForm.classList.toggle("is-overwrite", Boolean(currentSave));
+    }
+    if (saveGameNameInput) {
+      saveGameNameInput.hidden = Boolean(currentSave);
+      if (currentSave) {
+        saveGameNameInput.value = currentSave.name;
+      }
+    }
+    if (saveGameButton) {
+      const signedIn = isAccountSignedIn();
+      const crazyGamesRuntime = isCrazyGamesRuntime();
+      saveGameButton.disabled = (!signedIn && !crazyGamesRuntime) || accountState.busy;
+      saveGameButton.textContent = currentSave
+        ? 'Save over "' + currentSave.name + '"'
+        : signedIn
+        ? "Save"
+        : crazyGamesRuntime
+        ? "Save guest"
+        : "Log in";
+      saveGameButton.setAttribute("aria-label", currentSave ? 'Save over "' + currentSave.name + '"' : saveGameButton.textContent);
+    }
   }
 
   function updateAccountUi() {
@@ -6090,10 +6307,7 @@
       accountLogoutButton.hidden = crazyGamesRuntime;
       accountLogoutButton.disabled = accountState.busy;
     }
-    if (saveGameButton) {
-      saveGameButton.disabled = (!signedIn && !crazyGamesRuntime) || accountState.busy;
-      saveGameButton.textContent = signedIn ? "Save" : crazyGamesRuntime ? "Save guest" : "Log in";
-    }
+    renderManualSaveForm();
     updateRestartGameUi();
 
     renderSavedGames();
@@ -6965,18 +7179,26 @@
     }
 
     for (const save of accountState.saves) {
+      const currentSave = currentAccountSave();
+      const isCurrentSave = Boolean(currentSave && currentSave.id === save.id);
       const row = document.createElement("div");
       const details = document.createElement("div");
       const name = document.createElement("strong");
+      const meta = document.createElement("span");
       const button = document.createElement("button");
       row.className = "settings-panel__save-item";
+      row.classList.toggle("is-current", isCurrentSave);
       details.className = "settings-panel__save-details";
       name.textContent = save.name || "Saved world";
+      meta.textContent = isCurrentSave ? "Current save" : "";
       button.className = "settings-panel__save-action";
       button.type = "button";
       button.dataset.saveId = save.id || "";
-      button.textContent = "Load";
+      button.textContent = isCurrentSave ? "Reload" : "Load";
       details.append(name);
+      if (meta.textContent) {
+        details.append(meta);
+      }
       row.append(details, button);
       savedGameList.append(row);
     }
@@ -6992,6 +7214,7 @@
       accountState.username = "";
       accountState.displayName = "";
       accountState.saves = [];
+      clearCurrentAccountSave();
       accountState.sessionLoading = false;
       accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
@@ -7020,6 +7243,7 @@
       accountState.username = "";
       accountState.displayName = "";
       accountState.saves = [];
+      clearCurrentAccountSave();
       accountState.sessionLoading = false;
       accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
@@ -7091,6 +7315,7 @@
       accountState.username = "";
       accountState.displayName = "";
       accountState.saves = [];
+      clearCurrentAccountSave();
       accountState.sessionLoading = false;
       accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
@@ -7174,12 +7399,8 @@
   }
 
   async function saveManualGame() {
-    const name = sanitizeManualSaveName(saveGameNameInput && saveGameNameInput.value);
-
-    if (isPartySessionActive() && !isPartyHost()) {
-      setManualSaveStatus("Only the host can save this shared world.", "error");
-      return false;
-    }
+    const currentSave = currentAccountSave();
+    const name = currentSave ? currentSave.name : sanitizeManualSaveName(saveGameNameInput && saveGameNameInput.value);
 
     if (!isAccountSignedIn()) {
       if (isCrazyGamesRuntime()) {
@@ -7204,9 +7425,12 @@
       const data = await fetchPersistentJson("/api/saves", {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, accountAuthHeaders()),
-        body: JSON.stringify({ name, payload })
+        body: JSON.stringify({ saveId: currentSave && currentSave.id, name, payload })
       });
       accountState.saves = Array.isArray(data.saves) ? data.saves : accountState.saves;
+      if (data && data.save) {
+        setCurrentAccountSave(data.save);
+      }
       if (saveGameNameInput) {
         saveGameNameInput.value = name;
       }
@@ -7222,11 +7446,6 @@
   }
 
   async function saveGuestProgress() {
-    if (isPartySessionActive() && !isPartyHost()) {
-      setManualSaveStatus("Only the host can save this shared world.", "error");
-      return false;
-    }
-
     if (!runState.active || deathState.active) {
       setManualSaveStatus("Start a live run before saving.", "error");
       return false;
@@ -7253,19 +7472,19 @@
   function updateRestartGameUi() {
     if (restartGameButton) {
       restartGameButton.disabled = restartGameInFlight || accountState.busy;
-      restartGameButton.textContent = restartGameInFlight ? "Restarting..." : "Restart game";
+      restartGameButton.textContent = restartGameInFlight ? "Exiting..." : "Exit to main menu";
     }
 
     const canSaveCurrentRun = runState.active && !deathState.active;
     if (restartGamePrompt) {
-      restartGamePrompt.textContent = canSaveCurrentRun ? "Save your current game before restarting?" : "Start a new game?";
+      restartGamePrompt.textContent = canSaveCurrentRun ? "Save your current game before exiting to the main menu?" : "Exit to the main menu?";
     }
     if (restartGameSaveFirstButton) {
       restartGameSaveFirstButton.disabled = restartGameInFlight || accountState.busy || !canSaveCurrentRun;
     }
     if (restartGameAnywayButton) {
       restartGameAnywayButton.disabled = restartGameInFlight || accountState.busy;
-      restartGameAnywayButton.textContent = canSaveCurrentRun ? "Restart" : "New game";
+      restartGameAnywayButton.textContent = "Exit";
     }
     if (restartGameCancelButton) {
       restartGameCancelButton.disabled = restartGameInFlight;
@@ -7325,6 +7544,7 @@
       resetLocalWorldState();
       resetLifeStats();
       resetDeathState();
+      clearCurrentAccountSave();
       initializeNetworkIdentity();
       persistence.saveTimer = persistenceSaveInterval;
       persistence.pollTimer = persistencePollInterval;
@@ -7333,11 +7553,11 @@
       setStartMenuView("main", { push: false });
       setDifficultyScreenOpen(true);
       resetMouseButtons();
-      lastTime = performance.now();
+      resetFrameClock();
       void refreshLeaderboard(true);
       updateHud();
-      setManualSaveStatus("Choose a difficulty to start a new game.", "success");
-      maybeNotifyText("New game ready.");
+      setManualSaveStatus("Main menu ready.", "success");
+      maybeNotifyText("Main menu ready.");
     } catch (error) {
       console.warn("Clusternauts restart failed.", error);
       setManualSaveStatus("Could not restart the game.", "error");
@@ -7393,13 +7613,14 @@
       runState.active = true;
       applyPersistentPayload(Object.assign({ ok: true }, payload), { includePlayer: true });
       applyRunSnapshot(payload.run);
+      setCurrentAccountSave(data.save);
       runState.active = true;
       persistence.saveTimer = persistenceSaveInterval;
       persistence.pollTimer = persistencePollInterval;
       setDifficultyScreenOpen(false);
       setSettingsOpen(false);
       resetMouseButtons();
-      lastTime = performance.now();
+      resetFrameClock();
       updateHud();
       void savePersistentState({ includeWorld: true });
       connectMultiplayer();
@@ -7442,6 +7663,7 @@
     applyToolInventory([defaultToolId], defaultToolId, [defaultToolId]);
     applyToolUpgrades(null);
     updateTechUi();
+    resetFrameClock();
   }
 
   function resetDeathState() {
@@ -8105,7 +8327,7 @@
       setStartMenuView(nextStartMenuView, { push: false });
       setDifficultyScreenOpen(true);
       resetMouseButtons();
-      lastTime = performance.now();
+      resetFrameClock();
       void refreshLeaderboard(true);
       updateHud();
     } catch (error) {
@@ -8274,7 +8496,7 @@
     multiplayer.partyRespawnInvulnerableTimer = 3.5;
     resetDeathState();
     deathState.resetInFlight = false;
-    lastTime = performance.now();
+    resetFrameClock();
     const respawnSnapshot = buildPersistentPayload(false).player;
     if (isMultiplayerV2Active() && mpV2Sim && typeof mpV2Sim.respawnPlayer === "function") {
       mpV2Sim.respawnPlayer(multiplayer.v2.state, player.id, respawnSnapshot);
@@ -10364,6 +10586,9 @@
     );
   }
 
+  const remoteDisplaySnapshotInterval = 1 / 30;
+  const remoteSharedBodyContactLimit = 96;
+
   function partyInputSeqFromSnapshot(snapshot) {
     const source = snapshot && typeof snapshot === "object" ? snapshot : {};
     const gadget = source.gadget && typeof source.gadget === "object" ? source.gadget : null;
@@ -11030,7 +11255,13 @@
         }
       }
 
-      remote.displaySnapshot = buildRemoteDisplaySnapshot(remote, now);
+      remote.displaySnapshotTimer = finiteOr(remote.displaySnapshotTimer, remoteDisplaySnapshotInterval) + Math.max(0, finiteOr(dt, 0));
+      const snapshotInterval = renderQualityBelow(0.68) ? remoteDisplaySnapshotInterval * 1.5 : remoteDisplaySnapshotInterval;
+      if (!remote.displaySnapshot || remote.displaySnapshotDirty || remote.displaySnapshotTimer >= snapshotInterval) {
+        remote.displaySnapshot = buildRemoteDisplaySnapshot(remote, now);
+        remote.displaySnapshotTimer = 0;
+        remote.displaySnapshotDirty = false;
+      }
     }
   }
 
@@ -11196,6 +11427,7 @@
     }
 
     remote.snapshotFrames.push({ snapshot, receivedAt });
+    remote.displaySnapshotDirty = true;
     while (remote.snapshotFrames.length > remoteSnapshotBufferLimit) {
       remote.snapshotFrames.shift();
     }
@@ -11462,6 +11694,8 @@
 
     const sharedBodies = [];
     const combatPlayers = [];
+    const sharedBodyRange = multiplayer.bubbleRadius + 1800;
+    const sharedBodyRangeSq = sharedBodyRange * sharedBodyRange;
     for (const remote of multiplayer.remoteUniverses.values()) {
       if (!isRemoteUniverseInteractive(remote)) {
         continue;
@@ -11476,14 +11710,20 @@
       const world = snapshot.world || {};
       if (Array.isArray(world.particles)) {
         for (const particle of world.particles) {
+          if (sharedBodies.length >= remoteSharedBodyContactLimit) {
+            break;
+          }
           if (!isMappedBody(particle)) {
             continue;
           }
 
           const body = transformedRemoteEntity(particle, transform);
-          if (Math.hypot(body.x - player.x, body.y - player.y) > multiplayer.bubbleRadius + 1800) {
+          const dx = body.x - player.x;
+          const dy = body.y - player.y;
+          if (dx * dx + dy * dy > sharedBodyRangeSq) {
             continue;
           }
+          body.remoteContactRadius = body.tier && body.tier.solid ? solidBodyContactRadius(body) : finiteOr(body.radius, 0) * 1.08;
 
           sharedBodies.push({
             remote,
@@ -14837,6 +15077,18 @@
     };
   }
 
+  function worldViewRadius(padding) {
+    const zoom = Math.max(0.001, finiteOr(cameraZoom, 1));
+    return Math.hypot(width, height) / (2 * zoom) + Math.max(0, finiteOr(padding, 0));
+  }
+
+  function isWorldCircleNearView(x, y, radius, padding) {
+    const reach = worldViewRadius(Math.max(0, finiteOr(radius, 0)) + Math.max(0, finiteOr(padding, 0)));
+    const dx = finiteOr(x, player.x) - player.x;
+    const dy = finiteOr(y, player.y) - player.y;
+    return dx * dx + dy * dy <= reach * reach;
+  }
+
   function screenToWorld(x, y) {
     const local = cameraLocalToWorld((x - width / 2) / cameraZoom, (y - height / 2) / cameraZoom);
     return {
@@ -14941,6 +15193,58 @@
     }
 
     return clamp(0.34 / Math.pow(mass / asteroidThreshold, 0.72), 0.025, 1);
+  }
+
+  function decayGadgetPullContactIntent(target, dt) {
+    if (!target || target.gadgetPullContactTimer === undefined) {
+      return;
+    }
+    target.gadgetPullContactTimer = Math.max(0, finiteOr(target.gadgetPullContactTimer, 0) - dt);
+  }
+
+  function markGadgetPullContactIntent(target, actor, aimWorld, pullTowardActor) {
+    if (!target || !target.tier || !target.tier.solid || !actor || !aimWorld) {
+      return;
+    }
+    target.gadgetPullContactTimer = 0.09;
+    target.gadgetPullActorId = actor.id || "";
+    target.gadgetPullAimX = finiteOr(aimWorld.x, 1);
+    target.gadgetPullAimY = finiteOr(aimWorld.y, 0);
+    target.gadgetPullTowardActor = pullTowardActor === true;
+  }
+
+  function isSelfVacuumPulledBodyContact(targetPlayer, body, nx, ny) {
+    if (!targetPlayer || !body || !body.tier || !body.tier.solid || finiteOr(body.gadgetPullContactTimer, 0) <= 0) {
+      return false;
+    }
+
+    const actorId = body.gadgetPullActorId || "";
+    if (actorId && targetPlayer.id && actorId !== targetPlayer.id) {
+      return false;
+    }
+
+    const aimX = finiteOr(body.gadgetPullAimX, 1);
+    const aimY = finiteOr(body.gadgetPullAimY, 0);
+    const bodyForward = (finiteOr(body.x, 0) - finiteOr(targetPlayer.x, 0)) * aimX +
+      (finiteOr(body.y, 0) - finiteOr(targetPlayer.y, 0)) * aimY;
+    const contactFacesAim = nx * aimX + ny * aimY < -0.35;
+    const bodyClosingSpeed = (finiteOr(body.vx, 0) - finiteOr(targetPlayer.vx, 0)) * nx +
+      (finiteOr(body.vy, 0) - finiteOr(targetPlayer.vy, 0)) * ny;
+
+    return bodyForward > -solidBodyContactRadius(body) * 0.45 && contactFacesAim && bodyClosingSpeed > 8;
+  }
+
+  function resolveSelfVacuumPulledBodyContact(targetPlayer, body, nx, ny, overlap, damping) {
+    body.x -= nx * overlap;
+    body.y -= ny * overlap;
+
+    const closingSpeed = (finiteOr(body.vx, 0) - finiteOr(targetPlayer.vx, 0)) * nx +
+      (finiteOr(body.vy, 0) - finiteOr(targetPlayer.vy, 0)) * ny;
+    if (closingSpeed > 0) {
+      const impulse = closingSpeed * finiteOr(damping, 0.86);
+      body.vx -= nx * impulse;
+      body.vy -= ny * impulse;
+    }
   }
 
   function isStructureHostBody(particle) {
@@ -16826,6 +17130,16 @@
     );
   }
 
+  function partyGadgetMiddleGatherRange(forward, side, targetRadius, padding) {
+    const radius = Math.max(0, finiteOr(targetRadius, 0));
+    const extra = Math.max(0, finiteOr(padding, 0));
+    return (
+      forward > funnelShape.backX - 130 - extra * 0.25 &&
+      forward < gadgetHoldReach + radius + 90 + extra &&
+      side < 188 + radius + extra * 0.45
+    );
+  }
+
   function partyGadgetParticleProbe(state, target, options) {
     if (!state || !state.actor || !target) {
       return { force: false, bucket: false, score: Infinity };
@@ -16845,6 +17159,8 @@
       forward > -80 - padding * 0.25 &&
       forward < gadgetForceReach + target.radius + padding &&
       side < coneWidth + target.radius + padding * 0.35;
+    const middleGatherRange = state.middle &&
+      partyGadgetMiddleGatherRange(forward, side, target.radius, padding);
     const pushRange = state.right &&
       forward > -28 - padding * 0.2 &&
       forward < 470 + target.radius + padding &&
@@ -16854,9 +17170,12 @@
     const mouthDistance = Math.hypot(funnel.x - target.x, funnel.y - target.y);
 
     return {
-      force: Boolean(pullHoldRange || pushRange),
+      force: Boolean(pullHoldRange || middleGatherRange || pushRange),
       bucket,
-      score: Math.min(Math.abs(forward - funnelShape.captureX) + side * 1.4, mouthDistance)
+      score: Math.min(
+        Math.abs(forward - funnelShape.captureX) + side * 1.4,
+        middleGatherRange ? Math.abs(forward - gadgetHoldReach) + side * 0.65 : mouthDistance
+      )
     };
   }
 
@@ -16889,13 +17208,18 @@
     const captureInFunnel = options.captureInFunnel !== false;
     const pullTowardActor = options.pullTowardActor === true;
 
-    if (middleActive && inCone) {
+    const middleGatherRange = middleActive && partyGadgetMiddleGatherRange(forward, side, target.radius, 0);
+
+    if (middleActive && (inCone || middleGatherRange)) {
       const holdX = actor.x + aimWorld.x * gadgetHoldReach;
       const holdY = actor.y + aimWorld.y * gadgetHoldReach;
       const toHoldX = holdX - target.x;
       const toHoldY = holdY - target.y;
       const holdDistance = length(toHoldX, toHoldY);
-      const coneStrength = clamp(1 - side / Math.max(1, coneWidth), 0, 1);
+      const gatherWidth = middleGatherRange ? 188 + Math.max(0, finiteOr(target.radius, 0)) : coneWidth;
+      const coneStrength = inCone
+        ? clamp(1 - side / Math.max(1, coneWidth), 0, 1)
+        : clamp(1 - side / Math.max(1, gatherWidth), 0.16, 0.78);
       const response = Math.max(0.22, pushResponse);
       const desiredSpeed = clamp(holdDistance * 5.4, 0, 520);
       const hold = normalize(toHoldX, toHoldY);
@@ -16923,6 +17247,7 @@
     }
 
     if (leftActive && inCone) {
+      markGadgetPullContactIntent(target, actor, aimWorld, pullTowardActor);
       const pullTargetX = pullTowardActor ? actor.x : funnel.x;
       const pullTargetY = pullTowardActor ? actor.y : funnel.y;
       const toPullTargetX = pullTargetX - target.x;
@@ -17340,6 +17665,7 @@
     for (let i = particles.length - 1; i >= 0; i -= 1) {
       const particle = particles[i];
       const isLandedBody = particle.id === landedBodyId;
+      decayGadgetPullContactIntent(particle, dt);
       if (particle.ufoSapTimer !== undefined) {
         particle.ufoSapTimer = Math.max(0, finiteOr(particle.ufoSapTimer, 0) - dt);
       }
@@ -17616,6 +17942,7 @@
           const graduated = tier.threshold > previousTier.threshold;
           const visualSource = graduated ? dominantMergeBody(a, b) : absorbingPair.absorber;
           const color = graduated ? mixColor(a.color, b.color, a.mass, b.mass) : absorbingPair.absorber.color;
+          const absorbedParticleLightColor = absorbingPair.absorbed.color || color;
           normalizeBodyEnergy(a);
           normalizeBodyEnergy(b);
           const storedEnergy = clamp(finiteOr(a.energy, 0), 0, Math.max(1, finiteOr(a.maxEnergy, 0)))
@@ -17669,7 +17996,7 @@
             x: merged.x,
             y: merged.y,
             radius: merged.radius * 1.8,
-            color,
+            color: absorbedParticleLightColor,
             life: 0.42,
             maxLife: 0.42
           });
@@ -18007,6 +18334,11 @@
       const bodyShare = clamp(4 / (particle.mass + 4), 0.03, 0.28);
       const playerShare = 1 - bodyShare;
 
+      if (isSelfVacuumPulledBodyContact(player, particle, nx, ny)) {
+        resolveSelfVacuumPulledBodyContact(player, particle, nx, ny, overlap, 0.88);
+        continue;
+      }
+
       player.x += nx * overlap * playerShare;
       player.y += ny * overlap * playerShare;
       particle.x -= nx * overlap * bodyShare;
@@ -18040,6 +18372,11 @@
       const nx = contact.nx;
       const ny = contact.ny;
       const overlap = contact.overlap;
+
+      if (isSelfVacuumPulledBodyContact(player, particle, nx, ny)) {
+        resolveSelfVacuumPulledBodyContact(player, particle, nx, ny, overlap, 0.86);
+        continue;
+      }
 
       player.x += nx * overlap;
       player.y += ny * overlap;
@@ -18170,7 +18507,7 @@
         player,
         body.x,
         body.y,
-        body.tier.solid ? solidBodyContactRadius(body) : body.radius * 1.08,
+        finiteOr(body.remoteContactRadius, body.tier.solid ? solidBodyContactRadius(body) : body.radius * 1.08),
         playerBodyHurtboxScale
       );
       if (!bodyContact) {
@@ -18246,14 +18583,16 @@
         const body = contact.body;
         const dx = mob.x - body.x;
         const dy = mob.y - body.y;
-        const rawDist = Math.hypot(dx, dy);
-        const dist = rawDist || 1;
-        const minDist = mob.radius + (body.tier.solid ? solidBodyContactRadius(body) : body.radius * 1.08);
+        const bodyContactRadius = finiteOr(body.remoteContactRadius, body.tier.solid ? solidBodyContactRadius(body) : body.radius * 1.08);
+        const minDist = mob.radius + bodyContactRadius;
+        const distSq = dx * dx + dy * dy;
 
-        if (dist >= minDist) {
+        if (distSq >= minDist * minDist) {
           continue;
         }
 
+        const rawDist = Math.sqrt(distSq);
+        const dist = rawDist || 1;
         const nx = rawDist ? dx / dist : 1;
         const ny = rawDist ? dy / dist : 0;
         const relativeVelocity = (mob.vx - body.vx) * nx + (mob.vy - body.vy) * ny;
@@ -21851,8 +22190,10 @@
   }
 
   function drawTinyParticle(particle, radius) {
-    ctx.globalCompositeOperation = "lighter";
-    drawGlow(particle, radius, 1);
+    if (consumeTinyParticleGlowBudget()) {
+      ctx.globalCompositeOperation = "lighter";
+      drawGlow(particle, radius, 1);
+    }
 
     ctx.globalCompositeOperation = "source-over";
     ctx.fillStyle = colorString(particle.color, 0.92);
@@ -21881,6 +22222,55 @@
       }
     }
     ctx.closePath();
+  }
+
+  function drawSimpleBody(particle, radius, alpha) {
+    const light = shadeColor(particle.color, 48);
+    const dark = shadeColor(particle.color, -52);
+    const bodyAlpha = clamp(finiteOr(alpha, 0.94), 0, 1);
+
+    ctx.globalCompositeOperation = "source-over";
+    const gradient = ctx.createRadialGradient(
+      particle.x - radius * 0.32,
+      particle.y - radius * 0.34,
+      Math.max(1, radius * 0.08),
+      particle.x,
+      particle.y,
+      radius
+    );
+    gradient.addColorStop(0, colorString(light, bodyAlpha));
+    gradient.addColorStop(0.62, colorString(particle.color, bodyAlpha * 0.94));
+    gradient.addColorStop(1, colorString(dark, bodyAlpha * 0.96));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = colorString(light, bodyAlpha * 0.24);
+    ctx.lineWidth = Math.max(1, radius * 0.045);
+    ctx.beginPath();
+    ctx.arc(particle.x, particle.y, radius + Math.max(1.5, radius * 0.035), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function shouldDrawSimpleBody(particle, radius) {
+    const screenRadius = Math.max(0, finiteOr(radius, 0)) * Math.max(0.001, finiteOr(cameraZoom, 1));
+    if (renderQualityBelow(0.58)) {
+      return true;
+    }
+    if (particle.tier.name === "rock") {
+      return screenRadius < 22;
+    }
+    if (particle.tier.name === "boulder") {
+      return screenRadius < 20;
+    }
+    if (particle.tier.name === "asteroid") {
+      return screenRadius < 18;
+    }
+    if (particle.tier.name === "dwarf moon" || particle.tier.name === "moon") {
+      return screenRadius < 16;
+    }
+    return screenRadius < 12;
   }
 
   function drawCraters(radius, seed, count, color, alphaScale) {
@@ -21987,8 +22377,10 @@
     ctx.translate(particle.x, particle.y);
     ctx.rotate(particle.textureSeed * 0.12);
 
-    ctx.globalCompositeOperation = "lighter";
-    drawGlow({ x: 0, y: 0, color: particle.color }, radius, 0.38);
+    if (consumeBodyGlowBudget()) {
+      ctx.globalCompositeOperation = "lighter";
+      drawGlow({ x: 0, y: 0, color: particle.color }, radius, 0.38);
+    }
     ctx.globalCompositeOperation = "source-over";
 
     const gradient = ctx.createRadialGradient(-radius * 0.4, -radius * 0.36, radius * 0.02, 0, 0, radius);
@@ -22032,9 +22424,17 @@
       return;
     }
 
-    ctx.globalCompositeOperation = "lighter";
-    drawGlow(particle, radius, particle.tier.name === "planet" ? 0.32 : 0.48);
+    if (particle.tier.name !== "planet" && consumeBodyGlowBudget()) {
+      ctx.globalCompositeOperation = "lighter";
+      drawGlow(particle, radius, 0.48);
+    }
     ctx.globalCompositeOperation = "source-over";
+
+    if (shouldDrawSimpleBody(particle, radius)) {
+      drawSimpleBody(particle, radius, 0.96);
+      drawBodyEnergyMeter(particle, radius);
+      return;
+    }
 
     if (particle.tier.name === "rock" || particle.tier.name === "boulder" || particle.tier.name === "asteroid") {
       drawRockBody(particle, radius, particle.tier.name);
@@ -23968,6 +24368,9 @@
 
   function drawStructures(time) {
     for (const structure of structures) {
+      if (!isWorldCircleNearView(structure.x, structure.y, 170, 760)) {
+        continue;
+      }
       drawStructure(structure, time, 1, true);
     }
   }
@@ -24035,18 +24438,30 @@
     ctx.translate(-player.x, -player.y);
 
     for (const ufo of ufos) {
+      if (!isWorldCircleNearView(ufo.x, ufo.y, 340, 520)) {
+        continue;
+      }
       drawUfoTractorBeam(ufo, time);
     }
 
     for (const projectile of rivalProjectiles) {
+      if (!isWorldCircleNearView(projectile.x, projectile.y, finiteOr(projectile.length, 80), 420)) {
+        continue;
+      }
       drawRivalProjectile(projectile);
     }
 
     for (const laser of playerLasers) {
+      if (!isWorldCircleNearView(laser.x, laser.y, finiteOr(laser.length, 80), 420)) {
+        continue;
+      }
       drawRivalProjectile(laser);
     }
 
     for (const missile of launcherMissiles) {
+      if (!isWorldCircleNearView(missile.x, missile.y, finiteOr(missile.length, 90), 460)) {
+        continue;
+      }
       drawRivalProjectile(missile);
     }
 
@@ -24054,34 +24469,101 @@
     drawStructurePlacementPreview(time);
 
     for (const ufo of ufos) {
+      if (!isWorldCircleNearView(ufo.x, ufo.y, ufo.radius || 40, 360)) {
+        continue;
+      }
       drawUfo(ufo, time);
     }
 
     for (const rambot of rambots) {
+      if (!isWorldCircleNearView(rambot.x, rambot.y, rambot.radius || 42, 320)) {
+        continue;
+      }
       drawRambot(rambot, time);
     }
 
     for (const engineer of engineers) {
+      if (!isWorldCircleNearView(engineer.x, engineer.y, engineer.radius || 38, 320)) {
+        continue;
+      }
       drawEngineer(engineer, time);
     }
 
     for (const tesla of teslas) {
+      if (!isWorldCircleNearView(tesla.x, tesla.y, tesla.radius || 38, 360)) {
+        continue;
+      }
       drawTesla(tesla, time);
     }
 
     for (const rocket of rockets) {
+      if (!isWorldCircleNearView(rocket.x, rocket.y, rocket.radius || 40, 380)) {
+        continue;
+      }
       drawRocket(rocket, time);
     }
 
     for (const fighter of fighters) {
+      if (!isWorldCircleNearView(fighter.x, fighter.y, fighter.radius || 44, 380)) {
+        continue;
+      }
       drawFighter(fighter, time);
     }
 
     for (const rival of rivals) {
+      if (!isWorldCircleNearView(rival.x, rival.y, rival.radius || 32, 300)) {
+        continue;
+      }
       drawRival(rival, time);
     }
 
     ctx.restore();
+  }
+
+  const dynamicLightingWarmColor = { r: 255, g: 185, b: 116 };
+  const dynamicLightingFlameColor = { r: 255, g: 206, b: 134 };
+  const dynamicLightingMaxAlpha = 0.115;
+  const backgroundNebulae = [
+    { x: -1260, y: -920, r: 520, color: { r: 83, g: 121, b: 255 }, alpha: 0.18 },
+    { x: 880, y: -740, r: 460, color: { r: 211, g: 79, b: 194 }, alpha: 0.15 },
+    { x: -1460, y: 980, r: 540, color: { r: 255, g: 109, b: 171 }, alpha: 0.13 },
+    { x: 1280, y: 1000, r: 620, color: { r: 63, g: 183, b: 255 }, alpha: 0.14 },
+    { x: 320, y: 1450, r: 420, color: { r: 121, g: 89, b: 255 }, alpha: 0.12 }
+  ];
+  const gadgetGatherCache = {
+    frameId: -1,
+    limit: 0,
+    targets: []
+  };
+  const mapBodyCache = {
+    frameId: -1,
+    sourceCount: -1,
+    bodies: []
+  };
+  const hudCache = {
+    progressFrameId: -1000,
+    progressParticleCount: -1,
+    progressLandedBodyId: null,
+    progressEquippedToolId: "",
+    progressSnapshot: null,
+    leaderboardFrameId: -1000
+  };
+  let dynamicLightingPlayerBoost = 1;
+  let dynamicLightingPlayerBoostTime = 0;
+
+  function invalidateRenderCaches() {
+    mapBodyCache.frameId = -1;
+    mapBodyCache.sourceCount = -1;
+    mapBodyCache.bodies = [];
+    hudCache.progressFrameId = -1000;
+    hudCache.progressParticleCount = -1;
+    hudCache.progressLandedBodyId = null;
+    hudCache.progressEquippedToolId = "";
+    hudCache.progressSnapshot = null;
+    hudCache.leaderboardFrameId = -1000;
+    gadgetGatherCache.frameId = -1;
+    gadgetGatherCache.limit = 0;
+    gadgetGatherCache.targets = [];
   }
 
   function drawBackground() {
@@ -24104,14 +24586,7 @@
     ctx.fillStyle = gradient;
     ctx.fillRect(player.x - backgroundReach, player.y - backgroundReach, backgroundReach * 2, backgroundReach * 2);
 
-    const nebulae = [
-      { x: -1260, y: -920, r: 520, color: { r: 83, g: 121, b: 255 }, alpha: 0.18 },
-      { x: 880, y: -740, r: 460, color: { r: 211, g: 79, b: 194 }, alpha: 0.15 },
-      { x: -1460, y: 980, r: 540, color: { r: 255, g: 109, b: 171 }, alpha: 0.13 },
-      { x: 1280, y: 1000, r: 620, color: { r: 63, g: 183, b: 255 }, alpha: 0.14 },
-      { x: 320, y: 1450, r: 420, color: { r: 121, g: 89, b: 255 }, alpha: 0.12 }
-    ];
-    for (const nebula of nebulae) {
+    for (const nebula of backgroundNebulae) {
       const wrap = 3600;
       const x = nebula.x + Math.round((player.x - nebula.x) / wrap) * wrap;
       const y = nebula.y + Math.round((player.y - nebula.y) / wrap) * wrap;
@@ -24151,6 +24626,9 @@
     ctx.globalCompositeOperation = "lighter";
 
     for (const spark of sparks) {
+      if (!isWorldCircleNearView(spark.x, spark.y, spark.radius, 220)) {
+        continue;
+      }
       const progress = 1 - spark.life / spark.maxLife;
       ctx.beginPath();
       ctx.strokeStyle = colorString(spark.color, 0.36 * (1 - progress));
@@ -24160,17 +24638,528 @@
     }
 
     for (const particle of particles) {
+      if (!isWorldCircleNearView(particle.x, particle.y, particle.radius, 340)) {
+        continue;
+      }
       drawBody(particle, time);
     }
 
     ctx.globalCompositeOperation = "source-over";
     for (const pickup of healthPickups) {
+      if (!isWorldCircleNearView(pickup.x, pickup.y, 42, 180)) {
+        continue;
+      }
       drawHealthPickup(pickup, time);
     }
     for (const pickup of techPickups) {
+      if (!isWorldCircleNearView(pickup.x, pickup.y, 42, 180)) {
+        continue;
+      }
       drawTechPickup(pickup, time);
     }
 
+    ctx.restore();
+  }
+
+  function dynamicLightingEnabled() {
+    return gameSettings.dynamicLighting !== false;
+  }
+
+  function normalizeDynamicLightColor(color, fallback) {
+    if (
+      color &&
+      Number.isFinite(Number(color.r)) &&
+      Number.isFinite(Number(color.g)) &&
+      Number.isFinite(Number(color.b))
+    ) {
+      return {
+        r: clamp(Math.round(Number(color.r)), 0, 255),
+        g: clamp(Math.round(Number(color.g)), 0, 255),
+        b: clamp(Math.round(Number(color.b)), 0, 255)
+      };
+    }
+
+    if (typeof color === "string") {
+      const match = color.trim().match(/^#([0-9a-f]{6})$/i);
+      if (match) {
+        const value = parseInt(match[1], 16);
+        return {
+          r: (value >> 16) & 255,
+          g: (value >> 8) & 255,
+          b: value & 255
+        };
+      }
+    }
+
+    return fallback || dynamicLightingWarmColor;
+  }
+
+  function dynamicLightTint(color, warmth) {
+    const base = normalizeDynamicLightColor(color, dynamicLightingWarmColor);
+    const warmWeight = clamp(Number(warmth) || 0.78, 0, 1);
+    const sourceWeight = 1.12 - warmWeight * 0.72;
+    return mixColor(base, dynamicLightingWarmColor, sourceWeight, warmWeight);
+  }
+
+  function drawScreenDynamicLight(x, y, radius, color, alpha, coreRatio) {
+    const lightRadius = Math.max(1, finiteOr(radius, 0));
+    if (
+      x + lightRadius < 0 ||
+      x - lightRadius > width ||
+      y + lightRadius < 0 ||
+      y - lightRadius > height
+    ) {
+      return false;
+    }
+
+    const lightAlpha = clamp(finiteOr(alpha, 0), 0, dynamicLightingMaxAlpha);
+    if (lightAlpha <= 0) {
+      return false;
+    }
+
+    const core = clamp(finiteOr(coreRatio, 0.12), 0.02, 0.38);
+    const gradient = ctx.createRadialGradient(x, y, lightRadius * core, x, y, lightRadius);
+    gradient.addColorStop(0, colorString(color, lightAlpha));
+    gradient.addColorStop(0.38, colorString(color, lightAlpha * 0.38));
+    gradient.addColorStop(1, colorString(color, 0));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, lightRadius, 0, Math.PI * 2);
+    ctx.fill();
+    return true;
+  }
+
+  function drawWorldDynamicLight(x, y, worldRadius, color, alpha, options) {
+    const screen = worldToScreen(x, y);
+    const minRadius = options && Number.isFinite(options.minRadius) ? options.minRadius : 24;
+    const maxRadius = options && Number.isFinite(options.maxRadius) ? options.maxRadius : 620;
+    const warmth = options && Number.isFinite(options.warmth) ? options.warmth : 0.82;
+    const core = options && Number.isFinite(options.core) ? options.core : 0.12;
+    const radius = clamp(Math.max(1, finiteOr(worldRadius, 0)) * cameraZoom, minRadius, maxRadius);
+    return drawScreenDynamicLight(screen.x, screen.y, radius, dynamicLightTint(color, warmth), alpha, core);
+  }
+
+  function localGadgetGatherState(aim) {
+    if (!aim || !canUseSuctionControls() || !mouse.left || mouse.middle) {
+      return null;
+    }
+
+    return {
+      actor: player,
+      aimWorld: aim.world,
+      funnel: getFunnel(aim),
+      left: true,
+      middle: false,
+      right: false,
+      bucketActive: true,
+      bucketPadding: 0,
+      landedBodyId: player.landed ? player.landed.bodyId : null
+    };
+  }
+
+  function activeGadgetGatherTargets(aim, limit) {
+    const state = localGadgetGatherState(aim);
+    if (!state) {
+      gadgetGatherCache.frameId = -1;
+      gadgetGatherCache.limit = 0;
+      gadgetGatherCache.targets = [];
+      return [];
+    }
+
+    const targetLimit = Math.max(1, Math.floor(finiteOr(limit, 1)));
+    const gatherLimit = Math.max(targetLimit, 12);
+    const frameId = currentRenderFrameId();
+    if (gadgetGatherCache.frameId === frameId && gadgetGatherCache.limit >= targetLimit) {
+      return gadgetGatherCache.targets.slice(0, targetLimit);
+    }
+
+    const gathered = [];
+    for (const particle of particles) {
+      if (!particle || !particle.color || !partyGadgetCanAffectParticle(state, particle)) {
+        continue;
+      }
+      if (!isWorldCircleNearView(particle.x, particle.y, particle.radius, gadgetForceReach + 220)) {
+        continue;
+      }
+
+      const probe = partyGadgetParticleProbe(state, particle, { padding: 0 });
+      if (!probe.force && !probe.bucket) {
+        continue;
+      }
+
+      const sizeBias = Math.max(0, finiteOr(particle.radius, 0)) * 0.85;
+      const score = (probe.bucket ? probe.score * 0.35 : probe.score + 84) + sizeBias;
+      if (gathered.length < gatherLimit) {
+        gathered.push({ particle, score, bucket: probe.bucket });
+      } else {
+        let worstIndex = 0;
+        for (let i = 1; i < gathered.length; i += 1) {
+          if (gathered[i].score > gathered[worstIndex].score) {
+            worstIndex = i;
+          }
+        }
+        if (score < gathered[worstIndex].score) {
+          gathered[worstIndex] = { particle, score, bucket: probe.bucket };
+        }
+      }
+    }
+
+    gathered.sort((a, b) => a.score - b.score);
+    gadgetGatherCache.frameId = frameId;
+    gadgetGatherCache.limit = gatherLimit;
+    gadgetGatherCache.targets = gathered;
+    return gathered.slice(0, targetLimit);
+  }
+
+  function activeGadgetGatherColor(aim) {
+    const targets = activeGadgetGatherTargets(aim, 1);
+    return targets.length ? targets[0].particle.color : null;
+  }
+
+  function drawParticleDynamicLights(time) {
+    let smallLights = 0;
+    const smallLightLimit = Math.round(16 + renderQuality() * 34);
+
+    for (const particle of particles) {
+      if (!particle || !particle.tier) {
+        continue;
+      }
+      if (!isWorldCircleNearView(particle.x, particle.y, particle.radius, 700)) {
+        continue;
+      }
+
+      const pulse = 0.9 + Math.sin(time * 0.004 * particle.pulse + particle.id) * 0.1;
+      if (particle.tier.name === "particle") {
+        if (smallLights >= smallLightLimit) {
+          continue;
+        }
+
+        const particleRadius = 44 + particle.radius * 2.4;
+        if (drawWorldDynamicLight(particle.x, particle.y, particleRadius, particle.color, 0.034 * pulse, {
+          minRadius: 20,
+          maxRadius: 92,
+          warmth: 0.9,
+          core: 0.1
+        })) {
+          smallLights += 1;
+        }
+        continue;
+      }
+
+      const tierName = particle.tier.name;
+      const tierScale = tierName === "planet" ? 4.7 : tierName === "moon" ? 4.4 : tierName === "dwarf moon" ? 4.1 : tierName === "asteroid" ? 3.8 : 3.25;
+      const tierAlpha = tierName === "planet" ? 0.066 : tierName === "moon" ? 0.058 : tierName === "dwarf moon" ? 0.052 : tierName === "asteroid" ? 0.046 : 0.038;
+      drawWorldDynamicLight(particle.x, particle.y, particle.radius * tierScale + 80, particle.color, tierAlpha * pulse, {
+        minRadius: 56,
+        maxRadius: tierName === "planet" ? 680 : 540,
+        warmth: 0.78,
+        core: 0.16
+      });
+    }
+  }
+
+  function drawSparkDynamicLights() {
+    let drawn = 0;
+    const lightLimit = Math.round(10 + renderQuality() * 22);
+    for (const spark of sparks) {
+      if (drawn >= lightLimit) {
+        return;
+      }
+      if (!isWorldCircleNearView(spark.x, spark.y, spark.radius, 260)) {
+        continue;
+      }
+
+      const lifePct = clamp(finiteOr(spark.life, 0) / Math.max(0.001, finiteOr(spark.maxLife, 1)), 0, 1);
+      if (drawWorldDynamicLight(spark.x, spark.y, spark.radius * 4.8 + 24, spark.color, 0.085 * lifePct, {
+        minRadius: 28,
+        maxRadius: 210,
+        warmth: 0.18,
+        core: 0.08
+      })) {
+        drawn += 1;
+      }
+    }
+  }
+
+  function drawPickupDynamicLights(time) {
+    for (const pickup of healthPickups) {
+      if (!isWorldCircleNearView(pickup.x, pickup.y, 96, 240)) {
+        continue;
+      }
+      const fade = clamp(Math.min(finiteOr(pickup.life, 0), 1.6) / 1.6, 0, 1);
+      const bob = Math.sin(time * 0.006 + pickup.wobble) * 2.5;
+      drawWorldDynamicLight(pickup.x, pickup.y + bob, 96, { r: 123, g: 255, b: 173 }, 0.044 * fade, {
+        minRadius: 36,
+        maxRadius: 124,
+        warmth: 0.68,
+        core: 0.08
+      });
+    }
+
+    for (const pickup of techPickups) {
+      if (!isWorldCircleNearView(pickup.x, pickup.y, 104, 240)) {
+        continue;
+      }
+      const fade = clamp(Math.min(finiteOr(pickup.life, 0), 1.8) / 1.8, 0, 1);
+      const bob = Math.sin(time * 0.0065 + pickup.wobble) * 3;
+      drawWorldDynamicLight(pickup.x, pickup.y + bob, 104, pickup.color, 0.04 * fade, {
+        minRadius: 36,
+        maxRadius: 132,
+        warmth: 0.76,
+        core: 0.08
+      });
+    }
+  }
+
+  function drawProjectileDynamicLight(projectile, options) {
+    if (!projectile) {
+      return false;
+    }
+
+    const fade = clamp(finiteOr(projectile.life, 0) / Math.max(0.001, finiteOr(projectile.maxLife, 1)), 0, 1);
+    const speed = Math.hypot(finiteOr(projectile.vx, 0), finiteOr(projectile.vy, 0)) || 1;
+    const dirX = finiteOr(projectile.vx, 0) / speed;
+    const dirY = finiteOr(projectile.vy, 0) / speed;
+    const tailX = projectile.x - dirX * finiteOr(projectile.length, 40);
+    const tailY = projectile.y - dirY * finiteOr(projectile.length, 40);
+    const midX = (tailX + projectile.x) / 2;
+    const midY = (tailY + projectile.y) / 2;
+    const baseRadius = options && Number.isFinite(options.radius) ? options.radius : 142;
+    const baseAlpha = options && Number.isFinite(options.alpha) ? options.alpha : 0.076;
+    const warmth = options && Number.isFinite(options.warmth) ? options.warmth : 0.7;
+    const color = projectile.rocket ? dynamicLightingFlameColor : projectile.color;
+
+    let visible = drawWorldDynamicLight(projectile.x, projectile.y, baseRadius, color, baseAlpha * fade, {
+      minRadius: 34,
+      maxRadius: projectile.lightning ? 260 : projectile.rocket ? 230 : 180,
+      warmth,
+      core: 0.07
+    });
+    visible = drawWorldDynamicLight(midX, midY, baseRadius * 0.72, color, baseAlpha * 0.45 * fade, {
+      minRadius: 24,
+      maxRadius: projectile.lightning ? 210 : 140,
+      warmth,
+      core: 0.05
+    }) || visible;
+    return visible;
+  }
+
+  function drawProjectileDynamicLights() {
+    const limit = Math.round(18 + renderQuality() * 28);
+    let drawn = drawProjectileDynamicLightCollection(rivalProjectiles, 0, limit);
+    drawn = drawProjectileDynamicLightCollection(playerLasers, drawn, limit);
+    drawProjectileDynamicLightCollection(launcherMissiles, drawn, limit);
+  }
+
+  function drawProjectileDynamicLightCollection(collection, drawn, limit) {
+    if (!Array.isArray(collection) || drawn >= limit) {
+      return drawn;
+    }
+
+    for (const projectile of collection) {
+      if (drawn >= limit) {
+        return drawn;
+      }
+      if (!isWorldCircleNearView(projectile.x, projectile.y, finiteOr(projectile.length, 90), 360)) {
+        continue;
+      }
+
+      const options = projectile.lightning
+        ? { radius: 210, alpha: 0.095, warmth: 0.66 }
+        : projectile.rocket
+          ? { radius: 190, alpha: 0.084, warmth: 0.9 }
+          : { radius: 140, alpha: 0.076, warmth: 0.72 };
+
+      if (drawProjectileDynamicLight(projectile, options)) {
+        drawn += 1;
+      }
+    }
+
+    return drawn;
+  }
+
+  function drawGadgetDynamicLights(time) {
+    const aim = getAim();
+    const targets = activeGadgetGatherTargets(aim, Math.round(5 + renderQuality() * 7));
+    if (!targets.length) {
+      return;
+    }
+
+    const funnel = getFunnel(aim);
+    const pulse = 0.88 + Math.sin(time * 0.012) * 0.12;
+    const primary = targets[0].particle;
+    drawWorldDynamicLight(funnel.mouthX, funnel.mouthY, 138, primary.color, 0.048 * pulse, {
+      minRadius: 38,
+      maxRadius: 168,
+      warmth: 0.16,
+      core: 0.06
+    });
+    drawWorldDynamicLight(funnel.x, funnel.y, 124, primary.color, 0.036 * pulse, {
+      minRadius: 34,
+      maxRadius: 150,
+      warmth: 0.14,
+      core: 0.05
+    });
+
+    let drawn = 0;
+    for (const target of targets) {
+      const particle = target.particle;
+      const falloff = 1 - drawn / Math.max(1, targets.length) * 0.42;
+      if (drawWorldDynamicLight(particle.x, particle.y, 42 + particle.radius * 2.8, particle.color, 0.026 * pulse * falloff, {
+        minRadius: 18,
+        maxRadius: 92,
+        warmth: 0.12,
+        core: 0.08
+      })) {
+        drawn += 1;
+      }
+    }
+  }
+
+  function drawPlayerDynamicLight(time) {
+    if (player.landed || !isMoving()) {
+      return;
+    }
+
+    const boostTarget = isJetpackBoostPressed() ? 1.18 : 1;
+    const boostDt = dynamicLightingPlayerBoostTime > 0
+      ? clamp((time - dynamicLightingPlayerBoostTime) / 1000, 0, 0.08)
+      : 1 / 60;
+    dynamicLightingPlayerBoostTime = time;
+    dynamicLightingPlayerBoost += (boostTarget - dynamicLightingPlayerBoost) * (1 - Math.exp(-boostDt * 8.5));
+
+    const boost = dynamicLightingPlayerBoost;
+    const bob = Math.sin(time * 0.004) * 2.4;
+    const radius = clamp(128 * cameraZoom * boost, 54, 166);
+    drawScreenDynamicLight(width / 2, height / 2 + (bob + 58) * cameraZoom, radius, dynamicLightingFlameColor, 0.09 * boost, 0.08);
+  }
+
+  function dynamicStructureColor(structure) {
+    if (structure.type === "battery") return { r: 157, g: 255, b: 122 };
+    if (structure.type === "accumulator") return { r: 88, g: 226, b: 255 };
+    if (structure.type === "turret") return { r: 255, g: 115, b: 173 };
+    if (structure.type === "missile-launcher") return { r: 255, g: 184, b: 88 };
+    if (structure.type === "shield-generator") return { r: 119, g: 167, b: 255 };
+    if (structure.type === "communication-relay") return { r: 255, g: 184, b: 107 };
+    if (structure.type === "jet") return dynamicLightingFlameColor;
+    if (structure.type === "tether" || structure.type === "bridge") return { r: 169, g: 133, b: 255 };
+    return { r: 255, g: 209, b: 102 };
+  }
+
+  function drawStructureDynamicLights(time) {
+    for (const structure of structures) {
+      if (!structure || structure.health <= 0) {
+        continue;
+      }
+      if (!isWorldCircleNearView(structure.x, structure.y, 180, 760)) {
+        continue;
+      }
+
+      const disabledScale = isStructureDisabled(structure) ? 0.42 : 1;
+      const deploy = clamp(finiteOr(structure.deploy, 0), 0, 1);
+      const activePulse = 0.9 + Math.sin(time * 0.006 + finiteOr(structure.wobble, 0)) * 0.1;
+      let radius = 108 + deploy * 54;
+      let alpha = (0.026 + deploy * 0.026) * activePulse * disabledScale;
+
+      if (structure.type === "jet") {
+        const thrust = clamp(finiteOr(structure.thrustAmount, 0), 0, 1);
+        radius += 90 + thrust * 185;
+        alpha += thrust * 0.074;
+
+        if (thrust > 0.02) {
+          const thrustDirection = finiteOr(structure.thrustDirection, 1) < 0 ? -1 : 1;
+          const flameOffset = rotatePoint(0, (46 + thrust * 36) * thrustDirection, structure.angle + Math.PI / 2);
+          drawWorldDynamicLight(structure.x + flameOffset.x, structure.y + flameOffset.y, 190 + thrust * 180, dynamicLightingFlameColor, 0.088 * thrust, {
+            minRadius: 52,
+            maxRadius: 300,
+            warmth: 0.96,
+            core: 0.06
+          });
+        }
+      } else if (structure.type === "shield-generator") {
+        alpha += clamp(finiteOr(structure.burstTimer, 0) / shieldGeneratorActiveDuration, 0, 1) * 0.054;
+        radius += 64;
+      } else if (structure.type === "missile-launcher") {
+        alpha += clamp(finiteOr(structure.lockTimer, 0) / missileLauncherLockDuration, 0, 1) * 0.032;
+      }
+
+      drawWorldDynamicLight(structure.x, structure.y, radius, dynamicStructureColor(structure), alpha, {
+        minRadius: 38,
+        maxRadius: 280,
+        warmth: structure.type === "jet" ? 0.95 : 0.8,
+        core: 0.1
+      });
+    }
+  }
+
+  function drawMechanicalMobDynamicLights(time) {
+    for (const ufo of ufos) {
+      if (ufo.health <= 0) continue;
+      if (!isWorldCircleNearView(ufo.x, ufo.y, 260, 460)) continue;
+      const pulse = 0.9 + Math.sin(time * 0.008 + ufo.beamPulse) * 0.1;
+      drawWorldDynamicLight(ufo.x, ufo.y, 188, ufo.color, 0.062 * pulse, { minRadius: 54, maxRadius: 260, warmth: 0.72, core: 0.12 });
+
+      const beamX = ufo.x + Math.cos(ufo.beamAngle) * 210;
+      const beamY = ufo.y + Math.sin(ufo.beamAngle) * 210;
+      drawWorldDynamicLight(beamX, beamY, 190, ufo.color, 0.028 * pulse, { minRadius: 46, maxRadius: 220, warmth: 0.68, core: 0.08 });
+    }
+
+    for (const rambot of rambots) {
+      if (rambot.health <= 0) continue;
+      if (!isWorldCircleNearView(rambot.x, rambot.y, 240, 420)) continue;
+      const charge = rambot.chargeTimer > 0 ? 1 : 0;
+      drawWorldDynamicLight(rambot.x, rambot.y, 154 + charge * 110, rambot.color, 0.044 + charge * 0.044, { minRadius: 44, maxRadius: 240, warmth: 0.88, core: 0.1 });
+    }
+
+    for (const engineer of engineers) {
+      if (engineer.health <= 0) continue;
+      if (!isWorldCircleNearView(engineer.x, engineer.y, 230, 420)) continue;
+      const heal = clamp(finiteOr(engineer.healPulse, 0) / 0.38, 0, 1);
+      drawWorldDynamicLight(engineer.x, engineer.y, 145 + heal * 110, engineer.color, 0.042 + heal * 0.048, { minRadius: 42, maxRadius: 230, warmth: 0.78, core: 0.09 });
+    }
+
+    for (const tesla of teslas) {
+      if (tesla.health <= 0) continue;
+      if (!isWorldCircleNearView(tesla.x, tesla.y, 280, 460)) continue;
+      const warmup = clamp(finiteOr(tesla.lightningWarmup, 0), 0, 1);
+      const flash = clamp(finiteOr(tesla.lightningFlash, 0) / 0.32, 0, 1);
+      drawWorldDynamicLight(tesla.x, tesla.y, 172 + warmup * 120, tesla.color, 0.06 + warmup * 0.034 + flash * 0.042, { minRadius: 52, maxRadius: 280, warmth: 0.72, core: 0.08 });
+    }
+
+    for (const rocket of rockets) {
+      if (rocket.health <= 0) continue;
+      if (!isWorldCircleNearView(rocket.x, rocket.y, 290, 460)) continue;
+      const active = clamp(finiteOr(rocket.chargePower, 0), 0, 1) + (rocket.blastTimer > 0 ? 0.55 : 0) + (rocket.lockTimer > 0 ? 0.22 : 0);
+      drawWorldDynamicLight(rocket.x, rocket.y, 168 + active * 140, rocket.color, 0.046 + active * 0.04, { minRadius: 46, maxRadius: 290, warmth: 0.88, core: 0.09 });
+    }
+
+    for (const fighter of fighters) {
+      if (fighter.health <= 0) continue;
+      if (!isWorldCircleNearView(fighter.x, fighter.y, 300, 460)) continue;
+      const shield = clamp(finiteOr(fighter.shieldActive, 0) / 0.55, 0, 1);
+      drawWorldDynamicLight(fighter.x, fighter.y, 172 + shield * 130, fighter.color, 0.044 + shield * 0.052, { minRadius: 48, maxRadius: 300, warmth: 0.72, core: 0.1 });
+    }
+  }
+
+  function drawDynamicLighting(time) {
+    if (!dynamicLightingEnabled()) {
+      return;
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "rgba(1, 2, 8, 0.28)";
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.globalCompositeOperation = "screen";
+    drawParticleDynamicLights(time);
+    drawSparkDynamicLights();
+    drawPickupDynamicLights(time);
+    drawProjectileDynamicLights();
+    drawGadgetDynamicLights(time);
+    drawPlayerDynamicLight(time);
+    drawStructureDynamicLights(time);
+    drawMechanicalMobDynamicLights(time);
     ctx.restore();
   }
 
@@ -24200,6 +25189,13 @@
       const world = snapshot.world;
       const renderRadius = remoteUniverseRenderRadius();
       const renderRadiusSq = renderRadius * renderRadius;
+      const quality = renderQuality();
+      const lowQuality = quality < 0.7;
+      const remoteBodyLimit = Math.round((lowQuality ? 6 : 10) + quality * 13);
+      const remoteStructureLimit = Math.round((lowQuality ? 5 : 8) + quality * 11);
+      const projectileLimit = Math.round((lowQuality ? 5 : 8) + quality * 11);
+      const heavyMobLimit = Math.round((lowQuality ? 3 : 4) + quality * 5);
+      const alienoidLimit = Math.round((lowQuality ? 4 : 6) + quality * 6);
       ctx.save();
       ctx.globalAlpha = sharedBodyAlpha;
       ctx.globalCompositeOperation = "lighter";
@@ -24213,9 +25209,9 @@
         if (distanceSqToPlayer(transformed) > renderRadiusSq) {
           continue;
         }
-        drawBody(transformed, time);
+        drawRemoteBodyEcho(transformed, time);
         remoteBodiesDrawn += 1;
-        if (remoteBodiesDrawn >= 32) {
+        if (remoteBodiesDrawn >= remoteBodyLimit) {
           break;
         }
       }
@@ -24229,20 +25225,20 @@
         }
         drawRemoteStructure(transformed, time);
         remoteStructuresDrawn += 1;
-        if (remoteStructuresDrawn >= 24) {
+        if (remoteStructuresDrawn >= remoteStructureLimit) {
           break;
         }
       }
 
       ctx.globalAlpha = sharedEntityAlpha;
-      drawRemoteEntityCollection(world.rivalProjectiles, transform, drawRivalProjectile, time, 24, renderRadiusSq);
-      drawRemoteEntityCollection(world.ufos, transform, drawUfo, time, 10, renderRadiusSq);
-      drawRemoteEntityCollection(world.rambots, transform, drawRambot, time, 10, renderRadiusSq);
-      drawRemoteEntityCollection(world.engineers, transform, drawEngineer, time, 10, renderRadiusSq);
-      drawRemoteEntityCollection(world.teslas, transform, drawTesla, time, 10, renderRadiusSq);
-      drawRemoteEntityCollection(world.rockets, transform, drawRocket, time, 10, renderRadiusSq);
-      drawRemoteEntityCollection(world.fighters, transform, drawFighter, time, 10, renderRadiusSq);
-      drawRemoteEntityCollection(world.alienoids, transform, drawRival, time, 14, renderRadiusSq);
+      drawRemoteEntityCollection(world.rivalProjectiles, transform, drawRemoteProjectileEcho, time, projectileLimit, renderRadiusSq);
+      drawRemoteEntityCollection(world.ufos, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
+      drawRemoteEntityCollection(world.rambots, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
+      drawRemoteEntityCollection(world.engineers, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
+      drawRemoteEntityCollection(world.teslas, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
+      drawRemoteEntityCollection(world.rockets, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
+      drawRemoteEntityCollection(world.fighters, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
+      drawRemoteEntityCollection(world.alienoids, transform, drawRemoteMobEcho, time, alienoidLimit, renderRadiusSq);
 
       if (snapshot.player) {
         ctx.globalAlpha = remotePlayerAlpha;
@@ -24263,7 +25259,69 @@
 
   function remoteUniverseRenderRadius() {
     const zoom = Math.max(cameraZoomMin, finiteOr(cameraZoom, 1));
-    return Math.hypot(width, height) / zoom * 0.75 + 1600;
+    return Math.hypot(width, height) / zoom * 0.68 + (renderQualityBelow(0.7) ? 980 : 1280);
+  }
+
+  function drawRemoteBodyEcho(particle, time) {
+    if (!particle || !particle.tier || !particle.color) {
+      return;
+    }
+    const pulse = 1 + Math.sin(time * 0.004 * finiteOr(particle.pulse, 1) + finiteOr(particle.id, 0)) * 0.025;
+    drawSimpleBody(particle, Math.max(1, finiteOr(particle.radius, 1)) * pulse, 0.78);
+  }
+
+  function drawRemoteProjectileEcho(projectile) {
+    if (!projectile) {
+      return;
+    }
+    const length = Math.max(18, finiteOr(projectile.length, 46));
+    const speed = Math.hypot(finiteOr(projectile.vx, 0), finiteOr(projectile.vy, 0)) || 1;
+    const dirX = finiteOr(projectile.vx, 0) / speed;
+    const dirY = finiteOr(projectile.vy, 0) / speed;
+    const color = projectile.color || { r: 255, g: 115, b: 173 };
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = colorString(color, 0.54);
+    ctx.lineWidth = projectile.rocket ? 4 : 3;
+    ctx.beginPath();
+    ctx.moveTo(projectile.x, projectile.y);
+    ctx.lineTo(projectile.x - dirX * length, projectile.y - dirY * length);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRemoteMobEcho(mob, time) {
+    if (!mob) {
+      return;
+    }
+    const radius = Math.max(12, finiteOr(mob.radius, 30) * 0.78);
+    const color = mob.color || { r: 120, g: 210, b: 255 };
+    const rotation = finiteOr(mob.rotation, 0) + Math.sin(time * 0.004 + finiteOr(mob.wobble, 0)) * 0.08;
+
+    ctx.save();
+    ctx.translate(mob.x, mob.y);
+    ctx.rotate(rotation);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = colorString(color, 0.28);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 1.45, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = colorString(color, 0.68);
+    ctx.strokeStyle = "rgba(3, 8, 24, 0.42)";
+    ctx.lineWidth = Math.max(2, radius * 0.11);
+    ctx.beginPath();
+    ctx.moveTo(0, -radius);
+    ctx.lineTo(radius * 0.86, radius * 0.56);
+    ctx.lineTo(0, radius * 0.28);
+    ctx.lineTo(-radius * 0.86, radius * 0.56);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawRemoteEntityCollection(collection, transform, drawFn, time, limit, radiusSq) {
@@ -24316,6 +25374,87 @@
     return Math.sin(time * 0.004 + seed) * 2.4;
   }
 
+  function traceGadgetFieldCurve(startX, startY, controlX, controlY, endX, endY) {
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+  }
+
+  function strokeSoftGadgetCurve(startX, startY, controlX, controlY, endX, endY, gradient, lineWidth, blur) {
+    ctx.save();
+    ctx.filter = "blur(" + blur + "px)";
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = lineWidth * 2.8;
+    traceGadgetFieldCurve(startX, startY, controlX, controlY, endX, endY);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.72;
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = lineWidth;
+    traceGadgetFieldCurve(startX, startY, controlX, controlY, endX, endY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawGadgetHoldField(originX, originY, dirX, dirY, normalX, normalY, time, compact) {
+    const mouthX = originX + dirX * funnelShape.rimX;
+    const mouthY = originY + dirY * funnelShape.rimX;
+    const pointX = originX + dirX * gadgetHoldReach;
+    const pointY = originY + dirY * gadgetHoldReach;
+    const innerWidth = compact ? 106 : 124;
+    const outerWidth = compact ? 88 : 106;
+    const outerLength = compact ? 84 : 108;
+
+    ctx.save();
+    ctx.filter = "blur(5px)";
+    const glow = ctx.createRadialGradient(pointX, pointY, 2, pointX, pointY, compact ? 26 : 32);
+    glow.addColorStop(0, "rgba(255, 246, 139, 0.42)");
+    glow.addColorStop(0.45, "rgba(126, 255, 191, 0.22)");
+    glow.addColorStop(1, "rgba(126, 255, 191, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(pointX, pointY, compact ? 28 : 34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    for (let i = 0; i < 9; i += 1) {
+      const t = i / 8;
+      const side = (t - 0.5) * innerWidth;
+      const wave = Math.sin(time + i * 1.45) * (compact ? 4 : 5);
+      const startX = mouthX + dirX * 5 + normalX * (side * 0.48 + wave);
+      const startY = mouthY + dirY * 5 + normalY * (side * 0.48 + wave);
+      const endX = pointX + normalX * side * 0.025;
+      const endY = pointY + normalY * side * 0.025;
+      const controlX = (startX + endX) / 2 + normalX * (side * 0.18 + Math.sin(time * 0.8 + i) * 8);
+      const controlY = (startY + endY) / 2 + normalY * (side * 0.18 + Math.sin(time * 0.8 + i) * 8);
+      const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
+      gradient.addColorStop(0, "rgba(86, 245, 210, 0.03)");
+      gradient.addColorStop(0.48, "rgba(126, 255, 191, 0.2)");
+      gradient.addColorStop(1, "rgba(255, 246, 139, 0.42)");
+      strokeSoftGadgetCurve(startX, startY, controlX, controlY, endX, endY, gradient, compact ? 1.35 : 1.55, 2.5);
+    }
+
+    for (let i = 0; i < 8; i += 1) {
+      const t = i / 7;
+      const side = (t - 0.5) * outerWidth;
+      const wave = Math.sin(time * 1.1 + i * 1.7) * (compact ? 5 : 6);
+      const startX = pointX + dirX * outerLength + normalX * (side + wave);
+      const startY = pointY + dirY * outerLength + normalY * (side + wave);
+      const endX = pointX + normalX * side * 0.03;
+      const endY = pointY + normalY * side * 0.03;
+      const controlX = pointX + dirX * outerLength * 0.52 + normalX * (side * 0.44 + wave * 0.35);
+      const controlY = pointY + dirY * outerLength * 0.52 + normalY * (side * 0.44 + wave * 0.35);
+      const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
+      gradient.addColorStop(0, "rgba(172, 255, 164, 0.28)");
+      gradient.addColorStop(0.58, "rgba(126, 255, 191, 0.18)");
+      gradient.addColorStop(1, "rgba(255, 246, 139, 0.4)");
+      strokeSoftGadgetCurve(startX, startY, controlX, controlY, endX, endY, gradient, compact ? 1.45 : 1.7, 2.8);
+    }
+  }
+
   function drawRemoteGadgetField(remotePlayer, aimAngle, time) {
     if (isWeaponTool(remotePlayer.equippedTool) || !remotePlayer.toolActive) {
       return;
@@ -24341,6 +25480,12 @@
     ctx.globalCompositeOperation = "lighter";
     ctx.lineCap = "round";
 
+    if (holding) {
+      drawGadgetHoldField(remotePlayer.x, remotePlayer.y, dirX, dirY, normalX, normalY, time * 0.004, true);
+      ctx.restore();
+      return;
+    }
+
     for (let i = 0; i < 7; i += 1) {
       const t = i / 6;
       const side = (t - 0.5) * fieldWidth;
@@ -24353,31 +25498,27 @@
       const endY = mouthY + dirY * endScale + normalY * side * 0.18;
       const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
 
-      if (holding) {
-        gradient.addColorStop(0, "rgba(126, 255, 191, 0)");
-        gradient.addColorStop(0.5, "rgba(126, 255, 191, 0.34)");
-        gradient.addColorStop(1, "rgba(255, 246, 139, 0.46)");
-      } else if (pulling) {
+      if (pulling) {
         gradient.addColorStop(0, "rgba(114, 244, 255, 0)");
-        gradient.addColorStop(0.58, "rgba(114, 244, 255, 0.24)");
-        gradient.addColorStop(1, "rgba(229, 109, 255, 0.5)");
+        gradient.addColorStop(0.58, "rgba(114, 244, 255, 0.18)");
+        gradient.addColorStop(1, "rgba(229, 109, 255, 0.4)");
       } else {
-        gradient.addColorStop(0, "rgba(255, 229, 120, 0.58)");
-        gradient.addColorStop(0.62, "rgba(255, 117, 79, 0.24)");
+        gradient.addColorStop(0, "rgba(255, 229, 120, 0.42)");
+        gradient.addColorStop(0.62, "rgba(255, 117, 79, 0.18)");
         gradient.addColorStop(1, "rgba(255, 117, 79, 0)");
       }
 
-      ctx.strokeStyle = gradient;
-      ctx.lineWidth = holding ? 2.5 : pulling ? 2 : 3;
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.quadraticCurveTo(
+      strokeSoftGadgetCurve(
+        startX,
+        startY,
         (startX + endX) / 2 + normalX * Math.sin(time * 0.004 + i) * 12,
         (startY + endY) / 2 + normalY * Math.sin(time * 0.004 + i) * 12,
         endX,
-        endY
+        endY,
+        gradient,
+        pulling ? 1.5 : 2.1,
+        pulling ? 2.2 : 2.7
       );
-      ctx.stroke();
     }
 
     ctx.restore();
@@ -24729,16 +25870,19 @@
   }
 
   function drawRemotePlayer(remotePlayer, publicName, time) {
+    const quality = renderQuality();
     const aimAngle = remotePlayerVisualAimAngle(remotePlayer);
     const bodyRotation = remoteBodyRotation(remotePlayer);
     const bob = remotePlayerBob(remotePlayer, time);
 
-    drawRemoteGadgetField(remotePlayer, aimAngle, time);
+    if (quality >= 0.58) {
+      drawRemoteGadgetField(remotePlayer, aimAngle, time);
+    }
 
     ctx.save();
     ctx.translate(remotePlayer.x, remotePlayer.y);
     ctx.shadowColor = "rgba(88, 226, 255, 0.42)";
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = quality >= 0.72 ? 18 : 0;
     drawRemoteAstronautSuit(remotePlayer, time, bob, bodyRotation);
     ctx.shadowBlur = 0;
     drawRemoteHeldArms(aimAngle, bob, bodyRotation, "back");
@@ -24760,18 +25904,22 @@
       roundRectPath(screen.x - 37, screen.y - 91, 74 * pct, 8, 4);
       ctx.fill();
 
-      ctx.font = "800 11px Inter, system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "rgba(3, 8, 24, 0.68)";
-      const widthLabel = Math.min(160, ctx.measureText(label).width + 18);
-      roundRectPath(screen.x - widthLabel / 2, screen.y - 120, widthLabel, 22, 8);
-      ctx.fill();
-      ctx.fillStyle = "#dffcff";
-      ctx.fillText(label, screen.x, screen.y - 109, widthLabel - 10);
+      if (quality >= 0.64) {
+        ctx.font = "800 11px Inter, system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(3, 8, 24, 0.68)";
+        const widthLabel = Math.min(160, ctx.measureText(label).width + 18);
+        roundRectPath(screen.x - widthLabel / 2, screen.y - 120, widthLabel, 22, 8);
+        ctx.fill();
+        ctx.fillStyle = "#dffcff";
+        ctx.fillText(label, screen.x, screen.y - 109, widthLabel - 10);
+      }
       ctx.restore();
 
-      drawRemoteInteractionBubble(remotePlayer, screen);
+      if (quality >= 0.58) {
+        drawRemoteInteractionBubble(remotePlayer, screen);
+      }
     }
   }
 
@@ -24821,10 +25969,19 @@
     const normal = { x: -aim.local.y, y: aim.local.x };
     const fieldLength = holding ? gadgetHoldReach - funnelShape.rimX : pulling ? 320 : 250;
     const time = performance.now() * 0.004;
+    const gatherColor = pulling ? activeGadgetGatherColor(aim) : null;
+    const gatherLight = gatherColor ? normalizeDynamicLightColor(gatherColor, { r: 114, g: 244, b: 255 }) : null;
+    const gatherMid = gatherLight ? mixColor(gatherLight, { r: 248, g: 251, b: 255 }, 4, 1) : null;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.lineCap = "round";
+
+    if (holding) {
+      drawGadgetHoldField(centerX, centerY, aim.local.x, aim.local.y, normal.x, normal.y, time, false);
+      ctx.restore();
+      return;
+    }
 
     for (let i = 0; i < 10; i += 1) {
       const t = i / 9;
@@ -24838,31 +25995,33 @@
       const endY = mouthY + aim.local.y * endScale + normal.y * side * 0.18;
 
       const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
-      if (holding) {
-        gradient.addColorStop(0, "rgba(126, 255, 191, 0)");
-        gradient.addColorStop(0.5, "rgba(126, 255, 191, 0.38)");
-        gradient.addColorStop(1, "rgba(255, 246, 139, 0.5)");
-      } else if (pulling) {
-        gradient.addColorStop(0, "rgba(114, 244, 255, 0)");
-        gradient.addColorStop(0.58, "rgba(114, 244, 255, 0.22)");
-        gradient.addColorStop(1, "rgba(229, 109, 255, 0.52)");
+      if (pulling) {
+        if (gatherLight && gatherMid) {
+          gradient.addColorStop(0, colorString(gatherLight, 0));
+          gradient.addColorStop(0.58, colorString(gatherMid, 0.17));
+          gradient.addColorStop(1, colorString(gatherLight, 0.42));
+        } else {
+          gradient.addColorStop(0, "rgba(114, 244, 255, 0)");
+          gradient.addColorStop(0.58, "rgba(114, 244, 255, 0.17)");
+          gradient.addColorStop(1, "rgba(229, 109, 255, 0.42)");
+        }
       } else {
-        gradient.addColorStop(0, "rgba(255, 229, 120, 0.6)");
-        gradient.addColorStop(0.62, "rgba(255, 117, 79, 0.26)");
+        gradient.addColorStop(0, "rgba(255, 229, 120, 0.44)");
+        gradient.addColorStop(0.62, "rgba(255, 117, 79, 0.18)");
         gradient.addColorStop(1, "rgba(255, 117, 79, 0)");
       }
 
-      ctx.strokeStyle = gradient;
-      ctx.lineWidth = holding ? 2.5 : pulling ? 2 : 3;
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.quadraticCurveTo(
+      strokeSoftGadgetCurve(
+        startX,
+        startY,
         (startX + endX) / 2 + normal.x * Math.sin(time * 0.7 + i) * 16,
         (startY + endY) / 2 + normal.y * Math.sin(time * 0.7 + i) * 16,
         endX,
-        endY
+        endY,
+        gradient,
+        pulling ? 1.45 : 2.1,
+        pulling ? 2.3 : 2.8
       );
-      ctx.stroke();
     }
 
     ctx.restore();
@@ -25458,6 +26617,11 @@
     if (gameSettings.hudEnabled === false) {
       return;
     }
+    const showHealthBar = gameSettings.playerHealthBar !== false;
+    const showEnergyBar = gameSettings.playerEnergyBar !== false;
+    if (!showHealthBar && !showEnergyBar) {
+      return;
+    }
 
     const pct = clamp(player.health / player.maxHealth, 0, 1);
     const energyPct = playerEnergyPct();
@@ -25471,17 +26635,19 @@
     ctx.font = "13px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(255, 132, 146, 0.96)";
-    ctx.fillText("♥", iconX, healthY + barHeight * 0.5);
+    if (showHealthBar) {
+      ctx.fillStyle = "rgba(255, 132, 146, 0.96)";
+      ctx.fillText("♥", iconX, healthY + barHeight * 0.5);
 
-    ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
-    roundRectPath(barX, healthY, barWidth, barHeight, 4);
-    ctx.fill();
-    ctx.fillStyle = pct > 0.55 ? "#61f59a" : pct > 0.28 ? "#f5d65b" : "#ff6262";
-    roundRectPath(barX, healthY, barWidth * pct, barHeight, 4);
-    ctx.fill();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
+      roundRectPath(barX, healthY, barWidth, barHeight, 4);
+      ctx.fill();
+      ctx.fillStyle = pct > 0.55 ? "#61f59a" : pct > 0.28 ? "#f5d65b" : "#ff6262";
+      roundRectPath(barX, healthY, barWidth * pct, barHeight, 4);
+      ctx.fill();
+    }
 
-    if (energyPct < 0.995) {
+    if (showEnergyBar && energyPct < 0.995) {
       const energyY = height / 2 + 82 * cameraZoom;
       ctx.fillStyle = "rgba(157, 255, 122, 0.96)";
       ctx.fillText("⚡", iconX, energyY + barHeight * 0.5);
@@ -25721,6 +26887,86 @@
     ctx.restore();
   }
 
+  function mappedBodiesForFrame() {
+    const frameId = currentRenderFrameId();
+    if (
+      mapBodyCache.frameId >= 0 &&
+      frameId - mapBodyCache.frameId < 6 &&
+      mapBodyCache.sourceCount === particles.length
+    ) {
+      return mapBodyCache.bodies;
+    }
+
+    mapBodyCache.frameId = frameId;
+    mapBodyCache.sourceCount = particles.length;
+    mapBodyCache.bodies = particles.filter(isMappedBody).sort((a, b) => a.mass - b.mass);
+    return mapBodyCache.bodies;
+  }
+
+  function setTextIfChanged(element, value) {
+    if (element && element.textContent !== value) {
+      element.textContent = value;
+    }
+  }
+
+  function setStyleWidthIfChanged(element, value) {
+    if (element && element.style.width !== value) {
+      element.style.width = value;
+    }
+  }
+
+  function hudProgressSnapshot() {
+    const frameId = currentRenderFrameId();
+    const landedBodyId = player.landed ? player.landed.bodyId : null;
+    const equipped = equippedToolId || "";
+    const maxAge = isSuctionEquipped() ? 3 : 10;
+
+    if (
+      hudCache.progressSnapshot &&
+      frameId - hudCache.progressFrameId < maxAge &&
+      hudCache.progressParticleCount === particles.length &&
+      hudCache.progressLandedBodyId === landedBodyId &&
+      hudCache.progressEquippedToolId === equipped
+    ) {
+      return hudCache.progressSnapshot;
+    }
+
+    let largest = 1;
+    let largestParticle = null;
+    for (const particle of particles) {
+      if (particle.mass > largest) {
+        largest = particle.mass;
+        largestParticle = particle;
+      }
+    }
+
+    const progressBody = findBucketProgressBody() || findNearestProgressBody() || largestParticle;
+    const progressMass = progressBody ? progressBody.mass : largest;
+    const tier = progressBody ? progressBody.tier : bodyTiers[0];
+    hudCache.progressFrameId = frameId;
+    hudCache.progressParticleCount = particles.length;
+    hudCache.progressLandedBodyId = landedBodyId;
+    hudCache.progressEquippedToolId = equipped;
+    hudCache.progressSnapshot = {
+      mass: progressMass,
+      tier
+    };
+    return hudCache.progressSnapshot;
+  }
+
+  function maybeRenderOpenLeaderboard() {
+    if (!leaderboard.open) {
+      return;
+    }
+
+    const frameId = currentRenderFrameId();
+    if (frameId - hudCache.leaderboardFrameId < 15) {
+      return;
+    }
+    hudCache.leaderboardFrameId = frameId;
+    renderLeaderboard();
+  }
+
   function drawMapOverlay() {
     if (gameSettings.hudEnabled === false) {
       return;
@@ -25738,7 +26984,7 @@
     const centerX = x + size / 2;
     const centerY = y + size / 2;
     const mapRadius = size * 0.41;
-    const bodies = particles.filter(isMappedBody).sort((a, b) => a.mass - b.mass);
+    const bodies = mappedBodiesForFrame();
     const remoteContacts = collectRemoteMapContacts();
     let farthest = 0;
 
@@ -25824,55 +27070,41 @@
       return;
     }
 
-    let largest = 1;
-    let largestParticle = null;
-    for (const particle of particles) {
-      if (particle.mass > largest) {
-        largest = particle.mass;
-        largestParticle = particle;
-      }
-    }
-
     const healthPct = Math.round(clamp(player.health / player.maxHealth, 0, 1) * 100);
-    healthValue.textContent = "HP: " + healthPct + "%";
-    healthFill.style.width = healthPct + "%";
+    setTextIfChanged(healthValue, "HP: " + healthPct + "%");
+    setStyleWidthIfChanged(healthFill, healthPct + "%");
     if (energyValue && energyFill) {
       const energyPct = Math.round(playerEnergyPct() * 100);
-      energyValue.textContent = "EP: " + Math.round(player.energy) + "/" + Math.round(player.maxEnergy);
-      energyFill.style.width = energyPct + "%";
+      setTextIfChanged(energyValue, "EP: " + Math.round(player.energy) + "/" + Math.round(player.maxEnergy));
+      setStyleWidthIfChanged(energyFill, energyPct + "%");
     }
     updateDifficultyUi();
     if (scoreValue) {
-      scoreValue.textContent = Math.max(0, Math.round(lifeStats.bestScore || lifeStats.currentScore || 0)) + " pts";
+      setTextIfChanged(scoreValue, Math.max(0, Math.round(lifeStats.bestScore || lifeStats.currentScore || 0)) + " pts");
     }
     updateTouchLandButton();
 
-    const progressBody = findBucketProgressBody() || findNearestProgressBody() || largestParticle;
-    const progressMass = progressBody ? progressBody.mass : largest;
-    const tier = progressBody ? progressBody.tier : bodyTiers[0];
+    const progressSnapshot = hudProgressSnapshot();
+    const progressMass = progressSnapshot.mass;
+    const tier = progressSnapshot.tier;
     const nextTier = nextTierAfter(tier);
     const roundedProgressMass = Math.max(0, Math.round(progressMass));
-    currentBodyLabel.textContent = formatTierName(tier.name).toUpperCase() + ":";
+    setTextIfChanged(currentBodyLabel, formatTierName(tier.name).toUpperCase() + ":");
     if (!nextTier) {
-      nextMilestoneLabel.textContent = "MAX";
-      nextMilestoneValue.textContent = roundedProgressMass + " / " + Math.round(tier.threshold) + "+";
-      milestoneFill.style.width = "100%";
-      if (leaderboard.open) {
-        renderLeaderboard();
-      }
+      setTextIfChanged(nextMilestoneLabel, "MAX");
+      setTextIfChanged(nextMilestoneValue, roundedProgressMass + " / " + Math.round(tier.threshold) + "+");
+      setStyleWidthIfChanged(milestoneFill, "100%");
+      maybeRenderOpenLeaderboard();
       return;
     }
 
     const start = tier.threshold;
     const end = nextTier.threshold;
     const progress = clamp((progressMass - start) / (end - start), 0, 1);
-    nextMilestoneLabel.textContent = formatTierName(nextTier.name).toUpperCase();
-    nextMilestoneValue.textContent = roundedProgressMass + " / " + Math.round(end);
-    milestoneFill.style.width = Math.round(progress * 100) + "%";
-
-    if (leaderboard.open) {
-      renderLeaderboard();
-    }
+    setTextIfChanged(nextMilestoneLabel, formatTierName(nextTier.name).toUpperCase());
+    setTextIfChanged(nextMilestoneValue, roundedProgressMass + " / " + Math.round(end));
+    setStyleWidthIfChanged(milestoneFill, Math.round(progress * 100) + "%");
+    maybeRenderOpenLeaderboard();
   }
 
   function stepGameplaySimulation(dt, options) {
@@ -25954,17 +27186,44 @@
     }
   }
 
+  function stepRuntimeGameplayFrame(frameDt, options) {
+    const includeExternalSystems = !options || options.includeExternalSystems !== false;
+    if (isMultiplayerV2Active()) {
+      stepGameplaySimulation(multiplayerV2FrameDt(frameDt), { includeExternalSystems });
+      return;
+    }
+    if (isSharedWorldFollower()) {
+      stepGameplaySimulation(Math.min(0.033, Math.max(0, finiteOr(frameDt, 0))), { includeExternalSystems });
+      return;
+    }
+
+    const dt = Math.min(soloSimulationMaxFrameDt, Math.max(0, finiteOr(frameDt, 0)));
+    soloSimulationAccumulator = Math.min(soloSimulationMaxAccumulator, soloSimulationAccumulator + dt);
+
+    let steps = 0;
+    while (soloSimulationAccumulator + 0.000001 >= soloSimulationTickDt && steps < soloSimulationMaxCatchUpSteps) {
+      soloSimulationAccumulator -= soloSimulationTickDt;
+      stepGameplaySimulation(soloSimulationTickDt, { includeExternalSystems });
+      steps += 1;
+    }
+
+    if (steps >= soloSimulationMaxCatchUpSteps) {
+      soloSimulationAccumulator = Math.min(soloSimulationAccumulator, soloSimulationTickDt * soloSimulationMaxCatchUpSteps);
+    }
+  }
+
   function tick(now) {
     const frameDt = Math.max(0, (now - lastTime) / 1000 || 0);
     const dt = Math.min(0.033, frameDt);
-    const gameplayDt = isMultiplayerV2Active() ? multiplayerV2FrameDt(frameDt) : dt;
     lastTime = now;
+    beginRenderFrame(frameDt);
 
     if (!runState.active) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
       drawBackground();
       drawParticles(now);
+      drawDynamicLighting(now);
       updateHud();
       requestAnimationFrame(tick);
       return;
@@ -25979,6 +27238,7 @@
       drawRemoteUniverses(now);
       drawRivals(now);
       drawPlayer(now);
+      drawDynamicLighting(now);
       drawDeathVignette();
       updateHud();
       requestAnimationFrame(tick);
@@ -25993,6 +27253,7 @@
       drawRemoteUniverses(now);
       drawRivals(now);
       drawPlayer(now);
+      drawDynamicLighting(now);
       drawVignette();
       drawMapOverlay();
       updateHud();
@@ -26000,7 +27261,7 @@
       return;
     }
 
-    stepGameplaySimulation(gameplayDt);
+    stepRuntimeGameplayFrame(frameDt);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
@@ -26009,6 +27270,7 @@
     drawRemoteUniverses(now);
     drawRivals(now);
     drawPlayer(now);
+    drawDynamicLighting(now);
     drawVignette();
     drawMapOverlay();
     updateHud();
@@ -26174,6 +27436,24 @@
 
   function configureClusternautsTestPlayerState(options) {
     const config = options || {};
+    if (Number.isFinite(Number(config.x))) {
+      player.x = Number(config.x);
+    }
+    if (Number.isFinite(Number(config.y))) {
+      player.y = Number(config.y);
+    }
+    if (Number.isFinite(Number(config.vx))) {
+      player.vx = Number(config.vx);
+    }
+    if (Number.isFinite(Number(config.vy))) {
+      player.vy = Number(config.vy);
+    }
+    if (Number.isFinite(Number(config.cameraRoll))) {
+      cameraRoll = Number(config.cameraRoll);
+    }
+    if (Number.isFinite(Number(config.gadgetAngle))) {
+      gadgetAngle = Number(config.gadgetAngle);
+    }
     if (Number.isFinite(Number(config.health))) {
       player.health = clamp(Number(config.health), 0, player.maxHealth);
     }
@@ -26312,13 +27592,14 @@
         resetLifeStats();
         resetDeathState();
         resetClusternautsTestCounters();
+        resetRenderPerformance();
         configureClusternautsTestInput(config.input);
         runState.active = true;
         gamePaused = false;
         persistence.enabled = false;
         multiplayer.enabled = false;
         setDifficultyScreenOpen(false);
-        lastTime = performance.now();
+        resetFrameClock();
         return createClusternautsFrameRateSnapshot();
       },
       setInput: function (input) {
@@ -26337,20 +27618,21 @@
           return createClusternautsFrameRateSnapshot();
         }
         if (!gamePaused) {
-          stepGameplaySimulation(seconds, { includeExternalSystems: false });
+          stepRuntimeGameplayFrame(seconds, { includeExternalSystems: false });
         }
         return createClusternautsFrameRateSnapshot();
       },
       frame: function (dt) {
         const seconds = Math.max(0, finiteOr(dt, 0));
         const now = performance.now();
+        beginRenderFrame(seconds);
         if (!runState.active) {
           return createClusternautsFrameRateSnapshot();
         }
         if (deathState.active) {
           updateDeath(seconds);
         } else if (!gamePaused) {
-          stepGameplaySimulation(seconds, { includeExternalSystems: false });
+          stepRuntimeGameplayFrame(seconds, { includeExternalSystems: false });
         }
         updateRemoteVisualTransforms(seconds);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -26360,6 +27642,7 @@
         drawRemoteUniverses(now);
         drawRivals(now);
         drawPlayer(now);
+        drawDynamicLighting(now);
         drawVignette();
         drawMapOverlay();
         updateHud();
@@ -26648,6 +27931,18 @@
     });
   }
 
+  if (dynamicLightingInput) {
+    dynamicLightingInput.addEventListener("change", function () {
+      applyDynamicLightingSetting(dynamicLightingInput.checked);
+    });
+  }
+
+  if (menuDynamicLightingInput) {
+    menuDynamicLightingInput.addEventListener("change", function () {
+      applyDynamicLightingSetting(menuDynamicLightingInput.checked);
+    });
+  }
+
   if (surfaceCameraRotationInput) {
     surfaceCameraRotationInput.addEventListener("change", function () {
       applySurfaceCameraRotationSetting(surfaceCameraRotationInput.checked);
@@ -26672,9 +27967,33 @@
     });
   }
 
+  if (playerHealthBarInput) {
+    playerHealthBarInput.addEventListener("change", function () {
+      applyPlayerHealthBarSetting(playerHealthBarInput.checked);
+    });
+  }
+
+  if (playerEnergyBarInput) {
+    playerEnergyBarInput.addEventListener("change", function () {
+      applyPlayerEnergyBarSetting(playerEnergyBarInput.checked);
+    });
+  }
+
   if (menuTouchScreenInput) {
     menuTouchScreenInput.addEventListener("change", function () {
       applyTouchScreenSetting(menuTouchScreenInput.checked);
+    });
+  }
+
+  if (menuPlayerHealthBarInput) {
+    menuPlayerHealthBarInput.addEventListener("change", function () {
+      applyPlayerHealthBarSetting(menuPlayerHealthBarInput.checked);
+    });
+  }
+
+  if (menuPlayerEnergyBarInput) {
+    menuPlayerEnergyBarInput.addEventListener("change", function () {
+      applyPlayerEnergyBarSetting(menuPlayerEnergyBarInput.checked);
     });
   }
 
@@ -27221,6 +28540,11 @@
         adjustCameraZoom(-1);
         return;
       }
+      if (event.code === "KeyH" && !event.repeat) {
+        event.preventDefault();
+        applyHudEnabledSetting(gameSettings.hudEnabled === false);
+        return;
+      }
       if (event.code === "KeyT" && !event.repeat) {
         event.preventDefault();
         setResourcesHudOpen(!resourcesHudOpen);
@@ -27435,9 +28759,11 @@
     await bootstrapAccountSession();
     applyUiScale(gameSettings.uiScale);
     setCameraZoom(gameSettings.zoom);
+    updateDynamicLightingUi();
     updateSurfaceCameraRotationUi();
     updateTouchScreenUi();
     updateHudEnabledUi();
+    updatePlayerBarSettingsUi();
     renderControlBindings();
     initializeTechUi();
     updateSoundToggle();
@@ -27464,7 +28790,8 @@
       seedParticles();
     }
 
-    lastTime = performance.now();
+    resetFrameClock();
+    resetRenderPerformance();
     requestAnimationFrame(tick);
   }
 
