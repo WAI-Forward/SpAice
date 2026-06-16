@@ -172,6 +172,8 @@
     muteAudio: false,
     gameplayActive: false,
     gameplayEventsDisabled: false,
+    loadingActive: false,
+    loadingEventsDisabled: false,
     settingsListener: null,
     authListener: null,
     roomJoinListener: null,
@@ -4530,6 +4532,7 @@
     multiplayer.lobbyRequestStartedAt = performance.now();
     setLobbyStatus(loadedSnapshot ? 'Creating lobby from "' + loadedSaveName + '"...' : "Creating lobby...", "");
     setStartMenuView("lobby");
+    setCrazyGamesLoadingActive(true, "lobby-create");
     connectMultiplayer();
     flushLobbyRequests("create-lobby");
   }
@@ -4550,6 +4553,7 @@
     multiplayer.lobbyRequestStartedAt = performance.now();
     setLobbyStatus("Joining lobby...", "");
     setStartMenuView("lobby");
+    setCrazyGamesLoadingActive(true, "lobby-join");
     connectMultiplayer();
     flushLobbyRequests("join-lobby");
   }
@@ -4651,6 +4655,8 @@
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
     multiplayer.lobbyLoadedSaveName = "";
+    setCrazyGamesLoadingActive(false, "lobby-leave");
+    clearCrazyGamesRoomState("lobby-leave");
     setLobbyStatus("", "");
     setStartMenuView("multiplayer", { push: false });
   }
@@ -4669,6 +4675,7 @@
       multiplayer.lobby.status === "started" || multiplayer.lobbyLoadedSnapshot ? "success" : ""
     );
     setStartMenuView("lobby", { push: false });
+    setCrazyGamesLoadingActive(false, "lobby-state");
     updateLobbyCrazyGamesRoom("lobby-state");
     renderLobby();
   }
@@ -4868,7 +4875,7 @@
     multiplayer.roomMode = "party-lobby";
     multiplayer.roomPlayerCount = lobbyPlayers().length;
     multiplayer.roomMaxPlayers = multiplayer.lobby.maxPlayers || crazyGamesRoomMaxPlayers;
-    multiplayer.roomJoinable = multiplayer.roomPlayerCount < multiplayer.roomMaxPlayers;
+    multiplayer.roomJoinable = multiplayer.lobby.status === "open" && multiplayer.roomPlayerCount < multiplayer.roomMaxPlayers;
     reportCrazyGamesRoom(reason || "lobby-state");
   }
 
@@ -6395,7 +6402,7 @@
         : "Playing as guest";
     }
     if (crazyGamesLoginButton) {
-      crazyGamesLoginButton.hidden = crazyGamesRuntime || signedIn || crazyGamesState.authAvailable === false;
+      crazyGamesLoginButton.hidden = !crazyGamesRuntime || signedIn || crazyGamesState.authAvailable === false;
       crazyGamesLoginButton.disabled = accountState.busy || crazyGamesState.authPromptActive;
     }
     if (accountSignedIn) {
@@ -6782,6 +6789,9 @@
     const payload = {
       roomId,
       isJoinable,
+      maxPlayers: multiplayer.roomMaxPlayers,
+      currentPlayers: multiplayer.roomPlayerCount,
+      mode,
       inviteParams: crazyGamesRoomInviteParams(roomId, mode)
     };
     const reportKey = JSON.stringify(payload);
@@ -6801,12 +6811,7 @@
     }
 
     if (!callCrazyGamesRoomMethod("updateRoom", payload, reason)) {
-      const game = crazyGamesGameModule();
-      if (game && typeof game.showInviteButton === "function" && isJoinable && !inviteLinkRequested) {
-        callCrazyGamesRoomMethod("showInviteButton", payload.inviteParams, reason);
-      } else if (game && typeof game.hideInviteButton === "function" && !isJoinable) {
-        callCrazyGamesRoomMethod("hideInviteButton", undefined, reason);
-      }
+      console.warn("CrazyGames updateRoom unavailable.", { reason, roomId, isJoinable, inviteLinkRequested });
     }
   }
 
@@ -6817,9 +6822,7 @@
 
     crazyGamesState.lastRoomReport = "";
     clearCrazyGamesInviteLinkState();
-    if (!callCrazyGamesRoomMethod("leftRoom", undefined, reason)) {
-      callCrazyGamesRoomMethod("hideInviteButton", undefined, reason);
-    }
+    callCrazyGamesRoomMethod("leftRoom", undefined, reason);
   }
 
   function applyCrazyGamesRoomState(message) {
@@ -6837,6 +6840,12 @@
     if (multiplayer.joinRequestedRoomId === roomId) {
       multiplayer.joinRequestedRoomId = "";
       logCrazyGamesQa("roomId joined", {
+        roomId,
+        mode: multiplayer.roomMode,
+        playerCount: multiplayer.roomPlayerCount,
+        maxPlayers: multiplayer.roomMaxPlayers
+      });
+      logCrazyGamesQa("room joined from invite params", {
         roomId,
         mode: multiplayer.roomMode,
         playerCount: multiplayer.roomPlayerCount,
@@ -6934,7 +6943,7 @@
       return false;
     }
 
-    logCrazyGamesQa("invite params used", {
+    logCrazyGamesQa("invite params consumed", {
       reason,
       roomId,
       inviteParams: params
@@ -7032,6 +7041,10 @@
 
     if (crazyGamesState.instantMultiplayer && !crazyGamesState.instantMultiplayerHandled) {
       crazyGamesState.instantMultiplayerHandled = true;
+      logCrazyGamesQa("instant multiplayer requested", {
+        reason: "startup",
+        isInstantMultiplayer: true
+      });
       setStartMenuView("lobby", { push: false });
       setDifficultyScreenOpen(true);
       createLobby();
@@ -7068,6 +7081,37 @@
     } catch (error) {
       crazyGamesState.gameplayEventsDisabled = true;
       console.warn("CrazyGames gameplay event unavailable.", { reason, error });
+    }
+  }
+
+  function setCrazyGamesLoadingActive(active, reason) {
+    const nextActive = Boolean(active);
+    if (!isCrazyGamesRuntime() || crazyGamesState.loadingEventsDisabled || crazyGamesState.loadingActive === nextActive) {
+      return;
+    }
+
+    const game = crazyGamesGameModule();
+    const methodName = nextActive ? "loadingStart" : "loadingStop";
+    if (!game || typeof game[methodName] !== "function") {
+      return;
+    }
+
+    try {
+      game[methodName]();
+      crazyGamesState.loadingActive = nextActive;
+      logCrazyGamesQa(nextActive ? "loading start" : "loading stop", { reason });
+    } catch (error) {
+      crazyGamesState.loadingEventsDisabled = true;
+      console.warn("CrazyGames loading event unavailable.", { reason, error });
+    }
+  }
+
+  async function withCrazyGamesLoading(reason, task) {
+    setCrazyGamesLoadingActive(true, reason);
+    try {
+      return await task();
+    } finally {
+      setCrazyGamesLoadingActive(false, reason);
     }
   }
 
@@ -7174,7 +7218,7 @@
           }
         }
 
-        if (sdk.user && typeof sdk.user.addAuthListener === "function") {
+        if (sdk.user) {
           if (typeof sdk.user.isUserAccountAvailable === "function") {
             try {
               crazyGamesState.authAvailable = await sdk.user.isUserAccountAvailable();
@@ -7186,14 +7230,20 @@
             crazyGamesState.authAvailable = sdk.user.isUserAccountAvailable;
             updateAccountUi();
           }
-          crazyGamesState.authListener = function () {
-            void authenticateWithCrazyGames();
-          };
-          sdk.user.addAuthListener(crazyGamesState.authListener);
+          if (!crazyGamesState.authListener && typeof sdk.user.addAuthListener === "function") {
+            crazyGamesState.authListener = function () {
+              void handleCrazyGamesAuthChange("auth-listener");
+            };
+            try {
+              sdk.user.addAuthListener(crazyGamesState.authListener);
+            } catch (error) {
+              crazyGamesState.authListener = null;
+              console.warn("CrazyGames auth listener unavailable.", error);
+            }
+          }
         }
 
-        await refreshCrazyGamesVisibleUser();
-        await authenticateWithCrazyGames();
+        await handleCrazyGamesAuthChange("startup");
         await handleCrazyGamesStartupMultiplayer(sdk.game);
       } catch (error) {
         crazyGamesState.authAvailable = false;
@@ -7204,6 +7254,16 @@
     }());
 
     return crazyGamesState.initPromise;
+  }
+
+  async function handleCrazyGamesAuthChange(reason) {
+    await refreshCrazyGamesVisibleUser();
+    await authenticateWithCrazyGames();
+    updateAccountUi();
+    logCrazyGamesQa("auth state refreshed", {
+      reason,
+      hasUser: Boolean(crazyGamesState.user)
+    });
   }
 
   async function authenticateWithCrazyGames() {
@@ -8067,24 +8127,27 @@
 
   async function loadCrazyGamesProgressState() {
     const data = await initializeCrazyGamesProgressAdapter("load");
-    const dataEnvelope = await readCrazyGamesDataProgressEnvelope(data);
-    const localEnvelope = readLocalCrazyGamesProgressEnvelope();
-    const envelope = dataEnvelope || localEnvelope;
 
-    if (!envelope) {
+    return await withCrazyGamesLoading("progress-load", async function () {
+      const dataEnvelope = await readCrazyGamesDataProgressEnvelope(data);
+      const localEnvelope = readLocalCrazyGamesProgressEnvelope();
+      const envelope = dataEnvelope || localEnvelope;
+
+      if (!envelope) {
+        return false;
+      }
+
+      if (applyCrazyGamesProgressEnvelope(envelope)) {
+        progressSaveAdapter.lastLoadSource = envelope.source || "unknown";
+        persistence.online = true;
+        persistence.serverUnavailable = false;
+        persistence.storage = progressSaveAdapter.lastLoadSource === "crazygames-data" ? "crazygames-data" : "local";
+        logCrazyGamesProgress("Loaded progress.", { source: progressSaveAdapter.lastLoadSource, savedAt: envelope.savedAt }, "info", "load");
+        return true;
+      }
+
       return false;
-    }
-
-    if (applyCrazyGamesProgressEnvelope(envelope)) {
-      progressSaveAdapter.lastLoadSource = envelope.source || "unknown";
-      persistence.online = true;
-      persistence.serverUnavailable = false;
-      persistence.storage = progressSaveAdapter.lastLoadSource === "crazygames-data" ? "crazygames-data" : "local";
-      logCrazyGamesProgress("Loaded progress.", { source: progressSaveAdapter.lastLoadSource, savedAt: envelope.savedAt }, "info", "load");
-      return true;
-    }
-
-    return false;
+    });
   }
 
   async function saveCrazyGamesProgressState(includeWorld) {
@@ -10177,6 +10240,8 @@
     if (message.type === "lobby.join.failed") {
       multiplayer.lobbyCreatePending = false;
       multiplayer.lobbyJoinPending = "";
+      setCrazyGamesLoadingActive(false, "lobby-join-failed");
+      clearCrazyGamesRoomState("lobby-join-failed");
       setLobbyStatus(message.message || "Lobby unavailable.", "error");
       maybeNotifyText(message.message || "Lobby unavailable.");
       setStartMenuView("multiplayer", { push: false });
@@ -10214,6 +10279,8 @@
     if (message.type === "lobby.kicked") {
       multiplayer.lobby = null;
       multiplayer.lobbyInviteLink = "";
+      setCrazyGamesLoadingActive(false, "lobby-kicked");
+      clearCrazyGamesRoomState("lobby-kicked");
       setStartMenuView("multiplayer", { push: false });
       maybeNotifyText(message.message || "Removed from lobby.");
       return;
@@ -28420,6 +28487,77 @@
         };
       },
       initializeCrazyGamesIntegration: initializeCrazyGamesIntegration,
+      promptCrazyGamesLogin: function () {
+        return promptCrazyGamesLogin();
+      },
+      setCrazyGamesGameplayActive: function (active, reason) {
+        setCrazyGamesGameplayActive(active, reason || "test");
+        return {
+          gameplayActive: crazyGamesState.gameplayActive
+        };
+      },
+      setCrazyGamesLoadingActive: function (active, reason) {
+        setCrazyGamesLoadingActive(active, reason || "test");
+        return {
+          loadingActive: crazyGamesState.loadingActive
+        };
+      },
+      withCrazyGamesLoading: function (reason, fail) {
+        return withCrazyGamesLoading(reason || "test", async function () {
+          if (fail) {
+            throw new Error("test loading failure");
+          }
+          return {
+            loadingActive: crazyGamesState.loadingActive
+          };
+        });
+      },
+      reportCrazyGamesRoom: function (state) {
+        const source = state || {};
+        multiplayer.friendJoinsEnabled = source.friendJoinsEnabled !== false;
+        multiplayer.roomId = String(source.roomId || "");
+        multiplayer.roomMode = String(source.mode || "world-overlap");
+        multiplayer.roomPlayerCount = Math.max(0, Math.floor(finiteOr(source.playerCount, 1)));
+        multiplayer.roomMaxPlayers = Math.max(1, Math.floor(finiteOr(source.maxPlayers, crazyGamesRoomMaxPlayers)));
+        multiplayer.roomJoinable = source.isJoinable !== false;
+        reportCrazyGamesRoom(source.reason || "test-room");
+        return {
+          lastRoomReport: crazyGamesState.lastRoomReport,
+          inviteLinkPending: crazyGamesState.inviteLinkPending,
+          inviteLink: crazyGamesState.inviteLink
+        };
+      },
+      leaveCrazyGamesRoom: function (reason) {
+        leaveCrazyGamesRoom(reason || "test-leave");
+        return {
+          lastRoomReport: crazyGamesState.lastRoomReport,
+          inviteLink: crazyGamesState.inviteLink
+        };
+      },
+      handleCrazyGamesJoinParams: function (inviteParams, reason) {
+        return handleCrazyGamesJoinParams(inviteParams, reason || "test-invite");
+      },
+      applyCrazyGamesRoomState: function (message) {
+        applyCrazyGamesRoomState(message || {});
+        return {
+          roomId: multiplayer.roomId,
+          roomMode: multiplayer.roomMode,
+          roomPlayerCount: multiplayer.roomPlayerCount,
+          roomMaxPlayers: multiplayer.roomMaxPlayers,
+          roomJoinable: multiplayer.roomJoinable
+        };
+      },
+      crazyGamesState: function () {
+        return {
+          gameplayActive: crazyGamesState.gameplayActive,
+          loadingActive: crazyGamesState.loadingActive,
+          hasAuthListener: typeof crazyGamesState.authListener === "function",
+          hasRoomJoinListener: typeof crazyGamesState.roomJoinListener === "function",
+          user: crazyGamesState.user,
+          instantMultiplayer: crazyGamesState.instantMultiplayer,
+          instantMultiplayerHandled: crazyGamesState.instantMultiplayerHandled
+        };
+      },
       loadPersistentState: function () {
         return loadPersistentState();
       },
@@ -29266,6 +29404,24 @@
     keys.clear();
     jumpQueued = false;
     resetMouseButtons();
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      setCrazyGamesGameplayActive(false, "visibility-hidden");
+    } else {
+      updateCrazyGamesGameplayState("visibility-visible");
+    }
+  });
+
+  window.addEventListener("pagehide", function () {
+    setCrazyGamesGameplayActive(false, "pagehide");
+    setCrazyGamesLoadingActive(false, "pagehide");
+  });
+
+  window.addEventListener("beforeunload", function () {
+    setCrazyGamesGameplayActive(false, "beforeunload");
+    setCrazyGamesLoadingActive(false, "beforeunload");
   });
 
   window.addEventListener("mousemove", function (event) {

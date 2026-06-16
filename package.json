@@ -16,6 +16,7 @@
     "test:crazygames:audio": "node tests/crazygames-audio-mute.test.js",
     "test:crazygames:cors": "node tests/crazygames-cors-contract.test.js",
     "test:crazygames:data": "node tests/crazygames-data-module.test.js",
+    "test:crazygames:sdk": "node tests/crazygames-sdk-integration.test.js",
     "test:crazygames:package": "node tests/crazygames-package-smoke.test.js",
     "test:physics:framerate": "node tests/crazygames-framerate-consistency.test.js"
   },
