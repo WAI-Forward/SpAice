@@ -3619,8 +3619,45 @@ select {
     max-height: calc((100dvh - 20px) / var(--ui-scale));
   }
 
+  .start-menu[data-active-menu-view="main"] {
+    gap: 10px;
+    overflow: hidden;
+  }
+
   .start-menu__top {
     grid-template-columns: 64px 1fr 64px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__top {
+    gap: 6px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__back[hidden] {
+    display: none;
+  }
+
+  .start-menu[data-active-menu-view="main"] .difficulty-screen__eyebrow {
+    margin-bottom: 5px;
+    font-size: 10px;
+  }
+
+  .start-menu[data-active-menu-view="main"] h1 {
+    margin-bottom: 8px;
+    font-size: clamp(28px, 9vw, 36px);
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account {
+    gap: 1px;
+    width: min(320px, 100%);
+    padding: 7px 9px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account span {
+    font-size: 9px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account strong {
+    font-size: 13px;
   }
 
   .start-menu__back {
@@ -3643,6 +3680,10 @@ select {
   .lobby-panel__invite input {
     min-height: 46px;
     font-size: 14px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__button {
+    min-height: 42px;
   }
 
   .start-menu__row {
@@ -3788,6 +3829,56 @@ select {
 }
 
 @media (max-height: 460px) and (min-width: 480px) {
+  .difficulty-screen__panel.start-menu[data-active-menu-view="main"] {
+    grid-template-columns: minmax(170px, 0.86fr) minmax(240px, 1.14fr);
+    align-items: center;
+    width: min(720px, calc((100vw - 16px) / var(--ui-scale)));
+    max-height: calc((100vh - 16px) / var(--ui-scale));
+    max-height: calc((100dvh - 16px) / var(--ui-scale));
+    gap: 10px;
+    padding: 10px 12px;
+    overflow: hidden;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__top {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    align-content: center;
+    gap: 4px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__top .difficulty-screen__eyebrow,
+  .start-menu[data-active-menu-view="main"] .start-menu__top h1,
+  .start-menu[data-active-menu-view="main"] .start-menu__account {
+    grid-column: 1;
+  }
+
+  .start-menu[data-active-menu-view="main"] .difficulty-screen__eyebrow {
+    margin-bottom: 2px;
+    font-size: 9px;
+  }
+
+  .start-menu[data-active-menu-view="main"] h1 {
+    margin-bottom: 4px;
+    font-size: clamp(24px, 5vw, 32px);
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account {
+    width: min(260px, 100%);
+    padding: 6px 8px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__actions {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__button {
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
   .death-screen__panel {
     display: grid;
     grid-template-columns: minmax(148px, 0.82fr) minmax(210px, 1.18fr);
@@ -3858,5 +3949,23 @@ select {
 
   .death-screen__button + .death-screen__button {
     margin-top: 5px;
+  }
+}
+
+@media (max-height: 360px) and (min-width: 480px) {
+  .difficulty-screen__panel.start-menu[data-active-menu-view="main"] {
+    padding: 8px 10px;
+  }
+
+  .start-menu[data-active-menu-view="main"] h1 {
+    font-size: 24px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account {
+    padding: 5px 7px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__button {
+    min-height: 34px;
   }
 }

@@ -100,6 +100,7 @@
   const investigateSignal = document.getElementById("investigateSignal");
   const avoidSignal = document.getElementById("avoidSignal");
   const difficultyScreen = document.getElementById("difficultyScreen");
+  const startMenuPanel = difficultyScreen ? difficultyScreen.querySelector(".start-menu") : null;
   const startMenuBack = document.getElementById("startMenuBack");
   const startMenuEyebrow = document.getElementById("startMenuEyebrow");
   const startMenuTitle = document.getElementById("startMenuTitle");
@@ -552,6 +553,12 @@
     lastTapAt: -Infinity,
     lastTapX: 0,
     lastTapY: 0
+  };
+  const touchPinchState = {
+    active: false,
+    pointers: new Map(),
+    startDistance: 0,
+    startZoom: 0
   };
   const touchMoveAxisThreshold = 0.26;
   const touchDoubleTapWindow = 340;
@@ -1220,6 +1227,7 @@
       lastAckInputSeq: 0,
       ignoreDeathEventsBeforeTick: 0,
       visualBlend: null,
+      pendingMergeVisuals: [],
       eventKeys: new Map(),
       perf: {
         clientStepMs: 0,
@@ -1942,6 +1950,7 @@
   function resetTouchControlState() {
     resetTouchFireState();
     resetTouchJoystickState();
+    resetTouchPinchState();
   }
 
   function resetTouchFireState() {
@@ -1962,6 +1971,13 @@
     touchJoystickState.moveY = 0;
     touchJoystickState.boost = false;
     updateTouchJoystickUi();
+  }
+
+  function resetTouchPinchState() {
+    touchPinchState.active = false;
+    touchPinchState.pointers.clear();
+    touchPinchState.startDistance = 0;
+    touchPinchState.startZoom = cameraZoom;
   }
 
   function clearMouseButtonsOnly() {
@@ -2310,6 +2326,84 @@
     return Boolean(gameSettings.touchScreen && event && event.pointerType === "touch");
   }
 
+  function isTouchPinchPointer(event) {
+    if (!isTouchGameplayPointer(event) || deathState.active || !runState.active || isEditableEventTarget(event)) {
+      return false;
+    }
+    return !isGameplayPointerBlocked(event);
+  }
+
+  function touchPinchPoints() {
+    return Array.from(touchPinchState.pointers.values());
+  }
+
+  function beginTouchPinch(event) {
+    if (!isTouchPinchPointer(event)) {
+      return false;
+    }
+
+    touchPinchState.pointers.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY
+    });
+    touchControlState.suppressMouseUntil = performance.now() + 900;
+
+    if (touchPinchState.pointers.size < 2) {
+      return false;
+    }
+
+    const points = touchPinchPoints();
+    touchPinchState.active = true;
+    touchPinchState.startDistance = Math.max(1, Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y));
+    touchPinchState.startZoom = cameraZoom;
+    event.preventDefault();
+    return true;
+  }
+
+  function updateTouchPinch(event) {
+    if (!touchPinchState.pointers.has(event.pointerId)) {
+      return false;
+    }
+
+    touchPinchState.pointers.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY
+    });
+
+    if (touchPinchState.pointers.size < 2) {
+      return false;
+    }
+
+    const points = touchPinchPoints();
+    const distance = Math.max(1, Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y));
+    if (!touchPinchState.active) {
+      touchPinchState.active = true;
+      touchPinchState.startDistance = distance;
+      touchPinchState.startZoom = cameraZoom;
+    } else {
+      setCameraZoom(touchPinchState.startZoom * (distance / Math.max(1, touchPinchState.startDistance)));
+    }
+    touchControlState.suppressMouseUntil = performance.now() + 900;
+    event.preventDefault();
+    return true;
+  }
+
+  function endTouchPinch(event) {
+    if (!touchPinchState.pointers.has(event.pointerId)) {
+      return false;
+    }
+
+    touchPinchState.pointers.delete(event.pointerId);
+    if (touchPinchState.pointers.size < 2) {
+      touchPinchState.active = false;
+      touchPinchState.startDistance = 0;
+      touchPinchState.startZoom = cameraZoom;
+    }
+    touchControlState.suppressMouseUntil = performance.now() + 900;
+    event.preventDefault();
+    return true;
+  }
+
   function isGameplayPointerBlocked(event) {
     return Boolean(closestEventTarget(event, gameplayPointerBlockSelector));
   }
@@ -2356,6 +2450,9 @@
   }
 
   function beginTouchControl(event) {
+    if (beginTouchPinch(event)) {
+      return;
+    }
     if (beginTouchJoystick(event)) {
       return;
     }
@@ -2371,6 +2468,9 @@
   }
 
   function updateTouchControl(event) {
+    if (updateTouchPinch(event)) {
+      return;
+    }
     if (updateTouchJoystick(event)) {
       return;
     }
@@ -2380,10 +2480,14 @@
   }
 
   function endTouchControl(event) {
+    const endedPinch = endTouchPinch(event);
     if (endTouchJoystick(event)) {
       return;
     }
     if (endTouchFireJoystick(event)) {
+      return;
+    }
+    if (endedPinch) {
       return;
     }
   }
@@ -4220,6 +4324,9 @@
       startMenuBack.hidden = startMenu.view === "main";
       startMenuBack.textContent = startMenu.view === "lobby" ? "Leave" : "Back";
     }
+    if (startMenuPanel) {
+      startMenuPanel.dataset.activeMenuView = startMenu.view;
+    }
 
     difficultyScreen.querySelectorAll("[data-menu-view]").forEach((viewElement) => {
       viewElement.classList.toggle("is-active", viewElement.dataset.menuView === startMenu.view);
@@ -4577,6 +4684,22 @@
     flushLobbyRequests("create-lobby");
   }
 
+  function prepareForLobbyJoin() {
+    if (!runState.active && isDifficultyScreenOpen()) {
+      return;
+    }
+
+    resetSoloMultiplayerSession();
+    runState.active = false;
+    gamePaused = false;
+    resetDeathState();
+    setSettingsOpen(false);
+    setDifficultyScreenOpen(true);
+    resetMouseButtons();
+    resetFrameClock();
+    updateHud();
+  }
+
   function joinLobby(code) {
     const cleanCode = sanitizeLobbyCode(code);
     if (!cleanCode) {
@@ -4584,6 +4707,7 @@
       setStartMenuView("multiplayer", { push: false });
       return;
     }
+    prepareForLobbyJoin();
     setFriendJoinsEnabled(true, "lobby-join", { persist: true, notify: false, startRun: false });
     clearCurrentAccountSave();
     multiplayer.lobbyCreatePending = false;
@@ -4596,6 +4720,41 @@
     setCrazyGamesLoadingActive(true, "lobby-join");
     connectMultiplayer();
     flushLobbyRequests("join-lobby");
+  }
+
+  async function confirmLeaveCurrentRunForLobbyInvite(pending) {
+    if (!runState.active || deathState.active) {
+      return true;
+    }
+
+    const inviterName = pending && pending.fromName ? pending.fromName : "A player";
+    const shouldSave = window.confirm(inviterName + " invited you to a multiplayer lobby.\n\nSave your current game before leaving?");
+    if (shouldSave) {
+      maybeNotifyText("Saving current game...");
+      const saved = await saveManualGame();
+      if (saved) {
+        return true;
+      }
+      return window.confirm("Could not save your current game. Join the lobby without saving?");
+    }
+
+    return window.confirm("Leave your current game without saving and join the lobby?");
+  }
+
+  async function acceptLobbyInvite(pending) {
+    const code = pending && (pending.code || pending.lobbyId);
+    if (!code) {
+      setLobbyStatus("Lobby invite is missing a code.", "error");
+      maybeNotifyText("Lobby invite is unavailable.");
+      return;
+    }
+
+    if (!(await confirmLeaveCurrentRunForLobbyInvite(pending))) {
+      return;
+    }
+
+    hideSignalPrompt();
+    joinLobby(code);
   }
 
   function sanitizeLobbyCode(code) {
@@ -5085,6 +5244,7 @@
     multiplayer.v2.lastAckInputSeq = 0;
     multiplayer.v2.ignoreDeathEventsBeforeTick = 0;
     multiplayer.v2.visualBlend = null;
+    multiplayer.v2.pendingMergeVisuals = [];
     multiplayer.v2.eventKeys = new Map();
   }
 
@@ -5148,7 +5308,99 @@
       throttle: 0.09,
       volume: clamp(0.45 + Math.log2(mass) * 0.08, 0.45, 1.1)
     });
+    queueMultiplayerV2BodyMergeVisual(event, mass);
     maybeNotifyTier(tier, previousTier);
+  }
+
+  function multiplayerV2ParticleSnapshotById(world, id) {
+    const bodyId = Math.max(0, Math.floor(finiteOr(id, 0)));
+    if (!bodyId || !world || !Array.isArray(world.particles)) {
+      return null;
+    }
+    return world.particles.find((body) => body && body.id === bodyId) || null;
+  }
+
+  function pushMultiplayerV2EventSpark(event, options) {
+    const source = event && typeof event === "object" ? event : {};
+    const fallback = options && options.fallbackColor ? options.fallbackColor : { r: 114, g: 244, b: 255 };
+    sparks.push({
+      x: finiteOr(source.x, player.x),
+      y: finiteOr(source.y, player.y),
+      radius: Math.max(1, finiteOr(options && options.radius, 38)),
+      color: normalizeColorSnapshot(source.color, fallback),
+      life: Math.max(0.05, finiteOr(options && options.life, 0.26)),
+      maxLife: Math.max(0.05, finiteOr(options && options.maxLife, options && options.life ? options.life : 0.26))
+    });
+  }
+
+  function queueMultiplayerV2BodyMergeVisual(event, mass) {
+    const keptId = Math.max(0, Math.floor(finiteOr(event && event.keptId, 0)));
+    const removedId = Math.max(0, Math.floor(finiteOr(event && event.removedId, 0)));
+    const predictedWorld = multiplayer.v2.state && multiplayer.v2.state.world;
+    const authoritativeWorld = multiplayer.v2.authoritativeState && multiplayer.v2.authoritativeState.world;
+    const keptBody =
+      bodyById(keptId) ||
+      multiplayerV2ParticleSnapshotById(predictedWorld, keptId) ||
+      multiplayerV2ParticleSnapshotById(authoritativeWorld, keptId);
+    const removedBody =
+      bodyById(removedId) ||
+      multiplayerV2ParticleSnapshotById(predictedWorld, removedId) ||
+      multiplayerV2ParticleSnapshotById(authoritativeWorld, removedId);
+    const fallbackColor = normalizeColorSnapshot(
+      (keptBody && keptBody.color) || (event && event.color),
+      randomParticleColor()
+    );
+    const mergeX = finiteOr(event && event.x, keptBody ? keptBody.x : player.x);
+    const mergeY = finiteOr(event && event.y, keptBody ? keptBody.y : player.y);
+    const absorbedX = finiteOr(event && event.absorbedX, removedBody ? removedBody.x : mergeX);
+    const absorbedY = finiteOr(event && event.absorbedY, removedBody ? removedBody.y : mergeY);
+    const mergedRadius = Math.max(1, finiteOr(event && event.radius, keptBody ? keptBody.radius : radiusFromMass(mass)));
+    const absorbedRadius = Math.max(1, finiteOr(event && event.absorbedRadius, removedBody ? removedBody.radius : 1));
+    const color = normalizeColorSnapshot(
+      (event && event.absorbedColor) || (removedBody && removedBody.color) || (event && event.color),
+      fallbackColor
+    );
+    const visual = {
+      keptId,
+      x: absorbedX,
+      y: absorbedY,
+      radius: Math.max(42, Math.min(150, Math.max(mergedRadius * 1.8, absorbedRadius * 4.2))),
+      color,
+      life: 0.46,
+      maxLife: 0.46
+    };
+    sparks.push(visual);
+
+    const mergeDistance = Math.hypot(mergeX - absorbedX, mergeY - absorbedY);
+    if (mergeDistance > visual.radius * 0.45) {
+      sparks.push({
+        x: mergeX,
+        y: mergeY,
+        radius: Math.max(32, visual.radius * 0.62),
+        color,
+        life: 0.34,
+        maxLife: 0.34
+      });
+    }
+  }
+
+  function flushMultiplayerV2MergeVisuals() {
+    const visuals = multiplayer.v2.pendingMergeVisuals;
+    if (!Array.isArray(visuals) || !visuals.length) {
+      return;
+    }
+    for (const visual of visuals) {
+      const body = bodyById(visual.keptId);
+      sparks.push({
+        x: finiteOr(visual.x, body ? body.x : player.x),
+        y: finiteOr(visual.y, body ? body.y : player.y),
+        radius: Math.max(1, finiteOr(visual.radius, body ? body.radius * 1.8 : 28)),
+        color: normalizeColorSnapshot(visual.color, body && body.color ? body.color : randomParticleColor()),
+        life: Math.max(0.05, finiteOr(visual.life, 0.42)),
+        maxLife: Math.max(0.05, finiteOr(visual.maxLife, 0.42))
+      });
+    }
+    visuals.length = 0;
   }
 
   function scoreMultiplayerV2MobDefeat(event) {
@@ -5202,19 +5454,37 @@
       }
       if (event.type === "mob.hit") {
         playSound("mobHit", { throttleKey: "mpV2MobHit", throttle: 0.04 });
+        pushMultiplayerV2EventSpark(event, { radius: 38, life: 0.24, fallbackColor: { r: 255, g: 236, b: 194 } });
+      } else if (event.type === "mob.shielded") {
+        pushMultiplayerV2EventSpark(event, { radius: 48, life: 0.28, fallbackColor: { r: 119, g: 167, b: 255 } });
       } else if (event.type === "mob.defeated") {
         scoreMultiplayerV2MobDefeat(event);
         playSound("mobDestroyed", { throttleKey: "mpV2MobDestroyed", throttle: 0.08 });
+        pushMultiplayerV2EventSpark(event, { radius: 64, life: 0.36, fallbackColor: { r: 255, g: 236, b: 194 } });
       } else if (event.type === "player.shot") {
         playSound("laser", { throttleKey: "mpV2PlayerShot:" + String(event.projectileId || ""), throttle: 0.02 });
+      } else if (event.type === "projectile.blocked") {
+        pushMultiplayerV2EventSpark(event, { radius: 34, life: 0.22, fallbackColor: { r: 255, g: 115, b: 173 } });
+      } else if (event.type === "structure.shieldBlockedProjectile") {
+        pushMultiplayerV2EventSpark(event, { radius: 58, life: 0.28, fallbackColor: { r: 119, g: 167, b: 255 } });
       } else if (event.type === "player.hitByPlayerProjectile") {
         playSound("mobHit", { throttleKey: "mpV2PlayerProjectileHit", throttle: 0.06 });
+        pushMultiplayerV2EventSpark(event, { radius: 42, life: 0.28, fallbackColor: { r: 255, g: 115, b: 173 } });
+      } else if (event.type === "player.hitByMobProjectile" && String(event.playerId || "") === player.id) {
+        playSound("hit", { throttleKey: "mpV2PlayerProjectileHit", throttle: 0.06 });
+        pushMultiplayerV2EventSpark(event, { radius: 44, life: 0.34, fallbackColor: { r: 114, g: 244, b: 255 } });
       } else if (event.type === "body.merged") {
         processMultiplayerV2BodyMergeEvent(event);
-      } else if (event.type === "pickup.tech" && String(event.playerId || "") === player.id) {
-        playSound("pickupTech", { throttleKey: "mpV2PickupTech", throttle: 0.05 });
-      } else if (event.type === "pickup.health" && String(event.playerId || "") === player.id) {
-        playSound("pickupHealth", { throttleKey: "mpV2PickupHealth", throttle: 0.08 });
+      } else if (event.type === "pickup.tech") {
+        pushMultiplayerV2EventSpark(event, { radius: 42, life: 0.28, fallbackColor: hslToRgb(330, 0.88, 0.64) });
+        if (String(event.playerId || "") === player.id) {
+          playSound("pickupTech", { throttleKey: "mpV2PickupTech", throttle: 0.05 });
+        }
+      } else if (event.type === "pickup.health") {
+        pushMultiplayerV2EventSpark(event, { radius: 46, life: 0.26, fallbackColor: { r: 101, g: 245, b: 154 } });
+        if (String(event.playerId || "") === player.id) {
+          playSound("pickupHealth", { throttleKey: "mpV2PickupHealth", throttle: 0.08 });
+        }
       } else if (event.type === "player.died" && String(event.playerId || "") === player.id) {
         if (Math.floor(finiteOr(event.tick, 0)) <= Math.floor(finiteOr(multiplayer.v2.ignoreDeathEventsBeforeTick, 0))) {
           continue;
@@ -5489,6 +5759,7 @@
 
     const syncStart = performance.now();
     syncMultiplayerV2World(state.world);
+    flushMultiplayerV2MergeVisuals();
     updateLifeStats();
     syncMultiplayerV2RemotePlayers(state);
     updateMultiplayerV2Perf({
@@ -11081,9 +11352,10 @@
 
     if (pending.kind === "lobby") {
       if (choice === "investigate") {
-        joinLobby(pending.code || pending.lobbyId);
+        void acceptLobbyInvite(pending);
+      } else {
+        hideSignalPrompt();
       }
-      hideSignalPrompt();
       return;
     }
 
@@ -25868,8 +26140,28 @@
     return drawScreenDynamicLight(screen.x, screen.y, radius, dynamicLightTint(color, warmth), alpha, core);
   }
 
+  function localGadgetModeForRender() {
+    if (isMultiplayerV2Active()) {
+      return multiplayerLocalToolModeForInput(renderPerformance.lastFrameDt || 1 / 60);
+    }
+    if (!canUseSuctionControls()) {
+      return "idle";
+    }
+    if (mouse.middle) {
+      return "hold";
+    }
+    if (mouse.left) {
+      return "pull";
+    }
+    if (mouse.right) {
+      return "push";
+    }
+    return "idle";
+  }
+
   function localGadgetGatherState(aim) {
-    if (!aim || !canUseSuctionControls() || !mouse.left || mouse.middle) {
+    const mode = localGadgetModeForRender();
+    if (!aim || mode !== "pull") {
       return null;
     }
 
@@ -27085,12 +27377,13 @@
   }
 
   function drawGadgetField(aim) {
-    if (!canUseSuctionControls() || !isGadgetButtonPressed()) {
+    const mode = localGadgetModeForRender();
+    if (mode !== "pull" && mode !== "push" && mode !== "hold") {
       return;
     }
 
-    const holding = mouse.middle;
-    const pulling = mouse.left && !holding;
+    const holding = mode === "hold";
+    const pulling = mode === "pull";
     const centerX = width / 2;
     const centerY = height / 2;
     const mouthX = centerX + aim.local.x * funnelShape.rimX;
@@ -27596,8 +27889,9 @@
 
     const centerX = width / 2;
     const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
-    const active = canUseSuctionControls() && isGadgetButtonPressed();
-    const energyColor = mouse.middle ? "#8fffd0" : mouse.right ? "#ffb35c" : "#67edff";
+    const mode = localGadgetModeForRender();
+    const active = mode === "pull" || mode === "push" || mode === "hold";
+    const energyColor = mode === "hold" ? "#8fffd0" : mode === "push" ? "#ffb35c" : "#67edff";
 
     ctx.save();
     ctx.translate(centerX, centerY);
@@ -28492,6 +28786,21 @@
       },
       structures: {
         count: structures.length
+      },
+      effects: {
+        sparks: {
+          count: sparks.length,
+          latest: sparks.slice(-6).map(function (spark) {
+            return {
+              x: spark.x,
+              y: spark.y,
+              radius: spark.radius,
+              color: spark.color,
+              life: spark.life,
+              maxLife: spark.maxLife
+            };
+          })
+        }
       },
       mobs: Object.assign({
         total: mobCount
