@@ -6,7 +6,9 @@
     "build": "node scripts/build-platforms.js all",
     "build:render": "node scripts/build-platforms.js render",
     "build:crazygames": "node scripts/build-platforms.js crazygames",
+    "build:itch": "node scripts/build-platforms.js itch",
     "package:crazygames": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-crazygames.ps1",
+    "package:itch": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-itch.ps1",
     "start": "node server.js",
     "test:menu:lobby": "node tests/menu-lobby-contract.test.js",
     "test:multiplayer:death-respawn": "node tests/multiplayer-death-respawn.test.js",
@@ -18,6 +20,7 @@
     "test:crazygames:data": "node tests/crazygames-data-module.test.js",
     "test:crazygames:sdk": "node tests/crazygames-sdk-integration.test.js",
     "test:crazygames:package": "node tests/crazygames-package-smoke.test.js",
+    "test:itch:package": "node tests/itch-package-smoke.test.js",
     "test:physics:framerate": "node tests/crazygames-framerate-consistency.test.js"
   },
   "dependencies": {

@@ -310,7 +310,7 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-  if (url.pathname === "/auth/login" || url.pathname === "/auth/launch/callback") {
+  if (url.pathname === "/auth/login" || url.pathname === "/auth/launch/callback" || url.pathname === "/auth/portal-login-complete") {
     void handleWaiAuthRoute(request, response, url);
     return;
   }
@@ -392,6 +392,11 @@ async function handleWaiAuthRoute(request, response, url) {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/auth/portal-login-complete") {
+      writePortalLoginCompletePage(response);
+      return;
+    }
+
     writeJson(response, 405, { ok: false, message: "Method not allowed." });
   } catch (error) {
     logClusternautsError("wai auth route error", {
@@ -412,6 +417,44 @@ function redirectToWaiLogin(request, response, returnTo) {
   });
   response.writeHead(302, { Location: `${websiteUrl}/auth/app-launch?${params.toString()}` });
   response.end();
+}
+
+function writePortalLoginCompletePage(response) {
+  response.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff"
+  });
+  response.end(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Clusternauts Login Complete</title>
+  </head>
+  <body>
+    <p>Login complete. You can close this window.</p>
+    <script>
+      (function () {
+        var message = { type: "clusternauts:wai-login-complete" };
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(message, "*");
+          }
+        } catch (error) {}
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(message, "*");
+          }
+        } catch (error) {}
+        window.setTimeout(function () {
+          try {
+            window.close();
+          } catch (error) {}
+        }, 250);
+      }());
+    </script>
+  </body>
+</html>`);
 }
 
 async function handleWaiLaunchCallback(request, response, url) {
@@ -3183,6 +3226,7 @@ function applyCorsHeaders(request, response) {
   response.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Ngrok-Skip-Browser-Warning");
+  response.setHeader("Access-Control-Allow-Credentials", "true");
   response.setHeader("Access-Control-Max-Age", "600");
   response.setHeader("Vary", "Origin");
 }
@@ -3198,7 +3242,7 @@ function allowedCorsOrigin(origin) {
     if (parsedOrigin.protocol !== "https:") {
       return "";
     }
-    return isCrazyGamesHostName(hostName) ? origin : "";
+    return isCrazyGamesHostName(hostName) || isItchHostName(hostName) ? origin : "";
   } catch {
     return "";
   }
@@ -3215,6 +3259,16 @@ function isCrazyGamesHostName(hostName) {
   return (
     host === "crazygamesgame.com" ||
     host.endsWith(".crazygamesgame.com")
+  );
+}
+
+function isItchHostName(hostName) {
+  const host = String(hostName || "").toLowerCase().replace(/\.$/, "");
+  return (
+    host === "itch.io" ||
+    host.endsWith(".itch.io") ||
+    host === "itch.zone" ||
+    host.endsWith(".itch.zone")
   );
 }
 
@@ -3260,13 +3314,17 @@ function parseCookies(header) {
 }
 
 function buildAccountSessionCookie(request, token) {
-  const secure = requestOrigin(request).startsWith("https://") ? "; Secure" : "";
-  return `${accountSessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(sessionLifetimeMs / 1000)}${secure}`;
+  const secureRequest = requestOrigin(request).startsWith("https://");
+  const secure = secureRequest ? "; Secure" : "";
+  const sameSite = secureRequest ? "None" : "Lax";
+  return `${accountSessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${Math.floor(sessionLifetimeMs / 1000)}${secure}`;
 }
 
 function clearAccountSessionCookie(request) {
-  const secure = requestOrigin(request).startsWith("https://") ? "; Secure" : "";
-  return `${accountSessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
+  const secureRequest = requestOrigin(request).startsWith("https://");
+  const secure = secureRequest ? "; Secure" : "";
+  const sameSite = secureRequest ? "None" : "Lax";
+  return `${accountSessionCookie}=; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=0${secure}`;
 }
 
 function throwHttpError(status, message) {

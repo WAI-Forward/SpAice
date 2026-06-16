@@ -367,6 +367,17 @@
     return value;
   }
 
+  function backendRouteUrl(url) {
+    const value = String(url || "");
+    if (/^https?:\/\//i.test(value)) {
+      return value;
+    }
+    if (shouldUseExternalBackend()) {
+      return backendOrigin() + value;
+    }
+    return value;
+  }
+
   function websocketUrl() {
     if (shouldUseExternalBackend()) {
       return backendOrigin().replace(/^https:/, "wss:").replace(/^http:/, "ws:") + "/ws";
@@ -400,6 +411,9 @@
       headers[ngrokSkipBrowserWarningHeader] = "1";
     }
     requestOptions.headers = headers;
+    if (shouldUseExternalBackend()) {
+      requestOptions.credentials = "include";
+    }
     return requestOptions;
   }
 
@@ -493,6 +507,15 @@
 
   function isCrazyGamesRuntime() {
     return Boolean(window.CLUSTERNAUTS_CRAZYGAMES_BUILD) || isCrazyGamesHost(window.location.hostname) || crazyGamesSdkEnvironment() === "crazygames";
+  }
+
+  function isItchRuntime() {
+    return Boolean(window.CLUSTERNAUTS_ITCH_BUILD) || isItchHost(window.location.hostname);
+  }
+
+  function isItchHost(hostName) {
+    const host = String(hostName || "").toLowerCase().replace(/\.$/, "");
+    return host === "itch.io" || host.endsWith(".itch.io") || host === "itch.zone" || host.endsWith(".itch.zone");
   }
 
   function readSearchParam(name) {
@@ -6869,7 +6892,12 @@
     loginLink.className = "start-menu__account-login";
     loginLink.href = waiLoginUrl();
     loginLink.textContent = "login";
-    loginLink.addEventListener("click", function () {
+    loginLink.addEventListener("click", function (event) {
+      if (isPortalBackendRuntime()) {
+        event.preventDefault();
+        openWaiLogin();
+        return;
+      }
       setManualSaveStatus("Opening login...", "success");
     });
     startMenuAccountName.append(loginLink, document.createTextNode(" to save"));
@@ -7881,13 +7909,68 @@
       return;
     }
 
-    setManualSaveStatus("Opening login...", "success");
-    window.location.href = waiLoginUrl();
+    openWaiLogin();
   }
 
   function waiLoginUrl() {
-    const returnTo = `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`;
-    return `/auth/login?return_to=${encodeURIComponent(returnTo)}`;
+    const returnTo = isPortalBackendRuntime()
+      ? "/auth/portal-login-complete"
+      : `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`;
+    return backendRouteUrl(`/auth/login?return_to=${encodeURIComponent(returnTo)}`);
+  }
+
+  function openWaiLogin() {
+    const loginUrl = waiLoginUrl();
+    setManualSaveStatus("Opening login...", "success");
+
+    if (!isPortalBackendRuntime()) {
+      window.location.href = loginUrl;
+      return;
+    }
+
+    const popup = window.open(loginUrl, "clusternauts-wai-login", "popup,width=520,height=760");
+    if (popup) {
+      setManualSaveStatus("Finish login in the WAi Forward window.", "success");
+      return;
+    }
+
+    setManualSaveStatus("Allow popups or open the login link in a new tab.", "error");
+  }
+
+  function installAccountLoginMessageListener() {
+    if (!isPortalBackendRuntime()) {
+      return;
+    }
+
+    window.addEventListener("message", function (event) {
+      if (!isTrustedBackendMessageOrigin(event.origin)) {
+        return;
+      }
+      const data = event.data && typeof event.data === "object" ? event.data : {};
+      if (data.type !== "clusternauts:wai-login-complete") {
+        return;
+      }
+      setManualSaveStatus("Login complete. Loading saves...", "success");
+      void bootstrapAccountSession();
+    });
+
+    window.addEventListener("focus", function () {
+      if (!isAccountSignedIn() && !accountState.sessionLoading) {
+        void bootstrapAccountSession();
+      }
+    });
+  }
+
+  function isPortalBackendRuntime() {
+    return isItchRuntime() && shouldUseExternalBackend();
+  }
+
+  function isTrustedBackendMessageOrigin(origin) {
+    try {
+      return new URL(origin).origin === new URL(backendOrigin()).origin;
+    } catch {
+      return false;
+    }
   }
 
   async function logoutAccount() {
@@ -29421,6 +29504,7 @@
   }
 
   installClusternautsTestHarness();
+  installAccountLoginMessageListener();
 
   window.addEventListener("resize", function () {
     resize();
