@@ -48,6 +48,25 @@
           <strong>Leaderboard</strong>
           <span>Score</span>
         </div>
+        <div class="leaderboard-filters" aria-label="Leaderboard filters">
+          <label>
+            <span>Mode</span>
+            <select id="leaderboardModeFilter">
+              <option value="all">All</option>
+              <option value="singleplayer">Singleplayer</option>
+              <option value="multiplayer">Multiplayer</option>
+            </select>
+          </label>
+          <label>
+            <span>Difficulty</span>
+            <select id="leaderboardDifficultyFilter">
+              <option value="all">All</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+        </div>
         <div class="leaderboard-panel__list" id="leaderboardList"></div>
       </section>
     </div>
@@ -329,6 +348,7 @@
           <div class="start-menu__actions">
             <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single">Single Player</button>
             <button class="start-menu__button" type="button" data-menu-action="multiplayer">Multiplayer</button>
+            <button class="start-menu__button" type="button" data-menu-action="leaderboard">Leaderboard</button>
             <button class="start-menu__button" type="button" data-menu-action="settings">Settings</button>
           </div>
         </div>
@@ -404,6 +424,35 @@
               <button class="start-menu__button" id="leaveLobbyButton" type="button" data-menu-action="leave-lobby">Leave</button>
             </div>
             <p class="settings-panel__save-status" id="lobbyStatus" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="leaderboard">
+          <div class="start-menu__leaderboard">
+            <div class="leaderboard-panel__header">
+              <strong>Top Runs</strong>
+              <span>Score</span>
+            </div>
+            <div class="leaderboard-filters" aria-label="Leaderboard filters">
+              <label>
+                <span>Mode</span>
+                <select id="menuLeaderboardModeFilter">
+                  <option value="all">All</option>
+                  <option value="singleplayer">Singleplayer</option>
+                  <option value="multiplayer">Multiplayer</option>
+                </select>
+              </label>
+              <label>
+                <span>Difficulty</span>
+                <select id="menuLeaderboardDifficultyFilter">
+                  <option value="all">All</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </label>
+            </div>
+            <div class="leaderboard-panel__list" id="menuLeaderboardList" aria-label="Leaderboard entries"></div>
           </div>
         </div>
 

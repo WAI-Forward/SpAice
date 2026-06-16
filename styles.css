@@ -390,7 +390,7 @@ select {
   width: min(420px, calc(100vw - 32px));
   max-height: min(420px, calc(100vh - 88px));
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   gap: 8px;
   padding: 10px;
   opacity: 0;
@@ -431,6 +431,40 @@ select {
 .leaderboard-panel__header strong {
   color: #f8fbff;
   font-size: 13px;
+}
+
+.leaderboard-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.leaderboard-filters label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.leaderboard-filters span {
+  color: rgba(232, 241, 255, 0.62);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.leaderboard-filters select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 28px 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fbff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .leaderboard-panel__list {
@@ -1784,6 +1818,16 @@ select {
   min-width: 0;
 }
 
+.settings-panel__save-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-panel__save-actions .settings-panel__save-action {
+  min-width: 74px;
+}
+
 .settings-panel__save-item strong,
 .settings-panel__save-item span {
   min-width: 0;
@@ -2652,6 +2696,25 @@ select {
   width: min(460px, 100%);
 }
 
+.start-menu__leaderboard {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+  width: min(460px, 100%);
+  max-height: clamp(180px, calc((100vh - 320px) / var(--ui-scale)), 360px);
+  max-height: clamp(180px, calc((100dvh - 320px) / var(--ui-scale)), 360px);
+  margin: 0 auto;
+  text-align: left;
+}
+
+.start-menu__leaderboard .leaderboard-panel__header {
+  padding: 0 8px 4px;
+}
+
+.start-menu__leaderboard .leaderboard-panel__list {
+  min-height: 172px;
+}
+
 .start-menu__button {
   min-height: 54px;
   padding: 0 18px;
@@ -2740,6 +2803,12 @@ select {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
+}
+
+.start-menu__row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .start-menu__row strong,
@@ -3609,6 +3678,19 @@ select {
   .lobby-panel__invite input {
     min-height: 46px;
     font-size: 14px;
+  }
+
+  .start-menu__row {
+    grid-template-columns: 1fr;
+  }
+
+  .start-menu__row-actions {
+    justify-content: stretch;
+  }
+
+  .start-menu__row-actions .settings-panel__save-action {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .lobby-panel__difficulty,

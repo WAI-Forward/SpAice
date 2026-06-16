@@ -656,6 +656,21 @@ async function handleAccountSaveRequest(request, response, url) {
       return;
     }
 
+    if (request.method === "DELETE" && saveId) {
+      const deleted = await deleteAccountSave(session.account.username, saveId);
+      if (!deleted) {
+        writeJson(response, 404, { ok: false, message: "Save not found." });
+        return;
+      }
+
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        saves: await listAccountSaves(session.account.username)
+      });
+      return;
+    }
+
     writeJson(response, 404, { ok: false, message: "Save endpoint not found." });
   } catch (error) {
     const status = error && Number.isFinite(error.status) ? error.status : 500;
@@ -731,10 +746,14 @@ async function handleLeaderboardRequest(request, response, url) {
   try {
     if (request.method === "GET" && url.pathname === "/api/leaderboard") {
       const limit = Math.floor(clampNumber(url.searchParams.get("limit"), 1, 100) || 40);
+      const filters = {
+        mode: normalizeLeaderboardModeFilter(url.searchParams.get("mode")),
+        difficulty: normalizeLeaderboardDifficultyFilter(url.searchParams.get("difficulty"))
+      };
       writeJson(response, 200, {
         ok: true,
         serverTime: Date.now(),
-        entries: await listLeaderboardEntries(limit)
+        entries: await listLeaderboardEntries(limit, filters)
       });
       return;
     }
@@ -746,7 +765,10 @@ async function handleLeaderboardRequest(request, response, url) {
         ok: true,
         serverTime: Date.now(),
         entry,
-        entries: await listLeaderboardEntries(40)
+        entries: await listLeaderboardEntries(40, {
+          mode: "all",
+          difficulty: "all"
+        })
       });
       return;
     }
@@ -1223,24 +1245,38 @@ async function savePersistentState(playerId, body) {
   };
 }
 
-async function listLeaderboardEntries(limit) {
+async function listLeaderboardEntries(limit, filters) {
   const maxEntries = Math.floor(clampNumber(limit, 1, 100) || 40);
+  const cleanFilters = normalizeLeaderboardFilters(filters);
   const pool = await getDbPool();
 
   if (!pool) {
     return memoryPersistence.leaderboard
       .map((entry) => normalizeLeaderboardEntry(entry))
+      .filter((entry) => leaderboardEntryMatchesFilters(entry, cleanFilters))
       .sort(compareLeaderboardEntries)
       .slice(0, maxEntries);
   }
 
   await ensureDatabaseSchema(pool);
+  const clauses = [];
+  const params = [];
+  if (cleanFilters.mode !== "all") {
+    params.push(cleanFilters.mode);
+    clauses.push(`COALESCE(state->>'mode', 'singleplayer') = $${params.length}`);
+  }
+  if (cleanFilters.difficulty !== "all") {
+    params.push(cleanFilters.difficulty);
+    clauses.push(`COALESCE(state->>'difficulty', 'medium') = $${params.length}`);
+  }
+  params.push(maxEntries);
   const result = await pool.query(
     `SELECT state
      FROM clusternauts_leaderboard_entry
+     ${clauses.length ? "WHERE " + clauses.join(" AND ") : ""}
      ORDER BY score DESC, created_at ASC
-     LIMIT $1`,
-    [maxEntries]
+     LIMIT $${params.length}`,
+    params
   );
   return result.rows.map((row) => normalizeLeaderboardEntry(row.state)).filter(Boolean);
 }
@@ -1656,6 +1692,27 @@ async function getAccountSave(username, saveId) {
   return normalizeAccountSave(result.rows[0] && result.rows[0].state);
 }
 
+async function deleteAccountSave(username, saveId) {
+  const cleanUsername = sanitizeAccountUsername(username);
+  const cleanSaveId = sanitizeText(saveId, 80);
+  if (!cleanUsername || !cleanSaveId) {
+    return false;
+  }
+
+  const pool = await getDbPool();
+  if (!pool) {
+    const saves = memoryPersistence.accountSaves.get(cleanUsername);
+    return Boolean(saves && saves.delete(cleanSaveId));
+  }
+
+  await ensureDatabaseSchema(pool);
+  const result = await pool.query("DELETE FROM clusternauts_account_save WHERE id = $1 AND username = $2", [
+    cleanSaveId,
+    cleanUsername
+  ]);
+  return result.rowCount > 0;
+}
+
 function normalizeAccount(source) {
   if (!source || typeof source !== "object") {
     return null;
@@ -1838,8 +1895,9 @@ function normalizeLeaderboardEntry(source) {
     id: sanitizeText(snapshot.id, 80) || createLeaderboardEntryId(),
     playerId,
     name: sanitizeText(snapshot.name ?? stats.name, 32) || (playerId ? `Player ${playerId.slice(-4).toUpperCase()}` : "Player"),
+    mode: normalizeLeaderboardMode(snapshot.mode ?? stats.mode),
     score,
-    difficulty: sanitizeText(snapshot.difficulty ?? stats.difficulty, 16) || "medium",
+    difficulty: normalizeLeaderboardDifficulty(snapshot.difficulty ?? stats.difficulty),
     bodyScore: Math.max(0, Math.round(clampNumber(snapshot.bodyScore ?? stats.bodyScore, 0, 1000000000))),
     mobScore: Math.max(0, Math.round(clampNumber(snapshot.mobScore ?? stats.mobScore, 0, 1000000000))),
     ownedMass: Math.max(0, Math.round(clampNumber(snapshot.ownedMass ?? stats.ownedMass, 0, 1000000000))),
@@ -1850,6 +1908,45 @@ function normalizeLeaderboardEntry(source) {
     cause: sanitizeText(snapshot.cause ?? stats.cause, 80) || "Unknown impact",
     createdAt
   };
+}
+
+function normalizeLeaderboardMode(mode) {
+  const value = sanitizeText(mode, 32).toLowerCase();
+  return value === "multiplayer" ? "multiplayer" : "singleplayer";
+}
+
+function normalizeLeaderboardModeFilter(mode) {
+  const value = sanitizeText(mode, 32).toLowerCase();
+  return value === "singleplayer" || value === "multiplayer" ? value : "all";
+}
+
+function normalizeLeaderboardDifficulty(difficulty) {
+  const value = sanitizeText(difficulty, 32).toLowerCase();
+  return difficultyChoices.has(value) ? value : "medium";
+}
+
+function normalizeLeaderboardDifficultyFilter(difficulty) {
+  const value = sanitizeText(difficulty, 32).toLowerCase();
+  return difficultyChoices.has(value) ? value : "all";
+}
+
+function normalizeLeaderboardFilters(filters) {
+  const source = filters && typeof filters === "object" ? filters : {};
+  return {
+    mode: normalizeLeaderboardModeFilter(source.mode),
+    difficulty: normalizeLeaderboardDifficultyFilter(source.difficulty)
+  };
+}
+
+function leaderboardEntryMatchesFilters(entry, filters) {
+  const cleanFilters = normalizeLeaderboardFilters(filters);
+  if (cleanFilters.mode !== "all" && normalizeLeaderboardMode(entry && entry.mode) !== cleanFilters.mode) {
+    return false;
+  }
+  if (cleanFilters.difficulty !== "all" && sanitizeText(entry && entry.difficulty, 16).toLowerCase() !== cleanFilters.difficulty) {
+    return false;
+  }
+  return true;
 }
 
 function compareLeaderboardEntries(a, b) {
@@ -3638,6 +3735,11 @@ async function handleSocketMessage(client, message) {
     return;
   }
 
+  if (message.type === "party.health.pickup") {
+    handlePartyHealthPickup(client, message);
+    return;
+  }
+
   if (message.type === "party.command") {
     handlePartyCommand(client, message);
     return;
@@ -4939,6 +5041,33 @@ function handlePartyTechPickup(client, message) {
     type: "party.tech.claimed",
     pickupId,
     key,
+    claimedByPlayerId: client.playerId,
+    claimedByName: client.profile ? client.profile.publicName : client.playerId,
+    x: clampNumber(message.x, -1000000, 1000000),
+    y: clampNumber(message.y, -1000000, 1000000)
+  });
+}
+
+function handlePartyHealthPickup(client, message) {
+  const session = partySessions.get(client.partySessionId);
+  if (!session || !session.players.includes(client.playerId)) {
+    return;
+  }
+
+  if (!session.claimedHealthPickupIds) {
+    session.claimedHealthPickupIds = new Set();
+  }
+
+  const pickupId = sanitizeText(String(message.pickupId || ""), 80);
+  if (!pickupId || session.claimedHealthPickupIds.has(pickupId)) {
+    return;
+  }
+
+  session.claimedHealthPickupIds.add(pickupId);
+  relayToParty(session, {
+    type: "party.health.claimed",
+    pickupId,
+    heal: clampNumber(message.heal, 1, 100),
     claimedByPlayerId: client.playerId,
     claimedByName: client.profile ? client.profile.publicName : client.playerId,
     x: clampNumber(message.x, -1000000, 1000000),

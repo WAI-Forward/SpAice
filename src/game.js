@@ -19,6 +19,8 @@
   const leaderboardToggle = document.getElementById("leaderboardToggle");
   const leaderboardPanel = document.getElementById("leaderboardPanel");
   const leaderboardList = document.getElementById("leaderboardList");
+  const leaderboardModeFilter = document.getElementById("leaderboardModeFilter");
+  const leaderboardDifficultyFilter = document.getElementById("leaderboardDifficultyFilter");
   const vitalsToggle = document.getElementById("vitalsToggle");
   const resourcesToggle = document.getElementById("resourcesToggle");
   const buildToggle = document.getElementById("buildToggle");
@@ -107,6 +109,9 @@
   const startMenuAccount = document.getElementById("startMenuAccount");
   const startMenuAccountLabel = document.getElementById("startMenuAccountLabel");
   const startMenuAccountName = document.getElementById("startMenuAccountName");
+  const menuLeaderboardList = document.getElementById("menuLeaderboardList");
+  const menuLeaderboardModeFilter = document.getElementById("menuLeaderboardModeFilter");
+  const menuLeaderboardDifficultyFilter = document.getElementById("menuLeaderboardDifficultyFilter");
   const startSavedGameList = document.getElementById("startSavedGameList");
   const lobbyCodeInput = document.getElementById("lobbyCodeInput");
   const joinLobbyButton = document.getElementById("joinLobbyButton");
@@ -1038,6 +1043,7 @@
       difficulty: ["New Game", "Choose Difficulty"],
       multiplayer: ["Multiplayer", "Party Setup"],
       lobby: ["Multiplayer", "Lobby"],
+      leaderboard: ["Leaderboard", "Top Runs"],
       settings: ["Settings", "Settings"]
     }
   };
@@ -1058,7 +1064,11 @@
     submitInFlight: false,
     lastRefreshAt: 0,
     statusMessage: "",
-    submittedDeathKey: ""
+    submittedDeathKey: "",
+    filters: {
+      mode: "all",
+      difficulty: "all"
+    }
   };
   const multiplayerSnapshotInterval = 0.25;
   const partyInputInterval = 0.05;
@@ -1674,6 +1684,7 @@
   }
 
   function updateTouchScreenUi() {
+    const touchControlsVisible = canShowTouchControls();
     if (touchScreenInput) {
       touchScreenInput.checked = Boolean(gameSettings.touchScreen);
     }
@@ -1681,13 +1692,30 @@
       menuTouchScreenInput.checked = Boolean(gameSettings.touchScreen);
     }
     if (touchJoystick) {
-      touchJoystick.classList.toggle("is-enabled", Boolean(gameSettings.touchScreen));
-      touchJoystick.setAttribute("aria-hidden", gameSettings.touchScreen ? "false" : "true");
+      touchJoystick.classList.toggle("is-enabled", touchControlsVisible);
+      touchJoystick.setAttribute("aria-hidden", touchControlsVisible ? "false" : "true");
     }
     if (touchFireJoystick) {
-      touchFireJoystick.classList.toggle("is-enabled", Boolean(gameSettings.touchScreen));
-      touchFireJoystick.setAttribute("aria-hidden", gameSettings.touchScreen ? "false" : "true");
+      touchFireJoystick.classList.toggle("is-enabled", touchControlsVisible);
+      touchFireJoystick.setAttribute("aria-hidden", touchControlsVisible ? "false" : "true");
     }
+  }
+
+  function canShowTouchControls() {
+    return Boolean(
+      gameSettings.touchScreen &&
+      runState.active &&
+      !deathState.active &&
+      !gamePaused &&
+      !settingsOpen &&
+      !buildMenuOpen &&
+      !leaderboard.open &&
+      !multiplayer.panelOpen &&
+      !multiplayer.commandOpen &&
+      !multiplayer.interactionMenu &&
+      !multiplayer.trade &&
+      !isDifficultyScreenOpen()
+    );
   }
 
   function updateHudEnabledUi() {
@@ -3938,6 +3966,7 @@
     }
     updateToolHotbar();
     updateHudEnabledUi();
+    updateTouchScreenUi();
   }
 
   function serializeTechInventory() {
@@ -4047,8 +4076,10 @@
       difficultyScreen.setAttribute("aria-hidden", open ? "false" : "true");
     }
     if (open) {
+      resetMouseButtons();
       renderStartMenu();
     }
+    updateTouchScreenUi();
     updateCrazyGamesGameplayState(open ? "difficulty-screen-open" : "difficulty-screen-closed");
   }
 
@@ -4061,6 +4092,7 @@
     if (!gamePaused) {
       resetFrameClock();
     }
+    updateTouchScreenUi();
     updateCrazyGamesGameplayState(gamePaused ? "pause" : "resume");
   }
 
@@ -4098,6 +4130,10 @@
     if (nextView === "lobby") {
       renderLobby();
       void refreshLobbyPlayerSearch();
+    }
+    if (nextView === "leaderboard") {
+      renderLeaderboard();
+      void refreshLeaderboard(false);
     }
   }
 
@@ -4137,6 +4173,9 @@
     syncMenuSettingsControls();
     renderStartSavedGames();
     renderLobby();
+    if (startMenu.view === "leaderboard") {
+      renderLeaderboard();
+    }
   }
 
   function syncMenuSettingsControls() {
@@ -4187,29 +4226,47 @@
     }
 
     for (const save of accountState.saves) {
-      const row = createStartMenuRow(save.name || "Saved world", lobbySaveMode ? "Use" : "Load", lobbySaveMode ? "load-lobby-save" : "load-save");
-      const button = row.querySelector("button");
-      if (button) {
-        button.dataset.saveId = save.id || "";
-      }
+      const row = createStartMenuRow(save.name || "Saved world", lobbySaveMode ? "Use" : "Load", lobbySaveMode ? "load-lobby-save" : "load-save", {
+        saveId: save.id || "",
+        canDelete: true
+      });
       startSavedGameList.append(row);
     }
   }
 
-  function createStartMenuRow(label, actionLabel, action) {
+  function createStartMenuRow(label, actionLabel, action, options) {
     const row = document.createElement("div");
     const details = document.createElement("div");
     const name = document.createElement("strong");
+    const actions = document.createElement("div");
     const button = document.createElement("button");
+    const settings = options && typeof options === "object" ? options : {};
 
     row.className = "start-menu__row";
+    actions.className = "start-menu__row-actions";
     name.textContent = label;
     button.className = "settings-panel__save-action";
     button.type = "button";
     button.dataset.menuAction = action;
+    if (settings.saveId) {
+      button.dataset.saveId = settings.saveId;
+    }
+    button.disabled = accountState.busy;
     button.textContent = actionLabel;
+    actions.append(button);
+    if (settings.canDelete && settings.saveId) {
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "settings-panel__save-action settings-panel__save-action--danger";
+      deleteButton.type = "button";
+      deleteButton.dataset.menuAction = "delete-save";
+      deleteButton.dataset.saveId = settings.saveId;
+      deleteButton.disabled = accountState.busy;
+      deleteButton.textContent = "Delete";
+      deleteButton.setAttribute("aria-label", 'Delete "' + label + '"');
+      actions.append(deleteButton);
+    }
     details.append(name);
-    row.append(details, button);
+    row.append(details, actions);
     return row;
   }
 
@@ -4242,6 +4299,10 @@
       void loadLobbySave(sourceElement && sourceElement.dataset.saveId);
       return;
     }
+    if (action === "delete-save") {
+      void deleteManualGame(sourceElement && sourceElement.dataset.saveId);
+      return;
+    }
     if (action === "load-lobby-guest") {
       void loadLobbyGuestProgress();
       return;
@@ -4252,6 +4313,10 @@
     }
     if (action === "multiplayer") {
       setStartMenuView("multiplayer");
+      return;
+    }
+    if (action === "leaderboard") {
+      setStartMenuView("leaderboard");
       return;
     }
     if (action === "multiplayer-load-game") {
@@ -6291,7 +6356,7 @@
       startMenuAccountLabel.textContent = signedIn
         ? "Signed in as"
         : accountState.sessionLoading
-        ? "WAi Forward account"
+        ? accountSessionLoadingLabel()
         : "Not signed in";
     }
     if (startMenuAccountName) {
@@ -6311,6 +6376,10 @@
     updateRestartGameUi();
 
     renderSavedGames();
+  }
+
+  function accountSessionLoadingLabel() {
+    return "WAi Forward account";
   }
 
   function renderStartMenuAccountName(signedIn) {
@@ -7185,21 +7254,32 @@
       const details = document.createElement("div");
       const name = document.createElement("strong");
       const meta = document.createElement("span");
+      const actions = document.createElement("div");
       const button = document.createElement("button");
+      const deleteButton = document.createElement("button");
       row.className = "settings-panel__save-item";
       row.classList.toggle("is-current", isCurrentSave);
       details.className = "settings-panel__save-details";
+      actions.className = "settings-panel__save-actions";
       name.textContent = save.name || "Saved world";
       meta.textContent = isCurrentSave ? "Current save" : "";
       button.className = "settings-panel__save-action";
       button.type = "button";
       button.dataset.saveId = save.id || "";
+      button.disabled = accountState.busy;
       button.textContent = isCurrentSave ? "Reload" : "Load";
+      deleteButton.className = "settings-panel__save-action settings-panel__save-action--danger";
+      deleteButton.type = "button";
+      deleteButton.dataset.saveDeleteId = save.id || "";
+      deleteButton.disabled = accountState.busy;
+      deleteButton.textContent = "Delete";
+      deleteButton.setAttribute("aria-label", 'Delete "' + (save.name || "Saved world") + '"');
       details.append(name);
       if (meta.textContent) {
         details.append(meta);
       }
-      row.append(details, button);
+      actions.append(button, deleteButton);
+      row.append(details, actions);
       savedGameList.append(row);
     }
     renderStartSavedGames();
@@ -7632,6 +7712,48 @@
     }
   }
 
+  async function deleteManualGame(saveId) {
+    const cleanSaveId = String(saveId || "").trim();
+    if (!isAccountSignedIn()) {
+      setManualSaveStatus("Log in to delete saved games.", "error");
+      return;
+    }
+    if (!cleanSaveId) {
+      setManualSaveStatus("Choose a saved game to delete.", "error");
+      return;
+    }
+    if (accountState.busy) {
+      return;
+    }
+
+    const save = accountState.saves.find((entry) => entry && entry.id === cleanSaveId);
+    const saveName = save && save.name ? save.name : "this save";
+    if (!window.confirm('Delete "' + saveName + '"? This cannot be undone.')) {
+      return;
+    }
+
+    setAccountBusy(true);
+    try {
+      const data = await fetchPersistentJson("/api/saves/" + encodeURIComponent(cleanSaveId), {
+        method: "DELETE",
+        headers: accountAuthHeaders()
+      });
+      accountState.saves = Array.isArray(data.saves) ? data.saves : accountState.saves.filter((entry) => entry && entry.id !== cleanSaveId);
+      const currentSave = currentAccountSave();
+      if (currentSave && currentSave.id === cleanSaveId) {
+        clearCurrentAccountSave();
+      }
+      renderSavedGames();
+      setManualSaveStatus('Deleted "' + saveName + '".', "success");
+      maybeNotifyText('Deleted "' + saveName + '".');
+    } catch (error) {
+      console.warn("Clusternauts manual delete failed.", error);
+      setManualSaveStatus(backendErrorMessage(error, "Could not delete this save."), "error");
+    } finally {
+      setAccountBusy(false);
+    }
+  }
+
   function resetLocalPlayerState() {
     cancelStructurePlacement();
     hideSignalPrompt();
@@ -7827,7 +7949,15 @@
 
     leaderboard.refreshInFlight = true;
     try {
-      const data = await fetchPersistentJson("/api/leaderboard?limit=40");
+      const params = new URLSearchParams({ limit: "40" });
+      const filters = leaderboard.filters || {};
+      if (filters.mode && filters.mode !== "all") {
+        params.set("mode", filters.mode);
+      }
+      if (filters.difficulty && filters.difficulty !== "all") {
+        params.set("difficulty", filters.difficulty);
+      }
+      const data = await fetchPersistentJson("/api/leaderboard?" + params.toString());
       leaderboard.entries = Array.isArray(data.entries) ? data.entries.map(normalizeLeaderboardEntry).filter(Boolean) : [];
       leaderboard.lastRefreshAt = now;
       leaderboard.statusMessage = "";
@@ -7851,7 +7981,8 @@
     }
 
     const score = Math.max(1, Math.round(finiteOr(stats.score, stats.maxMass || 1)));
-    const deathKey = [player.id, score, stats.survived, stats.cause, Math.floor(lifeStats.startedAt)].join("|");
+    const mode = isPartySessionActive() ? "multiplayer" : "singleplayer";
+    const deathKey = [player.id, mode, score, stats.survived, stats.cause, Math.floor(lifeStats.startedAt)].join("|");
     if (leaderboard.submittedDeathKey === deathKey) {
       return true;
     }
@@ -7866,6 +7997,7 @@
         body: JSON.stringify({
           playerId: player.id,
           name: cleanName,
+          mode,
           score,
           difficulty: stats.difficulty,
           bodyScore: stats.bodyScore,
@@ -7881,6 +8013,9 @@
       leaderboard.entries = Array.isArray(data.entries) ? data.entries.map(normalizeLeaderboardEntry).filter(Boolean) : leaderboard.entries;
       leaderboard.lastRefreshAt = performance.now();
       leaderboard.statusMessage = "";
+      if (leaderboard.filters && (leaderboard.filters.mode !== "all" || leaderboard.filters.difficulty !== "all")) {
+        void refreshLeaderboard(true);
+      }
       if (leaderboard.open) {
         renderLeaderboard();
       }
@@ -8023,6 +8158,10 @@
 
     deathScreen.classList.toggle("is-open", Boolean(open));
     deathScreen.setAttribute("aria-hidden", open ? "false" : "true");
+    if (open) {
+      resetMouseButtons();
+    }
+    updateTouchScreenUi();
   }
 
   function renderDeathStats() {
@@ -8062,7 +8201,7 @@
   function resetDeathLeaderboardForm() {
     const multiplayerDeath = isPartySessionActive();
     if (deathLeaderboardForm) {
-      deathLeaderboardForm.hidden = multiplayerDeath;
+      deathLeaderboardForm.hidden = false;
     }
     if (deathRunNameInput) {
       deathRunNameInput.disabled = false;
@@ -8580,6 +8719,7 @@
     if (multiplayer.panelOpen) {
       void refreshPlayerSearch();
     }
+    updateTouchScreenUi();
   }
 
   function openRelayContacts() {
@@ -8698,10 +8838,12 @@
     }
 
     const score = Math.max(1, Math.round(finiteOr(entry.score || entry.maxMass, 1)));
+    const mode = normalizeLeaderboardMode(entry.mode, "singleplayer");
     return {
       id: String(entry.id || entry.playerId || "score"),
       playerId: String(entry.playerId || ""),
       name: sanitizePlayerName(entry.name) || "Player",
+      mode,
       score,
       difficulty: difficultyDefinitions[entry.difficulty] ? entry.difficulty : defaultDifficultyId,
       bodyScore: Math.max(0, Math.round(finiteOr(entry.bodyScore, 0))),
@@ -8719,18 +8861,49 @@
     return Math.max(1, Math.round(lifeStats.bestScore || lifeStats.currentScore));
   }
 
+  function normalizeLeaderboardMode(mode, fallback) {
+    const value = String(mode || fallback || "singleplayer").toLowerCase();
+    return value === "multiplayer" ? "multiplayer" : "singleplayer";
+  }
+
+  function normalizeLeaderboardModeFilter(mode) {
+    const value = String(mode || "all").toLowerCase();
+    return value === "singleplayer" || value === "multiplayer" ? value : "all";
+  }
+
+  function normalizeLeaderboardDifficultyFilter(difficulty) {
+    const value = String(difficulty || "all").toLowerCase();
+    return difficultyDefinitions[value] ? value : "all";
+  }
+
+  function leaderboardEntryMatchesFilters(entry) {
+    const filters = leaderboard.filters || {};
+    const modeFilter = normalizeLeaderboardModeFilter(filters.mode);
+    const difficultyFilter = normalizeLeaderboardDifficultyFilter(filters.difficulty);
+
+    if (modeFilter !== "all" && normalizeLeaderboardMode(entry.mode, "singleplayer") !== modeFilter) {
+      return false;
+    }
+    if (difficultyFilter !== "all" && entry.difficulty !== difficultyFilter) {
+      return false;
+    }
+    return true;
+  }
+
   function collectLeaderboardEntries() {
     const entries = leaderboard.entries.map((entry) => ({
       ...entry,
       local: entry.playerId === player.id
-    }));
+    })).filter(leaderboardEntryMatchesFilters);
     const liveEntries = [];
+    const liveMode = isPartySessionActive() ? "multiplayer" : "singleplayer";
 
     if (!deathState.active) {
       liveEntries.push({
         id: (player.id || "local-player") + ":live",
         playerId: player.id || "local-player",
         name: player.name || "Player",
+        mode: liveMode,
         score: localLeaderboardScore(),
         difficulty: runState.difficultyId,
         local: true,
@@ -8754,6 +8927,7 @@
         id: remote.playerId + ":live",
         playerId: remote.playerId,
         name: remote.publicName || (remotePlayer && remotePlayer.name) || "Contact",
+        mode: "multiplayer",
         score,
         difficulty: remoteDifficulty,
         local: false,
@@ -8761,7 +8935,7 @@
       });
     }
 
-    entries.push(...liveEntries);
+    entries.push(...liveEntries.filter(leaderboardEntryMatchesFilters));
     return entries.sort((a, b) => {
       if (b.score !== a.score) {
         return b.score - a.score;
@@ -8773,19 +8947,26 @@
     });
   }
 
-  function renderLeaderboard() {
-    if (!leaderboardList) {
+  function appendLeaderboardStatus(target, message) {
+    const status = document.createElement("div");
+    status.className = "leaderboard-row";
+    status.textContent = message;
+    target.append(status);
+  }
+
+  function renderLeaderboardList(target, entries) {
+    if (!target) {
       return;
     }
 
-    leaderboardList.textContent = "";
+    target.textContent = "";
     if (leaderboard.statusMessage) {
-      const status = document.createElement("div");
-      status.className = "leaderboard-row";
-      status.textContent = leaderboard.statusMessage;
-      leaderboardList.append(status);
+      appendLeaderboardStatus(target, leaderboard.statusMessage);
     }
-    collectLeaderboardEntries().forEach((entry, index) => {
+    if (!entries.length && !leaderboard.statusMessage) {
+      appendLeaderboardStatus(target, leaderboard.refreshInFlight ? "Loading leaderboard..." : "No scores yet.");
+    }
+    entries.forEach((entry, index) => {
       const row = document.createElement("div");
       const rank = document.createElement("span");
       const name = document.createElement("strong");
@@ -8798,12 +8979,52 @@
       score.className = "leaderboard-row__score";
 
       rank.textContent = "#" + (index + 1);
-      name.textContent = entry.name + " [" + difficultyLabel(entry.difficulty) + "]" + (entry.local ? " (you)" : "") + (entry.live ? " current" : "");
+      name.textContent = entry.name + " [" + (entry.mode === "multiplayer" ? "MP" : "SP") + " " + difficultyLabel(entry.difficulty) + "]" + (entry.local ? " (you)" : "") + (entry.live ? " current" : "");
       score.textContent = entry.score + " pts";
 
       row.append(rank, name, score);
-      leaderboardList.append(row);
+      target.append(row);
     });
+  }
+
+  function renderLeaderboard() {
+    syncLeaderboardFilters();
+    const entries = collectLeaderboardEntries();
+    renderLeaderboardList(leaderboardList, entries);
+    renderLeaderboardList(menuLeaderboardList, entries);
+  }
+
+  function syncLeaderboardFilters() {
+    const filters = leaderboard.filters || { mode: "all", difficulty: "all" };
+    const controls = [
+      [leaderboardModeFilter, filters.mode],
+      [menuLeaderboardModeFilter, filters.mode],
+      [leaderboardDifficultyFilter, filters.difficulty],
+      [menuLeaderboardDifficultyFilter, filters.difficulty]
+    ];
+
+    for (const control of controls) {
+      if (control[0] && control[0].value !== control[1]) {
+        control[0].value = control[1];
+      }
+    }
+  }
+
+  function setLeaderboardFilters(mode, difficulty) {
+    const nextMode = normalizeLeaderboardModeFilter(mode);
+    const nextDifficulty = normalizeLeaderboardDifficultyFilter(difficulty);
+    const current = leaderboard.filters || { mode: "all", difficulty: "all" };
+    if (current.mode === nextMode && current.difficulty === nextDifficulty) {
+      return;
+    }
+
+    leaderboard.filters = {
+      mode: nextMode,
+      difficulty: nextDifficulty
+    };
+    leaderboard.lastRefreshAt = 0;
+    renderLeaderboard();
+    void refreshLeaderboard(true);
   }
 
   function setLeaderboardOpen(open) {
@@ -8820,6 +9041,7 @@
       renderLeaderboard();
       void refreshLeaderboard(false);
     }
+    updateTouchScreenUi();
   }
 
   function inviteFriend(targetPlayerId) {
@@ -8867,6 +9089,7 @@
       commandPanel.classList.toggle("is-open", multiplayer.commandOpen);
       commandPanel.setAttribute("aria-hidden", multiplayer.commandOpen ? "false" : "true");
     }
+    updateTouchScreenUi();
 
     if (!commandInput) {
       return;
@@ -9734,6 +9957,11 @@
       return;
     }
 
+    if (message.type === "party.health.claimed") {
+      applyHealthPickupClaim(message);
+      return;
+    }
+
     if (message.type === "party.command") {
       handlePartyCommand(message);
       return;
@@ -10086,6 +10314,7 @@
         playerInteractionPanel.classList.remove("is-open");
         playerInteractionPanel.setAttribute("aria-hidden", "true");
       }
+      updateTouchScreenUi();
       return;
     }
 
@@ -10108,6 +10337,7 @@
       selectedIndex
     };
     renderPlayerInteractionMenu();
+    updateTouchScreenUi();
   }
 
   function renderPlayerInteractionMenu() {
@@ -10348,6 +10578,7 @@
       tradePanel.classList.remove("is-open");
       tradePanel.setAttribute("aria-hidden", "true");
     }
+    updateTouchScreenUi();
   }
 
   function renderTradePanel() {
@@ -10365,6 +10596,7 @@
     updateTradeStatus();
     tradePanel.classList.add("is-open");
     tradePanel.setAttribute("aria-hidden", "false");
+    updateTouchScreenUi();
   }
 
   function renderTradeOfferList() {
@@ -18189,7 +18421,6 @@
         if (!requestHealthPickupClaim(pickup)) {
           continue;
         }
-        awardHealthPickup(pickup);
         healthPickups.splice(i, 1);
         continue;
       }
@@ -18224,24 +18455,19 @@
     if (!pickup || multiplayer.claimedHealthPickupIds.has(String(pickup.id))) {
       return false;
     }
-    const now = performance.now();
-    const actor = buildPersistentPayload(false).player;
-    const session = markLocalPartyPhysicsSession("healthPickup", pickup, now, {
-      actor,
-      mode: "idle",
-      active: false,
-      force: true
-    });
-    if (!session) {
-      return false;
-    }
-    const sent = sendPartyPhysicsEnd(session, "collected");
-    if (!sent) {
-      return false;
-    }
     multiplayer.claimedHealthPickupIds.add(String(pickup.id));
-    multiplayer.localPartyPhysicsSessions.delete(session.key);
-    multiplayer.partyPhysicsSessions.delete(session.key);
+    const sent = sendMultiplayer({
+      type: "party.health.pickup",
+      pickupId: pickup.id,
+      heal: pickup.heal,
+      x: pickup.x,
+      y: pickup.y
+    });
+    if (!sent) {
+      multiplayer.claimedHealthPickupIds.delete(String(pickup.id));
+      return false;
+    }
+    clearLocalPartyPhysicsSession("healthPickup", pickup.id);
     return true;
   }
 
@@ -18293,6 +18519,48 @@
     if (message.claimedByPlayerId === player.id) {
       awardTechPickup(pickup);
     }
+  }
+
+  function removeHealthPickupById(pickupId) {
+    const id = String(pickupId || "");
+    if (!id) {
+      return null;
+    }
+    const index = healthPickups.findIndex((pickup) => String(pickup.id) === id);
+    if (index < 0) {
+      return null;
+    }
+    const pickup = healthPickups[index];
+    healthPickups.splice(index, 1);
+    return pickup;
+  }
+
+  function applyHealthPickupClaim(message) {
+    const pickupId = String(message && message.pickupId || "");
+    if (!pickupId) {
+      return;
+    }
+    const pickup = removeHealthPickupById(pickupId) || healthPickupFromClaim(message);
+    multiplayer.claimedHealthPickupIds.add(pickupId);
+    clearLocalPartyPhysicsSession("healthPickup", pickupId);
+    if (message.claimedByPlayerId === player.id) {
+      awardHealthPickup(pickup);
+    }
+  }
+
+  function healthPickupFromClaim(message) {
+    return {
+      id: Math.max(1, Math.floor(finiteOr(message && message.pickupId, nextHealthPickupId))),
+      x: finiteOr(message && message.x, player.x),
+      y: finiteOr(message && message.y, player.y),
+      vx: 0,
+      vy: 0,
+      radius: 14,
+      heal: clamp(finiteOr(message && message.heal, healthPickupHeal), 1, 100),
+      life: 0,
+      maxLife: healthPickupLifetime,
+      wobble: 0
+    };
   }
 
   function techPickupFromClaim(message) {
@@ -27734,6 +28002,10 @@
         applyPartyPlayerSnapshot(message || {});
         return createClusternautsFrameRateSnapshot();
       },
+      applyHealthPickupClaim: function (message) {
+        applyHealthPickupClaim(message || {});
+        return createClusternautsFrameRateSnapshot();
+      },
       applyRemoteSnapshot: function (message) {
         applyRemoteSnapshot(message || {});
         updateRemoteVisualTransforms(0);
@@ -28081,6 +28353,13 @@
 
   if (savedGameList) {
     savedGameList.addEventListener("click", function (event) {
+      const deleteButton = closestEventTarget(event, "button[data-save-delete-id]");
+      if (deleteButton && deleteButton.dataset.saveDeleteId) {
+        event.preventDefault();
+        void deleteManualGame(deleteButton.dataset.saveDeleteId);
+        return;
+      }
+
       const button = closestEventTarget(event, "button[data-save-id]");
       if (!button || !button.dataset.saveId) {
         return;
@@ -28108,6 +28387,30 @@
   if (leaderboardToggle) {
     leaderboardToggle.addEventListener("click", function () {
       setLeaderboardOpen(!leaderboard.open);
+    });
+  }
+
+  if (leaderboardModeFilter) {
+    leaderboardModeFilter.addEventListener("change", function () {
+      setLeaderboardFilters(leaderboardModeFilter.value, leaderboard.filters && leaderboard.filters.difficulty);
+    });
+  }
+
+  if (menuLeaderboardModeFilter) {
+    menuLeaderboardModeFilter.addEventListener("change", function () {
+      setLeaderboardFilters(menuLeaderboardModeFilter.value, leaderboard.filters && leaderboard.filters.difficulty);
+    });
+  }
+
+  if (leaderboardDifficultyFilter) {
+    leaderboardDifficultyFilter.addEventListener("change", function () {
+      setLeaderboardFilters(leaderboard.filters && leaderboard.filters.mode, leaderboardDifficultyFilter.value);
+    });
+  }
+
+  if (menuLeaderboardDifficultyFilter) {
+    menuLeaderboardDifficultyFilter.addEventListener("change", function () {
+      setLeaderboardFilters(leaderboard.filters && leaderboard.filters.mode, menuLeaderboardDifficultyFilter.value);
     });
   }
 
