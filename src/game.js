@@ -60,12 +60,9 @@
   const hudEnabledInput = document.getElementById("hudEnabledInput");
   const playerHealthBarInput = document.getElementById("playerHealthBarInput");
   const playerEnergyBarInput = document.getElementById("playerEnergyBarInput");
-  const multiplayerToggleInput = document.getElementById("multiplayerToggleInput");
   const settingsJoinCodeValue = document.getElementById("settingsJoinCodeValue");
   const copySettingsJoinCodeButton = document.getElementById("copySettingsJoinCodeButton");
   const multiplayerStatus = document.getElementById("multiplayerStatus");
-  const multiplayerPanelStatus = document.getElementById("multiplayerPanelStatus");
-  const multiplayerPanelToggle = document.getElementById("multiplayerPanelToggle");
   const accountLoginForm = document.getElementById("accountLoginForm");
   const accountUsernameInput = document.getElementById("accountUsernameInput");
   const accountPasswordInput = document.getElementById("accountPasswordInput");
@@ -74,7 +71,6 @@
   const crazyGamesAccount = document.getElementById("crazyGamesAccount");
   const crazyGamesAccountStatus = document.getElementById("crazyGamesAccountStatus");
   const crazyGamesLoginButton = document.getElementById("crazyGamesLoginButton");
-  const crazyGamesLogoutButton = document.getElementById("crazyGamesLogoutButton");
   const accountSignedIn = document.getElementById("accountSignedIn");
   const accountNameValue = document.getElementById("accountNameValue");
   const accountLogoutButton = document.getElementById("accountLogoutButton");
@@ -237,11 +233,12 @@
   const manualSaveStoragePrefix = "clusternauts.manualSave.";
   const legacyManualSaveStoragePrefix = "spaice.manualSave.";
   const crazyGamesProgressStorageKey = "clusternauts.progress.autosave";
+  const crazyGamesManualSaveIndexPrefix = "clusternauts.crazygames.manualSaves.index.";
+  const crazyGamesManualSavePayloadPrefix = "clusternauts.crazygames.manualSaves.payload.";
   const crazyGamesProgressSaveVersion = 1;
   const accountSessionStorageKey = "clusternauts.accountSession";
   const playerIdStorageKey = "clusternauts.playerId";
   const legacyPlayerIdStorageKey = "spaice.playerId";
-  const multiplayerPreferenceStorageKey = "clusternauts.multiplayer.enabled";
   const commandPassword = "imacheater";
   const defaultControlBindings = {
     up: "KeyW",
@@ -4253,13 +4250,7 @@
 
     startSavedGameList.textContent = "";
     const lobbySaveMode = isMultiplayerSaveLoadContext();
-    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
-      const row = createStartMenuRow("Guest progress", lobbySaveMode ? "Use" : "Continue", lobbySaveMode ? "load-lobby-guest" : "continue-guest");
-      startSavedGameList.append(row);
-      return;
-    }
-
-    if (!isAccountSignedIn()) {
+    if (!canUseManualSaves()) {
       const empty = document.createElement("p");
       empty.className = "start-menu__empty";
       empty.textContent = "Log in from Settings to load named saves.";
@@ -4276,6 +4267,11 @@
     }
 
     if (!accountState.saves.length) {
+      if (isCrazyGamesRuntime() && !isCrazyGamesUserSignedIn()) {
+        const row = createStartMenuRow("Guest progress", lobbySaveMode ? "Use" : "Continue", lobbySaveMode ? "load-lobby-guest" : "continue-guest");
+        startSavedGameList.append(row);
+        return;
+      }
       const empty = document.createElement("p");
       empty.className = "start-menu__empty";
       empty.textContent = "No saved worlds yet.";
@@ -4434,6 +4430,9 @@
       setLobbyStatus("Only the host can load a save.", "error");
       return;
     }
+    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+      return await loadLobbyCrazyGamesSave(cleanSaveId);
+    }
     if (!isAccountSignedIn()) {
       setLobbyStatus(isCrazyGamesRuntime() ? "Guest progress is already available." : "Log in to use saved worlds.", "error");
       return;
@@ -4472,6 +4471,45 @@
       }
     } catch (error) {
       console.warn("Clusternauts lobby save load failed.", error);
+      setLobbyStatus("Could not use this save.", "error");
+    }
+  }
+
+  async function loadLobbyCrazyGamesSave(saveId) {
+    const cleanSaveId = String(saveId || "").trim();
+    if (!cleanSaveId) {
+      setLobbyStatus("Choose a saved world.", "error");
+      return;
+    }
+
+    try {
+      const payload = parseCrazyGamesManualSavePayload(await readCrazyGamesStorageItem(crazyGamesManualSavePayloadKey(cleanSaveId)));
+      const saves = await readCrazyGamesManualSaveIndex();
+      const metadata = saves.find((entry) => entry && entry.id === cleanSaveId);
+      const saveName = metadata && metadata.name ? metadata.name : "saved world";
+      if (!payload || typeof payload !== "object" || !payload.player || !payload.world) {
+        setLobbyStatus("Could not use this save.", "error");
+        return;
+      }
+
+      resetLocalPlayerState();
+      resetLocalWorldState();
+      resetLifeStats();
+      resetDeathState();
+      applyPersistentPayload(Object.assign({ ok: true, universeId: "crazygames:" + player.id }, payload), { includePlayer: true });
+      applyRunSnapshot(payload.run);
+      runState.active = false;
+      multiplayer.lobbyLoadedSnapshot = payload;
+      multiplayer.lobbyLoadedSaveName = saveName;
+      setLoadedLobbyDifficulty(payload.run && payload.run.difficulty ? payload.run.difficulty : payload.world.difficulty || selectedLobbyDifficulty());
+      if (multiplayer.lobby) {
+        setStartMenuView("lobby", { push: false });
+        setLobbyStatus('Using "' + saveName + '".', "success");
+      } else {
+        createLobby({ loadedSnapshot: payload, loadedSaveName: saveName });
+      }
+    } catch (error) {
+      console.warn("CrazyGames lobby save load failed.", error);
       setLobbyStatus("Could not use this save.", "error");
     }
   }
@@ -6323,6 +6361,14 @@
     return Boolean(accountState.token && accountState.username);
   }
 
+  function sanitizeCrazyGamesStorageKeyPart(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+  }
+
   function crazyGamesVisibleUserName() {
     const user = crazyGamesState.user && typeof crazyGamesState.user === "object" ? crazyGamesState.user : null;
     if (!user) {
@@ -6335,37 +6381,92 @@
     return isCrazyGamesRuntime() && Boolean(crazyGamesState.user && typeof crazyGamesState.user === "object");
   }
 
+  function crazyGamesManualSaveOwnerKey() {
+    if (!isCrazyGamesRuntime()) {
+      return "";
+    }
+    const user = crazyGamesState.user && typeof crazyGamesState.user === "object" ? crazyGamesState.user : null;
+    if (!user) {
+      return "cg-guest";
+    }
+
+    const stableId = user.userId || user.id || user.profileId || user.username || user.displayName || user.name || "account";
+    return "cg-" + (sanitizeCrazyGamesStorageKeyPart(stableId) || "account").slice(0, 21);
+  }
+
+  function activeManualSaveOwnerKey() {
+    if (isAccountSignedIn()) {
+      return accountState.username;
+    }
+    return crazyGamesManualSaveOwnerKey();
+  }
+
+  function canUseManualSaves() {
+    return isAccountSignedIn() || isCrazyGamesRuntime();
+  }
+
   function crazyGamesAccountStatusText() {
     if (!isCrazyGamesUserSignedIn()) {
-      return "Progress syncs with CrazyGames when available";
+      return "Playing as guest";
     }
 
     const userName = crazyGamesVisibleUserName();
-    return userName ? "Synced with CrazyGames as " + userName : "Synced with CrazyGames";
+    return userName ? "Logged in as " + userName : "Logged in to CrazyGames";
+  }
+
+  function currentAccountOriginLabel() {
+    if (isCrazyGamesUserSignedIn() || accountState.crazyGamesLinked === true) {
+      return "CrazyGames";
+    }
+    if (accountState.waiLinked === true || isAccountSignedIn()) {
+      return "WAi Forward";
+    }
+    return "";
+  }
+
+  function publicPlayerAccountName() {
+    return sanitizePlayerName(player.name || accountState.displayName || accountState.username) || "Player";
+  }
+
+  function publicPlayerAccountLabel() {
+    const origin = currentAccountOriginLabel();
+    const name = publicPlayerAccountName();
+    return origin ? name + " " + origin : name;
+  }
+
+  function updatePublicNameValue() {
+    if (!publicNameValue) {
+      return;
+    }
+    const relayMode = multiplayer.socialMode === "relay";
+    publicNameValue.textContent = relayMode ? "Communication relay" : publicPlayerAccountLabel();
+    publicNameValue.classList.toggle("is-account-origin", !relayMode && Boolean(currentAccountOriginLabel()));
   }
 
   function currentAccountSave() {
-    if (!isAccountSignedIn() || !accountState.currentSaveId || accountState.currentSaveUsername !== accountState.username) {
+    const ownerKey = activeManualSaveOwnerKey();
+    if (!ownerKey || !accountState.currentSaveId || accountState.currentSaveUsername !== ownerKey) {
       return null;
     }
     return {
       id: accountState.currentSaveId,
       name: accountState.currentSaveName || "Saved world",
-      username: accountState.currentSaveUsername
+      username: ownerKey
     };
   }
 
   function setCurrentAccountSave(save) {
     const metadata = save && typeof save === "object" ? save : {};
     const id = String(metadata.id || "").trim();
-    if (!id || !isAccountSignedIn()) {
+    const ownerKey = activeManualSaveOwnerKey();
+    if (!id || !ownerKey) {
       clearCurrentAccountSave();
       return;
     }
 
     accountState.currentSaveId = id;
     accountState.currentSaveName = sanitizeManualSaveName(metadata.name) || "Saved world";
-    accountState.currentSaveUsername = sanitizeAccountUsername(metadata.username || accountState.username);
+    accountState.currentSaveUsername = sanitizeAccountUsername(metadata.username || ownerKey) || ownerKey;
     updateAccountUi();
   }
 
@@ -6396,7 +6497,7 @@
       const signedIn = isAccountSignedIn();
       const crazyGamesRuntime = isCrazyGamesRuntime();
       const crazyGamesSignedIn = isCrazyGamesUserSignedIn();
-      saveGameButton.disabled = (!signedIn && !crazyGamesRuntime) || accountState.busy;
+      saveGameButton.disabled = !canUseManualSaves() || accountState.busy;
       saveGameButton.textContent = currentSave
         ? 'Save over "' + currentSave.name + '"'
         : signedIn
@@ -6433,10 +6534,6 @@
       crazyGamesLoginButton.hidden = !crazyGamesRuntime || crazyGamesSignedIn || crazyGamesState.authAvailable === false;
       crazyGamesLoginButton.disabled = accountState.busy || crazyGamesState.authPromptActive;
     }
-    if (crazyGamesLogoutButton) {
-      crazyGamesLogoutButton.hidden = !crazyGamesRuntime || !crazyGamesSignedIn;
-      crazyGamesLogoutButton.disabled = accountState.busy || crazyGamesState.authPromptActive;
-    }
     if (accountSignedIn) {
       accountSignedIn.hidden = crazyGamesRuntime || !signedIn;
     }
@@ -6459,6 +6556,7 @@
     if (startMenuAccountName) {
       renderStartMenuAccountName(displaySignedIn);
     }
+    updatePublicNameValue();
     if (accountLoginButton) {
       accountLoginButton.disabled = accountState.busy;
     }
@@ -6567,29 +6665,6 @@
     return sdk && sdk.user ? sdk.user : null;
   }
 
-  function readMultiplayerPreference() {
-    try {
-      const stored = window.localStorage.getItem(multiplayerPreferenceStorageKey);
-      if (stored === "1") {
-        return true;
-      }
-      if (stored === "0") {
-        return false;
-      }
-    } catch {
-      // Local storage can be unavailable in private or locked-down browser contexts.
-    }
-    return !isCrazyGamesRuntime();
-  }
-
-  function writeMultiplayerPreference(enabled) {
-    try {
-      window.localStorage.setItem(multiplayerPreferenceStorageKey, enabled ? "1" : "0");
-    } catch {
-      // Preference persistence is best-effort.
-    }
-  }
-
   function multiplayerStatusText() {
     if (!multiplayer.friendJoinsEnabled) {
       return "Multiplayer Off";
@@ -6615,24 +6690,10 @@
   function updateMultiplayerModeUi() {
     const enabled = Boolean(multiplayer.friendJoinsEnabled);
     const text = multiplayerStatusText();
-    if (multiplayerToggleInput) {
-      multiplayerToggleInput.checked = enabled;
-    }
     if (multiplayerStatus) {
       multiplayerStatus.textContent = text;
       multiplayerStatus.classList.toggle("is-success", enabled && text !== "Room full" && !multiplayer.serverUnavailable);
       multiplayerStatus.classList.toggle("is-error", text === "Room full" || multiplayer.serverUnavailable);
-    }
-    if (multiplayerPanelStatus) {
-      multiplayerPanelStatus.textContent = text;
-    }
-    if (multiplayerPanelToggle) {
-      multiplayerPanelToggle.textContent = enabled ? "Disable" : "Enable";
-    }
-    const panelRow = multiplayerPanelStatus ? multiplayerPanelStatus.closest(".social-panel__multiplayer") : null;
-    if (panelRow) {
-      panelRow.classList.toggle("is-on", enabled && text !== "Room full" && !multiplayer.serverUnavailable);
-      panelRow.classList.toggle("is-full", text === "Room full" || multiplayer.serverUnavailable);
     }
   }
 
@@ -6647,10 +6708,6 @@
     const nextEnabled = Boolean(enabled);
     const changed = multiplayer.friendJoinsEnabled !== nextEnabled;
     multiplayer.friendJoinsEnabled = nextEnabled;
-    if (!options || options.persist !== false) {
-      writeMultiplayerPreference(nextEnabled);
-    }
-
     if (!nextEnabled) {
       multiplayer.roomCreatePending = false;
       multiplayer.pendingJoinRoomId = "";
@@ -7039,9 +7096,7 @@
       crazyGamesState.user = user && typeof user === "object" ? user : null;
       if (crazyGamesState.user && crazyGamesState.user.username) {
         player.name = sanitizePlayerName(crazyGamesState.user.username) || player.name;
-        if (publicNameValue) {
-          publicNameValue.textContent = player.name;
-        }
+        updatePublicNameValue();
       }
     } catch {
       crazyGamesState.user = null;
@@ -7298,6 +7353,9 @@
   async function handleCrazyGamesAuthChange(reason) {
     await refreshCrazyGamesVisibleUser();
     await authenticateWithCrazyGames();
+    if (isCrazyGamesRuntime()) {
+      await refreshAccountSaves();
+    }
     updateAccountUi();
     logCrazyGamesQa("auth state refreshed", {
       reason,
@@ -7412,12 +7470,10 @@
 
     savedGameList.textContent = "";
 
-    if (!isAccountSignedIn()) {
+    if (!canUseManualSaves()) {
       const empty = document.createElement("p");
       empty.className = "settings-panel__save-empty";
-      empty.textContent = isCrazyGamesRuntime()
-        ? "Progress autosaves through CrazyGames when available."
-        : "Log in to save and load worlds.";
+      empty.textContent = "Log in to save and load worlds.";
       savedGameList.append(empty);
       renderStartSavedGames();
       return;
@@ -7538,9 +7594,7 @@
     adoptLinkedPlayerId(account.linkedPlayerId);
     if (account.crazyGamesUsername) {
       player.name = sanitizePlayerName(account.crazyGamesUsername) || player.name;
-      if (publicNameValue) {
-        publicNameValue.textContent = player.name;
-      }
+      updatePublicNameValue();
     }
     writeStoredAccountSession();
     updateAccountUi();
@@ -7630,6 +7684,11 @@
   }
 
   async function refreshAccountSaves() {
+    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+      await refreshCrazyGamesManualSaves();
+      return;
+    }
+
     if (!isAccountSignedIn() || accountState.savesLoading) {
       return;
     }
@@ -7702,10 +7761,218 @@
     lifeStats.absorbedParticleCount = Math.max(0, Math.floor(finiteOr(stats.absorbedParticleCount, lifeStats.absorbedParticleCount)));
   }
 
+  function crazyGamesManualSaveIndexKey() {
+    return crazyGamesManualSaveIndexPrefix + activeManualSaveOwnerKey();
+  }
+
+  function crazyGamesManualSavePayloadKey(saveId) {
+    return crazyGamesManualSavePayloadPrefix + activeManualSaveOwnerKey() + "." + String(saveId || "").trim();
+  }
+
+  async function readCrazyGamesStorageItem(key) {
+    const data = crazyGamesDataModule();
+    if (data) {
+      try {
+        const value = await Promise.resolve(data.getItem(key));
+        if (value != null && value !== "") {
+          return value;
+        }
+      } catch (error) {
+        logCrazyGamesProgress("Data Module manual save read failed.", { key, error }, "warn", "load");
+      }
+    }
+
+    try {
+      return window.localStorage.getItem(key);
+    } catch (error) {
+      logCrazyGamesProgress("Local manual save read failed.", { key, error }, "warn", "load");
+      return null;
+    }
+  }
+
+  async function writeCrazyGamesStorageItem(key, value) {
+    const raw = String(value == null ? "" : value);
+    const data = crazyGamesDataModule();
+    let wrote = false;
+
+    if (data) {
+      try {
+        await Promise.resolve(data.setItem(key, raw));
+        wrote = true;
+      } catch (error) {
+        logCrazyGamesProgress("Data Module manual save write failed.", { key, error }, "warn", "save");
+      }
+    }
+
+    try {
+      window.localStorage.setItem(key, raw);
+      wrote = true;
+    } catch (error) {
+      logCrazyGamesProgress("Local manual save write failed.", { key, error }, "warn", "save");
+    }
+
+    return wrote;
+  }
+
+  function parseCrazyGamesManualSavePayload(raw) {
+    const envelope = parseCrazyGamesProgressEnvelope(raw, "crazygames-manual-save");
+    return envelope && envelope.payload ? envelope.payload : null;
+  }
+
+  function compareManualSaveMetadata(a, b) {
+    const leftSavedAt = a && a.savedAt ? a.savedAt : 0;
+    const rightSavedAt = b && b.savedAt ? b.savedAt : 0;
+    if (rightSavedAt !== leftSavedAt) {
+      return rightSavedAt - leftSavedAt;
+    }
+    return String((a && a.name) || "").localeCompare(String((b && b.name) || ""));
+  }
+
+  function normalizeCrazyGamesManualSaveMetadata(metadata) {
+    const source = metadata && typeof metadata === "object" ? metadata : {};
+    const id = String(source.id || "").trim();
+    if (!id) {
+      return null;
+    }
+
+    return {
+      id,
+      username: sanitizeAccountUsername(source.username || activeManualSaveOwnerKey()) || activeManualSaveOwnerKey(),
+      name: sanitizeManualSaveName(source.name) || "Saved world",
+      difficulty: String(source.difficulty || "medium").trim().slice(0, 32) || "medium",
+      score: Math.max(1, Math.floor(finiteOr(source.score, 1))),
+      createdAt: Math.max(0, Math.floor(finiteOr(source.createdAt, Date.now()))) || Date.now(),
+      savedAt: Math.max(0, Math.floor(finiteOr(source.savedAt, Date.now()))) || Date.now()
+    };
+  }
+
+  function parseCrazyGamesManualSaveIndex(raw) {
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const envelope = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const saves = envelope && envelope.game === "clusternauts" && Array.isArray(envelope.saves) ? envelope.saves : [];
+      return saves
+        .map(normalizeCrazyGamesManualSaveMetadata)
+        .filter(Boolean)
+        .sort(compareManualSaveMetadata);
+    } catch (error) {
+      logCrazyGamesProgress("Could not parse manual save list.", error, "warn", "load");
+      return [];
+    }
+  }
+
+  async function readCrazyGamesManualSaveIndex() {
+    return parseCrazyGamesManualSaveIndex(await readCrazyGamesStorageItem(crazyGamesManualSaveIndexKey()));
+  }
+
+  async function writeCrazyGamesManualSaveIndex(saves) {
+    const cleanSaves = (Array.isArray(saves) ? saves : [])
+      .map(normalizeCrazyGamesManualSaveMetadata)
+      .filter(Boolean)
+      .sort(compareManualSaveMetadata);
+    const envelope = {
+      saveVersion: crazyGamesProgressSaveVersion,
+      game: "clusternauts",
+      owner: activeManualSaveOwnerKey(),
+      savedAt: Date.now(),
+      saves: cleanSaves
+    };
+    const ok = await writeCrazyGamesStorageItem(crazyGamesManualSaveIndexKey(), JSON.stringify(envelope));
+    if (ok) {
+      accountState.saves = cleanSaves;
+    }
+    return ok;
+  }
+
+  function buildCrazyGamesManualSaveEnvelope(payload) {
+    return {
+      saveVersion: crazyGamesProgressSaveVersion,
+      game: "clusternauts",
+      owner: activeManualSaveOwnerKey(),
+      savedAt: Date.now(),
+      payload: compactCrazyGamesProgressPayload(payload)
+    };
+  }
+
+  async function refreshCrazyGamesManualSaves() {
+    if (!isCrazyGamesRuntime() || accountState.savesLoading) {
+      return;
+    }
+
+    accountState.savesLoading = true;
+    renderSavedGames();
+    try {
+      accountState.saves = await readCrazyGamesManualSaveIndex();
+    } finally {
+      accountState.savesLoading = false;
+      updateAccountUi();
+    }
+  }
+
+  async function saveCrazyGamesManualGame(currentSave, name) {
+    if (!runState.active || deathState.active) {
+      setManualSaveStatus("Start a live run before saving.", "error");
+      return false;
+    }
+
+    const saveName = sanitizeManualSaveName(name) || (isCrazyGamesUserSignedIn() ? "CrazyGames progress" : "Guest progress");
+    const now = Date.now();
+    const saveId = currentSave && currentSave.id ? currentSave.id : "cg-save-" + now.toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+    const existingSaves = await readCrazyGamesManualSaveIndex();
+    const existing = existingSaves.find((entry) => entry && entry.id === saveId);
+
+    updateLifeStats();
+    const payload = buildPersistentPayload(true);
+    payload.run = buildRunSnapshot();
+
+    const metadata = normalizeCrazyGamesManualSaveMetadata({
+      id: saveId,
+      username: activeManualSaveOwnerKey(),
+      name: saveName,
+      difficulty: payload.run.difficulty || payload.world.difficulty || payload.player.difficulty || "medium",
+      score: payload.player.score || lifeStats.bestScore || 1,
+      createdAt: existing ? existing.createdAt : now,
+      savedAt: now
+    });
+
+    setAccountBusy(true);
+    try {
+      const payloadOk = await writeCrazyGamesStorageItem(crazyGamesManualSavePayloadKey(saveId), JSON.stringify(buildCrazyGamesManualSaveEnvelope(payload)));
+      if (!payloadOk) {
+        setManualSaveStatus("Could not save this game.", "error");
+        return false;
+      }
+
+      const nextSaves = existingSaves.filter((entry) => entry && entry.id !== saveId);
+      nextSaves.push(metadata);
+      const indexOk = await writeCrazyGamesManualSaveIndex(nextSaves);
+      if (!indexOk) {
+        setManualSaveStatus("Could not update saved games.", "error");
+        return false;
+      }
+
+      setCurrentAccountSave(metadata);
+      if (saveGameNameInput) {
+        saveGameNameInput.value = saveName;
+      }
+      setManualSaveStatus('Saved "' + saveName + '".', "success");
+      maybeNotifyText('Saved "' + saveName + '".');
+      return true;
+    } finally {
+      setAccountBusy(false);
+    }
+  }
+
   async function saveManualGame() {
     const currentSave = currentAccountSave();
     const name = currentSave ? currentSave.name : sanitizeManualSaveName(saveGameNameInput && saveGameNameInput.value);
 
+    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+      return await saveCrazyGamesManualGame(currentSave, name);
+    }
     if (!isAccountSignedIn()) {
       if (isCrazyGamesRuntime()) {
         return await saveGuestProgress();
@@ -7896,6 +8163,9 @@
   async function loadManualGame(saveId) {
     const cleanSaveId = String(saveId || "").trim();
 
+    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+      return await loadCrazyGamesManualGame(cleanSaveId);
+    }
     if (!isAccountSignedIn()) {
       setManualSaveStatus(isCrazyGamesRuntime() ? "Guest progress loads automatically on startup." : "Log in to load saved games.", "error");
       return;
@@ -7944,8 +8214,56 @@
     }
   }
 
+  async function loadCrazyGamesManualGame(saveId) {
+    const cleanSaveId = String(saveId || "").trim();
+    if (!cleanSaveId) {
+      setManualSaveStatus("Choose a saved game.", "error");
+      return;
+    }
+
+    try {
+      const payload = parseCrazyGamesManualSavePayload(await readCrazyGamesStorageItem(crazyGamesManualSavePayloadKey(cleanSaveId)));
+      const saves = await readCrazyGamesManualSaveIndex();
+      const metadata = saves.find((entry) => entry && entry.id === cleanSaveId);
+      const saveName = metadata && metadata.name ? metadata.name : "saved world";
+
+      if (!payload || typeof payload !== "object" || !payload.player || !payload.world) {
+        setManualSaveStatus("Could not load this save.", "error");
+        return;
+      }
+
+      resetSoloMultiplayerSession();
+      resetLocalPlayerState();
+      resetLocalWorldState();
+      resetLifeStats();
+      resetDeathState();
+      runState.active = true;
+      applyPersistentPayload(Object.assign({ ok: true, universeId: "crazygames:" + player.id }, payload), { includePlayer: true });
+      applyRunSnapshot(payload.run);
+      setCurrentAccountSave(metadata || { id: cleanSaveId, name: saveName, username: activeManualSaveOwnerKey() });
+      runState.active = true;
+      persistence.saveTimer = persistenceSaveInterval;
+      persistence.pollTimer = persistencePollInterval;
+      setDifficultyScreenOpen(false);
+      setSettingsOpen(false);
+      resetMouseButtons();
+      resetFrameClock();
+      updateHud();
+      void savePersistentState({ includeWorld: true });
+      connectMultiplayer();
+      setManualSaveStatus('Loaded "' + saveName + '".', "success");
+      maybeNotifyText('Loaded "' + saveName + '".');
+    } catch (error) {
+      console.warn("CrazyGames manual load failed.", error);
+      setManualSaveStatus("Could not load this save.", "error");
+    }
+  }
+
   async function deleteManualGame(saveId) {
     const cleanSaveId = String(saveId || "").trim();
+    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+      return await deleteCrazyGamesManualGame(cleanSaveId);
+    }
     if (!isAccountSignedIn()) {
       setManualSaveStatus("Log in to delete saved games.", "error");
       return;
@@ -7981,6 +8299,42 @@
     } catch (error) {
       console.warn("Clusternauts manual delete failed.", error);
       setManualSaveStatus(backendErrorMessage(error, "Could not delete this save."), "error");
+    } finally {
+      setAccountBusy(false);
+    }
+  }
+
+  async function deleteCrazyGamesManualGame(saveId) {
+    const cleanSaveId = String(saveId || "").trim();
+    if (!cleanSaveId) {
+      setManualSaveStatus("Choose a saved game to delete.", "error");
+      return;
+    }
+    if (accountState.busy) {
+      return;
+    }
+
+    const save = accountState.saves.find((entry) => entry && entry.id === cleanSaveId);
+    const saveName = save && save.name ? save.name : "this save";
+    if (!window.confirm('Delete "' + saveName + '"? This cannot be undone.')) {
+      return;
+    }
+
+    setAccountBusy(true);
+    try {
+      const nextSaves = (await readCrazyGamesManualSaveIndex()).filter((entry) => entry && entry.id !== cleanSaveId);
+      await writeCrazyGamesManualSaveIndex(nextSaves);
+      await writeCrazyGamesStorageItem(crazyGamesManualSavePayloadKey(cleanSaveId), "");
+      const currentSave = currentAccountSave();
+      if (currentSave && currentSave.id === cleanSaveId) {
+        clearCurrentAccountSave();
+      }
+      renderSavedGames();
+      setManualSaveStatus('Deleted "' + saveName + '".', "success");
+      maybeNotifyText('Deleted "' + saveName + '".');
+    } catch (error) {
+      console.warn("CrazyGames manual delete failed.", error);
+      setManualSaveStatus("Could not delete this save.", "error");
     } finally {
       setAccountBusy(false);
     }
@@ -9195,9 +9549,7 @@
     multiplayer.profile = profile;
     multiplayer.universeId = profile.universeId || multiplayer.universeId || ("solo:" + player.id);
     player.name = profile.publicName || player.name;
-    if (publicNameValue) {
-      publicNameValue.textContent = player.name;
-    }
+    updatePublicNameValue();
   }
 
   function updateOnlineUi() {
@@ -9218,9 +9570,7 @@
       socialPanel.classList.toggle("is-open", multiplayer.panelOpen);
       socialPanel.setAttribute("aria-hidden", multiplayer.panelOpen ? "false" : "true");
     }
-    if (publicNameValue) {
-      publicNameValue.textContent = multiplayer.socialMode === "relay" ? "Communication relay" : player.name;
-    }
+    updatePublicNameValue();
     updateOnlineUi();
 
     if (multiplayer.panelOpen) {
@@ -28705,6 +29055,26 @@
       savePersistentState: function (options) {
         return savePersistentState(options || { includeWorld: true });
       },
+      saveManualGame: function (name) {
+        if (saveGameNameInput && name !== undefined) {
+          saveGameNameInput.value = String(name || "");
+        }
+        return saveManualGame();
+      },
+      loadManualGame: function (saveId) {
+        return loadManualGame(saveId);
+      },
+      accountState: function () {
+        return {
+          username: accountState.username,
+          displayName: accountState.displayName,
+          saves: accountState.saves.map((save) => Object.assign({}, save)),
+          currentSaveId: accountState.currentSaveId,
+          currentSaveName: accountState.currentSaveName,
+          currentSaveUsername: accountState.currentSaveUsername,
+          savesLoading: accountState.savesLoading
+        };
+      },
       submitDeathLeaderboardScore: function (stats, runName) {
         return submitDeathLeaderboardScore(stats || {}, runName || "Test Pilot");
       },
@@ -28893,18 +29263,6 @@
     });
   }
 
-  if (multiplayerToggleInput) {
-    multiplayerToggleInput.addEventListener("change", function () {
-      setFriendJoinsEnabled(multiplayerToggleInput.checked, "settings-toggle");
-    });
-  }
-
-  if (multiplayerPanelToggle) {
-    multiplayerPanelToggle.addEventListener("click", function () {
-      setFriendJoinsEnabled(!multiplayer.friendJoinsEnabled, "panel-toggle");
-    });
-  }
-
   if (copySettingsJoinCodeButton) {
     copySettingsJoinCodeButton.addEventListener("click", function () {
       copyTextToClipboard(activePartyJoinCode(), "World code copied.");
@@ -28934,12 +29292,6 @@
   if (crazyGamesLoginButton) {
     crazyGamesLoginButton.addEventListener("click", function () {
       void promptCrazyGamesLogin();
-    });
-  }
-
-  if (crazyGamesLogoutButton) {
-    crazyGamesLogoutButton.addEventListener("click", function () {
-      void logoutAccount();
     });
   }
 
@@ -29729,7 +30081,7 @@
     void refreshLeaderboard(true);
     updateOnlineUi();
     updateAccountUi();
-    setFriendJoinsEnabled(readMultiplayerPreference(), "startup", { persist: false, notify: false, startRun: false });
+    setFriendJoinsEnabled(false, "startup", { persist: false, notify: false, startRun: false });
     void initializeCrazyGamesIntegration().then(async function () {
       if (isCrazyGamesRuntime()) {
         await loadPersistentState();

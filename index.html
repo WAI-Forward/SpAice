@@ -206,10 +206,6 @@
               </div>
               <div class="settings-panel__group">
                 <div class="settings-panel__section-title">Multiplayer</div>
-                <label class="settings-panel__check" for="multiplayerToggleInput">
-                  <span>Allow friend joins</span>
-                  <input id="multiplayerToggleInput" type="checkbox">
-                </label>
                 <div class="settings-panel__join-code">
                   <span>World code</span>
                   <strong id="settingsJoinCodeValue">----</strong>
@@ -250,7 +246,6 @@
                   <span id="crazyGamesAccountStatus">Playing as guest</span>
                   <div class="settings-panel__crazy-actions">
                     <button class="settings-panel__save-action" id="crazyGamesLoginButton" type="button">Log in with CrazyGames</button>
-                    <button class="settings-panel__save-action" id="crazyGamesLogoutButton" type="button" hidden>Log out</button>
                   </div>
                 </div>
                 <div class="settings-panel__account" id="accountSignedIn" hidden>
@@ -284,10 +279,6 @@
       <div class="social-panel__header">
         <strong id="publicNameValue">Player</strong>
         <button class="social-panel__close" id="socialPanelClose" type="button" aria-label="Close online players">x</button>
-      </div>
-      <div class="social-panel__multiplayer">
-        <span id="multiplayerPanelStatus">Multiplayer Off</span>
-        <button id="multiplayerPanelToggle" type="button">Enable</button>
       </div>
       <div class="social-panel__tools">
         <input id="playerSearch" type="search" autocomplete="off" placeholder="Search name">

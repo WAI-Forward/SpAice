@@ -1975,6 +1975,10 @@ select {
   white-space: nowrap;
 }
 
+.social-panel__header strong.is-account-origin {
+  font-style: italic;
+}
+
 .social-panel__close,
 .social-row button,
 .signal-panel button {
@@ -1996,54 +2000,8 @@ select {
   font-size: 18px;
 }
 
-.social-panel__multiplayer {
-  min-height: 36px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
-}
-
-.social-panel__multiplayer span {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(232, 241, 255, 0.82);
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.social-panel__multiplayer button {
-  min-width: 74px;
-  height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #f8fbff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 950;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.social-panel__multiplayer.is-on {
-  border-color: rgba(88, 226, 255, 0.36);
-  background: rgba(88, 226, 255, 0.09);
-}
-
-.social-panel__multiplayer.is-full {
-  border-color: rgba(255, 229, 111, 0.36);
-  background: rgba(255, 229, 111, 0.08);
-}
-
 .social-panel__tools {
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
@@ -2079,7 +2037,7 @@ select {
 }
 
 .social-panel__list {
-  min-height: 120px;
+  min-height: 0;
   overflow-y: auto;
   display: grid;
   align-content: start;
