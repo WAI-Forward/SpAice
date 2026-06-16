@@ -27,6 +27,8 @@ const sessionLifetimeMs = 1000 * 60 * 60 * 24 * 14;
 const websiteUrl = stripTrailingSlash(process.env.WAI_FORWARD_WEBSITE_URL || process.env.WEBSITE_URL || defaultWebsiteUrl());
 const configuredPublicUrl = stripTrailingSlash(process.env.CLUSTERNAUTS_PUBLIC_URL || process.env.PUBLIC_URL || "");
 const coreTokenExchangeSecret = loadCoreTokenExchangeSecret();
+const portalAuthTransferSecret = coreTokenExchangeSecret || crypto.randomBytes(32).toString("base64url");
+const portalAuthTransferLifetimeMs = 2 * 60 * 1000;
 const accountSessionCookie = "clusternauts_session";
 const crazyGamesPublicKeyUrl = "https://sdk.crazygames.com/publicKey.json";
 const overlapRoomMaxPlayers = 4;
@@ -150,6 +152,12 @@ function logClusternautsError(event, details) {
   const stamp = new Date().toISOString();
   const payload = details && typeof details === "object" ? ` ${JSON.stringify(details)}` : "";
   console.error(`[Clusternauts error ${stamp}] ${event}${payload}`);
+}
+
+function logClusternautsAuth(event, details) {
+  const stamp = new Date().toISOString();
+  const payload = details && typeof details === "object" ? ` ${JSON.stringify(details)}` : "";
+  console.info(`[Clusternauts auth ${stamp}] ${event}${payload}`);
 }
 
 const mimeTypes = {
@@ -411,9 +419,15 @@ async function handleWaiAuthRoute(request, response, url) {
 }
 
 function redirectToWaiLogin(request, response, returnTo) {
+  const safeReturn = safeReturnPath(returnTo);
+  logClusternautsAuth("wai login redirect", {
+    returnTo: safeReturn,
+    portal: isPortalLoginCompletePath(safeReturn),
+    request: authRequestDetails(request)
+  });
   const params = new URLSearchParams({
     app: "clusternauts",
-    callback: safeReturnPath(returnTo)
+    callback: safeReturn
   });
   response.writeHead(302, { Location: `${websiteUrl}/auth/app-launch?${params.toString()}` });
   response.end();
@@ -435,7 +449,14 @@ function writePortalLoginCompletePage(response) {
     <p>Login complete. You can close this window.</p>
     <script>
       (function () {
-        var message = { type: "clusternauts:wai-login-complete" };
+        var params = new URLSearchParams(window.location.search || "");
+        var message = {
+          type: "clusternauts:wai-login-complete",
+          transfer: params.get("transfer") || ""
+        };
+        try {
+          console.info("[Clusternauts auth] portal completion page loaded", { hasTransfer: Boolean(message.transfer) });
+        } catch (error) {}
         try {
           if (window.opener && !window.opener.closed) {
             window.opener.postMessage(message, "*");
@@ -460,11 +481,17 @@ function writePortalLoginCompletePage(response) {
 async function handleWaiLaunchCallback(request, response, url) {
   const code = sanitizeDebugText(url.searchParams.get("code"), 2048);
   if (!code) {
+    logClusternautsAuth("wai callback missing code", { request: authRequestDetails(request) });
     redirectToWaiLogin(request, response, "/");
     return;
   }
 
   const callback = `${serviceBaseUrl(request)}/auth/launch/callback`;
+  logClusternautsAuth("wai callback exchanging code", {
+    callback,
+    returnTo: safeReturnPath(url.searchParams.get("return_to")),
+    request: authRequestDetails(request)
+  });
   const tokens = await exchangeWaiAuthorizationCode(code, callback);
   const payload = decodeWaiAccessTokenPayload(tokens && tokens.wf_access_token);
   if (!payload || !payload.user_id) {
@@ -473,11 +500,68 @@ async function handleWaiLaunchCallback(request, response, url) {
 
   const result = await createWaiAccountSession(payload);
   const returnTo = safeReturnPath(url.searchParams.get("return_to"));
+  const portalReturn = isPortalLoginCompletePath(returnTo);
+  const redirectLocation = isPortalLoginCompletePath(returnTo)
+    ? `${returnTo}?transfer=${encodeURIComponent(createPortalAuthTransfer(result.sessionToken))}`
+    : returnTo;
+  logClusternautsAuth("wai callback created session", {
+    username: result.account && result.account.username,
+    waiLinked: Boolean(result.account && result.account.waiLinked),
+    portal: portalReturn,
+    redirectTo: portalReturn ? "/auth/portal-login-complete?transfer=redacted" : redirectLocation,
+    cookie: cookieDebugDetails(request)
+  });
   response.writeHead(302, {
-    Location: returnTo,
+    Location: redirectLocation,
     "Set-Cookie": buildAccountSessionCookie(request, result.sessionToken)
   });
   response.end();
+}
+
+function isPortalLoginCompletePath(pathValue) {
+  return String(pathValue || "").split("?")[0] === "/auth/portal-login-complete";
+}
+
+function createPortalAuthTransfer(sessionToken) {
+  const payload = Buffer.from(JSON.stringify({
+    sessionToken,
+    expiresAt: Date.now() + portalAuthTransferLifetimeMs,
+    nonce: randomToken(12)
+  })).toString("base64url");
+  const signature = crypto.createHmac("sha256", portalAuthTransferSecret).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function verifyPortalAuthTransfer(transferToken) {
+  const parts = String(transferToken || "").split(".");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throwHttpError(401, "Login transfer expired. Try logging in again.");
+  }
+
+  const expected = crypto.createHmac("sha256", portalAuthTransferSecret).update(parts[0]).digest("base64url");
+  const actual = parts[1];
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(actual);
+  if (expectedBuffer.length !== actualBuffer.length || !crypto.timingSafeEqual(expectedBuffer, actualBuffer)) {
+    throwHttpError(401, "Login transfer expired. Try logging in again.");
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+  } catch {
+    throwHttpError(401, "Login transfer expired. Try logging in again.");
+  }
+
+  if (!payload || payload.expiresAt <= Date.now()) {
+    throwHttpError(401, "Login transfer expired. Try logging in again.");
+  }
+
+  const sessionToken = sanitizeDebugText(payload.sessionToken, 200);
+  if (!sessionToken) {
+    throwHttpError(401, "Login transfer expired. Try logging in again.");
+  }
+  return sessionToken;
 }
 
 async function exchangeWaiAuthorizationCode(code, callback) {
@@ -601,7 +685,9 @@ async function handleAccountRequest(request, response) {
 async function handleAuthRequest(request, response, url) {
   try {
     if (request.method === "GET" && url.pathname === "/api/auth/session") {
+      logClusternautsAuth("session bootstrap requested", { request: authRequestDetails(request) });
       const session = await requireAccountSession(request);
+      logClusternautsAuth("session bootstrap accepted", { username: session.account.username, request: authRequestDetails(request) });
       writeJson(response, 200, {
         ok: true,
         serverTime: Date.now(),
@@ -695,6 +781,28 @@ async function handleAccountSaveRequest(request, response, url) {
         serverTime: Date.now(),
         save: save.metadata,
         payload: save.payload
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/portal-session") {
+      const body = await readJsonBody(request);
+      logClusternautsAuth("portal session redeem requested", {
+        hasTransfer: Boolean(body && body.transfer),
+        request: authRequestDetails(request)
+      });
+      const sessionToken = verifyPortalAuthTransfer(body && body.transfer);
+      const session = await requireAccountSession({ headers: { authorization: `Bearer ${sessionToken}` } });
+      logClusternautsAuth("portal session redeem accepted", {
+        username: session.account.username,
+        waiLinked: Boolean(session.account.waiUserId),
+        request: authRequestDetails(request)
+      });
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        sessionToken,
+        account: publicAccount(session.account)
       });
       return;
     }
@@ -1586,6 +1694,7 @@ async function saveAccountSession(session) {
 async function requireAccountSession(request) {
   const token = extractSessionToken(request);
   if (!token) {
+    logClusternautsAuth("session rejected: missing token", { request: authRequestDetails(request) });
     throwHttpError(401, "Log in to use saved games.");
   }
 
@@ -1607,14 +1716,21 @@ async function requireAccountSession(request) {
   }
 
   if (!session || session.expiresAt <= Date.now()) {
+    logClusternautsAuth("session rejected: expired or unknown token", { request: authRequestDetails(request) });
     throwHttpError(401, "Session expired. Log in again.");
   }
 
   const account = await getAccount(session.username);
   if (!account) {
+    logClusternautsAuth("session rejected: account missing", { username: session.username, request: authRequestDetails(request) });
     throwHttpError(401, "Account no longer exists.");
   }
 
+  logClusternautsAuth("session accepted", {
+    username: account.username,
+    source: sessionTokenSource(request),
+    request: authRequestDetails(request)
+  });
   return { session, account };
 }
 
@@ -1888,6 +2004,37 @@ function extractSessionToken(request) {
     return sanitizeDebugText(match[1], 200);
   }
   return parseCookies(request.headers.cookie || "")[accountSessionCookie] || "";
+}
+
+function sessionTokenSource(request) {
+  const authorization = String(request.headers.authorization || "");
+  if (/^Bearer\s+.+/i.test(authorization)) {
+    return "authorization";
+  }
+  return parseCookies(request.headers.cookie || "")[accountSessionCookie] ? "cookie" : "missing";
+}
+
+function authRequestDetails(request) {
+  const headers = request && request.headers ? request.headers : {};
+  return {
+    method: request && request.method || "",
+    origin: sanitizeDebugText(headers.origin, 160),
+    referer: sanitizeDebugText(headers.referer, 240),
+    host: sanitizeDebugText(headers.host || headers["x-forwarded-host"], 160),
+    forwardedProto: sanitizeDebugText(headers["x-forwarded-proto"], 32),
+    hasAuthorization: /^Bearer\s+.+/i.test(String(headers.authorization || "")),
+    hasSessionCookie: Boolean(parseCookies(headers.cookie || "")[accountSessionCookie]),
+    userAgent: sanitizeDebugText(headers["user-agent"], 180)
+  };
+}
+
+function cookieDebugDetails(request) {
+  const secureRequest = requestOrigin(request).startsWith("https://");
+  return {
+    sameSite: secureRequest ? "None" : "Lax",
+    secure: secureRequest,
+    requestOrigin: sanitizeDebugText(requestOrigin(request), 160)
+  };
 }
 
 function hashToken(token) {

@@ -6651,6 +6651,13 @@
     return accountState.token ? { Authorization: "Bearer " + accountState.token } : {};
   }
 
+  function logAccountAuth(event, details) {
+    if (!window.console || typeof console.info !== "function") {
+      return;
+    }
+    console.info("[Clusternauts auth] " + event, details || {});
+  }
+
   function isAccountSignedIn() {
     return Boolean(accountState.token && accountState.username);
   }
@@ -7837,8 +7844,17 @@
   async function bootstrapAccountSession() {
     accountState.sessionLoading = true;
     updateAccountUi();
+    const hadAccountTokenAtStart = Boolean(accountState.token);
+    const storedAtStart = readStoredAccountSession();
+    logAccountAuth("bootstrap start", {
+      runtime: isItchRuntime() ? "itch" : isCrazyGamesRuntime() ? "crazygames" : "backend",
+      externalBackend: shouldUseExternalBackend(),
+      hasStoredToken: Boolean(storedAtStart),
+      hasAccountToken: hadAccountTokenAtStart
+    });
 
     if (isCrazyGamesRuntime()) {
+      logAccountAuth("bootstrap skipped for CrazyGames runtime");
       accountState.token = "";
       accountState.username = "";
       accountState.displayName = "";
@@ -7851,8 +7867,13 @@
       return;
     }
 
-    const stored = readStoredAccountSession();
+    const stored = storedAtStart;
     if (stored) {
+      logAccountAuth("stored session found", {
+        username: stored.username,
+        waiLinked: stored.waiLinked,
+        crazyGamesLinked: stored.crazyGamesLinked
+      });
       accountState.token = stored.token;
       accountState.username = stored.username;
       accountState.displayName = stored.displayName || "";
@@ -7867,6 +7888,11 @@
       });
       applyAccountSession(data);
       await refreshAccountSaves();
+      logAccountAuth("bootstrap success", {
+        username: accountState.username,
+        waiLinked: accountState.waiLinked,
+        saveCount: accountState.saves.length
+      });
     } catch (error) {
       accountState.token = "";
       accountState.username = "";
@@ -7878,6 +7904,13 @@
       accountState.crazyGamesLinked = false;
       writeStoredAccountSession();
       updateAccountUi();
+      logAccountAuth("bootstrap failed", {
+        status: error && error.status,
+        path: error && error.requestPath,
+        message: error && error.message,
+        hadStoredToken: Boolean(stored),
+        hadAccountToken: hadAccountTokenAtStart
+      });
       console.warn("Clusternauts account session unavailable.", error);
     }
   }
@@ -7922,6 +7955,10 @@
   function openWaiLogin() {
     const loginUrl = waiLoginUrl();
     setManualSaveStatus("Opening login...", "success");
+    logAccountAuth("open login", {
+      portal: isPortalBackendRuntime(),
+      backendOrigin: shouldUseExternalBackend() ? backendOrigin() : window.location.origin
+    });
 
     if (!isPortalBackendRuntime()) {
       window.location.href = loginUrl;
@@ -7930,10 +7967,12 @@
 
     const popup = window.open(loginUrl, "clusternauts-wai-login", "popup,width=520,height=760");
     if (popup) {
+      logAccountAuth("login popup opened");
       setManualSaveStatus("Finish login in the WAi Forward window.", "success");
       return;
     }
 
+    logAccountAuth("login popup blocked");
     setManualSaveStatus("Allow popups or open the login link in a new tab.", "error");
   }
 
@@ -7944,14 +7983,23 @@
 
     window.addEventListener("message", function (event) {
       if (!isTrustedBackendMessageOrigin(event.origin)) {
+        logAccountAuth("ignored login message from untrusted origin", { origin: event.origin || "" });
         return;
       }
       const data = event.data && typeof event.data === "object" ? event.data : {};
       if (data.type !== "clusternauts:wai-login-complete") {
         return;
       }
+      logAccountAuth("login completion message received", {
+        origin: event.origin || "",
+        hasTransfer: Boolean(data.transfer)
+      });
       setManualSaveStatus("Login complete. Loading saves...", "success");
-      void bootstrapAccountSession();
+      if (data.transfer) {
+        void redeemPortalLoginTransfer(data.transfer);
+      } else {
+        void bootstrapAccountSession();
+      }
     });
 
     window.addEventListener("focus", function () {
@@ -7970,6 +8018,42 @@
       return new URL(origin).origin === new URL(backendOrigin()).origin;
     } catch {
       return false;
+    }
+  }
+
+  async function redeemPortalLoginTransfer(transfer) {
+    if (accountState.busy) {
+      logAccountAuth("portal transfer skipped because account is busy");
+      return;
+    }
+
+    setAccountBusy(true);
+    logAccountAuth("portal transfer redeem start", { hasTransfer: Boolean(transfer) });
+    try {
+      const data = await fetchPersistentJson("/api/auth/portal-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transfer })
+      });
+      applyAccountSession(data);
+      await refreshAccountSaves();
+      setManualSaveStatus("Signed in with WAi Forward.", "success");
+      logAccountAuth("portal transfer redeem success", {
+        username: accountState.username,
+        waiLinked: accountState.waiLinked,
+        saveCount: accountState.saves.length
+      });
+    } catch (error) {
+      setManualSaveStatus(backendErrorMessage(error, "Login did not complete. Try again."), "error");
+      logAccountAuth("portal transfer redeem failed", {
+        status: error && error.status,
+        path: error && error.requestPath,
+        message: error && error.message
+      });
+      console.warn("Clusternauts portal login transfer failed.", error);
+      await bootstrapAccountSession();
+    } finally {
+      setAccountBusy(false);
     }
   }
 
@@ -9082,11 +9166,12 @@
     const timeout = window.setTimeout(function () {
       controller.abort();
     }, 2500);
+    const requestUrl = apiUrl(url);
 
     try {
       let response;
       try {
-        response = await fetch(apiUrl(url), Object.assign(withBackendRequestOptions(options), { signal: controller.signal }));
+        response = await fetch(requestUrl, Object.assign(withBackendRequestOptions(options), { signal: controller.signal }));
       } catch (error) {
         throw createServerMaintenanceError(error);
       }
@@ -9102,7 +9187,11 @@
         } catch {
           detail = "";
         }
-        throw new Error("Request failed " + response.status + detail);
+        const requestError = new Error("Request failed " + response.status + detail);
+        requestError.status = response.status;
+        requestError.requestPath = String(url || "");
+        requestError.requestUrl = requestUrl;
+        throw requestError;
       }
 
       return await response.json();
