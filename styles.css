@@ -1763,6 +1763,13 @@ select {
   white-space: nowrap;
 }
 
+.settings-panel__crazy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .settings-panel__save-form input,
 .settings-panel__auth-form input {
   min-width: 0;

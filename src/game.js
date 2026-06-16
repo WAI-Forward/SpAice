@@ -74,6 +74,7 @@
   const crazyGamesAccount = document.getElementById("crazyGamesAccount");
   const crazyGamesAccountStatus = document.getElementById("crazyGamesAccountStatus");
   const crazyGamesLoginButton = document.getElementById("crazyGamesLoginButton");
+  const crazyGamesLogoutButton = document.getElementById("crazyGamesLogoutButton");
   const accountSignedIn = document.getElementById("accountSignedIn");
   const accountNameValue = document.getElementById("accountNameValue");
   const accountLogoutButton = document.getElementById("accountLogoutButton");
@@ -1107,6 +1108,7 @@
     lastRefreshAt: 0,
     statusMessage: "",
     submittedDeathKey: "",
+    submittedCrazyGamesKey: "",
     filters: {
       mode: "all",
       difficulty: "all"
@@ -6321,6 +6323,27 @@
     return Boolean(accountState.token && accountState.username);
   }
 
+  function crazyGamesVisibleUserName() {
+    const user = crazyGamesState.user && typeof crazyGamesState.user === "object" ? crazyGamesState.user : null;
+    if (!user) {
+      return "";
+    }
+    return sanitizePlayerName(user.username || user.displayName || user.name);
+  }
+
+  function isCrazyGamesUserSignedIn() {
+    return isCrazyGamesRuntime() && Boolean(crazyGamesState.user && typeof crazyGamesState.user === "object");
+  }
+
+  function crazyGamesAccountStatusText() {
+    if (!isCrazyGamesUserSignedIn()) {
+      return "Progress syncs with CrazyGames when available";
+    }
+
+    const userName = crazyGamesVisibleUserName();
+    return userName ? "Synced with CrazyGames as " + userName : "Synced with CrazyGames";
+  }
+
   function currentAccountSave() {
     if (!isAccountSignedIn() || !accountState.currentSaveId || accountState.currentSaveUsername !== accountState.username) {
       return null;
@@ -6372,13 +6395,16 @@
     if (saveGameButton) {
       const signedIn = isAccountSignedIn();
       const crazyGamesRuntime = isCrazyGamesRuntime();
+      const crazyGamesSignedIn = isCrazyGamesUserSignedIn();
       saveGameButton.disabled = (!signedIn && !crazyGamesRuntime) || accountState.busy;
       saveGameButton.textContent = currentSave
         ? 'Save over "' + currentSave.name + '"'
         : signedIn
         ? "Save"
         : crazyGamesRuntime
-        ? "Save guest"
+        ? crazyGamesSignedIn
+          ? "Save progress"
+          : "Save guest"
         : "Log in";
       saveGameButton.setAttribute("aria-label", currentSave ? 'Save over "' + currentSave.name + '"' : saveGameButton.textContent);
     }
@@ -6387,6 +6413,8 @@
   function updateAccountUi() {
     const signedIn = isAccountSignedIn();
     const crazyGamesRuntime = isCrazyGamesRuntime();
+    const crazyGamesSignedIn = isCrazyGamesUserSignedIn();
+    const displaySignedIn = signedIn || crazyGamesSignedIn;
 
     if (accountLoginForm) {
       accountLoginForm.hidden = crazyGamesRuntime || signedIn;
@@ -6396,14 +6424,18 @@
     }
     if (crazyGamesAccountStatus) {
       crazyGamesAccountStatus.textContent = crazyGamesRuntime
-        ? "Progress syncs with CrazyGames when available"
+        ? crazyGamesAccountStatusText()
         : signedIn
         ? "Signed in with CrazyGames"
         : "Playing as guest";
     }
     if (crazyGamesLoginButton) {
-      crazyGamesLoginButton.hidden = !crazyGamesRuntime || signedIn || crazyGamesState.authAvailable === false;
+      crazyGamesLoginButton.hidden = !crazyGamesRuntime || crazyGamesSignedIn || crazyGamesState.authAvailable === false;
       crazyGamesLoginButton.disabled = accountState.busy || crazyGamesState.authPromptActive;
+    }
+    if (crazyGamesLogoutButton) {
+      crazyGamesLogoutButton.hidden = !crazyGamesRuntime || !crazyGamesSignedIn;
+      crazyGamesLogoutButton.disabled = accountState.busy || crazyGamesState.authPromptActive;
     }
     if (accountSignedIn) {
       accountSignedIn.hidden = crazyGamesRuntime || !signedIn;
@@ -6413,19 +6445,19 @@
     }
     if (startMenuAccount) {
       startMenuAccount.hidden = false;
-      startMenuAccount.classList.toggle("is-loading", !signedIn && accountState.sessionLoading === true);
-      startMenuAccount.classList.toggle("is-signed-out", !signedIn && accountState.sessionLoading !== true);
+      startMenuAccount.classList.toggle("is-loading", !displaySignedIn && accountState.sessionLoading === true);
+      startMenuAccount.classList.toggle("is-signed-out", !displaySignedIn && accountState.sessionLoading !== true);
       startMenuAccount.classList.toggle("is-wai-linked", accountState.waiLinked === true);
     }
     if (startMenuAccountLabel) {
-      startMenuAccountLabel.textContent = signedIn
+      startMenuAccountLabel.textContent = displaySignedIn
         ? "Signed in as"
         : accountState.sessionLoading
         ? accountSessionLoadingLabel()
         : "Not signed in";
     }
     if (startMenuAccountName) {
-      renderStartMenuAccountName(signedIn);
+      renderStartMenuAccountName(displaySignedIn);
     }
     if (accountLoginButton) {
       accountLoginButton.disabled = accountState.busy;
@@ -6454,7 +6486,9 @@
 
     startMenuAccountName.textContent = "";
     if (signedIn) {
-      startMenuAccountName.textContent = accountState.displayName || accountState.username;
+      startMenuAccountName.textContent = isAccountSignedIn()
+        ? accountState.displayName || accountState.username
+        : crazyGamesVisibleUserName() || "CrazyGames player";
       return;
     }
     if (accountState.sessionLoading) {
@@ -6526,6 +6560,11 @@
   function crazyGamesGameModule() {
     const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
     return sdk && sdk.game ? sdk.game : null;
+  }
+
+  function crazyGamesUserModule() {
+    const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
+    return sdk && sdk.user ? sdk.user : null;
   }
 
   function readMultiplayerPreference() {
@@ -7232,7 +7271,7 @@
           }
           if (!crazyGamesState.authListener && typeof sdk.user.addAuthListener === "function") {
             crazyGamesState.authListener = function () {
-              void handleCrazyGamesAuthChange("auth-listener");
+              return handleCrazyGamesAuthChange("auth-listener");
             };
             try {
               sdk.user.addAuthListener(crazyGamesState.authListener);
@@ -7312,6 +7351,24 @@
   function isCrazyGamesAlreadySignedInError(error) {
     const code = String((error && error.code) || (error && error.message) || error || "");
     return code.includes("userAlreadySignedIn");
+  }
+
+  function crazyGamesLogoutMethod() {
+    const sdk = crazyGamesState.sdk || (window.CrazyGames && window.CrazyGames.SDK);
+    const userModule = sdk && sdk.user;
+    if (!userModule) {
+      return null;
+    }
+
+    for (const methodName of ["logout", "logOut", "signOut", "signout"]) {
+      if (typeof userModule[methodName] === "function") {
+        return function () {
+          return userModule[methodName]();
+        };
+      }
+    }
+
+    return null;
   }
 
   async function promptCrazyGamesLogin() {
@@ -7510,8 +7567,7 @@
 
   async function logoutAccount() {
     if (isCrazyGamesRuntime()) {
-      setManualSaveStatus("Use your CrazyGames account menu to sign out.", "error");
-      return;
+      return await logoutCrazyGamesUser();
     }
 
     if (!isAccountSignedIn() || accountState.busy) {
@@ -7538,6 +7594,37 @@
       accountState.crazyGamesLinked = false;
       writeStoredAccountSession();
       setManualSaveStatus("Logged out.", "success");
+      setAccountBusy(false);
+    }
+  }
+
+  async function logoutCrazyGamesUser() {
+    if (accountState.busy || crazyGamesState.authPromptActive) {
+      return false;
+    }
+
+    const logoutMethod = crazyGamesLogoutMethod();
+    if (!logoutMethod) {
+      setManualSaveStatus("Use your CrazyGames account menu to sign out.", "error");
+      return false;
+    }
+
+    setAccountBusy(true);
+    try {
+      await Promise.resolve(logoutMethod());
+      await handleCrazyGamesAuthChange("logout");
+      if (isCrazyGamesUserSignedIn()) {
+        setManualSaveStatus("Use your CrazyGames account menu to finish signing out.", "error");
+        return false;
+      }
+      setManualSaveStatus("Logged out of CrazyGames.", "success");
+      return true;
+    } catch (error) {
+      console.warn("CrazyGames logout failed.", error);
+      await handleCrazyGamesAuthChange("logout-failed");
+      setManualSaveStatus("Could not log out of CrazyGames here.", "error");
+      return false;
+    } finally {
       setAccountBusy(false);
     }
   }
@@ -7675,11 +7762,19 @@
       await savePersistentState({ includeWorld: true });
       await waitForPersistenceIdle();
       if (!persistence.online) {
-        setManualSaveStatus(persistence.serverUnavailable ? serverMaintenanceMessage : "Could not save guest progress.", "error");
+        setManualSaveStatus(
+          persistence.serverUnavailable ? serverMaintenanceMessage : isCrazyGamesUserSignedIn() ? "Could not save progress." : "Could not save guest progress.",
+          "error"
+        );
         return false;
       }
-      setManualSaveStatus("Guest progress saved.", "success");
-      maybeNotifyText("Guest progress saved.");
+      const savedMessage = isCrazyGamesUserSignedIn()
+        ? persistence.storage === "crazygames-data"
+          ? "Synced with CrazyGames."
+          : "Progress saved."
+        : "Guest progress saved.";
+      setManualSaveStatus(savedMessage, "success");
+      maybeNotifyText(savedMessage);
       return true;
     } finally {
       setAccountBusy(false);
@@ -7987,6 +8082,8 @@
     } catch (error) {
       logCrazyGamesProgress("SDK init failed while preparing progress storage.", { reason, error }, "warn", "load");
     }
+
+    await handleCrazyGamesAuthChange("progress-" + (reason || "refresh"));
 
     const data = crazyGamesDataModule();
     progressSaveAdapter.dataModuleAvailable = Boolean(data);
@@ -8389,6 +8486,7 @@
         renderLeaderboard();
       }
       deathState.leaderboardSubmitted = true;
+      await submitCrazyGamesLeaderboardScore(score, deathKey, "death-run-save");
       return true;
     } catch (error) {
       leaderboard.statusMessage = backendErrorMessage(error, "Could not save this run.");
@@ -8397,6 +8495,46 @@
       return false;
     } finally {
       leaderboard.submitInFlight = false;
+    }
+  }
+
+  async function submitCrazyGamesLeaderboardScore(score, submissionKey, reason) {
+    if (!isCrazyGamesRuntime()) {
+      return false;
+    }
+
+    const cleanScore = Math.max(1, Math.round(finiteOr(score, 1)));
+    const cleanSubmissionKey = String(submissionKey || cleanScore || "").trim();
+    if (cleanSubmissionKey && leaderboard.submittedCrazyGamesKey === cleanSubmissionKey) {
+      return true;
+    }
+
+    try {
+      await initializeCrazyGamesIntegration();
+      await handleCrazyGamesAuthChange("leaderboard-" + (reason || "submit"));
+    } catch (error) {
+      console.warn("CrazyGames leaderboard auth refresh failed.", { reason, error });
+    }
+
+    if (!isCrazyGamesUserSignedIn()) {
+      return false;
+    }
+
+    const userModule = crazyGamesUserModule();
+    if (!userModule || typeof userModule.submitScore !== "function") {
+      console.warn("CrazyGames leaderboard score submit unavailable.", { reason });
+      return false;
+    }
+
+    try {
+      await Promise.resolve(userModule.submitScore({ score: cleanScore }));
+      if (cleanSubmissionKey) {
+        leaderboard.submittedCrazyGamesKey = cleanSubmissionKey;
+      }
+      return true;
+    } catch (error) {
+      console.warn("CrazyGames leaderboard score submit failed.", { reason, score: cleanScore, error });
+      return false;
     }
   }
 
@@ -28490,6 +28628,9 @@
       promptCrazyGamesLogin: function () {
         return promptCrazyGamesLogin();
       },
+      logoutAccount: function () {
+        return logoutAccount();
+      },
       setCrazyGamesGameplayActive: function (active, reason) {
         setCrazyGamesGameplayActive(active, reason || "test");
         return {
@@ -28563,6 +28704,9 @@
       },
       savePersistentState: function (options) {
         return savePersistentState(options || { includeWorld: true });
+      },
+      submitDeathLeaderboardScore: function (stats, runName) {
+        return submitDeathLeaderboardScore(stats || {}, runName || "Test Pilot");
       },
       setPersistenceEnabled: function (enabled) {
         persistence.enabled = Boolean(enabled);
@@ -28790,6 +28934,12 @@
   if (crazyGamesLoginButton) {
     crazyGamesLoginButton.addEventListener("click", function () {
       void promptCrazyGamesLogin();
+    });
+  }
+
+  if (crazyGamesLogoutButton) {
+    crazyGamesLogoutButton.addEventListener("click", function () {
+      void logoutAccount();
     });
   }
 
