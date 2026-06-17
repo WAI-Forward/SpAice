@@ -3536,7 +3536,7 @@ function allowedCorsOrigin(origin) {
     if (parsedOrigin.protocol !== "https:") {
       return "";
     }
-    return isCrazyGamesHostName(hostName) || isItchHostName(hostName) ? origin : "";
+    return isCrazyGamesHostName(hostName) || isItchHostName(hostName) || isGamePixHostName(hostName) ? origin : "";
   } catch {
     return "";
   }
@@ -3564,6 +3564,11 @@ function isItchHostName(hostName) {
     host === "itch.zone" ||
     host.endsWith(".itch.zone")
   );
+}
+
+function isGamePixHostName(hostName) {
+  const host = String(hostName || "").toLowerCase().replace(/\.$/, "");
+  return host === "gamepix.com" || host.endsWith(".gamepix.com");
 }
 
 function stripTrailingSlash(value) {

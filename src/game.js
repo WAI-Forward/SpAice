@@ -163,6 +163,7 @@
   const crazyGamesSdkUrl = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
   const crazyGamesSdkLoadTimeoutMs = 5000;
   const serverMaintenanceMessage = "Server is down for maintenance.  Please try again later";
+  const gamePixEventTargetOrigin = "*";
   const crazyGamesState = {
     sdk: null,
     initPromise: null,
@@ -186,6 +187,14 @@
     lastInviteLinkKey: "",
     inviteLinkPending: false,
     inviteLink: ""
+  };
+  const gamePixState = {
+    gameplayActive: false,
+    loadingActive: false,
+    lastScore: null,
+    lastLevel: "",
+    submittedScoreKey: "",
+    eventWarnings: Object.create(null)
   };
   const crazyGamesRoomMaxPlayers = 4;
   const clusternautsTestConfig = window.__CLUSTERNAUTS_TEST__ || null;
@@ -398,6 +407,9 @@
     if (isCrazyGamesRuntime()) {
       return true;
     }
+    if (isGamePixRuntime()) {
+      return true;
+    }
     return false;
   }
 
@@ -521,6 +533,18 @@
   function isItchHost(hostName) {
     const host = String(hostName || "").toLowerCase().replace(/\.$/, "");
     return host === "itch.io" || host.endsWith(".itch.io") || host === "itch.zone" || host.endsWith(".itch.zone");
+  }
+
+  function isGamePixRuntime() {
+    return Boolean(window.CLUSTERNAUTS_GAMEPIX_BUILD) || isGamePixHost(window.location.hostname);
+  }
+
+  function isGamePixHost(hostName) {
+    const host = String(hostName || "").toLowerCase().replace(/\.$/, "");
+    return (
+      host === "gamepix.com" ||
+      host.endsWith(".gamepix.com")
+    );
   }
 
   function readSearchParam(name) {
@@ -7476,7 +7500,9 @@
   }
 
   function updateCrazyGamesGameplayState(reason) {
-    setCrazyGamesGameplayActive(isCrazyGamesGameplayPlayable(), reason);
+    const playable = isCrazyGamesGameplayPlayable();
+    setCrazyGamesGameplayActive(playable, reason);
+    setGamePixGameplayActive(playable, reason);
   }
 
   function setCrazyGamesGameplayActive(active, reason) {
@@ -7502,6 +7528,7 @@
 
   function setCrazyGamesLoadingActive(active, reason) {
     const nextActive = Boolean(active);
+    setGamePixLoadingActive(nextActive, reason);
     if (!isCrazyGamesRuntime() || crazyGamesState.loadingEventsDisabled || crazyGamesState.loadingActive === nextActive) {
       return;
     }
@@ -7520,6 +7547,154 @@
       crazyGamesState.loadingEventsDisabled = true;
       console.warn("CrazyGames loading event unavailable.", { reason, error });
     }
+  }
+
+  function gamePixBridgeTargets() {
+    const targets = [];
+    for (const target of [window.parent, window.top]) {
+      if (target && target !== window && !targets.includes(target)) {
+        targets.push(target);
+      }
+    }
+    return targets;
+  }
+
+  function gamePixSdkCandidates() {
+    return [window.$GPX, window.GamePix, window.GamePixSDK, window.GPX].filter(function (candidate, index, candidates) {
+      return candidate && typeof candidate === "object" && candidates.indexOf(candidate) === index;
+    });
+  }
+
+  function warnGamePixEventOnce(key, details) {
+    if (gamePixState.eventWarnings[key]) {
+      return;
+    }
+    gamePixState.eventWarnings[key] = true;
+    console.warn("GamePix SDK bridge warning.", details || { key });
+  }
+
+  function callGamePixSdkMethod(methodNames, payload, reason) {
+    let delivered = false;
+    for (const sdk of gamePixSdkCandidates()) {
+      for (const methodName of methodNames) {
+        const method = sdk && sdk[methodName];
+        if (typeof method !== "function") {
+          continue;
+        }
+        try {
+          method.call(sdk, payload);
+          delivered = true;
+        } catch (error) {
+          warnGamePixEventOnce(methodName, { methodName, reason, error });
+        }
+      }
+    }
+    return delivered;
+  }
+
+  function dispatchGamePixCustomEvent(type, payload, reason) {
+    let delivered = false;
+    for (const sdk of gamePixSdkCandidates()) {
+      if (typeof sdk.emit === "function") {
+        try {
+          sdk.emit(type, payload);
+          delivered = true;
+        } catch (error) {
+          warnGamePixEventOnce("emit:" + type, { type, reason, error });
+        }
+      }
+      if (typeof sdk.dispatchEvent === "function") {
+        try {
+          sdk.dispatchEvent(Object.assign({ type }, payload || {}));
+          delivered = true;
+        } catch {
+          if (typeof CustomEvent === "function") {
+            try {
+              sdk.dispatchEvent(new CustomEvent(type, { detail: payload || {} }));
+              delivered = true;
+            } catch (error) {
+              warnGamePixEventOnce("dispatch:" + type, { type, reason, error });
+            }
+          }
+        }
+      }
+    }
+    return delivered;
+  }
+
+  function emitGamePixEvent(type, payload, reason) {
+    if (!isGamePixRuntime()) {
+      return false;
+    }
+
+    const cleanPayload = payload && typeof payload === "object" ? payload : {};
+    const message = Object.assign({ type }, cleanPayload);
+    let delivered = false;
+
+    for (const target of gamePixBridgeTargets()) {
+      try {
+        target.postMessage(message, gamePixEventTargetOrigin);
+        delivered = true;
+      } catch (error) {
+        warnGamePixEventOnce("postMessage:" + type, { type, reason, error });
+      }
+    }
+
+    return dispatchGamePixCustomEvent(type, cleanPayload, reason) || delivered;
+  }
+
+  function setGamePixGameplayActive(active, reason) {
+    const nextActive = Boolean(active);
+    if (!isGamePixRuntime() || gamePixState.gameplayActive === nextActive) {
+      return;
+    }
+
+    gamePixState.gameplayActive = nextActive;
+    const type = nextActive ? "gameplay_start" : "gameplay_stop";
+    const payload = { reason: reason || "" };
+    callGamePixSdkMethod(nextActive ? ["gameplayStart", "gameStart", "start"] : ["gameplayStop", "gameStop", "stop"], payload, reason);
+    emitGamePixEvent(type, payload, reason);
+  }
+
+  function setGamePixLoadingActive(active, reason) {
+    const nextActive = Boolean(active);
+    if (!isGamePixRuntime() || gamePixState.loadingActive === nextActive) {
+      return;
+    }
+
+    gamePixState.loadingActive = nextActive;
+    const type = nextActive ? "loading_start" : "loading_stop";
+    const payload = { reason: reason || "" };
+    callGamePixSdkMethod(nextActive ? ["loadingStart", "gameLoadingStart"] : ["loadingStop", "gameLoadingStop"], payload, reason);
+    emitGamePixEvent(type, payload, reason);
+  }
+
+  function updateGamePixScore(score, reason) {
+    if (!isGamePixRuntime()) {
+      return false;
+    }
+    const cleanScore = Math.max(0, Math.round(finiteOr(score, 0)));
+    if (gamePixState.lastScore === cleanScore) {
+      return true;
+    }
+    gamePixState.lastScore = cleanScore;
+    const payload = { score: cleanScore };
+    callGamePixSdkMethod(["updateScore", "setScore", "score"], payload, reason);
+    return emitGamePixEvent("update_score", payload, reason);
+  }
+
+  function updateGamePixLevel(level, reason) {
+    if (!isGamePixRuntime()) {
+      return false;
+    }
+    const cleanLevel = String(level || "").trim();
+    if (!cleanLevel || gamePixState.lastLevel === cleanLevel) {
+      return true;
+    }
+    gamePixState.lastLevel = cleanLevel;
+    const payload = { level: cleanLevel };
+    callGamePixSdkMethod(["updateLevel", "setLevel", "level"], payload, reason);
+    return emitGamePixEvent("update_level", payload, reason);
   }
 
   async function withCrazyGamesLoading(reason, task) {
@@ -9397,6 +9572,7 @@
       }
       deathState.leaderboardSubmitted = true;
       await submitCrazyGamesLeaderboardScore(score, deathKey, "death-run-save");
+      submitGamePixLeaderboardScore(score, deathKey, "death-run-save");
       return true;
     } catch (error) {
       leaderboard.statusMessage = backendErrorMessage(error, "Could not save this run.");
@@ -9446,6 +9622,24 @@
       console.warn("CrazyGames leaderboard score submit failed.", { reason, score: cleanScore, error });
       return false;
     }
+  }
+
+  function submitGamePixLeaderboardScore(score, submissionKey, reason) {
+    if (!isGamePixRuntime()) {
+      return false;
+    }
+
+    const cleanScore = Math.max(1, Math.round(finiteOr(score, 1)));
+    const cleanSubmissionKey = String(submissionKey || cleanScore || "").trim();
+    if (cleanSubmissionKey && gamePixState.submittedScoreKey === cleanSubmissionKey) {
+      return true;
+    }
+
+    updateGamePixScore(cleanScore, reason || "leaderboard-submit");
+    if (cleanSubmissionKey) {
+      gamePixState.submittedScoreKey = cleanSubmissionKey;
+    }
+    return true;
   }
 
   function connectedScoredBodyIds() {
@@ -9532,6 +9726,7 @@
     lifeStats.scoredBodies = bodyScore.bodyCount;
     lifeStats.bodyScore = bodyScore.bodyScore;
     lifeStats.currentScore = Math.max(1, Math.round(bodyScore.bodyScore + lifeStats.mobScore));
+    updateGamePixScore(lifeStats.currentScore, "life-stats");
 
     if (lifeStats.currentScore > lifeStats.bestScore) {
       lifeStats.bestScore = lifeStats.currentScore;
@@ -9539,6 +9734,8 @@
       lifeStats.bestScoredBodyMass = lifeStats.scoredBodyMass;
       lifeStats.bestScoredBodies = lifeStats.scoredBodies;
     }
+
+    updateGamePixLevel(lifeStats.maxTierName || (bodyTiers[0] && bodyTiers[0].name), "life-stats");
   }
 
   function formatLifeDuration(seconds) {
@@ -29641,6 +29838,15 @@
           user: crazyGamesState.user,
           instantMultiplayer: crazyGamesState.instantMultiplayer,
           instantMultiplayerHandled: crazyGamesState.instantMultiplayerHandled
+        };
+      },
+      gamePixState: function () {
+        return {
+          gameplayActive: gamePixState.gameplayActive,
+          loadingActive: gamePixState.loadingActive,
+          lastScore: gamePixState.lastScore,
+          lastLevel: gamePixState.lastLevel,
+          submittedScoreKey: gamePixState.submittedScoreKey
         };
       },
       loadPersistentState: function () {
