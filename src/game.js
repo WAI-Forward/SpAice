@@ -8230,7 +8230,7 @@
   }
 
   function isPortalBackendRuntime() {
-    return isItchRuntime() && shouldUseExternalBackend();
+    return (isItchRuntime() || isGamePixRuntime()) && shouldUseExternalBackend();
   }
 
   function isTrustedBackendMessageOrigin(origin) {
