@@ -2591,6 +2591,38 @@ select {
   overflow-wrap: anywhere;
 }
 
+.start-menu__account-logout {
+  justify-self: center;
+  min-height: 28px;
+  margin-top: 6px;
+  padding: 0 14px;
+  border: 1px solid rgba(248, 251, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(248, 251, 255, 0.08);
+  color: rgba(248, 251, 255, 0.86);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.start-menu__account-logout[hidden] {
+  display: none;
+}
+
+.start-menu__account-logout:hover,
+.start-menu__account-logout:focus-visible {
+  border-color: rgba(116, 224, 255, 0.48);
+  background: rgba(116, 224, 255, 0.14);
+  color: #f8fbff;
+}
+
+.start-menu__account-logout:disabled {
+  cursor: wait;
+  opacity: 0.56;
+}
+
 .start-menu__account-login {
   color: #74e0ff;
   text-decoration: underline;

@@ -75,6 +75,9 @@ const partyNetcodeVersion = 2;
 const anomalyPromptTimeoutMs = 15000;
 const anomalyEncounterLifetimeMs = 90000;
 const multiplayerDebugEnabled = process.env.CLUSTERNAUTS_MULTIPLAYER_DEBUG === "1";
+const authDebugEventsByAttempt = new Map();
+const maxAuthDebugEventsPerAttempt = 120;
+const authDebugEventLifetimeMs = 20 * 60 * 1000;
 const crazyGamesPublicKeyCache = {
   publicKey: "",
   expiresAt: 0
@@ -156,8 +159,54 @@ function logClusternautsError(event, details) {
 
 function logClusternautsAuth(event, details) {
   const stamp = new Date().toISOString();
-  const payload = details && typeof details === "object" ? ` ${JSON.stringify(details)}` : "";
+  const safeDetails = sanitizeAuthLogDetails(details);
+  const payload = safeDetails && typeof safeDetails === "object" ? ` ${JSON.stringify(safeDetails)}` : "";
   console.info(`[Clusternauts auth ${stamp}] ${event}${payload}`);
+  recordAuthDebugEvent(safeDetails && safeDetails.attemptId, event, safeDetails, stamp);
+}
+
+function sanitizeAuthLogDetails(details) {
+  if (!details || typeof details !== "object") {
+    return details;
+  }
+
+  const copy = Object.assign({}, details);
+  delete copy.transfer;
+  delete copy.sessionToken;
+  delete copy.cookie;
+  if (copy.redirectLocation && String(copy.redirectLocation).includes("transfer=")) {
+    copy.redirectLocation = String(copy.redirectLocation).replace(/transfer=[^&]+/g, "transfer=redacted");
+  }
+  return copy;
+}
+
+function recordAuthDebugEvent(attemptId, event, details, stamp) {
+  const cleanAttemptId = sanitizeAuthAttemptId(attemptId);
+  if (!cleanAttemptId) {
+    return;
+  }
+
+  pruneAuthDebugEvents();
+  const existing = authDebugEventsByAttempt.get(cleanAttemptId) || [];
+  existing.push({
+    at: stamp || new Date().toISOString(),
+    event: sanitizeDebugText(event, 80),
+    details: sanitizeAuthLogDetails(details) || {}
+  });
+  while (existing.length > maxAuthDebugEventsPerAttempt) {
+    existing.shift();
+  }
+  authDebugEventsByAttempt.set(cleanAttemptId, existing);
+}
+
+function pruneAuthDebugEvents() {
+  const cutoff = Date.now() - authDebugEventLifetimeMs;
+  for (const [attemptId, events] of authDebugEventsByAttempt) {
+    const latest = events.length ? Date.parse(events[events.length - 1].at) : 0;
+    if (!Number.isFinite(latest) || latest < cutoff) {
+      authDebugEventsByAttempt.delete(attemptId);
+    }
+  }
 }
 
 const mimeTypes = {
@@ -391,7 +440,7 @@ const server = http.createServer((request, response) => {
 async function handleWaiAuthRoute(request, response, url) {
   try {
     if (request.method === "GET" && url.pathname === "/auth/login") {
-      redirectToWaiLogin(request, response, url.searchParams.get("return_to"));
+      redirectToWaiLogin(request, response, url.searchParams.get("return_to"), url);
       return;
     }
 
@@ -401,7 +450,7 @@ async function handleWaiAuthRoute(request, response, url) {
     }
 
     if (request.method === "GET" && url.pathname === "/auth/portal-login-complete") {
-      writePortalLoginCompletePage(response);
+      writePortalLoginCompletePage(response, url);
       return;
     }
 
@@ -418,11 +467,16 @@ async function handleWaiAuthRoute(request, response, url) {
   }
 }
 
-function redirectToWaiLogin(request, response, returnTo) {
+function redirectToWaiLogin(request, response, returnTo, url) {
   const safeReturn = safeReturnPath(returnTo);
+  const attemptId = authAttemptIdFromPath(safeReturn) || authAttemptIdFromUrl(url);
   logClusternautsAuth("wai login redirect", {
+    attemptId,
     returnTo: safeReturn,
     portal: isPortalLoginCompletePath(safeReturn),
+    websiteUrl,
+    appLaunchUrl: `${websiteUrl}/auth/app-launch`,
+    callbackParam: safeReturn,
     request: authRequestDetails(request)
   });
   const params = new URLSearchParams({
@@ -433,7 +487,13 @@ function redirectToWaiLogin(request, response, returnTo) {
   response.end();
 }
 
-function writePortalLoginCompletePage(response) {
+function writePortalLoginCompletePage(response, url) {
+  const attemptId = authAttemptIdFromUrl(url);
+  logClusternautsAuth("portal completion page served", {
+    attemptId,
+    hasTransfer: Boolean(url.searchParams.get("transfer")),
+    queryKeys: Array.from(url.searchParams.keys()).sort()
+  });
   response.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store",
@@ -450,12 +510,18 @@ function writePortalLoginCompletePage(response) {
     <script>
       (function () {
         var params = new URLSearchParams(window.location.search || "");
+        var authDebugId = params.get("auth_debug_id") || "";
         var message = {
           type: "clusternauts:wai-login-complete",
+          authDebugId: authDebugId,
           transfer: params.get("transfer") || ""
         };
         try {
-          console.info("[Clusternauts auth] portal completion page loaded", { hasTransfer: Boolean(message.transfer) });
+          console.info("[Clusternauts auth] portal completion page loaded", {
+            authDebugId: authDebugId,
+            hasTransfer: Boolean(message.transfer),
+            queryKeys: Array.from(params.keys()).sort()
+          });
         } catch (error) {}
         try {
           if (window.opener && !window.opener.closed) {
@@ -479,17 +545,24 @@ function writePortalLoginCompletePage(response) {
 }
 
 async function handleWaiLaunchCallback(request, response, url) {
+  const attemptId = authAttemptIdFromUrl(url);
   const code = sanitizeDebugText(url.searchParams.get("code"), 2048);
   if (!code) {
-    logClusternautsAuth("wai callback missing code", { request: authRequestDetails(request) });
+    logClusternautsAuth("wai callback missing code", {
+      attemptId,
+      queryKeys: Array.from(url.searchParams.keys()).sort(),
+      request: authRequestDetails(request)
+    });
     redirectToWaiLogin(request, response, "/");
     return;
   }
 
   const callback = `${serviceBaseUrl(request)}/auth/launch/callback`;
   logClusternautsAuth("wai callback exchanging code", {
+    attemptId,
     callback,
     returnTo: safeReturnPath(url.searchParams.get("return_to")),
+    queryKeys: Array.from(url.searchParams.keys()).sort(),
     request: authRequestDetails(request)
   });
   const tokens = await exchangeWaiAuthorizationCode(code, callback);
@@ -500,16 +573,21 @@ async function handleWaiLaunchCallback(request, response, url) {
 
   const result = await createWaiAccountSession(payload);
   const returnTo = safeReturnPath(url.searchParams.get("return_to"));
+  const returnAttemptId = authAttemptIdFromPath(returnTo);
+  const effectiveAttemptId = returnAttemptId || attemptId;
   const portalReturn = isPortalLoginCompletePath(returnTo);
   const redirectLocation = isPortalLoginCompletePath(returnTo)
     ? `${returnTo}?transfer=${encodeURIComponent(createPortalAuthTransfer(result.sessionToken))}`
     : returnTo;
   logClusternautsAuth("wai callback created session", {
+    attemptId: effectiveAttemptId,
     username: result.account && result.account.username,
     waiLinked: Boolean(result.account && result.account.waiLinked),
     portal: portalReturn,
     redirectTo: portalReturn ? "/auth/portal-login-complete?transfer=redacted" : redirectLocation,
-    cookie: cookieDebugDetails(request)
+    returnTo,
+    returnToHadAttemptId: Boolean(returnAttemptId),
+    cookieSettings: cookieDebugDetails(request)
   });
   response.writeHead(302, {
     Location: redirectLocation,
@@ -532,9 +610,14 @@ function createPortalAuthTransfer(sessionToken) {
   return `${payload}.${signature}`;
 }
 
-function verifyPortalAuthTransfer(transferToken) {
+function verifyPortalAuthTransfer(transferToken, attemptId) {
   const parts = String(transferToken || "").split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    logClusternautsAuth("portal transfer rejected: malformed", {
+      attemptId,
+      hasTransfer: Boolean(transferToken),
+      partCount: parts.length
+    });
     throwHttpError(401, "Login transfer expired. Try logging in again.");
   }
 
@@ -543,6 +626,11 @@ function verifyPortalAuthTransfer(transferToken) {
   const expectedBuffer = Buffer.from(expected);
   const actualBuffer = Buffer.from(actual);
   if (expectedBuffer.length !== actualBuffer.length || !crypto.timingSafeEqual(expectedBuffer, actualBuffer)) {
+    logClusternautsAuth("portal transfer rejected: bad signature", {
+      attemptId,
+      payloadLength: parts[0].length,
+      signatureLength: actual.length
+    });
     throwHttpError(401, "Login transfer expired. Try logging in again.");
   }
 
@@ -550,17 +638,28 @@ function verifyPortalAuthTransfer(transferToken) {
   try {
     payload = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
   } catch {
+    logClusternautsAuth("portal transfer rejected: invalid payload json", { attemptId });
     throwHttpError(401, "Login transfer expired. Try logging in again.");
   }
 
   if (!payload || payload.expiresAt <= Date.now()) {
+    logClusternautsAuth("portal transfer rejected: expired", {
+      attemptId,
+      expiresAt: payload && payload.expiresAt,
+      now: Date.now()
+    });
     throwHttpError(401, "Login transfer expired. Try logging in again.");
   }
 
   const sessionToken = sanitizeDebugText(payload.sessionToken, 200);
   if (!sessionToken) {
+    logClusternautsAuth("portal transfer rejected: missing session token", { attemptId });
     throwHttpError(401, "Login transfer expired. Try logging in again.");
   }
+  logClusternautsAuth("portal transfer accepted", {
+    attemptId,
+    expiresInMs: payload.expiresAt - Date.now()
+  });
   return sessionToken;
 }
 
@@ -684,6 +783,21 @@ async function handleAccountRequest(request, response) {
 
 async function handleAuthRequest(request, response, url) {
   try {
+    if (request.method === "GET" && url.pathname === "/api/auth/debug") {
+      const attemptId = authAttemptIdFromUrl(url);
+      logClusternautsAuth("auth debug requested", {
+        attemptId,
+        request: authRequestDetails(request)
+      });
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        attemptId,
+        events: attemptId ? authDebugEventsByAttempt.get(attemptId) || [] : []
+      });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/auth/session") {
       logClusternautsAuth("session bootstrap requested", { request: authRequestDetails(request) });
       const session = await requireAccountSession(request);
@@ -692,6 +806,32 @@ async function handleAuthRequest(request, response, url) {
         ok: true,
         serverTime: Date.now(),
         sessionToken: extractSessionToken(request),
+        account: publicAccount(session.account)
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/portal-session") {
+      const body = await readJsonBody(request);
+      const attemptId = sanitizeAuthAttemptId(body && body.authDebugId) || authAttemptIdFromUrl(url);
+      logClusternautsAuth("portal session redeem requested", {
+        attemptId,
+        hasTransfer: Boolean(body && body.transfer),
+        transferLength: body && body.transfer ? String(body.transfer).length : 0,
+        request: authRequestDetails(request)
+      });
+      const sessionToken = verifyPortalAuthTransfer(body && body.transfer, attemptId);
+      const session = await requireAccountSession({ method: "POST", headers: { authorization: `Bearer ${sessionToken}` } });
+      logClusternautsAuth("portal session redeem accepted", {
+        attemptId,
+        username: session.account.username,
+        waiLinked: Boolean(session.account.waiUserId),
+        request: authRequestDetails(request)
+      });
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        sessionToken,
         account: publicAccount(session.account)
       });
       return;
@@ -731,6 +871,15 @@ async function handleAuthRequest(request, response, url) {
     writeJson(response, 404, { ok: false, message: "Auth endpoint not found." });
   } catch (error) {
     const status = error && Number.isFinite(error.status) ? error.status : 500;
+    const attemptId = authAttemptIdFromUrl(url);
+    logClusternautsAuth("auth request failed", {
+      attemptId,
+      method: request.method,
+      path: url.pathname,
+      status,
+      message: error instanceof Error ? error.message : "unknown error",
+      request: authRequestDetails(request)
+    });
     logClusternautsError("auth request error", {
       method: request.method,
       path: url.pathname,
@@ -781,28 +930,6 @@ async function handleAccountSaveRequest(request, response, url) {
         serverTime: Date.now(),
         save: save.metadata,
         payload: save.payload
-      });
-      return;
-    }
-
-    if (request.method === "POST" && url.pathname === "/api/auth/portal-session") {
-      const body = await readJsonBody(request);
-      logClusternautsAuth("portal session redeem requested", {
-        hasTransfer: Boolean(body && body.transfer),
-        request: authRequestDetails(request)
-      });
-      const sessionToken = verifyPortalAuthTransfer(body && body.transfer);
-      const session = await requireAccountSession({ headers: { authorization: `Bearer ${sessionToken}` } });
-      logClusternautsAuth("portal session redeem accepted", {
-        username: session.account.username,
-        waiLinked: Boolean(session.account.waiUserId),
-        request: authRequestDetails(request)
-      });
-      writeJson(response, 200, {
-        ok: true,
-        serverTime: Date.now(),
-        sessionToken,
-        account: publicAccount(session.account)
       });
       return;
     }
@@ -2012,6 +2139,26 @@ function sessionTokenSource(request) {
     return "authorization";
   }
   return parseCookies(request.headers.cookie || "")[accountSessionCookie] ? "cookie" : "missing";
+}
+
+function sanitizeAuthAttemptId(value) {
+  return String(value || "").replace(/[^\w.-]/g, "").slice(0, 80);
+}
+
+function authAttemptIdFromUrl(url) {
+  if (!url || !url.searchParams) {
+    return "";
+  }
+  return sanitizeAuthAttemptId(url.searchParams.get("auth_debug_id") || url.searchParams.get("attempt") || "");
+}
+
+function authAttemptIdFromPath(pathValue) {
+  try {
+    const parsed = new URL(String(pathValue || "/"), "https://clusternauts.local");
+    return authAttemptIdFromUrl(parsed);
+  } catch {
+    return "";
+  }
 }
 
 function authRequestDetails(request) {

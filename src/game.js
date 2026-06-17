@@ -107,6 +107,7 @@
   const startMenuAccount = document.getElementById("startMenuAccount");
   const startMenuAccountLabel = document.getElementById("startMenuAccountLabel");
   const startMenuAccountName = document.getElementById("startMenuAccountName");
+  const startMenuAccountLogoutButton = document.getElementById("startMenuAccountLogoutButton");
   const menuLeaderboardList = document.getElementById("menuLeaderboardList");
   const menuLeaderboardModeFilter = document.getElementById("menuLeaderboardModeFilter");
   const menuLeaderboardDifficultyFilter = document.getElementById("menuLeaderboardDifficultyFilter");
@@ -225,6 +226,10 @@
   };
   let lastClientErrorReportAt = -Infinity;
   let lastServerMaintenanceNoticeAt = -Infinity;
+  let pendingWaiLoginAttemptId = "";
+  let authDebugPollTimer = 0;
+  let authDebugPollStartedAt = 0;
+  let authDebugSeenEventCount = 0;
 
   installClientErrorReporting();
 
@@ -6658,6 +6663,13 @@
     console.info("[Clusternauts auth] " + event, details || {});
   }
 
+  function createAuthDebugId() {
+    const randomPart = window.crypto && typeof window.crypto.getRandomValues === "function"
+      ? Array.from(window.crypto.getRandomValues(new Uint32Array(2))).map((value) => value.toString(36)).join("")
+      : Math.random().toString(36).slice(2);
+    return "itch-" + Date.now().toString(36) + "-" + randomPart;
+  }
+
   function isAccountSignedIn() {
     return Boolean(accountState.token && accountState.username);
   }
@@ -6856,6 +6868,10 @@
     }
     if (startMenuAccountName) {
       renderStartMenuAccountName(displaySignedIn);
+    }
+    if (startMenuAccountLogoutButton) {
+      startMenuAccountLogoutButton.hidden = !signedIn || crazyGamesRuntime;
+      startMenuAccountLogoutButton.disabled = accountState.busy;
     }
     updatePublicNameValue();
     if (accountLoginButton) {
@@ -7946,19 +7962,29 @@
   }
 
   function waiLoginUrl() {
+    if (!pendingWaiLoginAttemptId) {
+      pendingWaiLoginAttemptId = createAuthDebugId();
+    }
+    const portalReturn = "/auth/portal-login-complete?auth_debug_id=" + encodeURIComponent(pendingWaiLoginAttemptId);
     const returnTo = isPortalBackendRuntime()
-      ? "/auth/portal-login-complete"
+      ? portalReturn
       : `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`;
-    return backendRouteUrl(`/auth/login?return_to=${encodeURIComponent(returnTo)}`);
+    return backendRouteUrl(
+      `/auth/login?return_to=${encodeURIComponent(returnTo)}&auth_debug_id=${encodeURIComponent(pendingWaiLoginAttemptId)}`
+    );
   }
 
   function openWaiLogin() {
+    pendingWaiLoginAttemptId = createAuthDebugId();
     const loginUrl = waiLoginUrl();
     setManualSaveStatus("Opening login...", "success");
     logAccountAuth("open login", {
+      authDebugId: pendingWaiLoginAttemptId,
       portal: isPortalBackendRuntime(),
-      backendOrigin: shouldUseExternalBackend() ? backendOrigin() : window.location.origin
+      backendOrigin: shouldUseExternalBackend() ? backendOrigin() : window.location.origin,
+      loginUrl: redactAuthDebugUrl(loginUrl)
     });
+    startAuthDebugPolling(pendingWaiLoginAttemptId, "open-login");
 
     if (!isPortalBackendRuntime()) {
       window.location.href = loginUrl;
@@ -7988,21 +8014,40 @@
       }
       const data = event.data && typeof event.data === "object" ? event.data : {};
       if (data.type !== "clusternauts:wai-login-complete") {
+        logAccountAuth("ignored backend message with different type", {
+          origin: event.origin || "",
+          type: data.type || typeof event.data
+        });
         return;
       }
+      if (data.authDebugId && pendingWaiLoginAttemptId && data.authDebugId !== pendingWaiLoginAttemptId) {
+        logAccountAuth("login completion attempt id mismatch", {
+          expected: pendingWaiLoginAttemptId,
+          received: data.authDebugId
+        });
+      }
       logAccountAuth("login completion message received", {
+        authDebugId: data.authDebugId || pendingWaiLoginAttemptId,
         origin: event.origin || "",
         hasTransfer: Boolean(data.transfer)
       });
+      startAuthDebugPolling(data.authDebugId || pendingWaiLoginAttemptId, "completion-message");
       setManualSaveStatus("Login complete. Loading saves...", "success");
       if (data.transfer) {
-        void redeemPortalLoginTransfer(data.transfer);
+        void redeemPortalLoginTransfer(data.transfer, data.authDebugId || pendingWaiLoginAttemptId);
       } else {
+        logAccountAuth("login completion missing transfer", {
+          authDebugId: data.authDebugId || pendingWaiLoginAttemptId
+        });
         void bootstrapAccountSession();
       }
     });
 
     window.addEventListener("focus", function () {
+      if (pendingWaiLoginAttemptId) {
+        logAccountAuth("window focused during pending login", { authDebugId: pendingWaiLoginAttemptId });
+        void fetchAuthDebugEvents(pendingWaiLoginAttemptId, "focus");
+      }
       if (!isAccountSignedIn() && !accountState.sessionLoading) {
         void bootstrapAccountSession();
       }
@@ -8021,35 +8066,103 @@
     }
   }
 
-  async function redeemPortalLoginTransfer(transfer) {
+  function redactAuthDebugUrl(value) {
+    return String(value || "").replace(/transfer=[^&]+/g, "transfer=redacted");
+  }
+
+  function startAuthDebugPolling(attemptId, reason) {
+    const cleanAttemptId = String(attemptId || "").trim();
+    if (!cleanAttemptId) {
+      return;
+    }
+    pendingWaiLoginAttemptId = cleanAttemptId;
+    authDebugPollStartedAt = performance.now();
+    authDebugSeenEventCount = 0;
+    if (authDebugPollTimer) {
+      window.clearInterval(authDebugPollTimer);
+    }
+    logAccountAuth("auth debug polling start", { authDebugId: cleanAttemptId, reason });
+    void fetchAuthDebugEvents(cleanAttemptId, reason);
+    authDebugPollTimer = window.setInterval(function () {
+      if (!pendingWaiLoginAttemptId || performance.now() - authDebugPollStartedAt > 120000) {
+        stopAuthDebugPolling("timeout");
+        return;
+      }
+      void fetchAuthDebugEvents(cleanAttemptId, "poll");
+    }, 2000);
+  }
+
+  function stopAuthDebugPolling(reason) {
+    if (authDebugPollTimer) {
+      window.clearInterval(authDebugPollTimer);
+      authDebugPollTimer = 0;
+      logAccountAuth("auth debug polling stop", { authDebugId: pendingWaiLoginAttemptId, reason });
+    }
+  }
+
+  async function fetchAuthDebugEvents(attemptId, reason) {
+    const cleanAttemptId = String(attemptId || "").trim();
+    if (!cleanAttemptId) {
+      return;
+    }
+
+    try {
+      const data = await fetchPersistentJson("/api/auth/debug?attempt=" + encodeURIComponent(cleanAttemptId));
+      const events = Array.isArray(data.events) ? data.events : [];
+      if (events.length !== authDebugSeenEventCount) {
+        logAccountAuth("backend auth debug events", {
+          authDebugId: cleanAttemptId,
+          reason,
+          eventCount: events.length,
+          newEvents: events.slice(authDebugSeenEventCount)
+        });
+        authDebugSeenEventCount = events.length;
+      }
+    } catch (error) {
+      logAccountAuth("backend auth debug fetch failed", {
+        authDebugId: cleanAttemptId,
+        reason,
+        status: error && error.status,
+        message: error && error.message
+      });
+    }
+  }
+
+  async function redeemPortalLoginTransfer(transfer, authDebugId) {
     if (accountState.busy) {
-      logAccountAuth("portal transfer skipped because account is busy");
+      logAccountAuth("portal transfer skipped because account is busy", { authDebugId: authDebugId || pendingWaiLoginAttemptId });
       return;
     }
 
     setAccountBusy(true);
-    logAccountAuth("portal transfer redeem start", { hasTransfer: Boolean(transfer) });
+    const cleanAuthDebugId = authDebugId || pendingWaiLoginAttemptId;
+    logAccountAuth("portal transfer redeem start", { authDebugId: cleanAuthDebugId, hasTransfer: Boolean(transfer) });
     try {
       const data = await fetchPersistentJson("/api/auth/portal-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transfer })
+        body: JSON.stringify({ transfer, authDebugId: cleanAuthDebugId })
       });
       applyAccountSession(data);
       await refreshAccountSaves();
       setManualSaveStatus("Signed in with WAi Forward.", "success");
       logAccountAuth("portal transfer redeem success", {
+        authDebugId: cleanAuthDebugId,
         username: accountState.username,
         waiLinked: accountState.waiLinked,
         saveCount: accountState.saves.length
       });
+      await fetchAuthDebugEvents(cleanAuthDebugId, "redeem-success");
+      stopAuthDebugPolling("redeem-success");
     } catch (error) {
       setManualSaveStatus(backendErrorMessage(error, "Login did not complete. Try again."), "error");
       logAccountAuth("portal transfer redeem failed", {
+        authDebugId: cleanAuthDebugId,
         status: error && error.status,
         path: error && error.requestPath,
         message: error && error.message
       });
+      await fetchAuthDebugEvents(cleanAuthDebugId, "redeem-failed");
       console.warn("Clusternauts portal login transfer failed.", error);
       await bootstrapAccountSession();
     } finally {
@@ -29767,6 +29880,12 @@
 
   if (accountLogoutButton) {
     accountLogoutButton.addEventListener("click", function () {
+      void logoutAccount();
+    });
+  }
+
+  if (startMenuAccountLogoutButton) {
+    startMenuAccountLogoutButton.addEventListener("click", function () {
       void logoutAccount();
     });
   }
