@@ -11,6 +11,8 @@
   const scoreValue = document.getElementById("scoreValue");
   const difficultyValue = document.getElementById("difficultyValue");
   const gameVitalsHud = document.getElementById("gameVitalsHud");
+  const developerOverlay = document.getElementById("developerOverlay");
+  const developerMetricsText = document.getElementById("developerMetricsText");
   const touchLandButton = document.getElementById("touchLandButton");
   const currentBodyLabel = document.getElementById("currentBodyLabel");
   const nextMilestoneLabel = document.getElementById("nextMilestoneLabel");
@@ -24,6 +26,13 @@
   const vitalsToggle = document.getElementById("vitalsToggle");
   const resourcesToggle = document.getElementById("resourcesToggle");
   const buildToggle = document.getElementById("buildToggle");
+  const objectiveToggle = document.getElementById("objectiveToggle");
+  const objectiveTree = document.getElementById("objectiveTree");
+  const objectiveTreeList = document.getElementById("objectiveTreeList");
+  const objectiveTreeDetail = document.getElementById("objectiveTreeDetail");
+  const objectiveTreeClose = document.getElementById("objectiveTreeClose");
+  const objectiveSummary = document.getElementById("objectiveSummary");
+  const objectiveClaimAll = document.getElementById("objectiveClaimAll");
   const mapToggle = document.getElementById("mapToggle");
   const touchJoystick = document.getElementById("touchJoystick");
   const touchJoystickStick = document.getElementById("touchJoystickStick");
@@ -263,8 +272,14 @@
     rollLeft: "KeyQ",
     rollRight: "KeyE",
     land: "Space",
-    build: "KeyR"
+    build: "KeyR",
+    objectives: "KeyO",
+    zoomIn: "WheelUp",
+    zoomOut: "WheelDown",
+    previousTool: "",
+    nextTool: ""
   };
+  const directControlActions = ["zoomIn", "zoomOut", "previousTool", "nextTool"];
   const controlBindingLabels = [
     { action: "up", label: "Move up" },
     { action: "down", label: "Move down" },
@@ -273,7 +288,12 @@
     { action: "rollLeft", label: "Roll left" },
     { action: "rollRight", label: "Roll right" },
     { action: "land", label: "Land / take off" },
-    { action: "build", label: "Build menu" }
+    { action: "build", label: "Build menu" },
+    { action: "objectives", label: "Objective tree" },
+    { action: "zoomIn", label: "Zoom in" },
+    { action: "zoomOut", label: "Zoom out" },
+    { action: "previousTool", label: "Previous hotbar tool" },
+    { action: "nextTool", label: "Next hotbar tool" }
   ];
   const movementKeyAliases = {
     up: [],
@@ -290,12 +310,70 @@
   const compactHudHeightBreakpoint = 560;
   let vitalsHudOpen = false;
   let resourcesHudOpen = false;
+  let objectivesOpen = false;
   let mapHudOpen = false;
+  const developerMetricsRefreshMs = 250;
+  const developerMetricsState = {
+    open: false,
+    lastUpdateAt: -Infinity,
+    lastText: ""
+  };
+  const objectiveState = {
+    completed: Object.create(null),
+    claimed: Object.create(null),
+    renderSignature: "",
+    selectedId: "",
+    newlyCompleted: [],
+    lastUpdateFrameId: -1000,
+    scrollLeft: 0,
+    scrollTop: 0,
+    hasUserPanned: false,
+    zoom: 1
+  };
+  const objectiveGraphLayout = Object.freeze({
+    create_rock: { x: 170, y: 90 },
+    create_boulder: { x: 170, y: 210 },
+    create_asteroid: { x: 170, y: 330 },
+    create_dwarf_moon: { x: 170, y: 450 },
+    create_moon: { x: 170, y: 570 },
+    create_planet: { x: 170, y: 690 },
+    kill_3_alienoids: { x: 520, y: 90 },
+    kill_3_ufos: { x: 520, y: 270 },
+    kill_3_rambots: { x: 520, y: 450 },
+    kill_3_teslas: { x: 520, y: 630 },
+    kill_3_engineers: { x: 520, y: 810 },
+    kill_3_satellites: { x: 520, y: 990 },
+    kill_3_rockets: { x: 520, y: 1170 },
+    kill_3_fighters: { x: 520, y: 1350 },
+    kill_alienoid_boss: { x: 950, y: 90 },
+    kill_ufo_boss: { x: 950, y: 270 },
+    kill_rambot_boss: { x: 950, y: 450 },
+    kill_tesla_boss: { x: 950, y: 630 },
+    kill_engineer_boss: { x: 950, y: 810 },
+    kill_satellite_boss: { x: 950, y: 990 },
+    kill_rocket_boss: { x: 950, y: 1170 },
+    kill_fighter_boss: { x: 950, y: 1350 },
+    make_laser_pistol: { x: 1280, y: 300 },
+    create_turret: { x: 1280, y: 480 },
+    create_accumulator: { x: 1280, y: 780 },
+    create_spanner: { x: 1280, y: 960 },
+    create_rifle: { x: 1280, y: 1140 }
+  });
+  const objectiveGraphPadding = 90;
   const techLedgerDrag = {
     active: false,
     pointerId: null,
     offsetX: 0,
     offsetY: 0
+  };
+  const objectiveTreePan = {
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    scrollLeft: 0,
+    scrollTop: 0,
+    scale: 1
   };
   const accountState = {
     token: "",
@@ -582,7 +660,7 @@
     right: false,
     seen: false
   };
-  const gameplayPointerBlockSelector = ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .hud__land-action, .compact-hud-toggles, .touch-joystick, .tech-ledger";
+  const gameplayPointerBlockSelector = ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .hud__land-action, .compact-hud-toggles, .touch-joystick, .tech-ledger, .notifications";
   const touchControlState = {
     active: false,
     pointerId: null,
@@ -649,8 +727,11 @@
     hitCooldown: 0,
     hitFlash: 0,
     landed: null,
+    spacecraftInterior: null,
     walkCycle: 0,
-    weaponSlow: 0
+    weaponSlow: 0,
+    rocketSuitCharge: 0,
+    rocketSuitActive: false
   };
 
   const particles = [];
@@ -667,6 +748,7 @@
   const playerLasers = [];
   const launcherMissiles = [];
   const structures = [];
+  const spacecrafts = [];
   const healthPickups = [];
   const techPickups = [];
   const targetParticles = 78;
@@ -677,6 +759,9 @@
   const bodyImpactRepeatDamageCooldown = 1.15;
   const bodyImpactBaseKnockback = 145;
   const bodyImpactMaxKnockback = 320;
+  const bossBodyEvadeDuration = 1.05;
+  const bossBodyEvadeMinSpeed = 430;
+  const bossBodyEvadeMaxSpeed = 820;
   const solidBodyDamageSpeed = 92;
   const solidBodyPlayerDamageSpeed = 520;
   const weaponSlowDecay = 0.18;
@@ -696,13 +781,44 @@
   const teslaLightningRange = 760;
   const teslaLightningDamage = 8;
   const teslaToolDisableDuration = 3.2;
+  const empToolId = "emp-tool";
+  const familiarNetToolId = "familiar-net";
+  const pistonPunchToolId = "piston-punch";
+  const guidedLauncherToolId = "guided-launcher";
+  const machineGunToolId = "machine-gun";
+  const rocketSuitToolId = "rocket-suit";
+  const empPulseRange = 520;
+  const empPulseDisableDuration = 4.8;
+  const empPulseEnergyCost = 28;
+  const empPulseCooldown = 7.5;
+  const pistonPunchRange = 235;
+  const pistonPunchDamage = 32;
+  const pistonPunchKnockback = 520;
+  const pistonPunchEnergyCost = 12;
+  const pistonPunchCooldown = 0.72;
+  const teslaBossEmpPulseRange = 620;
+  const teslaBossEmpPulseDisableDuration = 4.8;
   const rocketImpactDamage = 24;
   const rocketImpactSpeed = 320;
+  const rocketSuitEnergyDrain = 18;
+  const rocketSuitBaseThrust = 760;
+  const rocketSuitChargeThrust = 1680;
+  const rocketSuitChargeRate = 0.82;
+  const rocketSuitChargeDecay = 1.9;
+  const rocketSuitBaseMaxSpeed = 520;
+  const rocketSuitChargeMaxSpeed = 780;
+  const rocketSuitMobDamage = 24;
+  const rocketSuitMobDamageSpeedScale = 0.036;
+  const rocketSuitMobKnockback = 330;
   const satelliteMissileSpeed = 630;
   const satelliteMissileDamage = 15;
   const satelliteLockDuration = 0.82;
   const satelliteVolleySpacing = 0.24;
   const satelliteVolleyCount = 3;
+  const satelliteBossSeekingMissileCount = 3;
+  const satelliteBossSeekingMissileSpeed = 420;
+  const satelliteBossSeekingMissileTurnRate = 3.45;
+  const satelliteBossSeekingMissileLife = 4.6;
   const rocketChargeDuration = 1.18;
   const rocketChargeCooldownMin = 1.25;
   const rocketChargeCooldownMax = 2.15;
@@ -769,9 +885,12 @@
     easy: {
       id: "easy",
       label: "Easy",
+      summary: "Relaxed growth",
+      description: "Softer hits, more recovery drops, and smaller score rewards.",
       mobIntervalScale: 0.82,
       mobBatchScale: 1.12,
       mobBonusChanceScale: 1.1,
+      mobStartingBatchBonusChances: [0, 0],
       mobDamageMultiplier: 0.62,
       healthDropMultiplier: 1.45,
       techDropMultiplier: 1.45,
@@ -781,9 +900,12 @@
     medium: {
       id: "medium",
       label: "Medium",
+      summary: "Balanced pressure",
+      description: "Regular attacks, fair damage, and the standard score target.",
       mobIntervalScale: 0.72,
       mobBatchScale: 1.24,
       mobBonusChanceScale: 1.22,
+      mobStartingBatchBonusChances: [0.75, 0.2, 0.09],
       mobDamageMultiplier: 0.82,
       healthDropMultiplier: 1.2,
       techDropMultiplier: 1.15,
@@ -793,9 +915,12 @@
     hard: {
       id: "hard",
       label: "Hard",
+      summary: "Hostile space",
+      description: "More enemies, fewer safety drops, and stronger mob-point rewards.",
       mobIntervalScale: 0.62,
       mobBatchScale: 1.38,
       mobBonusChanceScale: 1.35,
+      mobStartingBatchBonusChances: [0.9, 0.75, 0.34],
       mobDamageMultiplier: 1,
       healthDropMultiplier: 1,
       techDropMultiplier: 1,
@@ -814,13 +939,69 @@
     rocket: 560,
     fighter: 700
   };
+  const mobEntityBlueprints = {
+    alienoid: { label: "Alienoid", radius: 28, health: 100, speedJitter: 18, color: null },
+    ufo: { label: "UFO", radius: 34, health: 130, speedJitter: 24, color: { r: 112, g: 226, b: 255 } },
+    rambot: { label: "Rambot", radius: 38, health: 210, speedJitter: 10, color: { r: 184, g: 196, b: 204 } },
+    engineer: { label: "Engineer", radius: 33, health: 140, speedJitter: 16, color: { r: 102, g: 224, b: 184 } },
+    tesla: { label: "Tesla", radius: 32, health: 150, speedJitter: 18, color: { r: 157, g: 255, b: 122 } },
+    satellite: { label: "Satellite", radius: 36, health: 180, speedJitter: 14, color: { r: 169, g: 133, b: 255 } },
+    rocket: { label: "Rocket ship", radius: 34, health: 170, speedJitter: 44, color: { r: 169, g: 133, b: 255 } },
+    fighter: { label: "Fighter ship", radius: 40, health: 230, speedJitter: 20, color: { r: 119, g: 167, b: 255 } }
+  };
   const mobTierOrder = ["alienoid", "ufo", "rambot", "tesla", "engineer", "satellite", "rocket", "fighter"];
-  const previousTierDefeatsToUnlock = 3;
+  const mobObjectivePluralLabels = {
+    alienoid: "Alienoids",
+    ufo: "UFOs",
+    rambot: "Rambots",
+    tesla: "Teslas",
+    engineer: "Engineers",
+    satellite: "Satellites",
+    rocket: "Rocket ships",
+    fighter: "Fighter ships"
+  };
+  const mobTierUnlockBaseDefeats = 3;
+  const mobBossDefeatsToUnlock = 30;
+  const mobBossWarningDuration = 60;
+  const mobBossSpawnChance = 0.18;
+  const mobBossSpawnChancePerDefeat = 0.006;
+  const mobBossHealthMultiplier = 6;
+  const mobBossRadiusMultiplier = 1.78;
+  const mobBossDamageMultiplier = 1.65;
+  const mobBossDropCount = 10;
+  const mobBossMinionCooldownMin = 8;
+  const mobBossMinionCooldownMax = 14;
+  const mobBossAltAttackCooldownMin = 6;
+  const mobBossAltAttackCooldownMax = 10;
+  const mobBossEscortSpawnMin = 3;
+  const mobBossEscortSpawnMax = 5;
+  const mobBossSpawnIntervalScale = 0.46;
+  const mobBossSpawnTimerCeilingScale = 0.32;
+  const mobBossSpawnBatchBonus = 1;
+  const mobBossLiveCapBonus = 3;
+  const mobBossMaxSpeedMultiplier = 1.28;
+  const mobBossDirectionalSpeedBonus = 0.48;
+  const engineerBossSummonDuration = 1.35;
+  const engineerBossSummonRadius = 118;
+  const familiarNetRange = 210;
+  const familiarNetCatchHalfAngle = 0.74;
+  const familiarNetCatchLinePadding = 38;
+  const familiarNetSwingDuration = 0.3;
+  const familiarNetCooldown = 0.62;
+  const familiarNetReleaseCooldown = 0.42;
+  const familiarDamagePerSecond = 28;
+  const hostileFamiliarDamagePerSecond = 18;
   const baseMaxMobSpawnBatchSize = 3;
   const mobSpawnCapGrowthIntervalMultiplier = 10;
   const thirdMobSpawnChanceScale = 0.45;
-  const mobSpawnRestDuration = 24;
+  const mobSpawnRestDuration = 45;
   const mobSpawnRestCooldown = 150;
+  const mobSpawnRestDrainMaxDuration = 90;
+  const mobSpawnRestManageableMobsPerPlayer = 3;
+  const mobSpawnEdgePaddingBonus = 320;
+  const mobSpawnSpreadMultiplier = 1.25;
+  const mobRelocationEdgePaddingBonus = 560;
+  const mobRelocationSpreadMultiplier = 1.5;
   const ufoTractorRange = 520;
   const ufoTractorWidth = 118;
   const ufoTractorForce = 2350;
@@ -831,11 +1012,26 @@
   const ufoSapSourceGraceDuration = 0.45;
   const ufoSapCargoDuration = 3.25;
   const ufoUndersideDamage = 14;
-  const mobDamageParticleMin = 2;
-  const mobDamageParticleMax = 4;
+  const ufoBossTractorImpactDisableDuration = 1.6;
+  const ufoBossNormalBeamDuration = 10;
+  const ufoBossNoBeamDuration = 2.5;
+  const ufoBossDrainBeamDuration = 10;
+  const ufoBossPlayerDrainRate = 4.6;
+  const ufoBossPlayerDrainTickInterval = 0.72;
+  const mobDamageParticleMin = 1;
+  const mobDamageParticleMax = 14;
+  const mobDamageParticleMultiplayerMax = 8;
+  const mobDamagePerParticle = 10;
   const mobDamageParticleMass = 1;
   const rambotBodyImpactSpeed = 285;
   const rambotBodyImpactDrain = 11;
+  const rambotBossPistonRange = 330;
+  const rambotBossPistonDuration = 0.95;
+  const rambotBossPistonDamage = 21;
+  const rambotBossPistonKnockback = 560;
+  const rambotBossHeadTurnLimit = Math.PI / 4;
+  const rambotBossAltAttackCooldownMin = 4.2;
+  const rambotBossAltAttackCooldownMax = 6.8;
   const playerWeaponDefaults = {
     speed: 620,
     damage: 28,
@@ -862,10 +1058,39 @@
       color: { r: 255, g: 115, b: 173 },
       piercesMobs: true,
       label: "laser rifle"
+    },
+    shotgun: {
+      speed: 710,
+      damage: 12,
+      cooldown: 1.35,
+      knockback: 180,
+      movementSlow: 0.28,
+      life: 0.58,
+      length: 38,
+      radius: 5.4,
+      pelletCount: 9,
+      spread: 0.46,
+      color: { r: 255, g: 220, b: 122 },
+      label: "shotgun"
+    },
+    [machineGunToolId]: {
+      speed: 820,
+      damage: 10,
+      cooldown: 0.14,
+      knockback: 95,
+      movementSlow: 0.06,
+      life: 0.66,
+      length: 36,
+      radius: 4.2,
+      spread: 0.055,
+      color: { r: 119, g: 167, b: 255 },
+      label: "machine gun"
     }
   };
   playerWeaponDefaults.energyCost = 8;
   weaponDefinitions["laser-rifle"].energyCost = 12;
+  weaponDefinitions.shotgun.energyCost = 16;
+  weaponDefinitions[machineGunToolId].energyCost = 3;
   const turretLaserSpeed = 760;
   const turretLaserDamage = 24;
   const turretLaserKnockback = 210;
@@ -883,6 +1108,11 @@
   const launcherMissileDamage = 68;
   const launcherMissileAoERadius = 220;
   const launcherMissileKnockback = 320;
+  const guidedLauncherEnergyCost = 18;
+  const guidedLauncherCooldown = 1.85;
+  const guidedLauncherMissileLife = 7.2;
+  const guidedLauncherPathPointSpacing = 42;
+  const guidedLauncherMaxPathPoints = 34;
   const structurePlacementTierThreshold = 500;
   const structureSurfaceOffset = 18;
   const structurePlacementLeeway = 72;
@@ -916,6 +1146,11 @@
   const jetEnergyDrain = 9;
   const jetThrust = 620;
   const defaultToolId = "suction-gadget";
+  const visciousVacuumToolId = "viscious-vacuum";
+  const visciousVacuumMobDrainRate = 16;
+  const visciousVacuumMobDrainTickInterval = 0.18;
+  const visciousVacuumBodyDrainRate = 2.15;
+  const visciousVacuumBodyDrainMinStrength = 0.1;
   const techTypes = [
     { key: "suction", label: "Suction Tech", color: "#58e2ff" },
     { key: "weapon", label: "Weapon Tech", color: "#ff73ad" },
@@ -934,9 +1169,17 @@
   ];
   const toolCatalog = [
     { id: defaultToolId, name: "Vacuum gadget", shortName: "Vacuum", color: "#58e2ff" },
+    { id: visciousVacuumToolId, name: "Viscious Vacuum", shortName: "Viscious", color: "#ff5f87" },
     { id: "laser-pistol", name: "Laser pistol", shortName: "Pistol", color: "#ff73ad" },
     { id: "laser-rifle", name: "Laser rifle", shortName: "Rifle", color: "#ff73ad" },
-    { id: "spanner", name: "Spanner", shortName: "Spanner", color: "#66e0b8" }
+    { id: "shotgun", name: "Shotgun", shortName: "Shotgun", color: "#ffdc7a" },
+    { id: machineGunToolId, name: "Machine Gun", shortName: "MG", color: "#77a7ff" },
+    { id: "spanner", name: "Spanner", shortName: "Spanner", color: "#66e0b8" },
+    { id: empToolId, name: "EMP tool", shortName: "EMP", color: "#7ee8ff" },
+    { id: familiarNetToolId, name: "Familiar Net", shortName: "Net", color: "#66e0b8" },
+    { id: pistonPunchToolId, name: "Piston Punch", shortName: "Punch", color: "#ffd166" },
+    { id: guidedLauncherToolId, name: "Guided Launcher", shortName: "Guided", color: "#ffb858" },
+    { id: rocketSuitToolId, name: "Rocket Suit", shortName: "Rocket", color: "#a985ff" }
   ];
   const buildRecipes = [
     {
@@ -976,6 +1219,86 @@
       icon: "assets/spanner.svg"
     },
     {
+      id: "shotgun",
+      name: "Shotgun",
+      category: "tools",
+      description: "A recovered alienoid scattergun that fires a tight cluster of propulsion-charged weapon pellets.",
+      cost: { weapon: 16, propulsion: 6, plating: 3 },
+      unlockToolId: "shotgun",
+      blueprintObjectiveId: "kill_alienoid_boss",
+      icon: "assets/shotgun.svg"
+    },
+    {
+      id: machineGunToolId,
+      name: "Machine Gun",
+      category: "tools",
+      description: "A fighter boss blueprint for a rapid-fire weapon that pours out a steady stream of shield-blue rounds.",
+      cost: { weapon: 22, target: 8, shield: 6 },
+      unlockToolId: machineGunToolId,
+      blueprintObjectiveId: "kill_fighter_boss",
+      icon: "assets/machine-gun.svg"
+    },
+    {
+      id: visciousVacuumToolId,
+      name: "Viscious Vacuum",
+      category: "tools",
+      description: "A UFO-tuned vacuum that siphons mob health, strips matter from larger bodies, and blasts mobs back.",
+      cost: { suction: 16, weapon: 6, energy: 3 },
+      unlockToolId: visciousVacuumToolId,
+      blueprintObjectiveId: "kill_ufo_boss",
+      icon: "assets/vacuum-gadget.svg"
+    },
+    {
+      id: empToolId,
+      name: "EMP tool",
+      category: "tools",
+      description: "A Tesla-derived pulse emitter that disables nearby mobs and shuts down UFO beams.",
+      cost: { energy: 16, target: 5, weapon: 6 },
+      unlockToolId: empToolId,
+      blueprintObjectiveId: "kill_tesla_boss",
+      icon: "assets/emp-tool.svg"
+    },
+    {
+      id: familiarNetToolId,
+      name: "Familiar Net",
+      category: "tools",
+      description: "An engineer blueprint for catching one mob at a time. Left click swipes the net; right click releases the captured mob as a familiar.",
+      cost: { repair: 16, target: 5, weapon: 6 },
+      unlockToolId: familiarNetToolId,
+      blueprintObjectiveId: "kill_engineer_boss",
+      icon: "assets/familiar-net.svg"
+    },
+    {
+      id: pistonPunchToolId,
+      name: "Piston Punch",
+      category: "tools",
+      description: "A rambot blueprint that snaps a heavy head forward on a piston, damaging mobs and punching them away.",
+      cost: { plating: 16, weapon: 8, propulsion: 4 },
+      unlockToolId: pistonPunchToolId,
+      blueprintObjectiveId: "kill_rambot_boss",
+      icon: "assets/piston-punch.svg"
+    },
+    {
+      id: guidedLauncherToolId,
+      name: "Guided Launcher",
+      category: "tools",
+      description: "A satellite blueprint that launches a missile while you hold fire, then guides it along the path you drag with the mouse.",
+      cost: { target: 16, propulsion: 8, weapon: 6 },
+      unlockToolId: guidedLauncherToolId,
+      blueprintObjectiveId: "kill_satellite_boss",
+      icon: "assets/missile-launcher.svg"
+    },
+    {
+      id: rocketSuitToolId,
+      name: "Rocket Suit",
+      category: "tools",
+      description: "A rocket boss blueprint that reshapes your suit into a pointed rocket and accelerates you toward the cursor while left click is held.",
+      cost: { propulsion: 18, plating: 7, energy: 5 },
+      unlockToolId: rocketSuitToolId,
+      blueprintObjectiveId: "kill_rocket_boss",
+      icon: "assets/missile-launcher.svg"
+    },
+    {
       id: "plating-block",
       name: "Plating block",
       category: "structures",
@@ -998,7 +1321,7 @@
       name: "Accumulator",
       category: "structures",
       description: "A suction-plated collector that pulls loose particles into its host body.",
-      cost: { plating: 3, suction: 5 },
+      cost: { plating: 3, suction: 5, energy: 1 },
       structureType: "accumulator",
       icon: "assets/accumulator.svg"
     },
@@ -1007,7 +1330,7 @@
       name: "Turret",
       category: "structures",
       description: "A folding surface turret that guards its host body from nearby mobs.",
-      cost: { plating: 3, weapon: 5 },
+      cost: { plating: 3, weapon: 5, energy: 1 },
       structureType: "turret",
       icon: "assets/turret.svg"
     },
@@ -1075,6 +1398,14 @@
       { id: "damage", name: "Damage", techKey: "weapon", cost: 5, maxBonus: 0.9 },
       { id: "range", name: "Range", techKey: "target", cost: 5, maxBonus: 0.9 }
     ],
+    shotgun: [
+      { id: "damage", name: "Damage", techKey: "weapon", cost: 5, maxBonus: 0.9 },
+      { id: "range", name: "Range", techKey: "propulsion", cost: 4, maxBonus: 0.9 }
+    ],
+    [machineGunToolId]: [
+      { id: "damage", name: "Damage", techKey: "weapon", cost: 6, maxBonus: 0.9 },
+      { id: "range", name: "Range", techKey: "target", cost: 5, maxBonus: 0.9 }
+    ],
     spanner: [
       { id: "repair-speed", name: "Repair speed", techKey: "repair", cost: 3, maxBonus: 1.15 },
       { id: "dismantle-speed", name: "Dismantle speed", techKey: "weapon", cost: 3, maxBonus: 1.15 }
@@ -1082,6 +1413,14 @@
     [defaultToolId]: [
       { id: "suck", name: "Suck strength", techKey: "suction", cost: 3, maxBonus: 1.2 },
       { id: "blow", name: "Blow strength", techKey: "propulsion", cost: 3, maxBonus: 1.2 }
+    ],
+    [visciousVacuumToolId]: [
+      { id: "suck", name: "Suck strength", techKey: "suction", cost: 4, maxBonus: 1.2 },
+      { id: "blow", name: "Blow strength", techKey: "propulsion", cost: 4, maxBonus: 1.2 }
+    ],
+    [empToolId]: [
+      { id: "range", name: "Pulse range", techKey: "target", cost: 5, maxBonus: 0.8 },
+      { id: "duration", name: "Disable duration", techKey: "energy", cost: 5, maxBonus: 0.65 }
     ]
   };
   const techInventory = {};
@@ -1303,6 +1642,193 @@
     { name: "moon", threshold: 1500, article: "a", solid: true },
     { name: "planet", threshold: 7500, article: "a", solid: true }
   ];
+  const celestialBodyRadii = {
+    particle: 11,
+    rock: 22,
+    boulder: 36,
+    asteroid: 52,
+    "dwarf moon": 78,
+    moon: 110,
+    planet: 158
+  };
+  const celestialBodyBlueprints = bodyTiers.reduce(function (blueprints, tier) {
+    blueprints[tier.name] = {
+      name: tier.name,
+      threshold: tier.threshold,
+      article: tier.article,
+      solid: tier.solid,
+      radius: celestialBodyRadii[tier.name] || 11
+    };
+    return blueprints;
+  }, Object.create(null));
+  const progressionTree = {
+    nodes: [
+      { id: "create_rock", label: "Create a rock", category: "celestial_body", prerequisites: [] },
+      { id: "create_boulder", label: "Create a boulder", category: "celestial_body", prerequisites: ["create_rock"] },
+      { id: "create_asteroid", label: "Create an asteroid", category: "celestial_body", prerequisites: ["create_boulder"] },
+      { id: "create_dwarf_moon", label: "Create a dwarf moon", category: "celestial_body", prerequisites: ["create_asteroid"] },
+      { id: "create_moon", label: "Create a moon", category: "celestial_body", prerequisites: ["create_dwarf_moon"] },
+      { id: "create_planet", label: "Create a planet", category: "celestial_body", prerequisites: ["create_moon"] },
+      { id: "kill_3_alienoids", label: "Kill 3 alienoids", category: "mob", prerequisites: ["create_rock"] },
+      { id: "kill_3_ufos", label: "Kill 4 UFOs", category: "mob", prerequisites: ["kill_3_alienoids"] },
+      { id: "kill_3_rambots", label: "Kill 5 rambots", category: "mob", prerequisites: ["kill_3_ufos"] },
+      { id: "kill_3_teslas", label: "Kill 6 teslas", category: "mob", prerequisites: ["kill_3_rambots"] },
+      { id: "kill_3_engineers", label: "Kill 7 engineers", category: "mob", prerequisites: ["kill_3_teslas"] },
+      { id: "kill_3_satellites", label: "Kill 8 satellites", category: "mob", prerequisites: ["kill_3_engineers"] },
+      { id: "kill_3_rockets", label: "Kill 9 rockets", category: "mob", prerequisites: ["kill_3_satellites"] },
+      { id: "kill_3_fighters", label: "Kill 10 fighters", category: "mob", prerequisites: ["kill_3_rockets"] },
+      { id: "kill_alienoid_boss", label: "Kill alienoid boss", category: "boss", prerequisites: ["kill_3_alienoids"] },
+      { id: "kill_ufo_boss", label: "Kill UFO boss", category: "boss", prerequisites: ["kill_3_ufos"] },
+      { id: "kill_rambot_boss", label: "Kill rambot boss", category: "boss", prerequisites: ["kill_3_rambots"] },
+      { id: "kill_tesla_boss", label: "Kill tesla boss", category: "boss", prerequisites: ["kill_3_teslas"] },
+      { id: "kill_engineer_boss", label: "Kill engineer boss", category: "boss", prerequisites: ["kill_3_engineers"] },
+      { id: "kill_satellite_boss", label: "Kill satellite boss", category: "boss", prerequisites: ["kill_3_satellites"] },
+      { id: "kill_rocket_boss", label: "Kill rocket boss", category: "boss", prerequisites: ["kill_3_rockets"] },
+      { id: "kill_fighter_boss", label: "Kill fighter boss", category: "boss", prerequisites: ["kill_3_fighters"] },
+      { id: "make_laser_pistol", label: "Make a laser pistol", category: "tool", prerequisites: ["kill_3_rambots"] },
+      { id: "create_spanner", label: "Create a spanner", category: "tool", prerequisites: ["kill_3_engineers"] },
+      { id: "create_rifle", label: "Create a rifle", category: "tool", prerequisites: ["kill_3_satellites"] },
+      { id: "create_turret", label: "Create a turret", category: "structure", prerequisites: ["kill_3_teslas"] },
+      { id: "create_accumulator", label: "Create an accumulator", category: "structure", prerequisites: ["kill_3_teslas"] }
+    ]
+  };
+  const objectiveMetadataById = {
+    create_rock: {
+      icon: "R",
+      hint: "Merge loose matter until one body becomes a rock.",
+      progress: function () {
+        return objectiveMassProgress("rock");
+      }
+    },
+    create_boulder: {
+      icon: "B",
+      hint: "Keep merging matter until one body becomes a boulder.",
+      progress: function () {
+        return objectiveMassProgress("boulder");
+      }
+    },
+    create_asteroid: {
+      icon: "A",
+      hint: "Grow a body into an asteroid.",
+      progress: function () {
+        return objectiveMassProgress("asteroid");
+      }
+    },
+    create_dwarf_moon: {
+      icon: "D",
+      hint: "Grow a body into a dwarf moon.",
+      progress: function () {
+        return objectiveMassProgress("dwarf moon");
+      }
+    },
+    create_moon: {
+      icon: "M",
+      hint: "Grow a body into a moon.",
+      progress: function () {
+        return objectiveMassProgress("moon");
+      }
+    },
+    create_planet: {
+      icon: "P",
+      hint: "Grow a body into a planet.",
+      progress: function () {
+        return objectiveMassProgress("planet");
+      }
+    },
+    kill_3_alienoids: objectiveMobMetadata("alienoid"),
+    kill_3_ufos: objectiveMobMetadata("ufo"),
+    kill_3_rambots: objectiveMobMetadata("rambot"),
+    kill_3_teslas: objectiveMobMetadata("tesla"),
+    kill_3_engineers: objectiveMobMetadata("engineer"),
+    kill_3_satellites: objectiveMobMetadata("satellite"),
+    kill_3_fighters: objectiveMobMetadata("fighter"),
+    kill_3_rockets: objectiveMobMetadata("rocket"),
+    kill_alienoid_boss: objectiveBossMetadata("alienoid"),
+    kill_ufo_boss: objectiveBossMetadata("ufo"),
+    kill_rambot_boss: objectiveBossMetadata("rambot"),
+    kill_tesla_boss: objectiveBossMetadata("tesla"),
+    kill_engineer_boss: objectiveBossMetadata("engineer"),
+    kill_satellite_boss: objectiveBossMetadata("satellite"),
+    kill_fighter_boss: objectiveBossMetadata("fighter"),
+    kill_rocket_boss: objectiveBossMetadata("rocket"),
+    make_laser_pistol: {
+      icon: "P",
+      hint: "Unlock the laser pistol from the build menu.",
+      progress: function () {
+        return objectiveToolProgress("laser-pistol");
+      }
+    },
+    create_spanner: {
+      icon: "S",
+      hint: "Unlock the spanner from the build menu.",
+      progress: function () {
+        return objectiveToolProgress("spanner");
+      }
+    },
+    create_rifle: {
+      icon: "R",
+      hint: "Unlock the laser rifle from the build menu.",
+      progress: function () {
+        return objectiveToolProgress("laser-rifle");
+      }
+    },
+    create_turret: {
+      icon: "T",
+      hint: "Build a turret on a planet.",
+      progress: function () {
+        return objectiveStructureProgress("turret");
+      }
+    },
+    create_accumulator: {
+      icon: "A",
+      hint: "Build an accumulator.",
+      progress: function () {
+        return objectiveStructureProgress("accumulator");
+      }
+    }
+  };
+  const objectiveDefinitions = progressionTree.nodes.map(function (node) {
+    const metadata = objectiveMetadataById[node.id] || {};
+    return {
+      ...node,
+      title: node.label,
+      icon: metadata.icon,
+      hint: metadata.hint || node.label,
+      parent: node.prerequisites && node.prerequisites[0] ? node.prerequisites[0] : "",
+      progress: metadata.progress
+    };
+  });
+  const randomEventDefinitions = [];
+  const randomEventDefaultCooldown = 180;
+  const randomEventMinimumCooldown = 150;
+  const randomEventState = {
+    enabled: true,
+    cooldown: randomEventDefaultCooldown,
+    timer: randomEventDefaultCooldown,
+    active: null,
+    history: []
+  };
+  const particleStormEventId = "particle-storm";
+  const meteorShowerEventId = "meteor-shower";
+  const particleStormMapColor = { r: 88, g: 226, b: 255 };
+  const meteorShowerMapColor = { r: 255, g: 166, b: 86 };
+  const particleStormSettings = {
+    duration: 42,
+    radiusMin: 820,
+    radiusMax: 1180,
+    initialCount: 24,
+    maxActiveParticles: 62,
+    spawnInterval: 0.22
+  };
+  const meteorShowerSettings = {
+    duration: 38,
+    radiusMin: 1380,
+    radiusMax: 1840,
+    initialCount: 8,
+    maxActiveParticles: 24,
+    spawnInterval: 0.48
+  };
+  const particleSpawnTransitionDuration = 0.52;
   const funnelShape = {
     backX: 88,
     backHalf: 22,
@@ -1323,6 +1849,7 @@
     masterGain: null,
     unavailable: false,
     unlocked: false,
+    resumePending: false,
     lastPlayed: Object.create(null)
   };
 
@@ -1348,6 +1875,7 @@
   let nextRocketId = 1;
   let nextFighterId = 1;
   let nextStructureId = 1;
+  let nextSpacecraftId = 1;
   let nextRivalProjectileId = 1;
   let nextTechPickupId = 1;
   let nextHealthPickupId = 1;
@@ -1364,6 +1892,26 @@
   let toolFireCooldown = 0;
   let toolDisabledTimer = 0;
   let playerContinuousEnergyLocked = false;
+  let familiarNetCapture = null;
+  let familiarNetSwingTimer = 0;
+  let familiarNetSwingDirection = -1;
+  const guidedLauncherState = {
+    activeMissile: null
+  };
+  const playerStatusBarState = {
+    health: { value: null, variant: "", changedAt: 0 },
+    energy: { value: null, variant: "", changedAt: 0 }
+  };
+
+  function resetPlayerStatusBarState() {
+    playerStatusBarState.health.value = null;
+    playerStatusBarState.health.variant = "";
+    playerStatusBarState.health.changedAt = 0;
+    playerStatusBarState.energy.value = null;
+    playerStatusBarState.energy.variant = "";
+    playerStatusBarState.energy.changedAt = 0;
+  }
+
   const mobSpawnTimers = {
     alienoid: mobSpawnIntervals.alienoid,
     ufo: mobSpawnIntervals.ufo,
@@ -1375,6 +1923,7 @@
     fighter: mobSpawnIntervals.fighter
   };
   let mobSpawnRestTimer = 0;
+  let mobSpawnRestDrainTimer = 0;
   let mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
   const mobDefeatsByKind = {
     alienoid: 0,
@@ -1386,6 +1935,24 @@
     rocket: 0,
     fighter: 0
   };
+  const mobBossDefeatsByKind = {
+    alienoid: 0,
+    ufo: 0,
+    rambot: 0,
+    tesla: 0,
+    engineer: 0,
+    satellite: 0,
+    rocket: 0,
+    fighter: 0
+  };
+  const mobBossWarnings = {};
+  for (const kind of mobTierOrder) {
+    mobBossWarnings[kind] = {
+      active: false,
+      timer: 0,
+      lastNoticeSecond: -1
+    };
+  }
 
   for (const tech of techTypes) {
     techInventory[tech.key] = 0;
@@ -1631,7 +2198,7 @@
     const snapshot = source && typeof source === "object" ? source : {};
 
     for (const action of Object.keys(defaultControlBindings)) {
-      if (typeof snapshot[action] === "string" && snapshot[action]) {
+      if (typeof snapshot[action] === "string") {
         controls[action] = snapshot[action];
       }
     }
@@ -1666,7 +2233,27 @@
   }
 
   function controlCodeFor(action) {
-    return gameSettings.controls[action] || defaultControlBindings[action] || "";
+    if (gameSettings.controls && Object.prototype.hasOwnProperty.call(gameSettings.controls, action)) {
+      return gameSettings.controls[action] || "";
+    }
+    return defaultControlBindings[action] || "";
+  }
+
+  function isKnownControlAction(action) {
+    return Object.prototype.hasOwnProperty.call(defaultControlBindings, action);
+  }
+
+  function actionForControlCode(code, actions) {
+    if (!code) {
+      return "";
+    }
+    const actionList = Array.isArray(actions) ? actions : Object.keys(defaultControlBindings);
+    for (const action of actionList) {
+      if (controlCodeFor(action) === code) {
+        return action;
+      }
+    }
+    return "";
   }
 
   function isControlPressed(action) {
@@ -1688,11 +2275,16 @@
       ArrowLeft: "Left",
       ArrowRight: "Right",
       NumpadAdd: "Numpad +",
-      NumpadSubtract: "Numpad -"
+      NumpadSubtract: "Numpad -",
+      WheelUp: "Wheel up",
+      WheelDown: "Wheel down"
     };
 
     if (labels[code]) {
       return labels[code];
+    }
+    if (/^Mouse\d+$/.test(code)) {
+      return "Mouse " + code.slice(5);
     }
     if (/^Key[A-Z]$/.test(code)) {
       return code.slice(3);
@@ -1742,7 +2334,7 @@
       button.className = "settings-row__key";
       button.type = "button";
       button.dataset.controlAction = binding.action;
-      button.textContent = pendingControlRemap === binding.action ? "Press key" : formatControlCode(code);
+      button.textContent = pendingControlRemap === binding.action ? "Press input" : formatControlCode(code);
       button.classList.toggle("is-listening", pendingControlRemap === binding.action);
       button.setAttribute("aria-label", "Remap " + binding.label);
 
@@ -1811,6 +2403,7 @@
       !gamePaused &&
       !settingsOpen &&
       !buildMenuOpen &&
+      !objectivesOpen &&
       !leaderboard.open &&
       !multiplayer.panelOpen &&
       !multiplayer.commandOpen &&
@@ -1823,7 +2416,7 @@
   function updateHudEnabledUi() {
     const hudEnabled = gameSettings.hudEnabled !== false;
     document.body.classList.toggle("hud-hidden", !hudEnabled);
-    document.body.classList.toggle("hud-menu-open", settingsOpen || buildMenuOpen);
+    document.body.classList.toggle("hud-menu-open", settingsOpen || buildMenuOpen || objectivesOpen);
     if (hudEnabledInput) {
       hudEnabledInput.checked = hudEnabled;
     }
@@ -1883,6 +2476,7 @@
       setLeaderboardOpen(false);
       setBuildMenuOpen(false);
       setSocialPanelOpen(false);
+      setObjectivesOpen(false);
       resetMouseButtons();
     }
     updateHudEnabledUi();
@@ -1952,16 +2546,16 @@
   }
 
   function remapControl(action, code) {
-    if (!defaultControlBindings[action] || !code || code === "Escape") {
+    if (!isKnownControlAction(action) || !code || code === "Escape") {
       pendingControlRemap = null;
       renderControlBindings();
       return;
     }
 
-    const previousCode = gameSettings.controls[action];
+    const previousCode = gameSettings.controls[action] || "";
     for (const key of Object.keys(gameSettings.controls)) {
       if (key !== action && gameSettings.controls[key] === code) {
-        gameSettings.controls[key] = previousCode && previousCode !== code ? previousCode : defaultControlBindings[key];
+        gameSettings.controls[key] = previousCode !== code ? previousCode : "";
       }
     }
 
@@ -1971,6 +2565,49 @@
     pendingControlRemap = null;
     writeGameSettings();
     renderControlBindings();
+  }
+
+  function mouseControlCode(event) {
+    if (!event || !Number.isFinite(event.button)) {
+      return "";
+    }
+    return "Mouse" + (Math.max(0, Math.floor(event.button)) + 1);
+  }
+
+  function wheelControlCode(deltaY) {
+    if (!Number.isFinite(deltaY) || deltaY === 0) {
+      return "";
+    }
+    return deltaY < 0 ? "WheelUp" : "WheelDown";
+  }
+
+  function performDirectControlAction(action, options) {
+    const settings = options || {};
+    if (action === "zoomIn") {
+      if (Number.isFinite(settings.wheelDeltaY)) {
+        adjustCameraZoomFromWheel(-Math.abs(settings.wheelDeltaY));
+      } else {
+        adjustCameraZoom(1);
+      }
+      return true;
+    }
+    if (action === "zoomOut") {
+      if (Number.isFinite(settings.wheelDeltaY)) {
+        adjustCameraZoomFromWheel(Math.abs(settings.wheelDeltaY));
+      } else {
+        adjustCameraZoom(-1);
+      }
+      return true;
+    }
+    if (action === "previousTool") {
+      cycleTool(-1);
+      return true;
+    }
+    if (action === "nextTool") {
+      cycleTool(1);
+      return true;
+    }
+    return false;
   }
 
   function resetControlBindings() {
@@ -2768,10 +3405,33 @@
     }
 
     if (context.state === "suspended") {
-      void context.resume();
+      soundState.resumePending = true;
+      void Promise.resolve(context.resume()).then(function () {
+        soundState.resumePending = false;
+        soundState.unlocked = true;
+        updateSoundToggle();
+      }).catch(function () {
+        soundState.resumePending = true;
+      });
+    } else {
+      soundState.resumePending = false;
     }
     soundState.unlocked = true;
     updateSoundToggle();
+  }
+
+  function requestAudioResume() {
+    if (!soundState.enabled || soundState.unavailable) {
+      return;
+    }
+    const context = ensureAudioContext();
+    if (context && context.state === "suspended") {
+      soundState.resumePending = true;
+    }
+  }
+
+  function resumeAudioFromUserGesture() {
+    unlockAudio();
   }
 
   function setSoundEnabled(enabled) {
@@ -2914,11 +3574,16 @@
       laser: 0.08,
       turret: 0.12,
       lock: 0.12,
+      rambotCharge: 0.28,
+      teslaWarmup: 0.28,
+      ufoSiphon: 0.3,
+      satelliteLock: 0.24,
       enemyLaser: 0.18,
       fighter: 0.12,
       hit: 0.18,
       mobHit: 0.08,
       merge: 0.09,
+      trade: 0.08,
       pickupHealth: 0.08,
       pickupTech: 0.05,
       shield: 0.16,
@@ -2967,6 +3632,19 @@
     } else if (name === "lock") {
       playTone({ frequency: 1180, endFrequency: 1420, duration: 0.08, gain: 0.022 * volume, type: "square" });
       playTone({ frequency: 1620, endFrequency: 1320, duration: 0.08, gain: 0.018 * volume, delay: 0.075, type: "triangle" });
+    } else if (name === "rambotCharge") {
+      playTone({ frequency: 132, endFrequency: 72, duration: 0.28, gain: 0.038 * volume, type: "sawtooth" });
+      playNoise({ duration: 0.18, gain: 0.028 * volume, frequency: 240, filterType: "lowpass", q: 0.7 });
+    } else if (name === "teslaWarmup") {
+      playTone({ frequency: 420, endFrequency: 1380, duration: 0.24, gain: 0.024 * volume, type: "triangle" });
+      playTone({ frequency: 860, endFrequency: 1720, duration: 0.16, gain: 0.016 * volume, delay: 0.08, type: "square" });
+    } else if (name === "ufoSiphon") {
+      playTone({ frequency: 340, endFrequency: 116, duration: 0.22, gain: 0.022 * volume, type: "sine" });
+      playNoise({ duration: 0.14, gain: 0.018 * volume, frequency: 620, filterType: "bandpass", q: 1.1 });
+    } else if (name === "satelliteLock") {
+      playTone({ frequency: 980, endFrequency: 980, duration: 0.055, gain: 0.018 * volume, type: "square" });
+      playTone({ frequency: 1220, endFrequency: 1220, duration: 0.055, gain: 0.017 * volume, delay: 0.07, type: "square" });
+      playTone({ frequency: 1500, endFrequency: 1500, duration: 0.07, gain: 0.016 * volume, delay: 0.14, type: "triangle" });
     } else if (name === "enemyLaser") {
       playTone({ frequency: 520, endFrequency: 360, duration: 0.11, gain: 0.024 * volume, type: "square" });
       playNoise({ duration: 0.08, gain: 0.012 * volume, frequency: 1600, q: 1.6 });
@@ -2991,6 +3669,10 @@
     } else if (name === "merge") {
       playTone({ frequency: 180, endFrequency: 260, duration: 0.16, gain: 0.026 * volume, type: "triangle" });
       playTone({ frequency: 360, endFrequency: 520, duration: 0.18, gain: 0.018 * volume, delay: 0.05, type: "sine" });
+    } else if (name === "trade") {
+      playTone({ frequency: 440, endFrequency: 660, duration: 0.09, gain: 0.024 * volume, type: "triangle" });
+      playTone({ frequency: 880, endFrequency: 1320, duration: 0.12, gain: 0.018 * volume, delay: 0.055, type: "sine" });
+      playNoise({ duration: 0.06, gain: 0.01 * volume, frequency: 1800, filterType: "bandpass", q: 2.4, delay: 0.04 });
     } else if (name === "milestone") {
       playTone({ frequency: 240, endFrequency: 360, duration: 0.18, gain: 0.034 * volume, type: "triangle" });
       playTone({ frequency: 480, endFrequency: 860, duration: 0.26, gain: 0.03 * volume, delay: 0.08, type: "sine" });
@@ -3065,16 +3747,8 @@
   }
 
   function radiusAtTier(tier) {
-    const radii = {
-      particle: 11,
-      rock: 22,
-      boulder: 36,
-      asteroid: 52,
-      "dwarf moon": 78,
-      moon: 110,
-      planet: 158
-    };
-    return radii[tier.name] || 11;
+    const blueprint = tier && celestialBodyBlueprints[tier.name];
+    return blueprint ? blueprint.radius : 11;
   }
 
   function radiusFromMass(mass) {
@@ -3193,16 +3867,18 @@
       const group = notificationGroups.get(groupKey);
       group.count += notificationIncrement(options);
       group.format = formatter || group.format;
+      group.actions = notificationActions(options) || group.actions;
       group.element.classList.remove("is-leaving");
-      group.element.textContent = group.format ? group.format(group.count) : message;
+      renderNotificationContent(group.element, group.format ? group.format(group.count) : message, group.actions);
       scheduleNotificationRemoval(group.element, groupKey, options);
       return;
     }
 
     const element = document.createElement("div");
     const initialCount = notificationInitialCount(options);
+    const actions = notificationActions(options);
     element.className = "notification";
-    element.textContent = formatter ? formatter(initialCount) : message;
+    renderNotificationContent(element, formatter ? formatter(initialCount) : message, actions);
     notifications.appendChild(element);
 
     if (groupKey) {
@@ -3210,6 +3886,7 @@
         element,
         count: initialCount,
         format: formatter,
+        actions,
         leaveTimer: 0,
         removeTimer: 0
       });
@@ -3218,12 +3895,1436 @@
     scheduleNotificationRemoval(element, groupKey, options);
   }
 
+  function updateGroupedNotificationText(groupKey, message, options) {
+    if (!groupKey) {
+      maybeNotifyText(message, options);
+      return;
+    }
+
+    const group = notificationGroups.get(String(groupKey));
+    if (!group || !group.element) {
+      maybeNotifyText(message, Object.assign({}, options, { groupKey: String(groupKey), increment: 0 }));
+      return;
+    }
+
+    group.element.classList.remove("is-leaving");
+    group.actions = notificationActions(options) || group.actions;
+    renderNotificationContent(group.element, message, group.actions);
+    scheduleNotificationRemoval(group.element, String(groupKey), options);
+  }
+
+  function notificationActions(options) {
+    const actions = options && Array.isArray(options.actions) ? options.actions : [];
+    const normalized = actions.filter(function (action) {
+      return action && typeof action.label === "string" && typeof action.onClick === "function";
+    });
+    return normalized.length ? normalized : null;
+  }
+
+  function renderNotificationContent(element, message, actions) {
+    element.textContent = "";
+    const label = document.createElement("span");
+    label.className = "notification__message";
+    label.textContent = message;
+    element.append(label);
+
+    if (!actions || !actions.length) {
+      return;
+    }
+
+    const actionList = document.createElement("span");
+    actionList.className = "notification__actions";
+    for (const action of actions) {
+      const button = document.createElement("button");
+      const stopNotificationPointer = function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      button.type = "button";
+      button.className = "notification__action";
+      button.textContent = action.label;
+      button.addEventListener("pointerdown", stopNotificationPointer);
+      button.addEventListener("pointerup", stopNotificationPointer);
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        action.onClick();
+      });
+      actionList.append(button);
+    }
+    element.append(actionList);
+  }
+
   function maybeNotifyTier(tier, previousTier) {
     if (tier.name === "particle" || tier.threshold <= previousTier.threshold) {
       return;
     }
 
     maybeNotifyText("You have made " + tier.article + " " + tier.name + ".");
+  }
+
+  function objectiveOwnedTechCount() {
+    let total = 0;
+    for (const tech of techTypes) {
+      total += Math.max(0, Math.floor(finiteOr(techInventory[tech.key], 0)));
+    }
+    return total;
+  }
+
+  function objectiveMobTechKey(kind) {
+    if (kind === "ufo") return "suction";
+    if (kind === "rambot") return "plating";
+    if (kind === "engineer") return "repair";
+    if (kind === "tesla") return "energy";
+    if (kind === "satellite") return "target";
+    if (kind === "rocket") return "propulsion";
+    if (kind === "fighter") return "shield";
+    return "weapon";
+  }
+
+  function objectiveRewardMobKind(id) {
+    const mobKindsByObjective = {
+      kill_3_alienoids: "alienoid",
+      kill_3_ufos: "ufo",
+      kill_3_rambots: "rambot",
+      kill_3_teslas: "tesla",
+      kill_3_engineers: "engineer",
+      kill_3_satellites: "satellite",
+      kill_3_fighters: "fighter",
+      kill_3_rockets: "rocket",
+      kill_alienoid_boss: "alienoid",
+      kill_ufo_boss: "ufo",
+      kill_rambot_boss: "rambot",
+      kill_tesla_boss: "tesla",
+      kill_engineer_boss: "engineer",
+      kill_satellite_boss: "satellite",
+      kill_fighter_boss: "fighter",
+      kill_rocket_boss: "rocket"
+    };
+    return mobKindsByObjective[id] || "";
+  }
+
+  function objectiveRewardEntries(definition) {
+    const id = String(definition && definition.id || "");
+    const fixedRewards = {
+      make_laser_pistol: { weapon: 1 },
+      create_rifle: { weapon: 2 },
+      create_spanner: { repair: 1 },
+      create_turret: { weapon: 1, plating: 1 },
+      create_accumulator: { suction: 1, plating: 1 }
+    };
+    const fixed = fixedRewards[id];
+    if (fixed) {
+      return Object.keys(fixed).map(function (techKey) {
+        return { techKey, amount: fixed[techKey] };
+      });
+    }
+
+    const mobKind = objectiveRewardMobKind(id);
+    if (mobKind) {
+      const rewards = [{
+        techKey: objectiveMobTechKey(mobKind),
+        amount: id.indexOf("_boss") >= 0 ? 3 : 1
+      }];
+      if (id === "kill_alienoid_boss") {
+        rewards.push({ blueprintId: "shotgun", label: "Shotgun Blueprint" });
+      }
+      if (id === "kill_ufo_boss") {
+        rewards.push({ blueprintId: visciousVacuumToolId, label: "Viscious Vacuum Blueprint" });
+      }
+      if (id === "kill_rambot_boss") {
+        rewards.push({ blueprintId: pistonPunchToolId, label: "Piston Punch Blueprint" });
+      }
+      if (id === "kill_tesla_boss") {
+        rewards.push({ blueprintId: empToolId, label: "EMP Blueprint" });
+      }
+      if (id === "kill_engineer_boss") {
+        rewards.push({ blueprintId: familiarNetToolId, label: "Familiar Net Blueprint" });
+      }
+      if (id === "kill_satellite_boss") {
+        rewards.push({ blueprintId: guidedLauncherToolId, label: "Guided Launcher Blueprint" });
+      }
+      if (id === "kill_rocket_boss") {
+        rewards.push({ blueprintId: rocketSuitToolId, label: "Rocket Suit Blueprint" });
+      }
+      if (id === "kill_fighter_boss") {
+        rewards.push({ blueprintId: machineGunToolId, label: "Machine Gun Blueprint" });
+      }
+      return rewards;
+    }
+
+    return [];
+  }
+
+  function objectiveTechLabel(techKey) {
+    const tech = techTypes.find((candidate) => candidate.key === techKey);
+    return tech ? tech.label : techKey;
+  }
+
+  function objectiveRewardText(entries) {
+    if (!entries || !entries.length) {
+      return "No reward";
+    }
+    return entries.map(function (entry) {
+      if (entry.blueprintId) {
+        return entry.label || "Blueprint";
+      }
+      return Math.max(1, Math.floor(finiteOr(entry.amount, 1))) + " " + objectiveTechLabel(entry.techKey);
+    }).join(" + ");
+  }
+
+  function objectiveIsClaimed(definition) {
+    return Boolean(definition && objectiveState.claimed[definition.id] === true);
+  }
+
+  function objectiveIsAwaitingClaim(snapshot) {
+    return Boolean(
+      snapshot &&
+      snapshot.progress.complete &&
+      !snapshot.definition.repeatable &&
+      !objectiveIsClaimed(snapshot.definition)
+    );
+  }
+
+  function objectiveCanClaim(snapshot) {
+    return objectiveIsAwaitingClaim(snapshot);
+  }
+
+  function objectiveHasUnclaimedObjectives(snapshots) {
+    return snapshots.some(objectiveIsAwaitingClaim);
+  }
+
+  function objectiveClaimableSnapshots(snapshots) {
+    return (Array.isArray(snapshots) ? snapshots : []).filter(objectiveCanClaim);
+  }
+
+  function updateObjectiveClaimUi(snapshots) {
+    const claimableCount = objectiveClaimableSnapshots(snapshots).length;
+    const hasUnclaimed = claimableCount > 0;
+    if (objectiveToggle) {
+      objectiveToggle.classList.toggle("is-unclaimed", hasUnclaimed);
+      objectiveToggle.setAttribute(
+        "aria-label",
+        hasUnclaimed ? "Open objective tree. Objectives ready to claim." : "Toggle objective tree"
+      );
+    }
+    if (objectiveClaimAll) {
+      objectiveClaimAll.disabled = !hasUnclaimed;
+      objectiveClaimAll.title = hasUnclaimed
+        ? "Claim " + claimableCount + " completed objective reward" + (claimableCount === 1 ? "" : "s")
+        : "No completed objective rewards to claim";
+      objectiveClaimAll.setAttribute("aria-label", objectiveClaimAll.title);
+    }
+  }
+
+  function objectiveLargestMass() {
+    let largest = Math.max(1, finiteOr(lifeStats.maxMass, 1));
+    for (const particle of particles) {
+      largest = Math.max(largest, finiteOr(particle.mass, 0));
+    }
+    return largest;
+  }
+
+  function objectiveMassProgress(tierName) {
+    const tier = bodyTierForCommandToken(tierName);
+    const target = tier ? tier.threshold : 1;
+    const mass = objectiveLargestMass();
+    return {
+      complete: mass >= target,
+      value: mass,
+      target,
+      label: Math.max(0, Math.round(mass)) + " / " + Math.round(target) + "g"
+    };
+  }
+
+  function objectiveMobBossProgress(kind) {
+    const target = Math.max(1, Math.floor(finiteOr(mobBossDefeatsToUnlock, 30)));
+    const defeats = Math.max(0, Math.floor(finiteOr(mobDefeatsByKind[kind], 0)));
+    return {
+      complete: defeats >= target,
+      value: defeats,
+      target,
+      label: Math.min(defeats, target) + " / " + target + " defeated"
+    };
+  }
+
+  function objectiveMobMetadata(kind) {
+    const blueprint = mobEntityBlueprints[kind] || { label: "Mob" };
+    const plural = mobObjectivePluralLabels[kind] || (blueprint.label + "s");
+    return {
+      icon: blueprint.label.charAt(0).toUpperCase(),
+      hint: function () {
+        return "Defeat " + previousMobTierDefeatsTarget(kind) + " " + plural + ".";
+      },
+      progress: function () {
+        return objectiveMobKindProgress(kind, previousMobTierDefeatsTarget(kind));
+      }
+    };
+  }
+
+  function objectiveBossMetadata(kind) {
+    const blueprint = mobEntityBlueprints[kind] || { label: "Mob" };
+    return {
+      icon: "!",
+      hint: "Defeat the " + blueprint.label + " boss.",
+      progress: function () {
+        return objectiveBossDefeatProgress(kind);
+      }
+    };
+  }
+
+  function objectiveMobKindProgress(kind, targetCount) {
+    const target = Math.max(1, Math.floor(finiteOr(targetCount, 3)));
+    const defeats = Math.max(0, Math.floor(finiteOr(mobDefeatsByKind[kind], 0)));
+    return {
+      complete: defeats >= target,
+      value: defeats,
+      target,
+      label: Math.min(defeats, target) + " / " + target + " defeated"
+    };
+  }
+
+  function multiplayerMobTierUnlockPlayerCount() {
+    if (!multiplayer || (!multiplayer.v2.active && multiplayer.partyMode !== "party" && !multiplayer.partySession)) {
+      return 1;
+    }
+
+    const v2Players = multiplayer.v2 && multiplayer.v2.state && multiplayer.v2.state.players;
+    if (v2Players && typeof v2Players === "object") {
+      return Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Object.keys(v2Players).length));
+    }
+    if (multiplayer.partySession && Array.isArray(multiplayer.partySession.players) && multiplayer.partySession.players.length) {
+      return Math.max(1, Math.min(crazyGamesRoomMaxPlayers, multiplayer.partySession.players.length));
+    }
+    return Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Math.floor(finiteOr(multiplayer.roomPlayerCount, 1))));
+  }
+
+  function mobTierDefeatsToUnlockNextTier(kind) {
+    const index = mobTierOrder.indexOf(kind);
+    return mobTierUnlockBaseDefeats + Math.max(0, index);
+  }
+
+  function previousMobTierDefeatsTarget(kind) {
+    return mobTierDefeatsToUnlockNextTier(kind) * multiplayerMobTierUnlockPlayerCount();
+  }
+
+  function objectiveBossDefeatProgress(kind) {
+    const defeats = Math.max(0, Math.floor(finiteOr(mobBossDefeatsByKind[kind], 0)));
+    return {
+      complete: defeats > 0,
+      value: defeats,
+      target: 1,
+      label: Math.min(defeats, 1) + " / 1 defeated"
+    };
+  }
+
+  function objectiveToolProgress(toolId) {
+    const complete = unlockedToolIds.includes(toolId);
+    const recipe = buildRecipes.find((candidate) => candidate.unlockToolId === toolId);
+    return {
+      complete,
+      value: complete ? 1 : 0,
+      target: 1,
+      label: complete ? "Unlocked" : ((recipe && recipe.name) || "Tool") + " locked"
+    };
+  }
+
+  function objectiveStructureProgress(type) {
+    const count = structures.filter((structure) => structure && structure.type === type).length;
+    return {
+      complete: count > 0,
+      value: count,
+      target: 1,
+      label: count > 0 ? count + " built" : "0 / 1 built"
+    };
+  }
+
+  function objectiveProgress(definition) {
+    const progress = definition && typeof definition.progress === "function" ? definition.progress() : {};
+    const complete = Boolean(progress.complete || objectiveState.completed[definition.id]);
+    if (progress.complete && !objectiveState.completed[definition.id]) {
+      objectiveState.completed[definition.id] = true;
+    }
+    return {
+      complete: Boolean(objectiveState.completed[definition.id] || complete),
+      label: progress.label || "",
+      value: finiteOr(progress.value, 0),
+      target: finiteOr(progress.target, 0)
+    };
+  }
+
+  function objectiveParentComplete(definition) {
+    const prerequisites = Array.isArray(definition && definition.prerequisites)
+      ? definition.prerequisites
+      : (definition && definition.parent ? [definition.parent] : []);
+    return prerequisites.every((id) => objectiveState.completed[id] === true);
+  }
+
+  function objectiveSnapshots() {
+    let currentAssigned = false;
+    return objectiveDefinitions.map(function (definition) {
+      const progress = objectiveProgress(definition);
+      const available = objectiveParentComplete(definition);
+      const current = !currentAssigned && available && !progress.complete && !definition.repeatable;
+      if (current) {
+        currentAssigned = true;
+      }
+      return {
+        definition,
+        progress,
+        available,
+        current
+      };
+    });
+  }
+
+  function objectiveHintText(definition) {
+    if (!definition) {
+      return "";
+    }
+    if (typeof definition.hint === "function") {
+      return definition.hint();
+    }
+    return definition.hint || "";
+  }
+
+  function objectiveRenderSignature(snapshots) {
+    return snapshots.map(function (snapshot) {
+      return [
+        snapshot.definition.id,
+        snapshot.progress.complete ? "1" : "0",
+        objectiveIsClaimed(snapshot.definition) ? "1" : "0",
+        objectiveRewardText(objectiveRewardEntries(snapshot.definition)),
+        snapshot.current ? "1" : "0",
+        snapshot.available ? "1" : "0",
+        snapshot.progress.label,
+        objectiveHintText(snapshot.definition)
+      ].join(":");
+    }).join("|") + "|" + (objectivesOpen ? "open" : "closed") + "|" + objectiveState.selectedId;
+  }
+
+  function objectiveStatusText(snapshot) {
+    if (!snapshot) {
+      return "Objective";
+    }
+    if (objectiveCanClaim(snapshot)) {
+      return objectiveRewardEntries(snapshot.definition).length ? "Claim reward" : "Claim objective";
+    }
+    if (snapshot.progress.complete && !snapshot.definition.repeatable) {
+      return objectiveIsClaimed(snapshot.definition) ? "Claimed" : "Complete";
+    }
+    if (snapshot.current) {
+      return "Current";
+    }
+    if (!snapshot.available) {
+      return "Locked";
+    }
+    return snapshot.definition.repeatable ? "Ongoing" : "Ready";
+  }
+
+  function objectiveCanSelect(snapshot) {
+    return Boolean(snapshot && (snapshot.available || snapshot.progress.complete));
+  }
+
+  function objectiveIconText(definition) {
+    if (definition && definition.icon) {
+      return definition.icon;
+    }
+    return String((definition && definition.title) || "?").trim().charAt(0).toUpperCase() || "?";
+  }
+
+  function objectiveVisualStatus(snapshot) {
+    if (objectiveIsAwaitingClaim(snapshot)) {
+      return "unclaimed";
+    }
+    if (snapshot.progress.complete && objectiveIsClaimed(snapshot.definition)) {
+      return "claimed";
+    }
+    if (!snapshot || !snapshot.available) {
+      return "locked";
+    }
+    return "unlocked";
+  }
+
+  function objectiveSelectedSnapshot(snapshots, current) {
+    let selected = snapshots.find((snapshot) => snapshot.definition.id === objectiveState.selectedId && objectiveCanSelect(snapshot));
+    if (!selected) {
+      selected = current || snapshots.find((snapshot) => objectiveCanSelect(snapshot)) || snapshots[0] || null;
+      objectiveState.selectedId = selected ? selected.definition.id : "";
+    }
+    return selected;
+  }
+
+  function objectiveGraphPosition(definition) {
+    if (!definition) {
+      return { x: objectiveGraphPadding, y: objectiveGraphPadding };
+    }
+
+    const fixed = objectiveGraphLayout[definition.id];
+    if (fixed) {
+      return fixed;
+    }
+
+    const bossPrefix = "boss-requirement-";
+    if (definition.id && definition.id.indexOf(bossPrefix) === 0) {
+      const kind = definition.id.slice(bossPrefix.length);
+      const index = Math.max(0, mobTierOrder.indexOf(kind));
+      return {
+        x: 585 + (index % 2) * 220,
+        y: 625 + Math.floor(index / 2) * 120
+      };
+    }
+
+    return {
+      x: objectiveGraphPadding + (Math.max(1, Math.round(finiteOr(definition.col, 1))) - 1) * 200,
+      y: objectiveGraphPadding + (Math.max(1, Math.round(finiteOr(definition.row, 1))) - 1) * 120
+    };
+  }
+
+  function objectiveGraphSize(snapshots) {
+    let width = 760;
+    let height = 620;
+    for (const snapshot of snapshots) {
+      const position = objectiveGraphPosition(snapshot.definition);
+      width = Math.max(width, position.x + objectiveGraphPadding);
+      height = Math.max(height, position.y + objectiveGraphPadding);
+    }
+    return { width, height };
+  }
+
+  function objectiveGraphZoom() {
+    return clamp(finiteOr(objectiveState.zoom, 1), 0.35, 1.8);
+  }
+
+  function objectiveScaledGraphSize(size) {
+    const zoom = objectiveGraphZoom();
+    return {
+      width: Math.ceil(size.width * zoom),
+      height: Math.ceil(size.height * zoom)
+    };
+  }
+
+  function objectiveTreeInteractionScale() {
+    return objectiveTreeList && objectiveTreeList.offsetWidth > 0
+      ? Math.max(0.1, objectiveTreeList.getBoundingClientRect().width / objectiveTreeList.offsetWidth)
+      : 1;
+  }
+
+  function objectiveNodeRadius() {
+    return window.matchMedia && window.matchMedia("(max-width: 560px)").matches ? 28 : 31;
+  }
+
+  function objectiveEdgePoints(start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const distance = Math.hypot(dx, dy);
+    const radius = objectiveNodeRadius();
+
+    if (!distance) {
+      return { start, end };
+    }
+
+    const offset = Math.min(radius, distance * 0.42);
+    const ux = dx / distance;
+    const uy = dy / distance;
+
+    return {
+      start: {
+        x: start.x + ux * offset,
+        y: start.y + uy * offset
+      },
+      end: {
+        x: end.x - ux * offset,
+        y: end.y - uy * offset
+      }
+    };
+  }
+
+  function createObjectiveLinkElement(namespace, start, end, status, glow) {
+    const line = document.createElementNS(namespace, "line");
+    const points = objectiveEdgePoints(start, end);
+    line.classList.add(glow ? "objective-tree__link-glow" : "objective-tree__link");
+    line.classList.add("is-" + status);
+    line.setAttribute("x1", points.start.x.toFixed(1));
+    line.setAttribute("y1", points.start.y.toFixed(1));
+    line.setAttribute("x2", points.end.x.toFixed(1));
+    line.setAttribute("y2", points.end.y.toFixed(1));
+    return line;
+  }
+
+  function createObjectiveLinkLayer(snapshots, size) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    const byId = new Map();
+
+    svg.classList.add("objective-tree__links");
+    svg.setAttribute("viewBox", "0 0 " + size.width + " " + size.height);
+    svg.setAttribute("aria-hidden", "true");
+
+    for (const snapshot of snapshots) {
+      byId.set(snapshot.definition.id, snapshot);
+    }
+
+    for (const snapshot of snapshots) {
+      const prerequisites = Array.isArray(snapshot.definition.prerequisites)
+        ? snapshot.definition.prerequisites
+        : (snapshot.definition.parent ? [snapshot.definition.parent] : []);
+      for (const prerequisiteId of prerequisites) {
+        const parent = byId.get(prerequisiteId);
+        if (!parent) {
+          continue;
+        }
+
+        const start = objectiveGraphPosition(parent.definition);
+        const end = objectiveGraphPosition(snapshot.definition);
+        const status = objectiveVisualStatus(snapshot);
+        svg.append(
+          createObjectiveLinkElement(namespace, start, end, status, true),
+          createObjectiveLinkElement(namespace, start, end, status, false)
+        );
+      }
+    }
+
+    return svg;
+  }
+
+  function createObjectiveNode(snapshot, selected) {
+    const definition = snapshot.definition;
+    const progress = snapshot.progress;
+    const position = objectiveGraphPosition(definition);
+    const node = document.createElement("button");
+    const icon = document.createElement("span");
+    const selectable = objectiveCanSelect(snapshot);
+    const selectedNode = selected && selected.definition.id === definition.id;
+
+    node.className = "objective-node";
+    node.type = "button";
+    node.style.left = position.x + "px";
+    node.style.top = position.y + "px";
+    node.classList.add("is-" + objectiveVisualStatus(snapshot));
+    node.classList.toggle("is-current", snapshot.current);
+    node.classList.toggle("is-selected", selectedNode);
+    node.dataset.objectiveId = definition.id;
+    node.disabled = !selectable;
+    node.title = definition.title + " - " + objectiveStatusText(snapshot);
+    node.setAttribute("aria-label", definition.title + ". " + objectiveStatusText(snapshot) + ". " + objectiveHintText(definition));
+    node.setAttribute("aria-pressed", selectedNode ? "true" : "false");
+
+    icon.className = "objective-node__icon";
+    icon.textContent = objectiveIconText(definition);
+
+    node.addEventListener("click", function () {
+      if (!selectable) {
+        return;
+      }
+      objectiveState.selectedId = definition.id;
+      objectiveState.renderSignature = "";
+      renderObjectiveTree(true);
+    });
+
+    node.append(icon);
+    return node;
+  }
+
+  function renderObjectiveDetail(snapshot, completeCount, totalCount) {
+    if (!objectiveTreeDetail) {
+      return;
+    }
+
+    objectiveTreeDetail.textContent = "";
+    const eyebrow = document.createElement("div");
+    const title = document.createElement("div");
+    const description = document.createElement("p");
+    const progress = document.createElement("div");
+
+    eyebrow.className = "objective-detail__eyebrow";
+    title.className = "objective-detail__title";
+    description.className = "objective-detail__description";
+    progress.className = "objective-detail__progress";
+
+    if (snapshot) {
+      const rewards = objectiveRewardEntries(snapshot.definition);
+      eyebrow.textContent = objectiveStatusText(snapshot);
+      title.textContent = snapshot.definition.title;
+      description.textContent = objectiveHintText(snapshot.definition);
+      progress.textContent = snapshot.progress.complete && !snapshot.definition.repeatable
+        ? "Complete"
+        : snapshot.progress.label || completeCount + " / " + totalCount + " complete";
+      if (rewards.length || (snapshot.progress.complete && !snapshot.definition.repeatable)) {
+        const reward = document.createElement("div");
+        const rewardLabel = document.createElement("span");
+        const rewardValue = document.createElement("strong");
+        const claim = document.createElement("button");
+        const claimed = objectiveIsClaimed(snapshot.definition);
+
+        reward.className = "objective-detail__reward";
+        rewardLabel.className = "objective-detail__reward-label";
+        rewardValue.className = "objective-detail__reward-value";
+        claim.className = "objective-detail__claim";
+        rewardLabel.textContent = rewards.length ? "Reward" : "Objective";
+        rewardValue.textContent = rewards.length ? objectiveRewardText(rewards) : (claimed ? "Claimed" : "Ready to claim");
+        claim.type = "button";
+        claim.textContent = claimed ? "Claimed" : "Claim";
+        claim.disabled = claimed || !snapshot.progress.complete;
+        claim.addEventListener("click", function () {
+          claimObjectiveReward(snapshot.definition.id);
+        });
+        reward.append(rewardLabel, rewardValue, claim);
+        objectiveTreeDetail.append(eyebrow, title, description, progress, reward);
+        return;
+      }
+    } else {
+      eyebrow.textContent = "Done";
+      title.textContent = "Objective chain complete";
+      description.textContent = "Keep growing, collecting tech, and pushing your total score.";
+      progress.textContent = completeCount + " / " + totalCount + " complete";
+    }
+
+    objectiveTreeDetail.append(eyebrow, title, description, progress);
+  }
+
+  function renderObjectiveTree(force) {
+    if (!objectiveTreeList && !objectiveSummary) {
+      return;
+    }
+
+    const snapshots = objectiveSnapshots();
+    const completeCount = snapshots.filter((snapshot) => snapshot.progress.complete && !snapshot.definition.repeatable).length;
+    const totalCount = snapshots.filter((snapshot) => !snapshot.definition.repeatable).length;
+    const current = snapshots.find((snapshot) => snapshot.current) || snapshots.find((snapshot) => snapshot.definition.repeatable);
+    const selected = objectiveSelectedSnapshot(snapshots, current);
+    const signature = objectiveRenderSignature(snapshots);
+    updateObjectiveClaimUi(snapshots);
+
+    if (!force && objectiveState.renderSignature === signature) {
+      return;
+    }
+    objectiveState.renderSignature = signature;
+
+    if (objectiveSummary) {
+      const summary = current
+        ? completeCount + " / " + totalCount + " done - " + current.definition.title
+        : completeCount + " / " + totalCount + " done";
+      setTextIfChanged(objectiveSummary, summary);
+    }
+
+    if (!objectivesOpen) {
+      return;
+    }
+
+    renderObjectiveDetail(selected, completeCount, totalCount);
+
+    if (!objectiveTreeList) {
+      return;
+    }
+
+    objectiveState.scrollLeft = objectiveTreeList.scrollLeft;
+    objectiveState.scrollTop = objectiveTreeList.scrollTop;
+    objectiveTreeList.textContent = "";
+    const graphSize = objectiveGraphSize(snapshots);
+    const scaledGraphSize = objectiveScaledGraphSize(graphSize);
+    const zoom = objectiveGraphZoom();
+    const viewport = document.createElement("div");
+    const graph = document.createElement("div");
+    viewport.className = "objective-tree__viewport";
+    viewport.style.width = scaledGraphSize.width + "px";
+    viewport.style.height = scaledGraphSize.height + "px";
+    graph.className = "objective-tree__graph";
+    graph.style.width = graphSize.width + "px";
+    graph.style.height = graphSize.height + "px";
+    graph.style.transform = "scale(" + zoom.toFixed(3) + ")";
+    graph.append(createObjectiveLinkLayer(snapshots, graphSize));
+
+    for (const snapshot of snapshots) {
+      graph.append(createObjectiveNode(snapshot, selected));
+    }
+    viewport.append(graph);
+    objectiveTreeList.append(viewport);
+
+    if (objectiveState.hasUserPanned) {
+      objectiveTreeList.scrollLeft = objectiveState.scrollLeft;
+      objectiveTreeList.scrollTop = objectiveState.scrollTop;
+    } else if (selected) {
+      const position = objectiveGraphPosition(selected.definition);
+      objectiveTreeList.scrollLeft = Math.max(0, position.x * zoom - objectiveTreeList.clientWidth * 0.5);
+      objectiveTreeList.scrollTop = Math.max(0, position.y * zoom - objectiveTreeList.clientHeight * 0.5);
+    }
+  }
+
+  function updateObjectiveState() {
+    const frameId = typeof currentRenderFrameId === "function" ? currentRenderFrameId() : 0;
+    if (!objectivesOpen && frameId - objectiveState.lastUpdateFrameId < 15) {
+      return;
+    }
+    objectiveState.lastUpdateFrameId = frameId;
+    const before = Object.assign({}, objectiveState.completed);
+    const snapshots = objectiveSnapshots();
+    for (const snapshot of snapshots) {
+      const id = snapshot.definition.id;
+      if (snapshot.progress.complete && !before[id] && !snapshot.definition.repeatable) {
+        maybeNotifyText("Objective complete: " + snapshot.definition.title, {
+          groupKey: "objective:" + id,
+          lifetime: 6200,
+          actions: [{
+            label: "View",
+            onClick: function () {
+              viewObjective(id);
+            }
+          }]
+        });
+      }
+    }
+    renderObjectiveTree(false);
+  }
+
+  function viewObjective(id) {
+    objectiveState.selectedId = String(id || "");
+    objectiveState.hasUserPanned = false;
+    objectiveState.renderSignature = "";
+    setObjectivesOpen(true);
+    renderObjectiveTree(true);
+  }
+
+  function applyObjectiveRewardClaim(snapshot) {
+    if (!objectiveCanClaim(snapshot)) {
+      return null;
+    }
+
+    const rewards = objectiveRewardEntries(snapshot.definition);
+    for (const reward of rewards) {
+      if (reward.blueprintId) {
+        continue;
+      }
+      const techKey = reward.techKey;
+      const amount = Math.max(1, Math.floor(finiteOr(reward.amount, 1)));
+      if (techTypes.some((tech) => tech.key === techKey)) {
+        techInventory[techKey] = Math.max(0, Math.floor(techInventory[techKey] || 0)) + amount;
+      }
+    }
+
+    objectiveState.claimed[snapshot.definition.id] = true;
+    return rewards;
+  }
+
+  function claimObjectiveReward(id) {
+    const objectiveId = String(id || "");
+    const snapshot = objectiveSnapshots().find(function (candidate) {
+      return candidate.definition.id === objectiveId;
+    });
+    const rewards = applyObjectiveRewardClaim(snapshot);
+    if (!rewards) {
+      return;
+    }
+
+    objectiveState.renderSignature = "";
+    updateTechUi();
+    renderObjectiveTree(true);
+    playSound("pickupTech");
+    maybeNotifyText(
+      rewards.length ? "Claimed " + objectiveRewardText(rewards) + "." : "Claimed objective.",
+      { groupKey: "objective-claim:" + objectiveId }
+    );
+  }
+
+  function claimAllObjectiveRewards() {
+    const claimable = objectiveClaimableSnapshots(objectiveSnapshots());
+    if (!claimable.length) {
+      return;
+    }
+
+    for (const snapshot of claimable) {
+      applyObjectiveRewardClaim(snapshot);
+    }
+
+    objectiveState.renderSignature = "";
+    updateTechUi();
+    renderObjectiveTree(true);
+    playSound("pickupTech");
+    maybeNotifyText(
+      "Claimed " + claimable.length + " objective reward" + (claimable.length === 1 ? "" : "s") + ".",
+      { groupKey: "objective-claim-all" }
+    );
+  }
+
+  function serializeObjectiveState() {
+    return {
+      completed: Object.keys(objectiveState.completed).filter((id) => objectiveState.completed[id] === true),
+      claimed: Object.keys(objectiveState.claimed).filter((id) => objectiveState.claimed[id] === true)
+    };
+  }
+
+  function applyObjectiveState(snapshot) {
+    objectiveState.completed = Object.create(null);
+    objectiveState.claimed = Object.create(null);
+    objectiveState.selectedId = "";
+    const source = snapshot && typeof snapshot === "object" && Array.isArray(snapshot.completed) ? snapshot.completed : [];
+    for (const id of source) {
+      if (objectiveDefinitions.some((definition) => definition.id === id)) {
+        objectiveState.completed[id] = true;
+      }
+    }
+    const claimed = snapshot && typeof snapshot === "object" && Array.isArray(snapshot.claimed) ? snapshot.claimed : [];
+    for (const id of claimed) {
+      if (objectiveDefinitions.some((definition) => definition.id === id)) {
+        objectiveState.claimed[id] = true;
+      }
+    }
+    objectiveState.renderSignature = "";
+    objectiveState.lastUpdateFrameId = -1000;
+    renderObjectiveTree(true);
+  }
+
+  function resetObjectiveState() {
+    applyObjectiveState({ completed: [], claimed: [] });
+  }
+
+  function serializeRandomEventState() {
+    return {
+      enabled: randomEventState.enabled !== false,
+      cooldown: Math.max(randomEventMinimumCooldown, finiteOr(randomEventState.cooldown, randomEventDefaultCooldown)),
+      timer: Math.max(0, finiteOr(randomEventState.timer, randomEventState.cooldown)),
+      active: randomEventState.active && typeof randomEventState.active === "object" ? { ...randomEventState.active } : null,
+      history: Array.isArray(randomEventState.history) ? randomEventState.history.slice(-12) : []
+    };
+  }
+
+  function applyRandomEventState(snapshot) {
+    const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+    randomEventState.enabled = source.enabled !== false;
+    randomEventState.cooldown = Math.max(randomEventMinimumCooldown, finiteOr(source.cooldown, randomEventDefaultCooldown));
+    randomEventState.timer = Math.max(0, finiteOr(source.timer, randomEventState.cooldown));
+    randomEventState.active = source.active && typeof source.active === "object" ? { ...source.active } : null;
+    randomEventState.history = Array.isArray(source.history) ? source.history.slice(-12).map((entry) => String(entry || "")).filter(Boolean) : [];
+  }
+
+  function resetRandomEventState() {
+    applyRandomEventState({
+      enabled: true,
+      cooldown: randomEventDefaultCooldown,
+      timer: randomEventDefaultCooldown,
+      active: null,
+      history: []
+    });
+  }
+
+  function registerRandomEvent(definition) {
+    if (!definition || typeof definition !== "object" || !definition.id) {
+      return false;
+    }
+    const id = String(definition.id);
+    const index = randomEventDefinitions.findIndex((candidate) => candidate.id === id);
+    const cleanDefinition = { ...definition, id };
+    if (index >= 0) {
+      randomEventDefinitions[index] = cleanDefinition;
+    } else {
+      randomEventDefinitions.push(cleanDefinition);
+    }
+    return true;
+  }
+
+  function chooseRandomEventDefinition() {
+    const candidates = randomEventDefinitions.map(function (definition) {
+      if (definition.canStart && definition.canStart(randomEventState) === false) {
+        return null;
+      }
+      let weight = typeof definition.weight === "function"
+        ? definition.weight(randomEventState)
+        : finiteOr(definition.weight, 1);
+      weight = Math.max(0, finiteOr(weight, 0));
+      return weight > 0 ? { definition, weight } : null;
+    }).filter(Boolean);
+    const totalWeight = candidates.reduce(function (total, candidate) {
+      return total + candidate.weight;
+    }, 0);
+    if (totalWeight <= 0) {
+      return null;
+    }
+    let roll = Math.random() * totalWeight;
+    for (const candidate of candidates) {
+      roll -= candidate.weight;
+      if (roll <= 0) {
+        return candidate.definition;
+      }
+    }
+    return candidates[candidates.length - 1].definition;
+  }
+
+  function randomEventHistoryCount(id) {
+    const eventId = String(id || "");
+    if (!eventId || !Array.isArray(randomEventState.history)) {
+      return 0;
+    }
+    return randomEventState.history.reduce(function (count, entry) {
+      return count + (entry === eventId ? 1 : 0);
+    }, 0);
+  }
+
+  function particleStormWeight(state) {
+    const history = Array.isArray(state && state.history) ? state.history : [];
+    if (!history.length) {
+      return 18;
+    }
+    const stormCount = randomEventHistoryCount(particleStormEventId);
+    return stormCount <= 0 ? 6 : 1.35;
+  }
+
+  function meteorShowerWeight(state) {
+    if (!meteorShowerCanStartAfterParticleStorms()) {
+      return 0;
+    }
+    const showerCount = randomEventHistoryCount(meteorShowerEventId);
+    return showerCount <= 0 ? 5 : 1.1;
+  }
+
+  function meteorShowerCanStartAfterParticleStorms() {
+    return randomEventHistoryCount(particleStormEventId) >= 3;
+  }
+
+  function currentRunElapsedSeconds() {
+    return Math.max(0, (performance.now() - lifeStats.startedAt) / 1000);
+  }
+
+  function chooseParticleStormRegion() {
+    const anchors = activePartyPlayerAnchors();
+    const source = anchors[Math.floor(Math.random() * anchors.length)] || player;
+    const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
+    const travelAngle = speed > 60 ? Math.atan2(source.vy, source.vx) : randomRange(0, Math.PI * 2);
+    const sideAngle = travelAngle + randomRange(-0.85, 0.85);
+    const distance = randomRange(920, 1520);
+    const radius = randomRange(particleStormSettings.radiusMin, particleStormSettings.radiusMax);
+    return {
+      x: finiteOr(source.x, player.x) + Math.cos(sideAngle) * distance,
+      y: finiteOr(source.y, player.y) + Math.sin(sideAngle) * distance,
+      radius,
+      windAngle: sideAngle + Math.PI + randomRange(-0.55, 0.55),
+      phase: randomRange(0, Math.PI * 2),
+      maxParticles: particleStormSettings.maxActiveParticles
+    };
+  }
+
+  function activeParticleStormParticles() {
+    return particles.filter(function (particle) {
+      return particle && particle.randomEventId === particleStormEventId;
+    });
+  }
+
+  function stormParticleColor() {
+    const hue = Math.random() < 0.65 ? randomRange(182, 215) : randomRange(294, 334);
+    return hslToRgb(hue, randomRange(0.72, 0.94), randomRange(0.54, 0.72));
+  }
+
+  function meteorBodyColor() {
+    const palettes = [
+      { r: 124, g: 118, b: 110 },
+      { r: 164, g: 143, b: 116 },
+      { r: 94, g: 104, b: 112 },
+      { r: 142, g: 114, b: 91 },
+      { r: 186, g: 154, b: 111 }
+    ];
+    return palettes[Math.floor(Math.random() * palettes.length)];
+  }
+
+  function activeMeteorShowerParticles() {
+    return particles.filter(function (particle) {
+      return particle && particle.randomEventId === meteorShowerEventId;
+    });
+  }
+
+  function randomMeteorMass(meteorIndex) {
+    if ((Math.max(0, Math.floor(finiteOr(meteorIndex, 0))) + 3) % 7 === 0) {
+      return randomRange(50, 96);
+    }
+    const roll = Math.random();
+    if (roll < 0.7) {
+      return randomRange(10, 34);
+    }
+    if (roll < 0.9) {
+      return randomRange(34, 50);
+    }
+    return randomRange(50, 96);
+  }
+
+  function createParticleStormParticle(active) {
+    const radius = Math.max(120, finiteOr(active.radius, particleStormSettings.radiusMin));
+    const windAngle = finiteOr(active.windAngle, 0);
+    const windX = Math.cos(windAngle);
+    const windY = Math.sin(windAngle);
+    const crossX = -windY;
+    const crossY = windX;
+    const edge = randomRange(radius * 0.72, radius * 1.08);
+    const sweep = randomRange(-radius * 0.9, radius * 0.9);
+    const jitter = randomRange(-radius * 0.12, radius * 0.2);
+    const x = finiteOr(active.x, player.x) - windX * edge + crossX * sweep + windX * jitter;
+    const y = finiteOr(active.y, player.y) - windY * edge + crossY * sweep + windY * jitter;
+    const roll = Math.random();
+    const mass = roll < 0.78 ? 1 : roll < 0.95 ? 2 : 3;
+    const particle = createParticle(x, y, mass, stormParticleColor());
+    const speed = randomRange(96, 178);
+    particle.vx = windX * speed + crossX * randomRange(-62, 62) + randomRange(-18, 18);
+    particle.vy = windY * speed + crossY * randomRange(-62, 62) + randomRange(-18, 18);
+    particle.randomEventId = particleStormEventId;
+    particle.randomEventRegionX = finiteOr(active.x, player.x);
+    particle.randomEventRegionY = finiteOr(active.y, player.y);
+    return particle;
+  }
+
+  function createMeteorShowerParticle(active, meteorIndex) {
+    const radius = Math.max(120, finiteOr(active.radius, meteorShowerSettings.radiusMin));
+    const windAngle = finiteOr(active.windAngle, 0);
+    const windX = Math.cos(windAngle);
+    const windY = Math.sin(windAngle);
+    const crossX = -windY;
+    const crossY = windX;
+    const edge = randomRange(radius * 0.78, radius * 1.12);
+    const sweep = randomRange(-radius * 0.95, radius * 0.95);
+    const jitter = randomRange(-radius * 0.08, radius * 0.26);
+    const x = finiteOr(active.x, player.x) - windX * edge + crossX * sweep + windX * jitter;
+    const y = finiteOr(active.y, player.y) - windY * edge + crossY * sweep + windY * jitter;
+    const particle = createParticle(x, y, randomMeteorMass(meteorIndex), meteorBodyColor());
+    const speed = particle.tier && particle.tier.name === "boulder" ? randomRange(760, 980) : randomRange(820, 1120);
+    particle.vx = windX * speed + crossX * randomRange(-92, 92) + randomRange(-28, 28);
+    particle.vy = windY * speed + crossY * randomRange(-92, 92) + randomRange(-28, 28);
+    particle.randomEventId = meteorShowerEventId;
+    particle.randomEventRegionX = finiteOr(active.x, player.x);
+    particle.randomEventRegionY = finiteOr(active.y, player.y);
+    particle.spawnAge = 0;
+    return particle;
+  }
+
+  function spawnParticleStormParticles(active, count) {
+    if (!active) {
+      return 0;
+    }
+    const stormParticles = activeParticleStormParticles();
+    const maxParticles = Math.max(8, finiteOr(active.maxParticles, particleStormSettings.maxActiveParticles));
+    const available = Math.max(0, maxParticles - stormParticles.length);
+    const spawnCount = Math.min(Math.max(0, Math.floor(finiteOr(count, 0))), available);
+    for (let i = 0; i < spawnCount; i += 1) {
+      particles.push(createParticleStormParticle(active));
+    }
+    active.particlesSpawned = Math.max(0, finiteOr(active.particlesSpawned, 0)) + spawnCount;
+    return spawnCount;
+  }
+
+  function spawnMeteorShowerParticles(active, count) {
+    if (!active) {
+      return 0;
+    }
+    const meteorParticles = activeMeteorShowerParticles();
+    const maxParticles = Math.max(4, finiteOr(active.maxParticles, meteorShowerSettings.maxActiveParticles));
+    const available = Math.max(0, maxParticles - meteorParticles.length);
+    const spawnCount = Math.min(Math.max(0, Math.floor(finiteOr(count, 0))), available);
+    const spawnedBefore = Math.max(0, Math.floor(finiteOr(active.particlesSpawned, 0)));
+    for (let i = 0; i < spawnCount; i += 1) {
+      particles.push(createMeteorShowerParticle(active, spawnedBefore + i));
+    }
+    active.particlesSpawned = Math.max(0, finiteOr(active.particlesSpawned, 0)) + spawnCount;
+    return spawnCount;
+  }
+
+  function startParticleStorm(active) {
+    const region = chooseParticleStormRegion();
+    Object.assign(active, {
+      title: "Particle storm",
+      x: region.x,
+      y: region.y,
+      radius: region.radius,
+      windAngle: region.windAngle,
+      phase: region.phase,
+      maxParticles: region.maxParticles,
+      spawnTimer: 0,
+      particlesSpawned: 0
+    });
+    spawnParticleStormParticles(active, particleStormSettings.initialCount);
+    maybeNotifyText("Particle storm detected.", { groupKey: "random-event-particle-storm" });
+    playSound("ui", { throttle: 0.5 });
+  }
+
+  function startMeteorShower(active) {
+    const region = chooseParticleStormRegion();
+    Object.assign(active, {
+      title: "Meteor shower",
+      x: region.x,
+      y: region.y,
+      radius: randomRange(meteorShowerSettings.radiusMin, meteorShowerSettings.radiusMax),
+      windAngle: region.windAngle,
+      phase: region.phase,
+      maxParticles: meteorShowerSettings.maxActiveParticles,
+      spawnTimer: 0,
+      particlesSpawned: 0
+    });
+    spawnMeteorShowerParticles(active, meteorShowerSettings.initialCount);
+    maybeNotifyText("Meteor shower detected.", { groupKey: "random-event-meteor-shower" });
+    playSound("ui", { throttle: 0.5 });
+  }
+
+  function updateParticleStorm(active, dt) {
+    if (!active) {
+      return;
+    }
+    const seconds = Math.max(0, finiteOr(dt, 0));
+    active.spawnTimer = finiteOr(active.spawnTimer, 0) - seconds;
+    while (active.spawnTimer <= 0) {
+      const lateFade = clamp(1 - finiteOr(active.elapsed, 0) / Math.max(1, finiteOr(active.duration, particleStormSettings.duration)), 0, 1);
+      const count = lateFade > 0.2 ? Math.floor(randomRange(2, 5)) : 1;
+      spawnParticleStormParticles(active, count);
+      active.spawnTimer += particleStormSettings.spawnInterval;
+      if (activeParticleStormParticles().length >= finiteOr(active.maxParticles, particleStormSettings.maxActiveParticles)) {
+        break;
+      }
+    }
+
+    const cx = finiteOr(active.x, player.x);
+    const cy = finiteOr(active.y, player.y);
+    const radius = Math.max(120, finiteOr(active.radius, particleStormSettings.radiusMin));
+    const windAngle = finiteOr(active.windAngle, 0);
+    const windX = Math.cos(windAngle);
+    const windY = Math.sin(windAngle);
+    const now = performance.now() * 0.001;
+    const phase = finiteOr(active.phase, 0);
+
+    for (const particle of particles) {
+      if (!particle || particle.id === (player.landed && player.landed.bodyId)) {
+        continue;
+      }
+      const dx = particle.x - cx;
+      const dy = particle.y - cy;
+      const distance = Math.hypot(dx, dy);
+      const tagged = particle.randomEventId === particleStormEventId;
+      if (!tagged && distance > radius) {
+        continue;
+      }
+
+      const influence = tagged ? 1 : clamp(1 - distance / radius, 0, 1);
+      if (influence <= 0) {
+        continue;
+      }
+
+      const invDistance = distance > 0.001 ? 1 / distance : 0;
+      const radialX = distance > 0.001 ? dx * invDistance : windX;
+      const radialY = distance > 0.001 ? dy * invDistance : windY;
+      const swirlSign = Math.sin(phase + particle.wobble * 1.7 + now * 1.2) < 0 ? -1 : 1;
+      const swirlX = -radialY * swirlSign;
+      const swirlY = radialX * swirlSign;
+      const gust = 42 + Math.sin(now * 2.1 + particle.wobble + phase) * 28;
+      const flutter = Math.sin(now * 4.7 + particle.textureSeed) * 38;
+      const massScale = particle.tier && particle.tier.solid
+        ? 0.14 / Math.sqrt(Math.max(1, finiteOr(particle.mass, 1)))
+        : 1 / Math.sqrt(Math.max(1, finiteOr(particle.mass, 1)));
+      particle.vx += (windX * gust + swirlX * 70 * influence + radialX * flutter) * influence * massScale * seconds;
+      particle.vy += (windY * gust + swirlY * 70 * influence + radialY * flutter) * influence * massScale * seconds;
+
+      if (tagged && Math.hypot(particle.vx, particle.vy) < 54) {
+        particle.vx += windX * 34 * seconds;
+        particle.vy += windY * 34 * seconds;
+      }
+    }
+  }
+
+  function updateMeteorShower(active, dt) {
+    if (!active) {
+      return;
+    }
+    const seconds = Math.max(0, finiteOr(dt, 0));
+    active.spawnTimer = finiteOr(active.spawnTimer, 0) - seconds;
+    while (active.spawnTimer <= 0) {
+      const lateFade = clamp(1 - finiteOr(active.elapsed, 0) / Math.max(1, finiteOr(active.duration, meteorShowerSettings.duration)), 0, 1);
+      const count = lateFade > 0.24 && Math.random() < 0.72 ? 2 : 1;
+      spawnMeteorShowerParticles(active, count);
+      active.spawnTimer += meteorShowerSettings.spawnInterval;
+      if (activeMeteorShowerParticles().length >= finiteOr(active.maxParticles, meteorShowerSettings.maxActiveParticles)) {
+        break;
+      }
+    }
+
+    const cx = finiteOr(active.x, player.x);
+    const cy = finiteOr(active.y, player.y);
+    const radius = Math.max(120, finiteOr(active.radius, meteorShowerSettings.radiusMin));
+    const windAngle = finiteOr(active.windAngle, 0);
+    const windX = Math.cos(windAngle);
+    const windY = Math.sin(windAngle);
+    const now = performance.now() * 0.001;
+    const phase = finiteOr(active.phase, 0);
+
+    for (const particle of particles) {
+      if (!particle || particle.id === (player.landed && player.landed.bodyId)) {
+        continue;
+      }
+      const dx = particle.x - cx;
+      const dy = particle.y - cy;
+      const distance = Math.hypot(dx, dy);
+      const tagged = particle.randomEventId === meteorShowerEventId;
+      if (!tagged && distance > radius) {
+        continue;
+      }
+
+      const influence = tagged ? 1 : clamp(1 - distance / radius, 0, 1);
+      if (influence <= 0) {
+        continue;
+      }
+
+      const invDistance = distance > 0.001 ? 1 / distance : 0;
+      const radialX = distance > 0.001 ? dx * invDistance : windX;
+      const radialY = distance > 0.001 ? dy * invDistance : windY;
+      const crossX = -radialY;
+      const crossY = radialX;
+      const gust = 68 + Math.sin(now * 1.8 + finiteOr(particle.wobble, 0) + phase) * 22;
+      const tumble = Math.sin(now * 3.6 + finiteOr(particle.textureSeed, 0)) * 32;
+      const massScale = particle.tier && particle.tier.solid
+        ? 0.18 / Math.sqrt(Math.max(1, finiteOr(particle.mass, 1)))
+        : 0.56 / Math.sqrt(Math.max(1, finiteOr(particle.mass, 1)));
+      particle.vx += (windX * gust + crossX * tumble + radialX * 18) * influence * massScale * seconds;
+      particle.vy += (windY * gust + crossY * tumble + radialY * 18) * influence * massScale * seconds;
+
+      if (tagged && Math.hypot(particle.vx, particle.vy) < 700) {
+        particle.vx += windX * 150 * seconds;
+        particle.vy += windY * 150 * seconds;
+      }
+    }
+  }
+
+  function finishParticleStorm() {
+    for (const particle of particles) {
+      if (particle && particle.randomEventId === particleStormEventId) {
+        delete particle.randomEventId;
+        delete particle.randomEventRegionX;
+        delete particle.randomEventRegionY;
+      }
+    }
+    maybeNotifyText("Particle storm clearing.", { groupKey: "random-event-particle-storm" });
+  }
+
+  function finishMeteorShower() {
+    for (const particle of particles) {
+      if (particle && particle.randomEventId === meteorShowerEventId) {
+        delete particle.randomEventId;
+        delete particle.randomEventRegionX;
+        delete particle.randomEventRegionY;
+      }
+    }
+    maybeNotifyText("Meteor shower clearing.", { groupKey: "random-event-meteor-shower" });
+  }
+
+  function activeRandomEventRegions() {
+    const active = randomEventState.active;
+    const regions = [];
+    if (active && active.id === particleStormEventId) {
+      regions.push({
+        id: particleStormEventId,
+        label: "Storm",
+        x: finiteOr(active.x, player.x),
+        y: finiteOr(active.y, player.y),
+        radius: Math.max(120, finiteOr(active.radius, particleStormSettings.radiusMin)),
+        color: particleStormMapColor,
+        progress: clamp(finiteOr(active.elapsed, 0) / Math.max(1, finiteOr(active.duration, particleStormSettings.duration)), 0, 1)
+      });
+    }
+    if (active && active.id === meteorShowerEventId) {
+      regions.push({
+        id: meteorShowerEventId,
+        label: "Meteors",
+        x: finiteOr(active.x, player.x),
+        y: finiteOr(active.y, player.y),
+        radius: Math.max(120, finiteOr(active.radius, meteorShowerSettings.radiusMin)),
+        color: meteorShowerMapColor,
+        progress: clamp(finiteOr(active.elapsed, 0) / Math.max(1, finiteOr(active.duration, meteorShowerSettings.duration)), 0, 1)
+      });
+    }
+    if (typeof activeSpacecraftEventRegions === "function") {
+      regions.push(...activeSpacecraftEventRegions(active));
+    }
+    return regions;
+  }
+
+  registerRandomEvent({
+    id: particleStormEventId,
+    title: "Particle storm",
+    duration: particleStormSettings.duration,
+    weight: particleStormWeight,
+    canStart: function () {
+      return !deathState.active && player.health > 0;
+    },
+    start: startParticleStorm,
+    update: updateParticleStorm,
+    finish: finishParticleStorm
+  });
+
+  registerRandomEvent({
+    id: meteorShowerEventId,
+    title: "Meteor shower",
+    duration: meteorShowerSettings.duration,
+    weight: meteorShowerWeight,
+    canStart: function () {
+      return !deathState.active && player.health > 0 && meteorShowerCanStartAfterParticleStorms();
+    },
+    start: startMeteorShower,
+    update: updateMeteorShower,
+    finish: finishMeteorShower
+  });
+
+  function startRandomEvent(definition) {
+    if (!definition) {
+      return false;
+    }
+    const eventState = {
+      id: definition.id,
+      elapsed: 0,
+      duration: Math.max(1, finiteOr(definition.duration, 30))
+    };
+    randomEventState.active = eventState;
+    randomEventState.history.push(definition.id);
+    randomEventState.history = randomEventState.history.slice(-12);
+    if (typeof definition.start === "function") {
+      definition.start(eventState);
+    }
+    return true;
+  }
+
+  function finishRandomEvent(reason) {
+    const active = randomEventState.active;
+    if (!active) {
+      return;
+    }
+    const definition = randomEventDefinitions.find((candidate) => candidate.id === active.id);
+    if (definition && typeof definition.finish === "function") {
+      definition.finish(active, reason || "complete");
+    }
+    randomEventState.active = null;
+    randomEventState.timer = Math.max(randomEventMinimumCooldown, finiteOr(randomEventState.cooldown, randomEventDefaultCooldown));
+  }
+
+  function updateRandomEvents(dt) {
+    if (randomEventState.enabled === false || randomEventDefinitions.length === 0) {
+      if (randomEventState.active) {
+        finishRandomEvent("disabled");
+      } else {
+        randomEventState.active = null;
+      }
+      return;
+    }
+
+    const seconds = Math.max(0, finiteOr(dt, 0));
+    if (randomEventState.active) {
+      const active = randomEventState.active;
+      const definition = randomEventDefinitions.find((candidate) => candidate.id === active.id);
+      active.elapsed = Math.max(0, finiteOr(active.elapsed, 0) + seconds);
+      if (definition && typeof definition.update === "function") {
+        definition.update(active, seconds);
+      }
+      if (!definition || active.elapsed >= Math.max(1, finiteOr(active.duration, 30))) {
+        finishRandomEvent("duration");
+      }
+      return;
+    }
+
+    randomEventState.timer = Math.max(0, finiteOr(randomEventState.timer, randomEventState.cooldown) - seconds);
+    if (randomEventState.timer > 0) {
+      return;
+    }
+
+    if (!startRandomEvent(chooseRandomEventDefinition())) {
+      randomEventState.timer = Math.max(randomEventMinimumCooldown, finiteOr(randomEventState.cooldown, randomEventDefaultCooldown));
+    }
   }
 
   function createTechRow(tech, className) {
@@ -3424,7 +5525,15 @@
   }
 
   function isSuctionEquipped() {
-    return equippedToolId === defaultToolId;
+    return isSuctionTool(equippedToolId);
+  }
+
+  function isSuctionTool(toolId) {
+    return toolId === defaultToolId || toolId === visciousVacuumToolId;
+  }
+
+  function isVisciousVacuumEquipped() {
+    return equippedToolId === visciousVacuumToolId;
   }
 
   function canUseSuctionControls() {
@@ -3461,6 +5570,38 @@
     return Boolean(weaponDefinitions[toolId]);
   }
 
+  function isEmpTool(toolId) {
+    return toolId === empToolId;
+  }
+
+  function isEmpToolEquipped() {
+    return isEmpTool(equippedToolId) && !areToolsDisabled();
+  }
+
+  function isFamiliarNetEquipped() {
+    return equippedToolId === familiarNetToolId && !areToolsDisabled();
+  }
+
+  function isPistonPunchTool(toolId) {
+    return toolId === pistonPunchToolId;
+  }
+
+  function isPistonPunchEquipped() {
+    return isPistonPunchTool(equippedToolId) && !areToolsDisabled();
+  }
+
+  function isRocketSuitEquipped() {
+    return equippedToolId === rocketSuitToolId && !areToolsDisabled();
+  }
+
+  function currentEmpPulseRange() {
+    return empPulseRange * toolUpgradeFactor(empToolId, "range");
+  }
+
+  function currentEmpPulseDisableDuration() {
+    return empPulseDisableDuration * toolUpgradeFactor(empToolId, "duration");
+  }
+
   function isMechanicalMob(mob) {
     return mob && ["ufo", "rambot", "satellite", "rocket", "fighter"].includes(mob.kind);
   }
@@ -3486,18 +5627,26 @@
   }
 
   function currentGadgetSuckFactor() {
-    return toolUpgradeFactor(defaultToolId, "suck");
+    return toolUpgradeFactor(isSuctionTool(equippedToolId) ? equippedToolId : defaultToolId, "suck");
   }
 
   function currentGadgetBlowFactor() {
-    return toolUpgradeFactor(defaultToolId, "blow");
+    return toolUpgradeFactor(isSuctionTool(equippedToolId) ? equippedToolId : defaultToolId, "blow");
   }
 
   function filteredBuildRecipes() {
+    const visibleRecipes = buildRecipes.filter(isBuildRecipeVisible);
     if (activeBuildFilter === "all") {
-      return buildRecipes;
+      return visibleRecipes;
     }
-    return buildRecipes.filter((recipe) => recipe.category === activeBuildFilter);
+    return visibleRecipes.filter((recipe) => recipe.category === activeBuildFilter);
+  }
+
+  function isBuildRecipeVisible(recipe) {
+    if (!recipe || !recipe.blueprintObjectiveId) {
+      return true;
+    }
+    return Boolean(objectiveState.completed[recipe.blueprintObjectiveId] && objectiveState.claimed[recipe.blueprintObjectiveId]);
   }
 
   function canAffordRecipe(recipe) {
@@ -3764,8 +5913,8 @@
 
     if (buildMenuStatus) {
       const shown = recipes.length;
-      const total = buildRecipes.length;
-      buildMenuStatus.textContent = shown + "/" + total + " Blueprints";
+      const visibleTotal = buildRecipes.filter(isBuildRecipeVisible).length;
+      buildMenuStatus.textContent = shown + "/" + visibleTotal + " Blueprints";
     }
   }
 
@@ -4049,7 +6198,11 @@
         techLedger.classList.remove("is-open");
         techLedger.setAttribute("aria-hidden", "true");
       }
-      for (const toggle of [vitalsToggle, resourcesToggle, buildToggle, mapToggle]) {
+      if (objectiveTree) {
+        objectiveTree.classList.remove("is-open");
+        objectiveTree.setAttribute("aria-hidden", "true");
+      }
+      for (const toggle of [vitalsToggle, resourcesToggle, buildToggle, objectiveToggle, mapToggle]) {
         if (toggle) {
           toggle.classList.remove("is-active");
           toggle.setAttribute("aria-expanded", "false");
@@ -4082,6 +6235,16 @@
       resourcesToggle.setAttribute("aria-expanded", resourcesHudOpen ? "true" : "false");
     }
 
+    if (objectiveTree) {
+      objectiveTree.classList.toggle("is-open", objectivesOpen);
+      objectiveTree.setAttribute("aria-hidden", objectivesOpen ? "false" : "true");
+    }
+
+    if (objectiveToggle) {
+      objectiveToggle.classList.toggle("is-active", objectivesOpen);
+      objectiveToggle.setAttribute("aria-expanded", objectivesOpen ? "true" : "false");
+    }
+
     if (mapToggle) {
       mapToggle.classList.toggle("is-active", compact && mapHudOpen);
       mapToggle.setAttribute("aria-expanded", compact && mapHudOpen ? "true" : "false");
@@ -4096,6 +6259,18 @@
   function setResourcesHudOpen(open) {
     resourcesHudOpen = Boolean(open);
     syncCompactHudControls();
+  }
+
+  function setObjectivesOpen(open) {
+    objectivesOpen = Boolean(open);
+    if (objectivesOpen) {
+      setBuildMenuOpen(false);
+      renderObjectiveTree(true);
+      resetMouseButtons();
+    }
+    syncCompactHudControls();
+    updateHudEnabledUi();
+    updateTouchScreenUi();
   }
 
   function setMapHudOpen(open) {
@@ -4158,9 +6333,91 @@
     }
   }
 
+  function beginObjectiveTreePan(event) {
+    if (!objectiveTreeList || event.button > 0 || closestEventTarget(event, ".objective-node")) {
+      return;
+    }
+
+    objectiveTreePan.active = true;
+    objectiveTreePan.pointerId = event.pointerId;
+    objectiveTreePan.startX = event.clientX;
+    objectiveTreePan.startY = event.clientY;
+    objectiveTreePan.scrollLeft = objectiveTreeList.scrollLeft;
+    objectiveTreePan.scrollTop = objectiveTreeList.scrollTop;
+    objectiveTreePan.scale = objectiveTreeInteractionScale();
+    objectiveTreeList.classList.add("is-panning");
+    objectiveTreeList.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  function updateObjectiveTreePan(event) {
+    if (!objectiveTreePan.active || objectiveTreePan.pointerId !== event.pointerId || !objectiveTreeList) {
+      return;
+    }
+
+    const deltaX = event.clientX - objectiveTreePan.startX;
+    const deltaY = event.clientY - objectiveTreePan.startY;
+    const scale = objectiveTreePan.scale || 1;
+    objectiveTreeList.scrollLeft = objectiveTreePan.scrollLeft - deltaX / scale;
+    objectiveTreeList.scrollTop = objectiveTreePan.scrollTop - deltaY / scale;
+    objectiveState.scrollLeft = objectiveTreeList.scrollLeft;
+    objectiveState.scrollTop = objectiveTreeList.scrollTop;
+    objectiveState.hasUserPanned = true;
+    event.preventDefault();
+  }
+
+  function endObjectiveTreePan(event) {
+    if (!objectiveTreePan.active || objectiveTreePan.pointerId !== event.pointerId) {
+      return;
+    }
+
+    objectiveTreePan.active = false;
+    objectiveTreePan.pointerId = null;
+    if (objectiveTreeList) {
+      objectiveTreeList.classList.remove("is-panning");
+      objectiveState.scrollLeft = objectiveTreeList.scrollLeft;
+      objectiveState.scrollTop = objectiveTreeList.scrollTop;
+      if (objectiveTreeList.hasPointerCapture(event.pointerId)) {
+        objectiveTreeList.releasePointerCapture(event.pointerId);
+      }
+    }
+  }
+
+  function zoomObjectiveTree(event) {
+    if (!objectiveTreeList) {
+      return;
+    }
+
+    const oldZoom = objectiveGraphZoom();
+    const nextZoom = clamp(oldZoom * Math.exp(-finiteOr(event.deltaY, 0) * 0.0016), 0.35, 1.8);
+    if (Math.abs(nextZoom - oldZoom) < 0.001) {
+      event.preventDefault();
+      return;
+    }
+
+    const rect = objectiveTreeList.getBoundingClientRect();
+    const uiScale = objectiveTreeInteractionScale();
+    const pointerX = (event.clientX - rect.left) / uiScale;
+    const pointerY = (event.clientY - rect.top) / uiScale;
+    const graphX = (objectiveTreeList.scrollLeft + pointerX) / oldZoom;
+    const graphY = (objectiveTreeList.scrollTop + pointerY) / oldZoom;
+
+    objectiveState.zoom = nextZoom;
+    objectiveState.hasUserPanned = true;
+    objectiveState.renderSignature = "";
+    renderObjectiveTree(true);
+
+    objectiveTreeList.scrollLeft = Math.max(0, graphX * nextZoom - pointerX);
+    objectiveTreeList.scrollTop = Math.max(0, graphY * nextZoom - pointerY);
+    objectiveState.scrollLeft = objectiveTreeList.scrollLeft;
+    objectiveState.scrollTop = objectiveTreeList.scrollTop;
+    event.preventDefault();
+  }
+
   function setBuildMenuOpen(open) {
     buildMenuOpen = Boolean(open);
     if (buildMenuOpen) {
+      setObjectivesOpen(false);
       cancelStructurePlacement();
       resetMouseButtons();
     }
@@ -4278,6 +6535,7 @@
       mobSpawnTimers[kind] = difficultyMobSpawnInterval(kind);
     }
     mobSpawnRestTimer = 0;
+    mobSpawnRestDrainTimer = 0;
     mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
   }
 
@@ -4426,8 +6684,8 @@
     }
 
     if (!accountState.saves.length) {
-      if (isCrazyGamesRuntime() && !isCrazyGamesUserSignedIn()) {
-        const row = createStartMenuRow("Guest progress", lobbySaveMode ? "Use" : "Continue", lobbySaveMode ? "load-lobby-guest" : "continue-guest");
+      if (isPlatformLocalSaveRuntime() && !isAccountSignedIn()) {
+        const row = createStartMenuRow(isGamePixRuntime() ? "Local progress" : "Guest progress", lobbySaveMode ? "Use" : "Continue", lobbySaveMode ? "load-lobby-guest" : "continue-guest");
         startSavedGameList.append(row);
         return;
       }
@@ -4589,11 +6847,11 @@
       setLobbyStatus("Only the host can load a save.", "error");
       return;
     }
-    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+    if (isPlatformLocalSaveRuntime() && !isAccountSignedIn()) {
       return await loadLobbyCrazyGamesSave(cleanSaveId);
     }
     if (!isAccountSignedIn()) {
-      setLobbyStatus(isCrazyGamesRuntime() ? "Guest progress is already available." : "Log in to use saved worlds.", "error");
+      setLobbyStatus(isPlatformLocalSaveRuntime() ? "Guest progress is already available." : "Log in to use saved worlds.", "error");
       return;
     }
     if (!cleanSaveId) {
@@ -4655,7 +6913,7 @@
       resetLocalWorldState();
       resetLifeStats();
       resetDeathState();
-      applyPersistentPayload(Object.assign({ ok: true, universeId: "crazygames:" + player.id }, payload), { includePlayer: true });
+      applyPersistentPayload(Object.assign({ ok: true, universeId: platformLocalUniverseId() }, payload), { includePlayer: true });
       applyRunSnapshot(payload.run);
       runState.active = false;
       multiplayer.lobbyLoadedSnapshot = payload;
@@ -4668,7 +6926,7 @@
         createLobby({ loadedSnapshot: payload, loadedSaveName: saveName });
       }
     } catch (error) {
-      console.warn("CrazyGames lobby save load failed.", error);
+      console.warn("Platform local lobby save load failed.", error);
       setLobbyStatus("Could not use this save.", "error");
     }
   }
@@ -4820,13 +7078,7 @@
   }
 
   function lobbyDifficultySummary(difficulty) {
-    if (difficulty === "easy") {
-      return "Fast mobs, softer hits";
-    }
-    if (difficulty === "hard") {
-      return "More mobs";
-    }
-    return "Busy mobs, lighter hits";
+    return difficultyDefinition(difficulty).summary || difficultyDefinition(difficulty).description || difficultyLabel(difficulty);
   }
 
   function lobbyDifficultyDisplayText(difficulty) {
@@ -5055,6 +7307,7 @@
       return;
     }
 
+    ensureOnlinePresence();
     try {
       const url =
         "/api/players/search?playerId=" +
@@ -5381,7 +7634,8 @@
       radius: Math.max(1, finiteOr(options && options.radius, 38)),
       color: normalizeColorSnapshot(source.color, fallback),
       life: Math.max(0.05, finiteOr(options && options.life, 0.26)),
-      maxLife: Math.max(0.05, finiteOr(options && options.maxLife, options && options.life ? options.life : 0.26))
+      maxLife: Math.max(0.05, finiteOr(options && options.maxLife, options && options.life ? options.life : 0.26)),
+      empPulse: Boolean(options && options.empPulse)
     });
   }
 
@@ -5459,6 +7713,12 @@
     const kind = String(event && event.kind || "alienoid");
     lifeStats.mobsDefeated += 1;
     lifeStats.mobScore += scoreMobKill(kind);
+    if (mobDefeatsByKind[kind] !== undefined) {
+      mobDefeatsByKind[kind] += 1;
+    }
+    if (event && event.isBoss && mobBossDefeatsByKind[kind] !== undefined) {
+      mobBossDefeatsByKind[kind] += 1;
+    }
   }
 
   function multiplayerV2DeathCause(event) {
@@ -5496,11 +7756,15 @@
     return true;
   }
 
-  function processMultiplayerV2Events(events) {
+  function processMultiplayerV2Events(events, options) {
     if (!Array.isArray(events)) {
       return;
     }
+    const authoritative = Boolean(options && options.authoritative);
     for (const event of events) {
+      if (event && event.type === "mob.defeated" && !authoritative) {
+        continue;
+      }
       if (!markMultiplayerV2EventSeen(event)) {
         continue;
       }
@@ -5513,8 +7777,33 @@
         scoreMultiplayerV2MobDefeat(event);
         playSound("mobDestroyed", { throttleKey: "mpV2MobDestroyed", throttle: 0.08 });
         pushMultiplayerV2EventSpark(event, { radius: 64, life: 0.36, fallbackColor: { r: 255, g: 236, b: 194 } });
+      } else if (event.type === "mob.boss.warning") {
+        const kind = String(event.kind || "alienoid");
+        const seconds = Math.max(0, Math.ceil(finiteOr(event.seconds, 0)));
+        updateGroupedNotificationText("mob-boss-warning:" + kind, mobBossLabel(kind) + " inbound in " + seconds + "s.", { lifetime: 1500 });
+      } else if (event.type === "mob.boss.spawned") {
+        maybeNotifyText(mobBossLabel(String(event.kind || "alienoid")) + " has arrived.", {
+          groupKey: "mob-boss-arrival:" + String(event.kind || "alienoid"),
+          lifetime: 4200
+        });
+        pushMultiplayerV2EventSpark(event, { radius: 92, life: 0.5, fallbackColor: { r: 255, g: 236, b: 194 } });
+      } else if (event.type === "randomEvent.started") {
+        const eventId = String(event.id || "");
+        const title = String(event.title || (eventId === particleStormEventId ? "Particle storm" : eventId === meteorShowerEventId ? "Meteor shower" : eventId === rogueTraderEventId ? "Rogue Trader" : "Event"));
+        maybeNotifyText(title + (eventId === particleStormEventId || eventId === meteorShowerEventId ? " detected." : " signal detected."), {
+          groupKey: "random-event-" + eventId
+        });
+      } else if (event.type === "randomEvent.finished") {
+        const eventId = String(event.id || "");
+        const title = String(event.title || (eventId === particleStormEventId ? "Particle storm" : eventId === meteorShowerEventId ? "Meteor shower" : eventId === rogueTraderEventId ? "Rogue Trader" : "Event"));
+        maybeNotifyText(title + (eventId === particleStormEventId || eventId === meteorShowerEventId ? " clearing." : " leaving local space."), {
+          groupKey: "random-event-" + eventId
+        });
       } else if (event.type === "player.shot") {
         playSound("laser", { throttleKey: "mpV2PlayerShot:" + String(event.projectileId || ""), throttle: 0.02 });
+      } else if (event.type === "emp.pulse") {
+        playSound("lightning", { throttleKey: "mpV2EmpPulse", throttle: 0.16, volume: 0.82 });
+        pushMultiplayerV2EventSpark(event, { radius: finiteOr(event.radius, empPulseRange), life: 0.72, fallbackColor: { r: 126, g: 232, b: 255 }, empPulse: true });
       } else if (event.type === "projectile.blocked") {
         pushMultiplayerV2EventSpark(event, { radius: 34, life: 0.22, fallbackColor: { r: 255, g: 115, b: 173 } });
       } else if (event.type === "structure.shieldBlockedProjectile") {
@@ -5749,7 +8038,7 @@
         serverMaxInputQueue: finiteOr(message.perf.maxInputQueue, multiplayer.v2.perf && multiplayer.v2.perf.serverMaxInputQueue)
       });
     }
-    processMultiplayerV2Events(message.events);
+    processMultiplayerV2Events(message.events, { authoritative: true });
 
     const oldX = player.x;
     const oldY = player.y;
@@ -5757,6 +8046,7 @@
     multiplayer.v2.state = mpV2Sim.replayFromSnapshot(multiplayer.v2.authoritativeState, replayInputs, {
       dt: mpV2Sim.TICK_DT,
       enableMobs: true,
+      emitMobDamageParticles: false,
       duels: multiplayerV2DuelPairsForPrediction()
     });
     syncMultiplayerV2StateToGame({ previousLocalX: oldX, previousLocalY: oldY, blendDt: mpV2Sim.TICK_DT });
@@ -5796,8 +8086,9 @@
       player.energy = clamp(finiteOr(local.energy, player.energy), 0, player.maxEnergy);
       player.hitCooldown = Math.max(0, finiteOr(local.hitCooldown, player.hitCooldown || 0));
       player.landed = localLanding;
+      player.spacecraftInterior = normalizeSpacecraftInteriorSnapshot(local.spacecraftInterior);
       player.walkCycle = finiteOr(local.walkCycle, player.walkCycle);
-      cameraRoll = player.landed ? surfaceCameraRollForAngle(player.landed.angle) : finiteOr(local.cameraRoll, cameraRoll);
+      cameraRoll = player.landed ? surfaceCameraRollForAngle(player.landed.angle) : (player.spacecraftInterior ? 0 : finiteOr(local.cameraRoll, cameraRoll));
       syncTechInventoryFromMultiplayerV2(local.tech);
       applyToolInventory(local.tools, local.equippedTool, local.equippedTools);
       applyToolUpgrades(local.toolUpgrades);
@@ -5811,6 +8102,7 @@
 
     const syncStart = performance.now();
     syncMultiplayerV2World(state.world);
+    updateSyncedSpacecraftWorldFields();
     flushMultiplayerV2MergeVisuals();
     updateLifeStats();
     syncMultiplayerV2RemotePlayers(state);
@@ -5838,8 +8130,23 @@
     }
   }
 
-  function syncMultiplayerV2EntityList(target, sourceList, normalizer) {
+  function updateSyncedSpacecraftWorldFields() {
+    for (const craft of spacecrafts) {
+      updateSpacecraftWorldFields(craft);
+    }
+  }
+
+  function syncMultiplayerV2EntityList(target, sourceList, normalizer, options) {
     const incoming = Array.isArray(sourceList) ? sourceList : [];
+    const authoritativeLiveById = new Map();
+    if (options && Array.isArray(options.authoritativeList)) {
+      for (const snapshot of options.authoritativeList) {
+        const normalized = normalizer(snapshot);
+        if (normalized && normalized.id !== undefined && normalized.id !== null && finiteOr(normalized.health, 1) > 0) {
+          authoritativeLiveById.set(String(normalized.id), normalized);
+        }
+      }
+    }
     const existingById = new Map();
     for (const entity of target) {
       if (entity && entity.id !== undefined && entity.id !== null) {
@@ -5849,9 +8156,17 @@
 
     const next = [];
     for (const snapshot of incoming) {
-      const normalized = normalizer(snapshot);
+      let normalized = normalizer(snapshot);
       if (!normalized) {
         continue;
+      }
+      const id = String(normalized.id);
+      if (authoritativeLiveById.size && finiteOr(normalized.health, 1) <= 0) {
+        const authoritative = authoritativeLiveById.get(id);
+        if (!authoritative) {
+          continue;
+        }
+        normalized = authoritative;
       }
       const existing = existingById.get(String(normalized.id));
       if (existing) {
@@ -5862,12 +8177,31 @@
       }
     }
 
+    if (authoritativeLiveById.size) {
+      const nextIds = new Set(next.map((entity) => String(entity.id)));
+      for (const [id, authoritative] of authoritativeLiveById.entries()) {
+        if (nextIds.has(id)) {
+          continue;
+        }
+        const existing = existingById.get(id);
+        if (existing) {
+          Object.assign(existing, authoritative);
+          next.push(existing);
+        } else {
+          next.push(authoritative);
+        }
+      }
+    }
+
     target.length = 0;
     target.push(...next);
   }
 
   function syncMultiplayerV2World(world) {
     const source = world && typeof world === "object" ? world : {};
+    const authoritativeWorld = multiplayer.v2.authoritativeState && multiplayer.v2.authoritativeState.world
+      ? multiplayer.v2.authoritativeState.world
+      : {};
     if (Array.isArray(source.claimedTechPickupIds)) {
       multiplayer.claimedTechPickupIds = new Set(source.claimedTechPickupIds.map(String));
     }
@@ -5879,20 +8213,30 @@
       starDust.push(...source.starDust.map(normalizeStarSnapshot).filter(Boolean));
     }
     syncMultiplayerV2EntityList(particles, source.particles, normalizeParticleSnapshot);
-    syncMultiplayerV2EntityList(rivals, source.alienoids, normalizeRivalSnapshot);
-    syncMultiplayerV2EntityList(ufos, source.ufos, normalizeUfoSnapshot);
-    syncMultiplayerV2EntityList(rambots, source.rambots, normalizeRambotSnapshot);
-    syncMultiplayerV2EntityList(engineers, source.engineers, normalizeEngineerSnapshot);
-    syncMultiplayerV2EntityList(teslas, source.teslas, normalizeTeslaSnapshot);
-    syncMultiplayerV2EntityList(rockets, source.rockets, normalizeRocketSnapshot);
-    syncMultiplayerV2EntityList(fighters, source.fighters, normalizeFighterSnapshot);
+    syncMultiplayerV2EntityList(rivals, source.alienoids, normalizeRivalSnapshot, { authoritativeList: authoritativeWorld.alienoids });
+    syncMultiplayerV2EntityList(ufos, source.ufos, normalizeUfoSnapshot, { authoritativeList: authoritativeWorld.ufos });
+    syncMultiplayerV2EntityList(rambots, source.rambots, normalizeRambotSnapshot, { authoritativeList: authoritativeWorld.rambots });
+    syncMultiplayerV2EntityList(engineers, source.engineers, normalizeEngineerSnapshot, { authoritativeList: authoritativeWorld.engineers });
+    syncMultiplayerV2EntityList(teslas, source.teslas, normalizeTeslaSnapshot, { authoritativeList: authoritativeWorld.teslas });
+    syncMultiplayerV2EntityList(rockets, source.rockets, normalizeRocketSnapshot, { authoritativeList: authoritativeWorld.rockets });
+    syncMultiplayerV2EntityList(fighters, source.fighters, normalizeFighterSnapshot, { authoritativeList: authoritativeWorld.fighters });
     syncMultiplayerV2EntityList(structures, source.structures, normalizeStructureSnapshot);
+    if (Array.isArray(source.spacecrafts)) {
+      syncMultiplayerV2EntityList(spacecrafts, source.spacecrafts, normalizeSpacecraftSnapshot);
+    }
     syncMultiplayerV2EntityList(rivalProjectiles, source.rivalProjectiles, normalizeProjectileSnapshot);
     syncMultiplayerV2EntityList(techPickups, source.techPickups, normalizeTechPickupSnapshot);
     syncMultiplayerV2EntityList(healthPickups, source.healthPickups, normalizeHealthPickupSnapshot);
+    if (source.randomEvents) {
+      applyRandomEventState(source.randomEvents);
+    }
+    if (!Array.isArray(source.spacecrafts)) {
+      syncSpacecraftsToRandomEventState();
+    }
     nextParticleId = Math.max(finiteOr(source.nextParticleId, nextParticleId), particles.reduce((largest, body) => Math.max(largest, body.id + 1), 1));
     nextTechPickupId = Math.max(finiteOr(source.nextTechPickupId, nextTechPickupId), techPickups.reduce((largest, pickup) => Math.max(largest, pickup.id + 1), 1));
     nextHealthPickupId = Math.max(finiteOr(source.nextHealthPickupId, nextHealthPickupId), healthPickups.reduce((largest, pickup) => Math.max(largest, pickup.id + 1), 1));
+    nextSpacecraftId = Math.max(finiteOr(source.nextSpacecraftId, nextSpacecraftId), spacecrafts.reduce((largest, craft) => Math.max(largest, finiteOr(craft.id, 0) + 1), 1));
   }
 
   function syncMultiplayerV2RemotePlayers(state) {
@@ -5956,6 +8300,7 @@
       mpV2Sim.step(multiplayer.v2.state, { [player.id]: input }, {
         dt: mpV2Sim.TICK_DT,
         enableMobs: true,
+        emitMobDamageParticles: false,
         duels: multiplayerV2DuelPairsForPrediction()
       });
       processMultiplayerV2Events(multiplayer.v2.state && multiplayer.v2.state.events);
@@ -6224,6 +8569,7 @@
       visualAimLocalAngle: incomingPlayer.visualAimLocalAngle,
       cameraRoll: incomingPlayer.cameraRoll,
       equippedTool: incomingPlayer.equippedTool,
+      toolDisabledTimer: incomingPlayer.toolDisabledTimer,
       toolMode: incomingPlayer.toolMode,
       toolActive: incomingPlayer.toolActive,
       moving: incomingPlayer.moving,
@@ -6602,7 +8948,9 @@
     rivalProjectiles.length = 0;
     playerLasers.length = 0;
     launcherMissiles.length = 0;
+    guidedLauncherState.activeMissile = null;
     structures.length = 0;
+    spacecrafts.length = 0;
     healthPickups.length = 0;
     techPickups.length = 0;
     multiplayer.remoteUniverses.clear();
@@ -6615,6 +8963,7 @@
     nextRocketId = 1;
     nextFighterId = 1;
     nextStructureId = 1;
+    nextSpacecraftId = 1;
     nextRivalProjectileId = 1;
     nextTechPickupId = 1;
     nextHealthPickupId = 1;
@@ -6625,9 +8974,12 @@
     resetMobSpawnTimers();
 
     resetMobDefeatsByKind();
+    resetMobBossWarnings();
+    resetRandomEventState();
 
     seedStarDust();
     seedParticles();
+    seedSpacecrafts();
     resetFrameClock();
   }
 
@@ -6648,6 +9000,7 @@
     lifeStats.bestScoredBodies = 0;
     lifeStats.absorbedParticleMass = 0;
     lifeStats.absorbedParticleCount = 0;
+    resetObjectiveState();
   }
 
   function sanitizePlayerName(name) {
@@ -6718,6 +9071,14 @@
     return isCrazyGamesRuntime() && Boolean(crazyGamesState.user && typeof crazyGamesState.user === "object");
   }
 
+  function isPlatformLocalSaveRuntime() {
+    return isCrazyGamesRuntime() || isGamePixRuntime();
+  }
+
+  function platformLocalUniverseId() {
+    return (isGamePixRuntime() ? "gamepix:" : "crazygames:") + player.id;
+  }
+
   function crazyGamesManualSaveOwnerKey() {
     if (!isCrazyGamesRuntime()) {
       return "";
@@ -6731,15 +9092,23 @@
     return "cg-" + (sanitizeCrazyGamesStorageKeyPart(stableId) || "account").slice(0, 21);
   }
 
+  function gamePixManualSaveOwnerKey() {
+    return isGamePixRuntime() ? "gamepix-local" : "";
+  }
+
+  function platformLocalSaveOwnerKey() {
+    return crazyGamesManualSaveOwnerKey() || gamePixManualSaveOwnerKey();
+  }
+
   function activeManualSaveOwnerKey() {
     if (isAccountSignedIn()) {
       return accountState.username;
     }
-    return crazyGamesManualSaveOwnerKey();
+    return platformLocalSaveOwnerKey();
   }
 
   function canUseManualSaves() {
-    return isAccountSignedIn() || isCrazyGamesRuntime();
+    return isAccountSignedIn() || isPlatformLocalSaveRuntime();
   }
 
   function crazyGamesAccountStatusText() {
@@ -6833,6 +9202,7 @@
     if (saveGameButton) {
       const signedIn = isAccountSignedIn();
       const crazyGamesRuntime = isCrazyGamesRuntime();
+      const gamePixRuntime = isGamePixRuntime();
       const crazyGamesSignedIn = isCrazyGamesUserSignedIn();
       saveGameButton.disabled = !canUseManualSaves() || accountState.busy;
       saveGameButton.textContent = currentSave
@@ -6843,6 +9213,8 @@
         ? crazyGamesSignedIn
           ? "Save progress"
           : "Save guest"
+        : gamePixRuntime
+        ? "Save"
         : "Log in";
       saveGameButton.setAttribute("aria-label", currentSave ? 'Save over "' + currentSave.name + '"' : saveGameButton.textContent);
     }
@@ -6851,11 +9223,12 @@
   function updateAccountUi() {
     const signedIn = isAccountSignedIn();
     const crazyGamesRuntime = isCrazyGamesRuntime();
+    const gamePixRuntime = isGamePixRuntime();
     const crazyGamesSignedIn = isCrazyGamesUserSignedIn();
     const displaySignedIn = signedIn || crazyGamesSignedIn;
 
     if (accountLoginForm) {
-      accountLoginForm.hidden = crazyGamesRuntime || signedIn;
+      accountLoginForm.hidden = crazyGamesRuntime || gamePixRuntime || signedIn;
     }
     if (crazyGamesAccount) {
       crazyGamesAccount.hidden = !crazyGamesRuntime;
@@ -6872,13 +9245,13 @@
       crazyGamesLoginButton.disabled = accountState.busy || crazyGamesState.authPromptActive;
     }
     if (accountSignedIn) {
-      accountSignedIn.hidden = crazyGamesRuntime || !signedIn;
+      accountSignedIn.hidden = crazyGamesRuntime || gamePixRuntime || !signedIn;
     }
     if (accountNameValue) {
       accountNameValue.textContent = signedIn ? accountState.displayName || accountState.username : "Signed out";
     }
     if (startMenuAccount) {
-      startMenuAccount.hidden = false;
+      startMenuAccount.hidden = gamePixRuntime;
       startMenuAccount.classList.toggle("is-loading", !displaySignedIn && accountState.sessionLoading === true);
       startMenuAccount.classList.toggle("is-signed-out", !displaySignedIn && accountState.sessionLoading !== true);
       startMenuAccount.classList.toggle("is-wai-linked", accountState.waiLinked === true);
@@ -6905,7 +9278,7 @@
       accountSignupButton.disabled = accountState.busy;
     }
     if (accountLogoutButton) {
-      accountLogoutButton.hidden = crazyGamesRuntime;
+      accountLogoutButton.hidden = crazyGamesRuntime || gamePixRuntime;
       accountLogoutButton.disabled = accountState.busy;
     }
     renderManualSaveForm();
@@ -8038,23 +10411,23 @@
     const hadAccountTokenAtStart = Boolean(accountState.token);
     const storedAtStart = readStoredAccountSession();
     logAccountAuth("bootstrap start", {
-      runtime: isItchRuntime() ? "itch" : isCrazyGamesRuntime() ? "crazygames" : "backend",
+      runtime: isItchRuntime() ? "itch" : isCrazyGamesRuntime() ? "crazygames" : isGamePixRuntime() ? "gamepix" : "backend",
       externalBackend: shouldUseExternalBackend(),
       hasStoredToken: Boolean(storedAtStart),
       hasAccountToken: hadAccountTokenAtStart
     });
 
-    if (isCrazyGamesRuntime()) {
-      logAccountAuth("bootstrap skipped for CrazyGames runtime");
+    if (isPlatformLocalSaveRuntime()) {
+      logAccountAuth("bootstrap skipped for platform-local save runtime");
       accountState.token = "";
       accountState.username = "";
       accountState.displayName = "";
-      accountState.saves = [];
       clearCurrentAccountSave();
       accountState.sessionLoading = false;
       accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
       updateAccountUi();
+      await refreshCrazyGamesManualSaves();
       return;
     }
 
@@ -8126,6 +10499,10 @@
   async function submitAccountAuth(_createNew) {
     if (isCrazyGamesRuntime()) {
       await promptCrazyGamesLogin();
+      return;
+    }
+    if (isGamePixRuntime()) {
+      setManualSaveStatus("GamePix saves are stored locally.", "success");
       return;
     }
 
@@ -8349,6 +10726,9 @@
     if (isCrazyGamesRuntime()) {
       return await logoutCrazyGamesUser();
     }
+    if (isGamePixRuntime()) {
+      return false;
+    }
 
     if (!isAccountSignedIn() || accountState.busy) {
       return;
@@ -8410,7 +10790,7 @@
   }
 
   async function refreshAccountSaves() {
-    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+    if (isPlatformLocalSaveRuntime() && !isAccountSignedIn()) {
       await refreshCrazyGamesManualSaves();
       return;
     }
@@ -8495,8 +10875,32 @@
     return crazyGamesManualSavePayloadPrefix + activeManualSaveOwnerKey() + "." + String(saveId || "").trim();
   }
 
+  function gamePixLocalStorageModule() {
+    const storage = window.GamePix && window.GamePix.localStorage;
+    if (
+      storage &&
+      typeof storage.getItem === "function" &&
+      typeof storage.setItem === "function"
+    ) {
+      return storage;
+    }
+    return null;
+  }
+
   async function readCrazyGamesStorageItem(key) {
-    const data = crazyGamesDataModule();
+    const gamePixStorage = isGamePixRuntime() ? gamePixLocalStorageModule() : null;
+    if (gamePixStorage) {
+      try {
+        const value = await Promise.resolve(gamePixStorage.getItem(key));
+        if (value != null && value !== "") {
+          return value;
+        }
+      } catch (error) {
+        logCrazyGamesProgress("GamePix localStorage manual save read failed.", { key, error }, "warn", "load");
+      }
+    }
+
+    const data = isCrazyGamesRuntime() ? crazyGamesDataModule() : null;
     if (data) {
       try {
         const value = await Promise.resolve(data.getItem(key));
@@ -8518,8 +10922,22 @@
 
   async function writeCrazyGamesStorageItem(key, value) {
     const raw = String(value == null ? "" : value);
-    const data = crazyGamesDataModule();
+    const gamePixStorage = isGamePixRuntime() ? gamePixLocalStorageModule() : null;
+    const data = isCrazyGamesRuntime() ? crazyGamesDataModule() : null;
     let wrote = false;
+
+    if (gamePixStorage) {
+      try {
+        if (!raw && typeof gamePixStorage.removeItem === "function") {
+          await Promise.resolve(gamePixStorage.removeItem(key));
+        } else {
+          await Promise.resolve(gamePixStorage.setItem(key, raw));
+        }
+        wrote = true;
+      } catch (error) {
+        logCrazyGamesProgress("GamePix localStorage manual save write failed.", { key, error }, "warn", "save");
+      }
+    }
 
     if (data) {
       try {
@@ -8624,7 +11042,7 @@
   }
 
   async function refreshCrazyGamesManualSaves() {
-    if (!isCrazyGamesRuntime() || accountState.savesLoading) {
+    if (!isPlatformLocalSaveRuntime() || accountState.savesLoading) {
       return;
     }
 
@@ -8644,7 +11062,7 @@
       return false;
     }
 
-    const saveName = sanitizeManualSaveName(name) || (isCrazyGamesUserSignedIn() ? "CrazyGames progress" : "Guest progress");
+    const saveName = sanitizeManualSaveName(name) || (isCrazyGamesUserSignedIn() ? "CrazyGames progress" : isGamePixRuntime() ? "GamePix save" : "Guest progress");
     const now = Date.now();
     const saveId = currentSave && currentSave.id ? currentSave.id : "cg-save-" + now.toString(36) + "-" + Math.random().toString(36).slice(2, 8);
     const existingSaves = await readCrazyGamesManualSaveIndex();
@@ -8696,7 +11114,7 @@
     const currentSave = currentAccountSave();
     const name = currentSave ? currentSave.name : sanitizeManualSaveName(saveGameNameInput && saveGameNameInput.value);
 
-    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+    if (isPlatformLocalSaveRuntime() && !isAccountSignedIn()) {
       return await saveCrazyGamesManualGame(currentSave, name);
     }
     if (!isAccountSignedIn()) {
@@ -8857,6 +11275,7 @@
       setSettingsOpen(false);
       setStartMenuView("main", { push: false });
       setDifficultyScreenOpen(true);
+      ensureOnlinePresence();
       resetMouseButtons();
       resetFrameClock();
       void refreshLeaderboard(true);
@@ -8889,11 +11308,11 @@
   async function loadManualGame(saveId) {
     const cleanSaveId = String(saveId || "").trim();
 
-    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+    if (isPlatformLocalSaveRuntime() && !isAccountSignedIn()) {
       return await loadCrazyGamesManualGame(cleanSaveId);
     }
     if (!isAccountSignedIn()) {
-      setManualSaveStatus(isCrazyGamesRuntime() ? "Guest progress loads automatically on startup." : "Log in to load saved games.", "error");
+      setManualSaveStatus(isPlatformLocalSaveRuntime() ? "Guest progress loads automatically on startup." : "Log in to load saved games.", "error");
       return;
     }
     if (!cleanSaveId) {
@@ -8964,7 +11383,7 @@
       resetLifeStats();
       resetDeathState();
       runState.active = true;
-      applyPersistentPayload(Object.assign({ ok: true, universeId: "crazygames:" + player.id }, payload), { includePlayer: true });
+      applyPersistentPayload(Object.assign({ ok: true, universeId: platformLocalUniverseId() }, payload), { includePlayer: true });
       applyRunSnapshot(payload.run);
       setCurrentAccountSave(metadata || { id: cleanSaveId, name: saveName, username: activeManualSaveOwnerKey() });
       runState.active = true;
@@ -8980,14 +11399,14 @@
       setManualSaveStatus('Loaded "' + saveName + '".', "success");
       maybeNotifyText('Loaded "' + saveName + '".');
     } catch (error) {
-      console.warn("CrazyGames manual load failed.", error);
+      console.warn("Platform local manual load failed.", error);
       setManualSaveStatus("Could not load this save.", "error");
     }
   }
 
   async function deleteManualGame(saveId) {
     const cleanSaveId = String(saveId || "").trim();
-    if (isCrazyGamesRuntime() && !isAccountSignedIn()) {
+    if (isPlatformLocalSaveRuntime() && !isAccountSignedIn()) {
       return await deleteCrazyGamesManualGame(cleanSaveId);
     }
     if (!isAccountSignedIn()) {
@@ -9059,7 +11478,7 @@
       setManualSaveStatus('Deleted "' + saveName + '".', "success");
       maybeNotifyText('Deleted "' + saveName + '".');
     } catch (error) {
-      console.warn("CrazyGames manual delete failed.", error);
+      console.warn("Platform local manual delete failed.", error);
       setManualSaveStatus("Could not delete this save.", "error");
     } finally {
       setAccountBusy(false);
@@ -9083,12 +11502,18 @@
     player.hitCooldown = 0;
     player.hitFlash = 0;
     player.landed = null;
+    player.spacecraftInterior = null;
     player.walkCycle = 0;
     cameraRoll = 0;
     gadgetAngle = -0.32;
     toolFireCooldown = 0;
     toolDisabledTimer = 0;
     playerContinuousEnergyLocked = false;
+    familiarNetCapture = null;
+    familiarNetSwingTimer = 0;
+    familiarNetSwingDirection = -1;
+    guidedLauncherState.activeMissile = null;
+    resetPlayerStatusBarState();
 
     for (const tech of techTypes) {
       techInventory[tech.key] = 0;
@@ -9175,6 +11600,36 @@
       console.info("[Clusternauts CrazyGames Data] Data Module unavailable; using fallback progress storage.");
     }
     return data;
+  }
+
+  async function readGamePixProgressEnvelope() {
+    const storage = gamePixLocalStorageModule();
+    if (!storage) {
+      return null;
+    }
+
+    try {
+      const raw = await Promise.resolve(storage.getItem(crazyGamesProgressStorageKey));
+      return parseCrazyGamesProgressEnvelope(raw, "gamepix-localStorage");
+    } catch (error) {
+      logCrazyGamesProgress("GamePix localStorage progress load failed.", error, "warn", "load");
+      return null;
+    }
+  }
+
+  async function writeGamePixProgressEnvelope(envelope) {
+    const storage = gamePixLocalStorageModule();
+    if (!storage) {
+      return false;
+    }
+
+    try {
+      await Promise.resolve(storage.setItem(crazyGamesProgressStorageKey, JSON.stringify(envelope)));
+      return true;
+    } catch (error) {
+      logCrazyGamesProgress("GamePix localStorage progress save failed.", error, "warn", "save");
+      return false;
+    }
   }
 
   function logCrazyGamesProgress(message, details, level, kind) {
@@ -9303,10 +11758,10 @@
   }
 
   async function loadCrazyGamesProgressState() {
-    const data = await initializeCrazyGamesProgressAdapter("load");
+    const data = isCrazyGamesRuntime() ? await initializeCrazyGamesProgressAdapter("load") : null;
 
     return await withCrazyGamesLoading("progress-load", async function () {
-      const dataEnvelope = await readCrazyGamesDataProgressEnvelope(data);
+      const dataEnvelope = isGamePixRuntime() ? await readGamePixProgressEnvelope() : await readCrazyGamesDataProgressEnvelope(data);
       const localEnvelope = readLocalCrazyGamesProgressEnvelope();
       const envelope = dataEnvelope || localEnvelope;
 
@@ -9318,7 +11773,7 @@
         progressSaveAdapter.lastLoadSource = envelope.source || "unknown";
         persistence.online = true;
         persistence.serverUnavailable = false;
-        persistence.storage = progressSaveAdapter.lastLoadSource === "crazygames-data" ? "crazygames-data" : "local";
+        persistence.storage = progressSaveAdapter.lastLoadSource === "crazygames-data" ? "crazygames-data" : progressSaveAdapter.lastLoadSource === "gamepix-localStorage" ? "gamepix-localStorage" : "local";
         logCrazyGamesProgress("Loaded progress.", { source: progressSaveAdapter.lastLoadSource, savedAt: envelope.savedAt }, "info", "load");
         return true;
       }
@@ -9328,9 +11783,24 @@
   }
 
   async function saveCrazyGamesProgressState(includeWorld) {
-    const data = await initializeCrazyGamesProgressAdapter("save");
-    const previousEnvelope = await readCrazyGamesDataProgressEnvelope(data) || readLocalCrazyGamesProgressEnvelope();
+    const data = isCrazyGamesRuntime() ? await initializeCrazyGamesProgressAdapter("save") : null;
+    const previousEnvelope = isGamePixRuntime()
+      ? await readGamePixProgressEnvelope() || readLocalCrazyGamesProgressEnvelope()
+      : await readCrazyGamesDataProgressEnvelope(data) || readLocalCrazyGamesProgressEnvelope();
     const envelope = buildCrazyGamesProgressEnvelope(includeWorld, previousEnvelope);
+
+    if (isGamePixRuntime() && await writeGamePixProgressEnvelope(envelope)) {
+      progressSaveAdapter.lastSaveSource = "gamepix-localStorage";
+      persistence.online = true;
+      persistence.serverUnavailable = false;
+      persistence.storage = "gamepix-localStorage";
+      writeLocalCrazyGamesProgressEnvelope(envelope);
+      if (!progressSaveAdapter.dataModuleSaveLogged) {
+        progressSaveAdapter.dataModuleSaveLogged = true;
+        logCrazyGamesProgress("Saved progress through GamePix localStorage.", { bytes: JSON.stringify(envelope).length }, "info", "save");
+      }
+      return true;
+    }
 
     if (data) {
       try {
@@ -9373,7 +11843,7 @@
     persistence.loadInFlight = true;
 
     try {
-      if (isCrazyGamesRuntime() && await loadCrazyGamesProgressState()) {
+      if (isPlatformLocalSaveRuntime() && await loadCrazyGamesProgressState()) {
         return;
       }
 
@@ -9400,6 +11870,12 @@
     persistence.loadInFlight = true;
 
     try {
+      if (isPlatformLocalSaveRuntime()) {
+        persistence.online = true;
+        persistence.serverUnavailable = false;
+        return;
+      }
+
       const data = await fetchPersistentJson("/api/world/state?playerId=" + encodeURIComponent(player.id));
       persistence.online = true;
       persistence.serverUnavailable = false;
@@ -9421,7 +11897,7 @@
 
     try {
       const includeWorld = !options || options.includeWorld !== false;
-      if (isCrazyGamesRuntime() && await saveCrazyGamesProgressState(includeWorld)) {
+      if (isPlatformLocalSaveRuntime() && await saveCrazyGamesProgressState(includeWorld)) {
         return;
       }
 
@@ -9785,7 +12261,7 @@
 
     const stats = deathState.stats;
     const items = [
-      ["Score", stats.score + " pts"],
+      ["Total score", stats.score + " pts"],
       ["Difficulty", difficultyLabel(stats.difficulty)],
       ["Owned bodies", stats.ownedBodies + " / " + stats.ownedMass + "g"],
       ["Body points", stats.bodyScore],
@@ -10079,6 +12555,7 @@
       resetDeathState();
       setStartMenuView(nextStartMenuView, { push: false });
       setDifficultyScreenOpen(true);
+      ensureOnlinePresence();
       resetMouseButtons();
       resetFrameClock();
       void refreshLeaderboard(true);
@@ -10346,6 +12823,7 @@
       return;
     }
 
+    ensureOnlinePresence();
     const query = playerSearch ? playerSearch.value : "";
     const friendsOnly = friendsOnlyFilter && friendsOnlyFilter.checked;
     const relayOnly = multiplayer.socialMode === "relay" && !isCrazyGamesRuntime();
@@ -10787,6 +13265,9 @@
     .filter((tier) => tier.threshold > 0)
     .map((tier) => tier.name.replace(/\s+/g, "-"));
   const spawnMobCommandNames = ["alienoid", "ufo", "rambot", "tesla", "engineer", "satellite", "rocket", "fighter"];
+  const spawnBossCommandNames = spawnMobCommandNames.slice();
+  const spawnEventCommandNames = ["particle-storm", "meteor-shower"];
+  const spawnNpcCommandNames = ["trader"];
 
   function normalizeSpawnCommandToken(token) {
     return String(token || "").trim().toLowerCase().replace(/[-_\s]+/g, "");
@@ -10816,6 +13297,27 @@
     return "Alienoid";
   }
 
+  function randomEventIdForCommandToken(token) {
+    const normalized = normalizeSpawnCommandToken(token);
+    if (normalized === "particlestorm" || normalized === "storm") return particleStormEventId;
+    if (normalized === "meteorshower" || normalized === "meteor" || normalized === "meteors" || normalized === "shower") return meteorShowerEventId;
+    if (normalized === "roguetrader" || normalized === "trader") return rogueTraderEventId;
+    return "";
+  }
+
+  function npcKindForCommandToken(token) {
+    const normalized = normalizeSpawnCommandToken(token);
+    if (normalized === "trader" || normalized === "roguetrader" || normalized === "spacecrafttrader") return "trader";
+    return "";
+  }
+
+  function spawnEventLabel(eventId) {
+    if (eventId === particleStormEventId) return "Particle storm";
+    if (eventId === meteorShowerEventId) return "Meteor shower";
+    if (eventId === rogueTraderEventId) return "Rogue Trader";
+    return "Event";
+  }
+
   function parseSpawnTargetAndAmount(rawTarget) {
     const parts = String(rawTarget || "").trim().split(/\s+/).filter(Boolean);
     let amount = 1;
@@ -10837,7 +13339,7 @@
       return;
     }
     const command = commandInput.value;
-    const match = command.match(/^\/spawn\s+(body|mob)(?:\s+(.+))?$/i);
+    const match = command.match(/^\/spawn\s+(body|mob|boss|event|npc)(?:\s+(.+))?$/i);
     if (!match) {
       commandInput.value = "/spawn ";
       commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
@@ -10845,7 +13347,15 @@
       return;
     }
     const category = match[1].toLowerCase();
-    const names = category === "mob" ? spawnMobCommandNames : spawnBodyCommandNames;
+    const names = category === "mob"
+      ? spawnMobCommandNames
+      : category === "boss"
+        ? spawnBossCommandNames
+        : category === "event"
+          ? spawnEventCommandNames
+          : category === "npc"
+            ? spawnNpcCommandNames
+            : spawnBodyCommandNames;
     const rawTarget = String(match[2] || "").trim();
     const amountMatch = rawTarget.match(/^(.*?)(?:\s+(\d+))?$/);
     const partialTarget = amountMatch ? amountMatch[1].trim() : rawTarget;
@@ -10890,7 +13400,7 @@
 
     const value = commandInput.value.trim();
     if (!value) {
-      commandHint.textContent = "Available: /tp <player>, /spawn mob <type> <amount>, /spawn body <type> <amount>, /tech <type> <amount>, /reset all";
+      commandHint.textContent = "Available: /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>, /spawn event meteor-shower, /spawn npc trader";
       return;
     }
 
@@ -10900,7 +13410,7 @@
     }
 
     if (/^\/spawn(\s|$)/i.test(value)) {
-      commandHint.textContent = "Mobs: alienoid, ufo, rambot, tesla, engineer, satellite, rocket, fighter. Bodies: rock, boulder, asteroid, dwarf-moon, moon, planet.";
+      commandHint.textContent = "Spawn: mob, boss, body, event, npc. Bosses: alienoid, ufo, rambot, tesla, engineer, satellite, rocket, fighter.";
       return;
     }
 
@@ -10910,7 +13420,7 @@
     }
 
     if (!/^\/tp(\s|$)/i.test(value)) {
-      commandHint.textContent = "Available: /tp <player>, /spawn mob <type> <amount>, /spawn body <type> <amount>, /tech <type> <amount>, /reset all";
+      commandHint.textContent = "Available: /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>, /spawn event meteor-shower, /spawn npc trader";
       return;
     }
 
@@ -11020,7 +13530,7 @@
     }
 
     if (!/^\/tp(\s|$)/i.test(command)) {
-      maybeNotifyText("Unknown command. Try /tp <player>, /spawn mob <type> <amount>, /spawn body <type> <amount>, /tech <type> <amount>, or /reset all.");
+      maybeNotifyText("Unknown command. Try /spawn boss alienoid, /spawn event meteor-shower, /spawn npc trader, /tech <type> <amount>, or /reset all.");
       setCommandOpen(false);
       return;
     }
@@ -11087,6 +13597,32 @@
     spawnMobByKind(kind, anchor);
   }
 
+  function spawnBossFromCommand(kind, source) {
+    const anchor = {
+      x: finiteOr(source && source.x, player.x),
+      y: finiteOr(source && source.y, player.y),
+      vx: finiteOr(player.vx, 0),
+      vy: finiteOr(player.vy, 0),
+      radius: finiteOr(source && source.radius, player.radius)
+    };
+    spawnBossByKind(kind, anchor, activePartyPlayerAnchors());
+  }
+
+  function forceRandomEventFromCommand(eventId) {
+    const definition = randomEventDefinitions.find((candidate) => candidate && candidate.id === eventId);
+    if (!definition) {
+      return false;
+    }
+    if (eventId === meteorShowerEventId && typeof meteorShowerCanStartAfterParticleStorms === "function" && !meteorShowerCanStartAfterParticleStorms()) {
+      return false;
+    }
+    if (randomEventState.active) {
+      finishRandomEvent("command");
+    }
+    randomEventState.enabled = true;
+    return startRandomEvent(definition);
+  }
+
   function localSpawnCommandSource() {
     const aimAngle = getCursorAimAngle();
     const direction = cameraLocalToWorld(Math.cos(aimAngle), Math.sin(aimAngle));
@@ -11100,11 +13636,11 @@
   }
 
   function executeSpawnCommand(command) {
-    const match = command.match(/^\/spawn\s+(body|mob)(?:\s+(.+))?$/i);
+    const match = command.match(/^\/spawn\s+(body|mob|boss|event|npc)(?:\s+(.+))?$/i);
     const category = match && match[1] ? match[1].toLowerCase() : "";
     const parsed = parseSpawnTargetAndAmount(match && match[2] ? match[2] : "");
     if (!match || !parsed.target) {
-      maybeNotifyText("Use /spawn mob alienoid 3 or /spawn body asteroid 2.");
+      maybeNotifyText("Use /spawn mob alienoid 3, /spawn boss ufo, /spawn event meteor-shower, or /spawn npc trader.");
       updateCommandHint();
       return;
     }
@@ -11131,6 +13667,54 @@
       }
       maybeNotifyText("Spawned " + parsed.amount + " " + mobLabelForKind(kind) + (parsed.amount === 1 ? "." : "s."));
       void savePersistentState({ includeWorld: true });
+      return;
+    }
+
+    if (category === "boss") {
+      const kind = mobKindForCommandToken(parsed.target);
+      if (!kind) {
+        maybeNotifyText("Unknown boss. Try alienoid, ufo, rambot, tesla, engineer, satellite, rocket, or fighter.");
+        return;
+      }
+      if (isMultiplayerV2Active() || isSharedWorldFollower()) {
+        const sent = sendPartyCommand({
+          command: "spawnBoss",
+          mob: kind,
+          amount: parsed.amount,
+          source
+        });
+        maybeNotifyText(sent ? "Spawned " + parsed.amount + " " + mobBossLabel(kind) + (parsed.amount === 1 ? "." : "s.") : "Multiplayer command unavailable.");
+        return;
+      }
+      for (let i = 0; i < parsed.amount; i += 1) {
+        spawnBossFromCommand(kind, source);
+      }
+      void savePersistentState({ includeWorld: true });
+      return;
+    }
+
+    if (category === "event" || category === "npc") {
+      const eventId = category === "npc" ? (npcKindForCommandToken(parsed.target) ? rogueTraderEventId : "") : randomEventIdForCommandToken(parsed.target);
+      if (!eventId) {
+        maybeNotifyText(category === "npc" ? "Unknown NPC. Try trader." : "Unknown event. Try meteor-shower or particle-storm.");
+        return;
+      }
+      if (isMultiplayerV2Active() || isSharedWorldFollower()) {
+        const sent = sendPartyCommand({
+          command: category === "npc" ? "spawnNpc" : "spawnEvent",
+          npc: category === "npc" ? "trader" : "",
+          event: eventId,
+          source
+        });
+        maybeNotifyText(sent ? "Spawned " + spawnEventLabel(eventId) + "." : "Multiplayer command unavailable.");
+        return;
+      }
+      if (forceRandomEventFromCommand(eventId)) {
+        maybeNotifyText("Spawned " + spawnEventLabel(eventId) + ".");
+        void savePersistentState({ includeWorld: true });
+      } else {
+        maybeNotifyText("Unable to spawn " + spawnEventLabel(eventId) + ".");
+      }
       return;
     }
 
@@ -11217,7 +13801,7 @@
       return;
     }
     const command = String(message && message.command || "");
-    if (command !== "spawnBody" && command !== "spawnMob") {
+    if (command !== "spawnBody" && command !== "spawnMob" && command !== "spawnBoss" && command !== "spawnEvent" && command !== "spawnNpc") {
       return;
     }
     const amount = clamp(Math.max(1, Math.floor(finiteOr(message.amount, 1))), 1, 100);
@@ -11231,6 +13815,27 @@
         spawnMobFromCommand(kind, source);
       }
       maybeNotifyText((message.publicName || "A player") + " spawned " + amount + " " + mobLabelForKind(kind) + (amount === 1 ? "." : "s."));
+      void savePersistentState({ includeWorld: true });
+      return;
+    }
+    if (command === "spawnBoss") {
+      const kind = mobKindForCommandToken(message.mob);
+      if (!kind) {
+        return;
+      }
+      for (let i = 0; i < amount; i += 1) {
+        spawnBossFromCommand(kind, source);
+      }
+      maybeNotifyText((message.publicName || "A player") + " spawned " + amount + " " + mobBossLabel(kind) + (amount === 1 ? "." : "s."));
+      void savePersistentState({ includeWorld: true });
+      return;
+    }
+    if (command === "spawnEvent" || command === "spawnNpc") {
+      const eventId = command === "spawnNpc" ? (npcKindForCommandToken(message.npc) ? rogueTraderEventId : "") : randomEventIdForCommandToken(message.event);
+      if (!eventId || !forceRandomEventFromCommand(eventId)) {
+        return;
+      }
+      maybeNotifyText((message.publicName || "A player") + " spawned " + spawnEventLabel(eventId) + ".");
       void savePersistentState({ includeWorld: true });
       return;
     }
@@ -11366,6 +13971,13 @@
     socket.addEventListener("error", scheduleMultiplayerReconnect);
   }
 
+  function ensureOnlinePresence() {
+    if (!player.id || multiplayer.socket || multiplayer.connected) {
+      return;
+    }
+    connectMultiplayer();
+  }
+
   function scheduleMultiplayerReconnect(event) {
     if (deathState.resetInFlight) {
       return;
@@ -11490,10 +14102,6 @@
     }
 
     if (message.type === "lobby.invite") {
-      if (!multiplayer.friendJoinsEnabled) {
-        maybeNotifyText("Multiplayer Off");
-        return;
-      }
       multiplayer.pendingSignal = {
         kind: "lobby",
         lobbyId: message.lobbyId,
@@ -11878,6 +14486,13 @@
     ];
   }
 
+  function interactionChoicesForTarget(target) {
+    if (target && target.kind === "npc") {
+      return [playerInteractionChoiceConfigs.trade];
+    }
+    return interactionChoicesForPlayer(playerIdForInteractionTarget(target));
+  }
+
   function interactionMenuChoiceByKey(menu, key) {
     return menu && Array.isArray(menu.choices)
       ? menu.choices.find((choice) => choice && choice.key === key) || null
@@ -11886,6 +14501,13 @@
 
   function playerIdForInteractionTarget(target) {
     return target && target.remote ? target.remote.playerId || "" : "";
+  }
+
+  function interactionIdForTarget(target) {
+    if (target && target.kind === "npc" && target.npc && target.spacecraft) {
+      return "npc:" + target.spacecraft.id + ":" + target.npc.id;
+    }
+    return playerIdForInteractionTarget(target);
   }
 
   function findRemoteInteractionTargetByPlayerId(playerId) {
@@ -11905,6 +14527,12 @@
   function findNearbyInteractionTarget() {
     let best = null;
     let bestDistance = Infinity;
+
+    const npcTarget = findNearbyNpcInteractionTarget();
+    if (npcTarget) {
+      best = npcTarget;
+      bestDistance = Math.hypot(npcTarget.player.x - player.x, npcTarget.player.y - player.y);
+    }
 
     for (const target of collectRemoteCombatPlayers()) {
       const targetPlayerId = playerIdForInteractionTarget(target);
@@ -11933,19 +14561,23 @@
       return;
     }
 
-    const targetPlayerId = playerIdForInteractionTarget(target);
-    if (!targetPlayerId) {
+    const targetId = interactionIdForTarget(target);
+    if (!targetId) {
       return;
     }
 
     const requested = normalizeInteractionChoice(requestedChoice);
-    const choices = interactionChoicesForPlayer(targetPlayerId);
+    const choices = interactionChoicesForTarget(target);
     const selectedIndex = Math.max(
       0,
       choices.findIndex((choice) => choice.key === requested)
     );
     multiplayer.interactionMenu = {
-      targetPlayerId,
+      targetId,
+      targetKind: target.kind === "npc" ? "npc" : "player",
+      targetPlayerId: playerIdForInteractionTarget(target),
+      targetNpcId: target.kind === "npc" && target.npc ? target.npc.id : "",
+      targetSpacecraftId: target.kind === "npc" && target.spacecraft ? target.spacecraft.id : 0,
       targetName: target.publicName || target.player.name || "Contact",
       requestedChoice: requested,
       choices,
@@ -12007,6 +14639,16 @@
     const menu = multiplayer.interactionMenu;
     const choice = normalizeInteractionChoice(choiceKey);
     if (!menu || !choice || !interactionMenuChoiceByKey(menu, choice)) {
+      return;
+    }
+
+    if (menu.targetKind === "npc") {
+      const target = findNpcInteractionTargetById(menu.targetSpacecraftId, menu.targetNpcId);
+      if (choice === "trade" && target) {
+        openNpcTradeSession(target.spacecraft, target.npc);
+      } else {
+        setPlayerInteractionMenu(false);
+      }
       return;
     }
 
@@ -12143,7 +14785,9 @@
     }
 
     if (multiplayer.interactionMenu) {
-      const target = findRemoteInteractionTargetByPlayerId(multiplayer.interactionMenu.targetPlayerId);
+      const target = multiplayer.interactionMenu.targetKind === "npc"
+        ? findNpcInteractionTargetById(multiplayer.interactionMenu.targetSpacecraftId, multiplayer.interactionMenu.targetNpcId)
+        : findRemoteInteractionTargetByPlayerId(multiplayer.interactionMenu.targetPlayerId);
       if (!target || Math.hypot(target.player.x - player.x, target.player.y - player.y) > playerInteractionRange + 80) {
         setPlayerInteractionMenu(false);
       }
@@ -12165,6 +14809,18 @@
 
   function canAffordTradeOffer(offer) {
     return techTypes.every((tech) => Math.max(0, Math.floor(offer && offer[tech.key] || 0)) <= Math.floor(techInventory[tech.key] || 0));
+  }
+
+  function describeTradeCostWithInventory(offer) {
+    const parts = [];
+    for (const tech of techTypes) {
+      const amount = Math.max(0, Math.floor(offer && offer[tech.key] || 0));
+      if (amount > 0) {
+        const owned = Math.max(0, Math.floor(techInventory[tech.key] || 0));
+        parts.push(owned + "/" + amount + " " + tech.label);
+      }
+    }
+    return parts.length ? parts.join(", ") : "nothing";
   }
 
   function openTradeSession(peerId, peerName) {
@@ -12220,6 +14876,29 @@
     }
 
     tradeOfferList.textContent = "";
+    if (multiplayer.trade.kind === "npc") {
+      const trade = multiplayer.trade;
+      trade.npcOffers.forEach((offer, index) => {
+        const row = document.createElement("div");
+        const dot = document.createElement("span");
+        const name = document.createElement("span");
+        const button = document.createElement("button");
+        const selected = index === trade.selectedOfferIndex;
+        row.className = "trade-row";
+        row.style.setProperty("--tech-color", selected ? "#ffd166" : "#ffb858");
+        dot.className = "trade-row__dot";
+        name.className = "trade-row__name";
+        name.textContent = describeTradeCostWithInventory(offer.pay);
+        button.type = "button";
+        button.dataset.npcOffer = String(index);
+        button.textContent = selected ? "Selected" : "Select";
+        button.disabled = selected;
+        row.append(dot, name, button);
+        tradeOfferList.append(row);
+      });
+      return;
+    }
+
     for (const tech of techTypes) {
       const amount = Math.max(0, Math.floor(multiplayer.trade.localOffer[tech.key] || 0));
       const owned = Math.floor(techInventory[tech.key] || 0);
@@ -12261,6 +14940,31 @@
     }
 
     tradeReceiveList.textContent = "";
+    if (multiplayer.trade.kind === "npc") {
+      const offer = selectedNpcTradeOffer(multiplayer.trade);
+      const receive = offer ? offer.receive : multiplayer.trade.remoteOffer;
+      for (const tech of techTypes) {
+        const amount = Math.max(0, Math.floor(receive && receive[tech.key] || 0));
+        if (amount <= 0) {
+          continue;
+        }
+        const row = document.createElement("div");
+        const dot = document.createElement("span");
+        const name = document.createElement("span");
+        const value = document.createElement("strong");
+        row.className = "trade-row";
+        row.style.setProperty("--tech-color", tech.color);
+        dot.className = "trade-row__dot";
+        name.className = "trade-row__name";
+        name.textContent = tech.label;
+        value.className = "trade-row__amount";
+        value.textContent = amount.toString();
+        row.append(dot, name, value);
+        tradeReceiveList.append(row);
+      }
+      return;
+    }
+
     for (const tech of techTypes) {
       const amount = Math.max(0, Math.floor(multiplayer.trade.remoteOffer[tech.key] || 0));
       const row = document.createElement("div");
@@ -12285,8 +14989,36 @@
       return;
     }
 
+    if (trade.kind === "npc") {
+      const offer = selectedNpcTradeOffer(trade);
+      trade.localOffer = normalizeTradeOffer(offer && offer.pay);
+      trade.remoteOffer = normalizeTradeOffer(offer && offer.receive);
+      if (tradeSendOffer) {
+        tradeSendOffer.disabled = true;
+        tradeSendOffer.textContent = "Fixed Offer";
+      }
+      if (tradeAccept) {
+        tradeAccept.disabled = trade.completed || !offer || !canAffordTradeOffer(trade.localOffer);
+        tradeAccept.textContent = "Trade";
+      }
+      if (tradeStatus) {
+        if (!offer) {
+          tradeStatus.textContent = "No offers available.";
+        } else if (trade.completed) {
+          tradeStatus.textContent = "Trade complete.";
+        } else {
+          const cost = describeTradeCostWithInventory(trade.localOffer);
+          tradeStatus.textContent = canAffordTradeOffer(trade.localOffer)
+            ? "Trader asks for " + cost + "."
+            : "You need " + cost + ".";
+        }
+      }
+      return;
+    }
+
     if (tradeSendOffer) {
       tradeSendOffer.disabled = !canAffordTradeOffer(trade.localOffer) || trade.completed;
+      tradeSendOffer.textContent = "Send Offer";
     }
     if (tradeAccept) {
       tradeAccept.disabled =
@@ -12295,6 +15027,7 @@
         !trade.remoteSent ||
         !canAffordTradeOffer(trade.localOffer) ||
         (tradeOfferTotal(trade.localOffer) <= 0 && tradeOfferTotal(trade.remoteOffer) <= 0);
+      tradeAccept.textContent = "Accept";
     }
     if (!tradeStatus) {
       return;
@@ -12320,7 +15053,7 @@
   function adjustTradeOffer(techKey, delta) {
     const trade = multiplayer.trade;
     const tech = techByKey(techKey);
-    if (!trade || !tech || trade.completed) {
+    if (!trade || trade.kind === "npc" || !tech || trade.completed) {
       return;
     }
 
@@ -12337,6 +15070,9 @@
     if (!trade || !canAffordTradeOffer(trade.localOffer)) {
       return;
     }
+    if (trade.kind === "npc") {
+      return;
+    }
 
     trade.localSent = true;
     trade.localAccepted = false;
@@ -12350,6 +15086,10 @@
 
   function acceptTradeOffer() {
     const trade = multiplayer.trade;
+    if (trade && trade.kind === "npc") {
+      completeNpcTradeOffer();
+      return;
+    }
     if (!trade || trade.completed || !trade.localSent || !trade.remoteSent || !canAffordTradeOffer(trade.localOffer)) {
       return;
     }
@@ -12422,6 +15162,7 @@
     updateTechUi();
     void savePersistentState({ includeWorld: false });
     renderTradePanel();
+    playSound("trade");
     maybeNotifyText("Trade complete with " + trade.peerName + ".");
   }
 
@@ -13233,8 +15974,9 @@
     const maxEnergy = clamp(finiteOr(snapshot.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
     const energy = clamp(finiteOr(snapshot.energy, maxEnergy), 0, maxEnergy);
     const equippedTool = toolCatalog.some((tool) => tool.id === snapshot.equippedTool) ? snapshot.equippedTool : null;
+    const toolDisabledTimer = Math.max(0, finiteOr(snapshot.toolDisabledTimer, 0));
     const toolMode = ["pull", "push", "hold", "fire", "idle"].includes(snapshot.toolMode) ? snapshot.toolMode : "idle";
-    const activeToolMode = equippedTool && actorCanAffordMultiplayerToolMode({ energy }, equippedTool, toolMode) ? toolMode : "idle";
+    const activeToolMode = equippedTool && actorCanAffordMultiplayerToolMode({ energy, toolDisabledTimer }, equippedTool, toolMode) ? toolMode : "idle";
     const camera = finiteOr(snapshot.cameraRoll, 0);
     const hasAimAngle = Number.isFinite(Number(snapshot.aimAngle));
     const hasAimLocalAngle = Number.isFinite(Number(snapshot.aimLocalAngle));
@@ -13253,6 +15995,7 @@
       maxHealth,
       energy,
       maxEnergy,
+      toolDisabledTimer,
       landed: normalizeLandingSnapshot(snapshot.landed),
       walkCycle: finiteOr(snapshot.walkCycle, snapshot.landed && snapshot.landed.walkCycle),
       cameraRoll: camera,
@@ -13334,7 +16077,7 @@
         toSnapshot && toSnapshot.player,
         progress,
         lead,
-        { angleKeys: ["cameraRoll", "aimAngle", "aimLocalAngle", "visualAimLocalAngle"], scalarKeys: ["radius", "health", "maxHealth", "energy", "maxEnergy", "walkCycle"] }
+        { angleKeys: ["cameraRoll", "aimAngle", "aimLocalAngle", "visualAimLocalAngle"], scalarKeys: ["radius", "health", "maxHealth", "energy", "maxEnergy", "toolDisabledTimer", "walkCycle"] }
       ),
       world: {
         particles: interpolateRemoteEntityList(fromWorld.particles, toWorld.particles, progress, lead, {
@@ -13342,31 +16085,31 @@
         }).map(refreshInterpolatedBody),
         alienoids: interpolateRemoteEntityList(fromWorld.alienoids, toWorld.alienoids, progress, lead, {
           angleKeys: ["rotation"],
-          scalarKeys: ["radius", "health", "maxHealth"]
+          scalarKeys: ["radius", "health", "maxHealth", "disabledTimer"]
         }),
         ufos: interpolateRemoteEntityList(fromWorld.ufos, toWorld.ufos, progress, lead, {
           angleKeys: ["rotation", "beamAngle"],
-          scalarKeys: ["radius", "health", "maxHealth"]
+          scalarKeys: ["radius", "health", "maxHealth", "disabledTimer", "tractorDisabledTimer"]
         }),
         rambots: interpolateRemoteEntityList(fromWorld.rambots, toWorld.rambots, progress, lead, {
           angleKeys: ["rotation"],
-          scalarKeys: ["radius", "health", "maxHealth"]
+          scalarKeys: ["radius", "health", "maxHealth", "disabledTimer"]
         }),
         engineers: interpolateRemoteEntityList(fromWorld.engineers, toWorld.engineers, progress, lead, {
           angleKeys: ["rotation"],
-          scalarKeys: ["radius", "health", "maxHealth", "healPulse"]
+          scalarKeys: ["radius", "health", "maxHealth", "disabledTimer", "healPulse"]
         }),
         teslas: interpolateRemoteEntityList(fromWorld.teslas, toWorld.teslas, progress, lead, {
           angleKeys: ["rotation"],
-          scalarKeys: ["radius", "health", "maxHealth", "lightningWarmup", "lightningFlash"]
+          scalarKeys: ["radius", "health", "maxHealth", "disabledTimer", "lightningWarmup", "lightningFlash"]
         }),
         rockets: interpolateRemoteEntityList(fromWorld.rockets, toWorld.rockets, progress, lead, {
           angleKeys: ["rotation", "scannerAngle"],
-          scalarKeys: ["radius", "health", "maxHealth", "scanProgress", "lockTimer", "blastTimer", "volleyTimer", "volleyShots"]
+          scalarKeys: ["radius", "health", "maxHealth", "disabledTimer", "scanProgress", "lockTimer", "blastTimer", "volleyTimer", "volleyShots"]
         }),
         fighters: interpolateRemoteEntityList(fromWorld.fighters, toWorld.fighters, progress, lead, {
           angleKeys: ["rotation"],
-          scalarKeys: ["radius", "health", "maxHealth", "shieldCharge", "shieldActive", "shootCooldown"]
+          scalarKeys: ["radius", "health", "maxHealth", "disabledTimer", "shieldCharge", "shieldActive", "shootCooldown"]
         }),
         structures: interpolateRemoteEntityList(fromWorld.structures, toWorld.structures, progress, lead, {
           angleKeys: ["angle", "linkedAngle", "aimAngle"],
@@ -13608,7 +16351,7 @@
   }
 
   function collectCombatPlayerTargets() {
-    return [
+    const targets = [
       {
         local: true,
         remote: null,
@@ -13616,14 +16359,23 @@
         publicName: player.name || "Player"
       }
     ].concat(collectRemoteCombatPlayers());
+    if (typeof familiarCombatTargets === "function") {
+      targets.push(...familiarCombatTargets());
+    }
+    return targets;
   }
 
   function nearestCombatPlayerTarget(x, y) {
     let best = null;
     let bestDistance = Infinity;
+    const localPlayerInsideSpacecraft = isPlayerInsideSpacecraft();
+    const spacecraftTarget = localPlayerInsideSpacecraft ? nearestSpacecraftCombatTarget(x, y, 2200) : null;
 
     for (const target of collectCombatPlayerTargets()) {
       if (!target.player || target.player.health <= 0) {
+        continue;
+      }
+      if (target.local && localPlayerInsideSpacecraft) {
         continue;
       }
 
@@ -13631,6 +16383,13 @@
       if (distance < bestDistance) {
         best = target;
         bestDistance = distance;
+      }
+    }
+
+    if (spacecraftTarget) {
+      const spacecraftDistance = Math.hypot(spacecraftTarget.player.x - x, spacecraftTarget.player.y - y);
+      if (!best || spacecraftDistance < bestDistance * 1.28 + 420) {
+        return spacecraftTarget;
       }
     }
 
@@ -14008,14 +16767,17 @@
         maxHealth: player.maxHealth,
         energy: player.energy,
         maxEnergy: player.maxEnergy,
+        toolDisabledTimer,
         score: Math.max(1, Math.round(lifeStats.bestScore || lifeStats.currentScore || 1)),
         difficulty: runState.difficultyId,
         tech: serializeTechInventory(),
         tools: serializeToolInventory(),
         equippedTools: serializeEquippedToolInventory(),
         toolUpgrades: serializeToolUpgrades(),
+        objectives: serializeObjectiveState(),
         equippedTool: equippedToolId,
         landed: player.landed,
+        spacecraftInterior: player.spacecraftInterior,
         walkCycle: player.walkCycle,
         cameraRoll,
         hasCommunicationRelay: hasCommunicationRelay(),
@@ -14040,6 +16802,7 @@
         rockets: rockets.map(serializeRocket),
         fighters: fighters.map(serializeFighter),
         structures: structures.map(serializeStructure),
+        spacecrafts: spacecrafts.map(serializeSpacecraft),
         rivalProjectiles: rivalProjectiles.map(serializeProjectile),
         techPickups: techPickups.map(serializeTechPickup),
         healthPickups: healthPickups.map(serializeHealthPickup),
@@ -14053,14 +16816,20 @@
         nextRocketId,
         nextFighterId,
         nextStructureId,
+        nextSpacecraftId,
         nextRivalProjectileId,
         nextTechPickupId,
         nextHealthPickupId,
         difficulty: runState.difficultyId,
         mobSpawnTimers: { ...mobSpawnTimers },
         mobSpawnRestTimer,
+        mobSpawnRestDrainTimer,
         mobSpawnRestCooldownTimer,
-        mobDefeatsByKind: { ...mobDefeatsByKind }
+        mobDefeatsByKind: { ...mobDefeatsByKind },
+        mobBossDefeatsByKind: { ...mobBossDefeatsByKind },
+        mobBossWarnings: serializeMobBossWarnings(),
+        objectives: serializeObjectiveState(),
+        randomEvents: serializeRandomEventState()
       };
     }
 
@@ -14185,6 +16954,11 @@
       structures.push(...snapshot.structures.map(normalizeStructureSnapshot).filter(Boolean));
     }
 
+    if (Array.isArray(snapshot.spacecrafts)) {
+      spacecrafts.length = 0;
+      spacecrafts.push(...snapshot.spacecrafts.map(normalizeSpacecraftSnapshot).filter(Boolean));
+    }
+
     if (Array.isArray(snapshot.rivalProjectiles)) {
       if (shouldSmoothWorldEntities(options)) {
         applySmoothedEntitySnapshots(rivalProjectiles, snapshot.rivalProjectiles, normalizeProjectileSnapshot, { snapDistance: 520, entityType: "rivalProjectile" });
@@ -14250,6 +17024,10 @@
       Number(snapshot.nextStructureId) || 1,
       structures.reduce((largest, structure) => Math.max(largest, structure.id + 1), 1)
     );
+    nextSpacecraftId = Math.max(
+      Number(snapshot.nextSpacecraftId) || 1,
+      spacecrafts.reduce((largest, craft) => Math.max(largest, finiteOr(craft.id, 0) + 1), 1)
+    );
     nextRivalProjectileId = Math.max(
       Number(snapshot.nextRivalProjectileId) || 1,
       rivalProjectiles.reduce((largest, projectile) => Math.max(largest, finiteOr(projectile.id, 0) + 1), 1)
@@ -14266,6 +17044,15 @@
     applyMobSpawnTimers(snapshot.mobSpawnTimers);
     applyMobSpawnRestState(snapshot);
     applyMobDefeatsByKind(snapshot.mobDefeatsByKind);
+    applyMobBossDefeatsByKind(snapshot.mobBossDefeatsByKind);
+    applyMobBossWarnings(snapshot.mobBossWarnings);
+    if (snapshot.objectives) {
+      applyObjectiveState(snapshot.objectives);
+    }
+    if (snapshot.randomEvents) {
+      applyRandomEventState(snapshot.randomEvents);
+    }
+    syncSpacecraftsToRandomEventState();
   }
 
   function applyPlayerSnapshot(snapshot) {
@@ -14288,9 +17075,13 @@
     applyTechInventory(snapshot.tech);
     applyToolInventory(snapshot.tools, snapshot.equippedTool, snapshot.equippedTools);
     applyToolUpgrades(snapshot.toolUpgrades);
+    if (snapshot.objectives) {
+      applyObjectiveState(snapshot.objectives);
+    }
     player.landed = normalizeLandingSnapshot(snapshot.landed);
+    player.spacecraftInterior = normalizeSpacecraftInteriorSnapshot(snapshot.spacecraftInterior);
     player.walkCycle = finiteOr(snapshot.walkCycle, player.landed ? player.landed.walkCycle : player.walkCycle);
-    cameraRoll = player.landed ? surfaceCameraRollForAngle(player.landed.angle) : finiteOr(snapshot.cameraRoll, cameraRoll);
+    cameraRoll = player.landed ? surfaceCameraRollForAngle(player.landed.angle) : (player.spacecraftInterior ? 0 : finiteOr(snapshot.cameraRoll, cameraRoll));
   }
 
   function serializeParticle(particle) {
@@ -14308,7 +17099,11 @@
       textureSeed: particle.textureSeed,
       wobble: particle.wobble,
       pulse: particle.pulse,
+      spawnAge: particle.spawnAge,
       spawnSizeScale: particle.spawnSizeScale,
+      randomEventId: particle.randomEventId || "",
+      randomEventRegionX: particle.randomEventRegionX,
+      randomEventRegionY: particle.randomEventRegionY,
       ufoSapTimer: particle.ufoSapTimer,
       ufoSapSourceGraceTimer: particle.ufoSapSourceGraceTimer,
       ufoExtractedById: particle.ufoExtractedById,
@@ -14760,6 +17555,30 @@
     return true;
   }
 
+  function mobBossSnapshotFields(mob) {
+    if (!mob || !mob.isBoss) {
+      return {};
+    }
+    return {
+      isBoss: true,
+      bossBaseKind: mob.bossBaseKind || mob.kind,
+      minionCooldown: finiteOr(mob.minionCooldown, randomRange(mobBossMinionCooldownMin, mobBossMinionCooldownMax)),
+      altAttackCooldown: finiteOr(mob.altAttackCooldown, randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax)),
+      bossBodyEvadeTimer: Math.max(0, finiteOr(mob.bossBodyEvadeTimer, 0)),
+      bossBodyEvadeSpeedCap: clamp(finiteOr(mob.bossBodyEvadeSpeedCap, 0), 0, bossBodyEvadeMaxSpeed)
+    };
+  }
+
+  function mobTeamSnapshotFields(mob) {
+    return {
+      team: isPlayerTeamMob(mob) ? "player" : "",
+      summonAge: Math.max(0, finiteOr(mob && mob.summonAge, 0)),
+      summonDuration: Math.max(0, finiteOr(mob && mob.summonDuration, 0)),
+      summonBaseRadius: Math.max(0, finiteOr(mob && mob.summonBaseRadius, mob && mob.radius)),
+      summonSpinSpeed: finiteOr(mob && mob.summonSpinSpeed, 0)
+    };
+  }
+
   function serializeRival(rival) {
     return {
       id: rival.id,
@@ -14773,12 +17592,15 @@
       color: rival.color,
       flash: rival.flash,
       hitCooldown: rival.hitCooldown,
+      disabledTimer: rival.disabledTimer,
       landed: rival.landed,
       residentTier: rival.residentTier,
       shootCooldown: rival.shootCooldown,
       strafeSign: rival.strafeSign,
       rotation: rival.rotation,
-      wobble: rival.wobble
+      wobble: rival.wobble,
+      ...mobTeamSnapshotFields(rival),
+      ...mobBossSnapshotFields(rival)
     };
   }
 
@@ -14795,11 +17617,17 @@
       color: ufo.color,
       flash: ufo.flash,
       hitCooldown: ufo.hitCooldown,
+      disabledTimer: ufo.disabledTimer,
       strafeSign: ufo.strafeSign,
       rotation: ufo.rotation,
       beamAngle: ufo.beamAngle,
       beamPulse: ufo.beamPulse,
-      wobble: ufo.wobble
+      tractorDisabledTimer: ufo.tractorDisabledTimer,
+      bossBeamMode: ufo.bossBeamMode,
+      bossBeamTimer: ufo.bossBeamTimer,
+      wobble: ufo.wobble,
+      ...mobTeamSnapshotFields(ufo),
+      ...mobBossSnapshotFields(ufo)
     };
   }
 
@@ -14816,6 +17644,7 @@
       color: rambot.color,
       flash: rambot.flash,
       hitCooldown: rambot.hitCooldown,
+      disabledTimer: rambot.disabledTimer,
       strafeSign: rambot.strafeSign,
       rotation: rambot.rotation,
       chargeCooldown: rambot.chargeCooldown,
@@ -14824,7 +17653,13 @@
       chargeDirX: rambot.chargeDirX,
       chargeDirY: rambot.chargeDirY,
       impactCooldown: rambot.impactCooldown,
-      wobble: rambot.wobble
+      headAngle: rambot.headAngle,
+      pistonTimer: rambot.pistonTimer,
+      pistonDuration: rambot.pistonDuration,
+      pistonHit: rambot.pistonHit,
+      wobble: rambot.wobble,
+      ...mobTeamSnapshotFields(rambot),
+      ...mobBossSnapshotFields(rambot)
     };
   }
 
@@ -14841,6 +17676,7 @@
       color: engineer.color,
       flash: engineer.flash,
       hitCooldown: engineer.hitCooldown,
+      disabledTimer: engineer.disabledTimer,
       strafeSign: engineer.strafeSign,
       rotation: engineer.rotation,
       healCooldown: engineer.healCooldown,
@@ -14848,7 +17684,9 @@
       repairBeamAngle: engineer.repairBeamAngle,
       targetKind: engineer.targetKind,
       targetId: engineer.targetId,
-      wobble: engineer.wobble
+      wobble: engineer.wobble,
+      ...mobTeamSnapshotFields(engineer),
+      ...mobBossSnapshotFields(engineer)
     };
   }
 
@@ -14865,13 +17703,16 @@
       color: tesla.color,
       flash: tesla.flash,
       hitCooldown: tesla.hitCooldown,
+      disabledTimer: tesla.disabledTimer,
       strafeSign: tesla.strafeSign,
       rotation: tesla.rotation,
       shootCooldown: tesla.shootCooldown,
       lightningWarmup: tesla.lightningWarmup,
       lightningFlash: tesla.lightningFlash,
       lightningAngle: tesla.lightningAngle,
-      wobble: tesla.wobble
+      wobble: tesla.wobble,
+      ...mobTeamSnapshotFields(tesla),
+      ...mobBossSnapshotFields(tesla)
     };
   }
 
@@ -14889,6 +17730,7 @@
       color: rocket.color,
       flash: rocket.flash,
       hitCooldown: rocket.hitCooldown,
+      disabledTimer: rocket.disabledTimer,
       strafeSign: rocket.strafeSign,
       rotation: rocket.rotation,
       scannerAngle: rocket.scannerAngle,
@@ -14908,7 +17750,9 @@
       chargeDirY: rocket.chargeDirY,
       chargePower: rocket.chargePower,
       impactCooldown: rocket.impactCooldown,
-      wobble: rocket.wobble
+      wobble: rocket.wobble,
+      ...mobTeamSnapshotFields(rocket),
+      ...mobBossSnapshotFields(rocket)
     };
   }
 
@@ -14925,13 +17769,18 @@
       color: fighter.color,
       flash: fighter.flash,
       hitCooldown: fighter.hitCooldown,
+      disabledTimer: fighter.disabledTimer,
       strafeSign: fighter.strafeSign,
       rotation: fighter.rotation,
       shootCooldown: fighter.shootCooldown,
+      machineGunShots: Math.max(0, Math.floor(finiteOr(fighter.machineGunShots, 0))),
+      machineGunTimer: Math.max(0, finiteOr(fighter.machineGunTimer, 0)),
       shieldCharge: fighter.shieldCharge,
       shieldRecharge: fighter.shieldRecharge,
       shieldActive: fighter.shieldActive,
-      wobble: fighter.wobble
+      wobble: fighter.wobble,
+      ...mobTeamSnapshotFields(fighter),
+      ...mobBossSnapshotFields(fighter)
     };
   }
 
@@ -14950,8 +17799,18 @@
       damage: projectile.damage,
       toolDisable: projectile.toolDisable,
       cause: projectile.cause,
+      sourcePlayerId: projectile.sourcePlayerId,
+      sourceStructureId: projectile.sourceStructureId,
+      weaponLabel: projectile.weaponLabel,
+      knockback: projectile.knockback,
+      piercesMobs: Boolean(projectile.piercesMobs),
+      hitMobIds: Array.isArray(projectile.hitMobIds) ? projectile.hitMobIds.slice() : [],
+      ignoredBodyId: projectile.ignoredBodyId,
       lightning: Boolean(projectile.lightning),
-      rocket: Boolean(projectile.rocket)
+      rocket: Boolean(projectile.rocket),
+      heatSeeking: Boolean(projectile.heatSeeking),
+      targetSpeed: projectile.targetSpeed,
+      turnRate: projectile.turnRate
     };
   }
 
@@ -15056,7 +17915,11 @@
       color: normalizeColorSnapshot(snapshot.color, randomParticleColor()),
       wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
       pulse: finiteOr(snapshot.pulse, randomRange(0.8, 1.25)),
+      spawnAge: clamp(finiteOr(snapshot.spawnAge, particleSpawnTransitionDuration), 0, particleSpawnTransitionDuration),
       spawnSizeScale: finiteOr(snapshot.spawnSizeScale, 1),
+      randomEventId: typeof snapshot.randomEventId === "string" ? snapshot.randomEventId : "",
+      randomEventRegionX: finiteOr(snapshot.randomEventRegionX, Number.NaN),
+      randomEventRegionY: finiteOr(snapshot.randomEventRegionY, Number.NaN),
       ufoSapTimer: Math.max(0, finiteOr(snapshot.ufoSapTimer, 0)),
       ufoSapSourceGraceTimer: Math.max(0, finiteOr(snapshot.ufoSapSourceGraceTimer, 0)),
       ufoExtractedById: Math.max(0, Math.floor(finiteOr(snapshot.ufoExtractedById, 0))),
@@ -15067,6 +17930,34 @@
     return particle;
   }
 
+  function normalizeMobBossSnapshotFields(snapshot, kind, baseHealth, baseRadius) {
+    const isBoss = Boolean(snapshot && snapshot.isBoss);
+    return {
+      isBoss,
+      bossBaseKind: isBoss && snapshot.bossBaseKind && mobTierOrder.includes(snapshot.bossBaseKind) ? snapshot.bossBaseKind : (isBoss ? kind : ""),
+      minionCooldown: isBoss
+        ? clamp(finiteOr(snapshot.minionCooldown, randomRange(mobBossMinionCooldownMin, mobBossMinionCooldownMax)), 0, mobBossMinionCooldownMax)
+        : 0,
+      altAttackCooldown: isBoss
+        ? clamp(finiteOr(snapshot.altAttackCooldown, randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax)), 0, mobBossAltAttackCooldownMax)
+        : 0,
+      bossBodyEvadeTimer: clamp(finiteOr(snapshot.bossBodyEvadeTimer, 0), 0, bossBodyEvadeDuration),
+      bossBodyEvadeSpeedCap: clamp(finiteOr(snapshot.bossBodyEvadeSpeedCap, 0), 0, bossBodyEvadeMaxSpeed),
+      maxHealthCap: isBoss ? Math.max(baseHealth, baseHealth * mobBossHealthMultiplier) : baseHealth,
+      fallbackRadius: isBoss ? baseRadius * mobBossRadiusMultiplier : baseRadius
+    };
+  }
+
+  function normalizeMobTeamSnapshotFields(snapshot, fallbackRadius) {
+    return {
+      team: snapshot && snapshot.team === "player" ? "player" : "",
+      summonAge: Math.max(0, finiteOr(snapshot && snapshot.summonAge, 0)),
+      summonDuration: Math.max(0, finiteOr(snapshot && snapshot.summonDuration, 0)),
+      summonBaseRadius: Math.max(0, finiteOr(snapshot && snapshot.summonBaseRadius, fallbackRadius)),
+      summonSpinSpeed: finiteOr(snapshot && snapshot.summonSpinSpeed, 0)
+    };
+  }
+
   function normalizeRivalSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== "object") {
       return null;
@@ -15074,6 +17965,8 @@
 
     const fallback = randomAlienColor();
     const fallbackId = nextRivalId;
+    const boss = normalizeMobBossSnapshotFields(snapshot, "alienoid", 100, 28);
+    const mobTeam = normalizeMobTeamSnapshotFields(snapshot, boss.fallbackRadius);
     return {
       kind: "alienoid",
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
@@ -15081,18 +17974,26 @@
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
       vy: finiteOr(snapshot.vy, 0),
-      radius: finiteOr(snapshot.radius, 28),
-      health: clamp(finiteOr(snapshot.health, 100), 0, 100),
-      maxHealth: clamp(finiteOr(snapshot.maxHealth, 100), 1, 100),
+      radius: finiteOr(snapshot.radius, boss.fallbackRadius),
+      health: clamp(finiteOr(snapshot.health, boss.maxHealthCap), 0, boss.maxHealthCap),
+      maxHealth: clamp(finiteOr(snapshot.maxHealth, boss.maxHealthCap), 1, boss.maxHealthCap),
       color: normalizeColorSnapshot(snapshot.color, fallback),
       flash: finiteOr(snapshot.flash, 0),
       hitCooldown: finiteOr(snapshot.hitCooldown, 0),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
       landed: normalizeLandingSnapshot(snapshot.landed),
       residentTier: typeof snapshot.residentTier === "string" ? snapshot.residentTier : null,
       shootCooldown: finiteOr(snapshot.shootCooldown, randomRange(0.8, 2.1)),
       strafeSign: Number(snapshot.strafeSign) < 0 ? -1 : 1,
       rotation: finiteOr(snapshot.rotation, 0),
-      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
+      ...mobTeam,
+      isBoss: boss.isBoss,
+      bossBaseKind: boss.bossBaseKind,
+      minionCooldown: boss.minionCooldown,
+      altAttackCooldown: boss.altAttackCooldown,
+      bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
+      bossBodyEvadeSpeedCap: boss.bossBodyEvadeSpeedCap
     };
   }
 
@@ -15102,6 +18003,8 @@
     }
 
     const fallbackId = nextUfoId;
+    const boss = normalizeMobBossSnapshotFields(snapshot, "ufo", 130, 34);
+    const mobTeam = normalizeMobTeamSnapshotFields(snapshot, boss.fallbackRadius);
     return {
       kind: "ufo",
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
@@ -15109,17 +18012,28 @@
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
       vy: finiteOr(snapshot.vy, 0),
-      radius: finiteOr(snapshot.radius, 34),
-      health: clamp(finiteOr(snapshot.health, 130), 0, 130),
-      maxHealth: clamp(finiteOr(snapshot.maxHealth, 130), 1, 130),
+      radius: finiteOr(snapshot.radius, boss.fallbackRadius),
+      health: clamp(finiteOr(snapshot.health, boss.maxHealthCap), 0, boss.maxHealthCap),
+      maxHealth: clamp(finiteOr(snapshot.maxHealth, boss.maxHealthCap), 1, boss.maxHealthCap),
       color: normalizeColorSnapshot(snapshot.color, { r: 112, g: 226, b: 255 }),
       flash: finiteOr(snapshot.flash, 0),
       hitCooldown: finiteOr(snapshot.hitCooldown, 0),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
       strafeSign: Number(snapshot.strafeSign) < 0 ? -1 : 1,
       rotation: finiteOr(snapshot.rotation, 0),
       beamAngle: finiteOr(snapshot.beamAngle, Math.PI / 2),
       beamPulse: finiteOr(snapshot.beamPulse, randomRange(0, Math.PI * 2)),
-      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
+      tractorDisabledTimer: Math.max(0, finiteOr(snapshot.tractorDisabledTimer, 0)),
+      bossBeamMode: normalizeUfoBossBeamModeValue(snapshot.bossBeamMode),
+      bossBeamTimer: Math.max(0, finiteOr(snapshot.bossBeamTimer, ufoBossNormalBeamDuration)),
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
+      ...mobTeam,
+      isBoss: boss.isBoss,
+      bossBaseKind: boss.bossBaseKind,
+      minionCooldown: boss.minionCooldown,
+      altAttackCooldown: boss.altAttackCooldown,
+      bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
+      bossBodyEvadeSpeedCap: boss.bossBodyEvadeSpeedCap
     };
   }
 
@@ -15129,6 +18043,8 @@
     }
 
     const fallbackId = nextRambotId;
+    const boss = normalizeMobBossSnapshotFields(snapshot, "rambot", 210, 38);
+    const mobTeam = normalizeMobTeamSnapshotFields(snapshot, boss.fallbackRadius);
     return {
       kind: "rambot",
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
@@ -15136,12 +18052,13 @@
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
       vy: finiteOr(snapshot.vy, 0),
-      radius: finiteOr(snapshot.radius, 38),
-      health: clamp(finiteOr(snapshot.health, 210), 0, 210),
-      maxHealth: clamp(finiteOr(snapshot.maxHealth, 210), 1, 210),
+      radius: finiteOr(snapshot.radius, boss.fallbackRadius),
+      health: clamp(finiteOr(snapshot.health, boss.maxHealthCap), 0, boss.maxHealthCap),
+      maxHealth: clamp(finiteOr(snapshot.maxHealth, boss.maxHealthCap), 1, boss.maxHealthCap),
       color: normalizeColorSnapshot(snapshot.color, { r: 184, g: 196, b: 204 }),
       flash: finiteOr(snapshot.flash, 0),
       hitCooldown: finiteOr(snapshot.hitCooldown, 0),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
       strafeSign: Number(snapshot.strafeSign) < 0 ? -1 : 1,
       rotation: finiteOr(snapshot.rotation, 0),
       chargeCooldown: finiteOr(snapshot.chargeCooldown, randomRange(1.1, 2.4)),
@@ -15150,7 +18067,18 @@
       chargeDirX: finiteOr(snapshot.chargeDirX, 1),
       chargeDirY: finiteOr(snapshot.chargeDirY, 0),
       impactCooldown: finiteOr(snapshot.impactCooldown, 0),
-      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
+      headAngle: finiteOr(snapshot.headAngle, finiteOr(snapshot.rotation, 0) - Math.PI / 2),
+      pistonTimer: Math.max(0, finiteOr(snapshot.pistonTimer, 0)),
+      pistonDuration: Math.max(0.1, finiteOr(snapshot.pistonDuration, rambotBossPistonDuration)),
+      pistonHit: Boolean(snapshot.pistonHit),
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
+      ...mobTeam,
+      isBoss: boss.isBoss,
+      bossBaseKind: boss.bossBaseKind,
+      minionCooldown: boss.minionCooldown,
+      altAttackCooldown: boss.altAttackCooldown,
+      bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
+      bossBodyEvadeSpeedCap: boss.bossBodyEvadeSpeedCap
     };
   }
 
@@ -15160,6 +18088,8 @@
     }
 
     const fallbackId = nextEngineerId;
+    const boss = normalizeMobBossSnapshotFields(snapshot, "engineer", 140, 33);
+    const mobTeam = normalizeMobTeamSnapshotFields(snapshot, boss.fallbackRadius);
     return {
       kind: "engineer",
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
@@ -15167,12 +18097,13 @@
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
       vy: finiteOr(snapshot.vy, 0),
-      radius: finiteOr(snapshot.radius, 33),
-      health: clamp(finiteOr(snapshot.health, 140), 0, 140),
-      maxHealth: clamp(finiteOr(snapshot.maxHealth, 140), 1, 140),
+      radius: finiteOr(snapshot.radius, boss.fallbackRadius),
+      health: clamp(finiteOr(snapshot.health, boss.maxHealthCap), 0, boss.maxHealthCap),
+      maxHealth: clamp(finiteOr(snapshot.maxHealth, boss.maxHealthCap), 1, boss.maxHealthCap),
       color: normalizeColorSnapshot(snapshot.color, { r: 102, g: 224, b: 184 }),
       flash: finiteOr(snapshot.flash, 0),
       hitCooldown: finiteOr(snapshot.hitCooldown, 0),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
       strafeSign: Number(snapshot.strafeSign) < 0 ? -1 : 1,
       rotation: finiteOr(snapshot.rotation, 0),
       healCooldown: finiteOr(snapshot.healCooldown, randomRange(0.35, 0.9)),
@@ -15180,7 +18111,14 @@
       repairBeamAngle: finiteOr(snapshot.repairBeamAngle, 0),
       targetKind: typeof snapshot.targetKind === "string" ? snapshot.targetKind : "",
       targetId: Math.max(0, Math.floor(finiteOr(snapshot.targetId, 0))),
-      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
+      ...mobTeam,
+      isBoss: boss.isBoss,
+      bossBaseKind: boss.bossBaseKind,
+      minionCooldown: boss.minionCooldown,
+      altAttackCooldown: boss.altAttackCooldown,
+      bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
+      bossBodyEvadeSpeedCap: boss.bossBodyEvadeSpeedCap
     };
   }
 
@@ -15190,6 +18128,8 @@
     }
 
     const fallbackId = nextTeslaId;
+    const boss = normalizeMobBossSnapshotFields(snapshot, "tesla", 150, 32);
+    const mobTeam = normalizeMobTeamSnapshotFields(snapshot, boss.fallbackRadius);
     return {
       kind: "tesla",
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
@@ -15197,19 +18137,27 @@
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
       vy: finiteOr(snapshot.vy, 0),
-      radius: finiteOr(snapshot.radius, 32),
-      health: clamp(finiteOr(snapshot.health, 150), 0, 150),
-      maxHealth: clamp(finiteOr(snapshot.maxHealth, 150), 1, 150),
+      radius: finiteOr(snapshot.radius, boss.fallbackRadius),
+      health: clamp(finiteOr(snapshot.health, boss.maxHealthCap), 0, boss.maxHealthCap),
+      maxHealth: clamp(finiteOr(snapshot.maxHealth, boss.maxHealthCap), 1, boss.maxHealthCap),
       color: normalizeColorSnapshot(snapshot.color, { r: 157, g: 255, b: 122 }),
       flash: finiteOr(snapshot.flash, 0),
       hitCooldown: finiteOr(snapshot.hitCooldown, 0),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
       strafeSign: Number(snapshot.strafeSign) < 0 ? -1 : 1,
       rotation: finiteOr(snapshot.rotation, 0),
       shootCooldown: finiteOr(snapshot.shootCooldown, randomRange(1.2, 2.5)),
       lightningWarmup: finiteOr(snapshot.lightningWarmup, 0),
       lightningFlash: finiteOr(snapshot.lightningFlash, 0),
       lightningAngle: finiteOr(snapshot.lightningAngle, 0),
-      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
+      ...mobTeam,
+      isBoss: boss.isBoss,
+      bossBaseKind: boss.bossBaseKind,
+      minionCooldown: boss.minionCooldown,
+      altAttackCooldown: boss.altAttackCooldown,
+      bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
+      bossBodyEvadeSpeedCap: boss.bossBodyEvadeSpeedCap
     };
   }
 
@@ -15222,6 +18170,9 @@
     const legacyShooter = !Number.isFinite(Number(snapshot.chargeCooldown)) && Number.isFinite(Number(snapshot.scanProgress));
     const kind = snapshot.kind === "satellite" || legacyShooter ? "satellite" : "rocket";
     const maxHealth = kind === "satellite" ? 180 : 170;
+    const baseRadius = kind === "satellite" ? 36 : 34;
+    const boss = normalizeMobBossSnapshotFields(snapshot, kind, maxHealth, baseRadius);
+    const mobTeam = normalizeMobTeamSnapshotFields(snapshot, boss.fallbackRadius);
     return {
       kind,
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
@@ -15229,12 +18180,13 @@
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
       vy: finiteOr(snapshot.vy, 0),
-      radius: finiteOr(snapshot.radius, kind === "satellite" ? 36 : 34),
-      health: clamp(finiteOr(snapshot.health, maxHealth), 0, maxHealth),
-      maxHealth: clamp(finiteOr(snapshot.maxHealth, maxHealth), 1, maxHealth),
+      radius: finiteOr(snapshot.radius, boss.fallbackRadius),
+      health: clamp(finiteOr(snapshot.health, boss.maxHealthCap), 0, boss.maxHealthCap),
+      maxHealth: clamp(finiteOr(snapshot.maxHealth, boss.maxHealthCap), 1, boss.maxHealthCap),
       color: normalizeColorSnapshot(snapshot.color, { r: 169, g: 133, b: 255 }),
       flash: finiteOr(snapshot.flash, 0),
       hitCooldown: finiteOr(snapshot.hitCooldown, 0),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
       strafeSign: Number(snapshot.strafeSign) < 0 ? -1 : 1,
       rotation: finiteOr(snapshot.rotation, 0),
       scannerAngle: finiteOr(snapshot.scannerAngle, 0),
@@ -15254,7 +18206,14 @@
       chargeDirY: finiteOr(snapshot.chargeDirY, 0),
       chargePower: clamp(finiteOr(snapshot.chargePower, 0), 0, 1),
       impactCooldown: finiteOr(snapshot.impactCooldown, 0),
-      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
+      ...mobTeam,
+      isBoss: boss.isBoss,
+      bossBaseKind: boss.bossBaseKind,
+      minionCooldown: boss.minionCooldown,
+      altAttackCooldown: boss.altAttackCooldown,
+      bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
+      bossBodyEvadeSpeedCap: boss.bossBodyEvadeSpeedCap
     };
   }
 
@@ -15264,6 +18223,8 @@
     }
 
     const fallbackId = nextFighterId;
+    const boss = normalizeMobBossSnapshotFields(snapshot, "fighter", 230, 40);
+    const mobTeam = normalizeMobTeamSnapshotFields(snapshot, boss.fallbackRadius);
     return {
       kind: "fighter",
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
@@ -15271,19 +18232,29 @@
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
       vy: finiteOr(snapshot.vy, 0),
-      radius: finiteOr(snapshot.radius, 40),
-      health: clamp(finiteOr(snapshot.health, 230), 0, 230),
-      maxHealth: clamp(finiteOr(snapshot.maxHealth, 230), 1, 230),
+      radius: finiteOr(snapshot.radius, boss.fallbackRadius),
+      health: clamp(finiteOr(snapshot.health, boss.maxHealthCap), 0, boss.maxHealthCap),
+      maxHealth: clamp(finiteOr(snapshot.maxHealth, boss.maxHealthCap), 1, boss.maxHealthCap),
       color: normalizeColorSnapshot(snapshot.color, { r: 119, g: 167, b: 255 }),
       flash: finiteOr(snapshot.flash, 0),
       hitCooldown: finiteOr(snapshot.hitCooldown, 0),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
       strafeSign: Number(snapshot.strafeSign) < 0 ? -1 : 1,
       rotation: finiteOr(snapshot.rotation, 0),
       shootCooldown: finiteOr(snapshot.shootCooldown, randomRange(1.0, 2.4)),
+      machineGunShots: Math.max(0, Math.floor(finiteOr(snapshot.machineGunShots, 0))),
+      machineGunTimer: Math.max(0, finiteOr(snapshot.machineGunTimer, 0)),
       shieldCharge: clamp(finiteOr(snapshot.shieldCharge, fighterShieldMaxCharge), 0, fighterShieldMaxCharge),
       shieldRecharge: clamp(finiteOr(snapshot.shieldRecharge, 0), 0, fighterShieldCycle),
       shieldActive: finiteOr(snapshot.shieldActive, 0),
-      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
+      ...mobTeam,
+      isBoss: boss.isBoss,
+      bossBaseKind: boss.bossBaseKind,
+      minionCooldown: boss.minionCooldown,
+      altAttackCooldown: boss.altAttackCooldown,
+      bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
+      bossBodyEvadeSpeedCap: boss.bossBodyEvadeSpeedCap
     };
   }
 
@@ -15352,6 +18323,7 @@
     }
 
     mobSpawnRestTimer = clamp(finiteOr(snapshot.mobSpawnRestTimer, mobSpawnRestTimer), 0, mobSpawnRestDuration);
+    mobSpawnRestDrainTimer = clamp(finiteOr(snapshot.mobSpawnRestDrainTimer, mobSpawnRestDrainTimer), 0, mobSpawnRestDrainMaxDuration);
     mobSpawnRestCooldownTimer = clamp(finiteOr(snapshot.mobSpawnRestCooldownTimer, mobSpawnRestCooldownTimer), 0, mobSpawnRestCooldown);
   }
 
@@ -15365,9 +18337,54 @@
     }
   }
 
+  function applyMobBossDefeatsByKind(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return;
+    }
+
+    for (const kind of mobTierOrder) {
+      mobBossDefeatsByKind[kind] = Math.max(0, Math.floor(finiteOr(snapshot[kind], mobBossDefeatsByKind[kind])));
+    }
+  }
+
+  function serializeMobBossWarnings() {
+    const result = {};
+    for (const kind of mobTierOrder) {
+      const warning = mobBossWarnings[kind] || {};
+      result[kind] = {
+        active: Boolean(warning.active),
+        timer: Math.max(0, finiteOr(warning.timer, 0)),
+        lastNoticeSecond: Math.floor(finiteOr(warning.lastNoticeSecond, -1))
+      };
+    }
+    return result;
+  }
+
+  function applyMobBossWarnings(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return;
+    }
+
+    for (const kind of mobTierOrder) {
+      const warning = snapshot[kind] && typeof snapshot[kind] === "object" ? snapshot[kind] : {};
+      mobBossWarnings[kind].active = Boolean(warning.active);
+      mobBossWarnings[kind].timer = clamp(finiteOr(warning.timer, mobBossWarnings[kind].timer), 0, mobBossWarningDuration);
+      mobBossWarnings[kind].lastNoticeSecond = Math.floor(finiteOr(warning.lastNoticeSecond, -1));
+    }
+  }
+
   function resetMobDefeatsByKind() {
     for (const kind of mobTierOrder) {
       mobDefeatsByKind[kind] = 0;
+      mobBossDefeatsByKind[kind] = 0;
+    }
+  }
+
+  function resetMobBossWarnings() {
+    for (const kind of mobTierOrder) {
+      mobBossWarnings[kind].active = false;
+      mobBossWarnings[kind].timer = 0;
+      mobBossWarnings[kind].lastNoticeSecond = -1;
     }
   }
 
@@ -15392,10 +18409,16 @@
       toolDisable: finiteOr(snapshot.toolDisable, 0),
       cause: typeof snapshot.cause === "string" ? snapshot.cause : "",
       sourcePlayerId: typeof snapshot.sourcePlayerId === "string" ? snapshot.sourcePlayerId : "",
+      sourceStructureId: typeof snapshot.sourceStructureId === "string" ? snapshot.sourceStructureId : "",
       weaponLabel: typeof snapshot.weaponLabel === "string" ? snapshot.weaponLabel : "",
       piercesMobs: Boolean(snapshot.piercesMobs),
+      hitMobIds: Array.isArray(snapshot.hitMobIds) ? snapshot.hitMobIds.map(String) : [],
+      ignoredBodyId: Number.isFinite(Number(snapshot.ignoredBodyId)) ? Number(snapshot.ignoredBodyId) : null,
       lightning: Boolean(snapshot.lightning),
-      rocket: Boolean(snapshot.rocket)
+      rocket: Boolean(snapshot.rocket),
+      heatSeeking: Boolean(snapshot.heatSeeking),
+      targetSpeed: finiteOr(snapshot.targetSpeed, 0),
+      turnRate: finiteOr(snapshot.turnRate, 0)
     };
   }
 
@@ -15489,33 +18512,145 @@
   }
 
   function finiteOr(value, fallback) {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : fallback;
+    }
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
+  }
+
+  function createCelestialBodyState(options) {
+    const settings = options || {};
+    const mass = Math.max(0.001, finiteOr(settings.mass, 1));
+    const tier = tierForMass(mass);
+    const id = Number.isFinite(Number(settings.id))
+      ? Math.max(1, Math.floor(Number(settings.id)))
+      : nextParticleId++;
+    const textureSeed = finiteOr(settings.textureSeed, Math.random() * 1000);
+    const body = {
+      id,
+      x: finiteOr(settings.x, 0),
+      y: finiteOr(settings.y, 0),
+      vx: finiteOr(settings.vx, 0),
+      vy: finiteOr(settings.vy, 0),
+      mass,
+      radius: radiusFromMass(mass),
+      tier,
+      textureSeed,
+      color: settings.color || randomParticleColor(),
+      wobble: finiteOr(settings.wobble, randomRange(0, Math.PI * 2)),
+      pulse: finiteOr(settings.pulse, randomRange(0.8, 1.25)),
+      spawnAge: clamp(finiteOr(settings.spawnAge, 0), 0, particleSpawnTransitionDuration),
+      spawnSizeScale: finiteOr(settings.spawnSizeScale, ambientSpawnSizeScale(id, textureSeed))
+    };
+    normalizeBodyEnergy(body);
+    return body;
+  }
+
+  function nextMobId(kind) {
+    if (kind === "ufo") {
+      return nextUfoId++;
+    }
+    if (kind === "rambot") {
+      return nextRambotId++;
+    }
+    if (kind === "engineer") {
+      return nextEngineerId++;
+    }
+    if (kind === "tesla") {
+      return nextTeslaId++;
+    }
+    if (kind === "satellite" || kind === "rocket") {
+      return nextRocketId++;
+    }
+    if (kind === "fighter") {
+      return nextFighterId++;
+    }
+    return nextRivalId++;
+  }
+
+  function createMobFromBlueprint(kind, x, y, overrides) {
+    const blueprint = mobEntityBlueprints[kind] || mobEntityBlueprints.alienoid;
+    const settings = overrides || {};
+    const color = blueprint.color ? { ...blueprint.color } : randomAlienColor();
+    const speedJitter = Math.max(0, finiteOr(blueprint.speedJitter, 16));
+    const isBoss = Boolean(settings.isBoss);
+    const radius = isBoss ? blueprint.radius * mobBossRadiusMultiplier : blueprint.radius;
+    const maxHealth = isBoss ? blueprint.health * mobBossHealthMultiplier : blueprint.health;
+    return Object.assign({
+      kind,
+      id: nextMobId(kind),
+      x,
+      y,
+      vx: randomRange(-speedJitter, speedJitter),
+      vy: randomRange(-speedJitter, speedJitter),
+      radius,
+      health: maxHealth,
+      maxHealth,
+      color,
+      flash: 0,
+      hitCooldown: 0,
+      disabledTimer: 0,
+      strafeSign: Math.random() < 0.5 ? -1 : 1,
+      rotation: 0,
+      wobble: randomRange(0, Math.PI * 2),
+      team: settings.team === "player" ? "player" : "",
+      summonAge: Math.max(0, finiteOr(settings.summonAge, 0)),
+      summonDuration: Math.max(0, finiteOr(settings.summonDuration, 0)),
+      summonBaseRadius: Math.max(0, finiteOr(settings.summonBaseRadius, radius)),
+      summonSpinSpeed: finiteOr(settings.summonSpinSpeed, 0)
+    }, settings);
+  }
+
+  function createBossMob(kind, x, y) {
+    const boss = createMobByKind(kind, x, y, {
+      isBoss: true,
+      bossBaseKind: kind,
+      minionCooldown: randomRange(mobBossMinionCooldownMin, mobBossMinionCooldownMax),
+      altAttackCooldown: randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax),
+      bossBodyEvadeTimer: 0,
+      bossBodyEvadeSpeedCap: 0
+    });
+    boss.flash = Math.max(boss.flash || 0, 0.6);
+    return boss;
+  }
+
+  function createMobByKind(kind, x, y, overrides) {
+    if (kind === "ufo") {
+      return createUfo(x, y, overrides);
+    }
+    if (kind === "rambot") {
+      return createRambot(x, y, overrides);
+    }
+    if (kind === "engineer") {
+      return createEngineer(x, y, overrides);
+    }
+    if (kind === "tesla") {
+      return createTesla(x, y, overrides);
+    }
+    if (kind === "satellite") {
+      return createSatellite(x, y, overrides);
+    }
+    if (kind === "rocket") {
+      return createRocket(x, y, overrides);
+    }
+    if (kind === "fighter") {
+      return createFighter(x, y, overrides);
+    }
+    return createRival(x, y, overrides);
   }
 
   function createParticle(x, y, mass, color) {
     const angle = randomRange(0, Math.PI * 2);
     const speed = randomRange(5, 36);
-    const tier = tierForMass(mass);
-    const id = nextParticleId++;
-    const textureSeed = Math.random() * 1000;
-    const particle = {
-      id,
+    return createCelestialBodyState({
       x,
       y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       mass,
-      radius: radiusFromMass(mass),
-      tier,
-      textureSeed,
-      color,
-      wobble: randomRange(0, Math.PI * 2),
-      pulse: randomRange(0.8, 1.25),
-      spawnSizeScale: ambientSpawnSizeScale(id, textureSeed)
-    };
-    normalizeBodyEnergy(particle);
-    return particle;
+      color
+    });
   }
 
   function randomAmbientParticleMass() {
@@ -15784,6 +18919,21 @@
     return count;
   }
 
+  function totalLiveMobCount() {
+    let count = 0;
+    for (const mob of liveMobsForSpawnPlacement()) {
+      if (mob && mob.health > 0) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  function manageableMobRestThreshold(anchors) {
+    const effectiveCount = Math.min(crazyGamesRoomMaxPlayers, effectiveMobAnchorCount(anchors));
+    return Math.max(1, Math.ceil(mobSpawnRestManageableMobsPerPlayer * effectiveCount));
+  }
+
   let liveMobSpawnCache = null;
 
   function liveMobsForSpawnPlacement() {
@@ -15869,7 +19019,7 @@
   }
 
   function isAmbientDensityParticle(particle) {
-    return Boolean(particle && particle.tier && !particle.tier.solid && !isUfoBeamCargo(particle));
+    return Boolean(particle && particle.tier && !particle.randomEventId && !particle.tier.solid && !isUfoBeamCargo(particle));
   }
 
   function countAmbientParticles() {
@@ -16159,143 +19309,61 @@
     }
   }
 
-  function createRival(x, y) {
-    const color = randomAlienColor();
-    return {
-      kind: "alienoid",
-      id: nextRivalId++,
-      x,
-      y,
-      vx: randomRange(-18, 18),
-      vy: randomRange(-18, 18),
-      radius: 28,
-      health: 100,
-      maxHealth: 100,
-      color,
-      flash: 0,
-      hitCooldown: 0,
+  function createRival(x, y, overrides) {
+    return createMobFromBlueprint("alienoid", x, y, Object.assign({
       landed: null,
       residentTier: null,
       shootCooldown: randomRange(0.8, 2.1),
-      strafeSign: Math.random() < 0.5 ? -1 : 1,
-      rotation: 0,
-      wobble: randomRange(0, Math.PI * 2)
-    };
+    }, overrides));
   }
 
-  function createUfo(x, y) {
-    return {
-      kind: "ufo",
-      id: nextUfoId++,
-      x,
-      y,
-      vx: randomRange(-24, 24),
-      vy: randomRange(-24, 24),
-      radius: 34,
-      health: 130,
-      maxHealth: 130,
-      color: { r: 112, g: 226, b: 255 },
-      flash: 0,
-      hitCooldown: 0,
-      strafeSign: Math.random() < 0.5 ? -1 : 1,
-      rotation: 0,
+  function createUfo(x, y, overrides) {
+    return createMobFromBlueprint("ufo", x, y, Object.assign({
       beamAngle: Math.PI / 2,
       beamPulse: randomRange(0, Math.PI * 2),
-      wobble: randomRange(0, Math.PI * 2)
-    };
+      tractorDisabledTimer: 0,
+      bossBeamMode: "tractor",
+      bossBeamTimer: ufoBossNormalBeamDuration,
+      playerDrainTickTimer: 0
+    }, overrides));
   }
 
-  function createRambot(x, y) {
-    return {
-      kind: "rambot",
-      id: nextRambotId++,
-      x,
-      y,
-      vx: randomRange(-10, 10),
-      vy: randomRange(-10, 10),
-      radius: 38,
-      health: 210,
-      maxHealth: 210,
-      color: { r: 184, g: 196, b: 204 },
-      flash: 0,
-      hitCooldown: 0,
-      strafeSign: Math.random() < 0.5 ? -1 : 1,
-      rotation: 0,
+  function createRambot(x, y, overrides) {
+    return createMobFromBlueprint("rambot", x, y, Object.assign({
       chargeCooldown: randomRange(1.2, 2.6),
       chargeTimer: 0,
       recoverTimer: 0,
       chargeDirX: 1,
       chargeDirY: 0,
       impactCooldown: 0,
-      wobble: randomRange(0, Math.PI * 2)
-    };
+      headAngle: 0,
+      pistonTimer: 0,
+      pistonDuration: rambotBossPistonDuration,
+      pistonHit: false
+    }, overrides));
   }
 
-  function createEngineer(x, y) {
-    return {
-      kind: "engineer",
-      id: nextEngineerId++,
-      x,
-      y,
-      vx: randomRange(-16, 16),
-      vy: randomRange(-16, 16),
-      radius: 33,
-      health: 140,
-      maxHealth: 140,
-      color: { r: 102, g: 224, b: 184 },
-      flash: 0,
-      hitCooldown: 0,
-      strafeSign: Math.random() < 0.5 ? -1 : 1,
-      rotation: 0,
+  function createEngineer(x, y, overrides) {
+    return createMobFromBlueprint("engineer", x, y, Object.assign({
       healCooldown: randomRange(0.35, 0.9),
       healPulse: 0,
       repairBeamAngle: 0,
       targetKind: "",
-      targetId: 0,
-      wobble: randomRange(0, Math.PI * 2)
-    };
+      targetId: 0
+    }, overrides));
   }
 
-  function createTesla(x, y) {
-    return {
-      kind: "tesla",
-      id: nextTeslaId++,
-      x,
-      y,
-      vx: randomRange(-18, 18),
-      vy: randomRange(-18, 18),
-      radius: 32,
-      health: 150,
-      maxHealth: 150,
-      color: { r: 157, g: 255, b: 122 },
-      flash: 0,
-      hitCooldown: 0,
-      strafeSign: Math.random() < 0.5 ? -1 : 1,
-      rotation: 0,
+  function createTesla(x, y, overrides) {
+    return createMobFromBlueprint("tesla", x, y, Object.assign({
       shootCooldown: randomRange(1.2, 2.5),
       lightningWarmup: 0,
       lightningFlash: 0,
-      lightningAngle: 0,
-      wobble: randomRange(0, Math.PI * 2)
-    };
+      lightningAngle: 0
+    }, overrides));
   }
 
-  function createSatellite(x, y) {
-    return {
-      kind: "satellite",
-      id: nextRocketId++,
-      x,
-      y,
-      vx: randomRange(-14, 14),
-      vy: randomRange(-14, 14),
-      radius: 36,
-      health: 180,
-      maxHealth: 180,
-      color: { r: 169, g: 133, b: 255 },
-      flash: 0,
-      hitCooldown: 0,
-      strafeSign: Math.random() < 0.5 ? -1 : 1,
-      rotation: 0,
+  function createSatellite(x, y, overrides) {
+    return createMobFromBlueprint("satellite", x, y, Object.assign({
       scannerAngle: 0,
       scanProgress: 0,
       lockTimer: 0,
@@ -16307,27 +19375,15 @@
       blastDirY: 0,
       volleyTimer: 0,
       volleyShots: 0,
-      impactCooldown: 0,
-      wobble: randomRange(0, Math.PI * 2)
-    };
+      impactCooldown: 0
+    }, overrides));
   }
 
-  function createRocket(x, y) {
+  function createRocket(x, y, overrides) {
     const angle = randomRange(0, Math.PI * 2);
-    return {
-      kind: "rocket",
-      id: nextRocketId++,
-      x,
-      y,
+    return createMobFromBlueprint("rocket", x, y, Object.assign({
       vx: Math.cos(angle) * randomRange(18, 44),
       vy: Math.sin(angle) * randomRange(18, 44),
-      radius: 34,
-      health: 170,
-      maxHealth: 170,
-      color: { r: 169, g: 133, b: 255 },
-      flash: 0,
-      hitCooldown: 0,
-      strafeSign: Math.random() < 0.5 ? -1 : 1,
       rotation: angle + Math.PI / 2,
       chargeCooldown: randomRange(0.6, 1.6),
       chargeTimer: 0,
@@ -16339,32 +19395,18 @@
       lockY: y,
       impactCooldown: 0,
       blastTimer: 0,
-      wobble: randomRange(0, Math.PI * 2)
-    };
+    }, overrides));
   }
 
-  function createFighter(x, y) {
-    return {
-      kind: "fighter",
-      id: nextFighterId++,
-      x,
-      y,
-      vx: randomRange(-20, 20),
-      vy: randomRange(-20, 20),
-      radius: 40,
-      health: 230,
-      maxHealth: 230,
-      color: { r: 119, g: 167, b: 255 },
-      flash: 0,
-      hitCooldown: 0,
-      strafeSign: Math.random() < 0.5 ? -1 : 1,
-      rotation: 0,
+  function createFighter(x, y, overrides) {
+    return createMobFromBlueprint("fighter", x, y, Object.assign({
       shootCooldown: randomRange(1.0, 2.4),
+      machineGunShots: 0,
+      machineGunTimer: 0,
       shieldCharge: fighterShieldMaxCharge,
       shieldRecharge: 0,
-      shieldActive: 0,
-      wobble: randomRange(0, Math.PI * 2)
-    };
+      shieldActive: 0
+    }, overrides));
   }
 
   function createHealthPickup(x, y, vx, vy) {
@@ -16419,28 +19461,8 @@
   }
 
   function mobName(mob) {
-    if (mob.kind === "ufo") {
-      return "UFO";
-    }
-    if (mob.kind === "rambot") {
-      return "Rambot";
-    }
-    if (mob.kind === "engineer") {
-      return "Engineer";
-    }
-    if (mob.kind === "tesla") {
-      return "Tesla";
-    }
-    if (mob.kind === "satellite") {
-      return "Satellite";
-    }
-    if (mob.kind === "rocket") {
-      return "Rocket ship";
-    }
-    if (mob.kind === "fighter") {
-      return "Fighter ship";
-    }
-    return "Alienoid";
+    const blueprint = mob && mobEntityBlueprints[mob.kind] ? mobEntityBlueprints[mob.kind] : mobEntityBlueprints.alienoid;
+    return blueprint.label;
   }
 
   function difficultyTechDropCount() {
@@ -16470,7 +19492,7 @@
       techKey = "shield";
     }
 
-    const dropCount = difficultyTechDropCount();
+    const dropCount = mob.isBoss ? mobBossDropCount : difficultyTechDropCount();
     for (let i = 0; i < dropCount; i += 1) {
       techPickups.push(createTechPickup(techKey, mob.x, mob.y, mob.vx, mob.vy));
     }
@@ -16488,9 +19510,10 @@
     }
 
     const maxCount = isPartySessionActive() || multiplayer.remoteUniverses.size
-      ? Math.max(1, Math.min(2, mobDamageParticleMax))
+      ? mobDamageParticleMultiplayerMax
       : mobDamageParticleMax;
-    const count = Math.floor(randomRange(mobDamageParticleMin, maxCount + 1));
+    const scaledCount = Math.round(damage / mobDamagePerParticle + randomRange(-0.35, 0.35));
+    const count = clamp(scaledCount, mobDamageParticleMin, maxCount);
     const baseColor = mob.color || hitColor || randomParticleColor();
     const particleColor = hitColor ? mixColor(baseColor, hitColor, 3, 2) : ejectedParticleColor(mob);
 
@@ -16535,13 +19558,24 @@
 
     if (mob.health <= 0) {
       mob.defeatedBySpanner = mob.lastDamageTool === "spanner";
-      lifeStats.mobsDefeated += 1;
-      lifeStats.mobScore += scoreMobKill(mob.kind);
-      if (mobDefeatsByKind[mob.kind] !== undefined) {
-        mobDefeatsByKind[mob.kind] += 1;
+      if (!isPlayerTeamMob(mob)) {
+        lifeStats.mobsDefeated += 1;
+        lifeStats.mobScore += scoreMobKill(mob.kind);
+        if (mobDefeatsByKind[mob.kind] !== undefined) {
+          mobDefeatsByKind[mob.kind] += 1;
+          if (mobDefeatsByKind[mob.kind] === mobBossDefeatsToUnlock) {
+            maybeNotifyText(mobBossLabel(mob.kind) + " sightings unlocked.", {
+              groupKey: "mob-boss-unlocked:" + mob.kind,
+              lifetime: 4200
+            });
+          }
+        }
+        if (mob.isBoss && mobBossDefeatsByKind[mob.kind] !== undefined) {
+          mobBossDefeatsByKind[mob.kind] += 1;
+        }
+        dropHealthPickups(mob);
+        dropMobTech(mob);
       }
-      dropHealthPickups(mob);
-      dropMobTech(mob);
       playSound("mobDestroyed");
       maybeNotifyText(message || mobName(mob) + " knocked out.", options && options.notification);
       return true;
@@ -16568,7 +19602,28 @@
 
   function tickMobDamageTimers(mob, dt) {
     mob.hitCooldown = Math.max(0, mob.hitCooldown - dt);
+    mob.disabledTimer = Math.max(0, finiteOr(mob.disabledTimer, 0) - dt);
+    if (finiteOr(mob.summonDuration, 0) > 0 && finiteOr(mob.summonAge, 0) < finiteOr(mob.summonDuration, 0)) {
+      mob.summonAge = Math.min(mob.summonDuration, finiteOr(mob.summonAge, 0) + dt);
+      const progress = clamp(mob.summonAge / Math.max(0.001, mob.summonDuration), 0, 1);
+      const eased = progress * progress * (3 - progress * 2);
+      mob.radius = Math.max(0.1, finiteOr(mob.summonBaseRadius, mob.radius) * eased);
+      mob.rotation += finiteOr(mob.summonSpinSpeed, 0) * (1 - progress * 0.65) * dt;
+    } else if (finiteOr(mob.summonDuration, 0) > 0) {
+      mob.radius = Math.max(1, finiteOr(mob.summonBaseRadius, mob.radius));
+      mob.summonDuration = 0;
+      mob.summonAge = 0;
+      mob.summonSpinSpeed = 0;
+    }
+    mob.bossBodyEvadeTimer = Math.max(0, finiteOr(mob.bossBodyEvadeTimer, 0) - dt);
+    if (mob.bossBodyEvadeTimer <= 0) {
+      mob.bossBodyEvadeSpeedCap = 0;
+    }
     tickMobBodyImpactCooldowns(mob, dt);
+  }
+
+  function isMobSummoning(mob) {
+    return Boolean(mob && finiteOr(mob.summonDuration, 0) > 0 && finiteOr(mob.summonAge, 0) < finiteOr(mob.summonDuration, 0));
   }
 
   function canDamageMobWithBody(mob, body) {
@@ -16581,6 +19636,35 @@
       mob.bodyImpactCooldowns = {};
     }
     mob.bodyImpactCooldowns[body.id] = bodyImpactRepeatDamageCooldown;
+  }
+
+  function triggerBossBodyEvade(mob, body, nx, ny, impactSpeed) {
+    if (!mob || !body) {
+      return;
+    }
+
+    const bodySpeed = Math.hypot(finiteOr(body.vx, 0), finiteOr(body.vy, 0));
+    const travelX = bodySpeed > 1 ? body.vx / bodySpeed : -nx;
+    const travelY = bodySpeed > 1 ? body.vy / bodySpeed : -ny;
+    const cross = travelX * ny - travelY * nx;
+    const side = Math.abs(cross) > 0.02 ? Math.sign(cross) : (mob.strafeSign < 0 ? -1 : 1);
+    const tangentX = -travelY * side;
+    const tangentY = travelX * side;
+    const evade = normalize(tangentX * 0.82 + nx * 0.38, tangentY * 0.82 + ny * 0.38);
+    const mass = Math.max(1, finiteOr(body.mass, 1));
+    const boostSpeed = clamp(
+      340 + Math.max(bodySpeed, finiteOr(impactSpeed, 0)) * 0.5 + Math.sqrt(mass) * 1.8,
+      bossBodyEvadeMinSpeed,
+      bossBodyEvadeMaxSpeed
+    );
+    const currentAlongEvade = finiteOr(mob.vx, 0) * evade.x + finiteOr(mob.vy, 0) * evade.y;
+    const extraSpeed = Math.max(0, boostSpeed - currentAlongEvade);
+
+    mob.vx += evade.x * extraSpeed;
+    mob.vy += evade.y * extraSpeed;
+    mob.strafeSign = side;
+    mob.bossBodyEvadeTimer = Math.max(finiteOr(mob.bossBodyEvadeTimer, 0), bossBodyEvadeDuration);
+    mob.bossBodyEvadeSpeedCap = Math.max(finiteOr(mob.bossBodyEvadeSpeedCap, 0), boostSpeed * 1.08);
   }
 
   function bodyImpactKnockbackForce(body, bodySpeed) {
@@ -16663,8 +19747,10 @@
     const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
     const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
     const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
-    const minPlayerDistance = viewportRadius + Math.max(120, margin);
-    const maxDistance = minPlayerDistance + Math.max(420, spread);
+    const spawnMargin = Math.max(120, margin) + mobSpawnEdgePaddingBonus;
+    const spawnSpread = Math.max(420, spread) * mobSpawnSpreadMultiplier;
+    const minPlayerDistance = viewportRadius + spawnMargin;
+    const maxDistance = minPlayerDistance + spawnSpread;
     const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
     const moving = speed > 50;
     const travel = moving ? normalize(source.vx, source.vy) : { x: 0, y: 0 };
@@ -16695,7 +19781,7 @@
       }
     }
 
-    return best || randomOffscreenPoint(margin, spread, source);
+    return best || randomOffscreenPoint(spawnMargin, spawnSpread, source);
   }
 
   function spawnAlienoidNearPlayer(anchor, anchors) {
@@ -16738,6 +19824,179 @@
     fighters.push(createFighter(spawn.x, spawn.y));
   }
 
+  function mobBossLabel(kind) {
+    return (mobEntityBlueprints[kind] && mobEntityBlueprints[kind].label ? mobEntityBlueprints[kind].label : "Mob") + " boss";
+  }
+
+  function isMobBossUnlocked(kind) {
+    return Math.max(0, mobDefeatsByKind[kind] || 0) >= mobBossDefeatsToUnlock;
+  }
+
+  function hasLiveMobBoss(kind) {
+    return mobCollectionByKind(kind).some((mob) => mob && mob.kind === kind && mob.isBoss && mob.health > 0);
+  }
+
+  function liveMobBossCount(kind) {
+    return mobCollectionByKind(kind).filter((mob) => mob && mob.kind === kind && mob.isBoss && mob.health > 0).length;
+  }
+
+  function mobBossSpawnPressure(kind) {
+    return Math.min(3, liveMobBossCount(kind));
+  }
+
+  function mobBossWarningFor(kind) {
+    return mobBossWarnings[kind] || null;
+  }
+
+  function mobBossSpawnRollChance(kind) {
+    const defeats = Math.max(0, mobDefeatsByKind[kind] || 0);
+    const overUnlock = Math.max(0, defeats - mobBossDefeatsToUnlock);
+    return clamp(mobBossSpawnChance + overUnlock * mobBossSpawnChancePerDefeat, mobBossSpawnChance, 0.55);
+  }
+
+  function maybeScheduleMobBoss(kind) {
+    const warning = mobBossWarningFor(kind);
+    if (!warning || warning.active || !isMobBossUnlocked(kind) || hasLiveMobBoss(kind)) {
+      return;
+    }
+    if (Math.random() >= mobBossSpawnRollChance(kind)) {
+      return;
+    }
+
+    warning.active = true;
+    warning.timer = mobBossWarningDuration;
+    warning.lastNoticeSecond = -1;
+    updateMobBossCountdownNotice(kind, true);
+  }
+
+  function updateMobBossCountdownNotice(kind, force) {
+    const warning = mobBossWarningFor(kind);
+    if (!warning || !warning.active) {
+      return;
+    }
+    const seconds = Math.max(0, Math.ceil(warning.timer));
+    if (!force && warning.lastNoticeSecond === seconds) {
+      return;
+    }
+    warning.lastNoticeSecond = seconds;
+    updateGroupedNotificationText(
+      "mob-boss-warning:" + kind,
+      mobBossLabel(kind) + " inbound in " + seconds + "s.",
+      { lifetime: 1500 }
+    );
+  }
+
+  function spawnBossByKind(kind, anchor, anchors) {
+    const spawn = chooseMobSpawnPoint(kind, 420, 980, anchor, anchors);
+    const boss = createBossMob(kind, spawn.x, spawn.y);
+    mobCollectionByKind(kind).push(boss);
+    spawnBossEscortMobs(kind, boss);
+    maybeNotifyText(mobBossLabel(kind) + " has arrived.", {
+      groupKey: "mob-boss-arrival:" + kind,
+      lifetime: 4200
+    });
+  }
+
+  function spawnBossEscortMobs(kind, boss) {
+    const collection = mobCollectionByKind(kind);
+    const escortCount = Math.floor(randomRange(mobBossEscortSpawnMin, mobBossEscortSpawnMax + 1));
+    const startAngle = randomRange(0, Math.PI * 2);
+
+    for (let i = 0; i < escortCount; i += 1) {
+      const angle = startAngle + (Math.PI * 2 * i) / escortCount + randomRange(-0.28, 0.28);
+      const distance = Math.max(boss.radius * 1.35, randomRange(115, 210));
+      const escort = createMobByKind(
+        kind,
+        boss.x + Math.cos(angle) * distance,
+        boss.y + Math.sin(angle) * distance
+      );
+      escort.vx += Math.cos(angle) * randomRange(38, 96) + finiteOr(boss.vx, 0) * 0.12;
+      escort.vy += Math.sin(angle) * randomRange(38, 96) + finiteOr(boss.vy, 0) * 0.12;
+      collection.push(escort);
+    }
+  }
+
+  function randomEngineerBossSummonKind() {
+    const options = mobTierOrder.filter((kind) => kind !== "engineer");
+    return options[Math.floor(randomRange(0, options.length))] || "alienoid";
+  }
+
+  function collectionPushMob(kind, mob) {
+    const collection = mobCollectionByKind(kind);
+    if (Array.isArray(collection)) {
+      collection.push(mob);
+    }
+  }
+
+  function createSummonedMob(kind, x, y, sourceMob) {
+    const mob = createMobByKind(kind, x, y, {
+      summonAge: 0,
+      summonDuration: engineerBossSummonDuration,
+      summonSpinSpeed: randomRange(7.5, 11.5) * (Math.random() < 0.5 ? -1 : 1)
+    });
+    mob.summonBaseRadius = Math.max(1, finiteOr(mob.radius, 28));
+    mob.radius = 0;
+    mob.vx += finiteOr(sourceMob && sourceMob.vx, 0) * 0.12;
+    mob.vy += finiteOr(sourceMob && sourceMob.vy, 0) * 0.12;
+    return mob;
+  }
+
+  function summonEngineerBossMob(engineer, targetPlayer) {
+    if (!engineer || !engineer.isBoss) {
+      return false;
+    }
+    const kind = randomEngineerBossSummonKind();
+    const angleToPlayer = targetPlayer ? Math.atan2(targetPlayer.y - engineer.y, targetPlayer.x - engineer.x) : randomRange(0, Math.PI * 2);
+    const angle = angleToPlayer + randomRange(-0.95, 0.95);
+    const distance = randomRange(185, 315);
+    const x = engineer.x + Math.cos(angle) * distance + randomRange(-42, 42);
+    const y = engineer.y + Math.sin(angle) * distance + randomRange(-42, 42);
+    const mob = createSummonedMob(kind, x, y, engineer);
+    collectionPushMob(kind, mob);
+
+    sparks.push({
+      x,
+      y,
+      radius: engineerBossSummonRadius,
+      color: mob.color || engineer.color,
+      life: engineerBossSummonDuration,
+      maxLife: engineerBossSummonDuration,
+      summonTelegraph: true
+    });
+    sparks.push({
+      x: engineer.x,
+      y: engineer.y,
+      radius: engineer.radius * 2.2,
+      color: engineer.color,
+      life: 0.28,
+      maxLife: 0.28
+    });
+    playSound("pickupTech", { throttleKey: "engineerBossSummon:" + engineer.id, throttle: 0.45 });
+    resetBossAltAttackCooldown(engineer);
+    return true;
+  }
+
+  function updateMobBossWarnings(dt, anchors) {
+    for (const kind of mobTierOrder) {
+      const warning = mobBossWarningFor(kind);
+      if (!warning || !warning.active) {
+        continue;
+      }
+
+      warning.timer = Math.max(0, finiteOr(warning.timer, 0) - dt);
+      updateMobBossCountdownNotice(kind, false);
+      if (warning.timer > 0) {
+        continue;
+      }
+
+      warning.active = false;
+      warning.lastNoticeSecond = -1;
+      if (!hasLiveMobBoss(kind)) {
+        spawnBossByKind(kind, leastPopulatedMobSpawnAnchor(anchors), anchors);
+      }
+    }
+  }
+
   function spawnMobByKind(kind, anchor, anchors) {
     if (kind === "ufo") {
       spawnUfoNearPlayer(anchor, anchors);
@@ -16777,7 +20036,7 @@
     }
 
     const previousKind = mobTierOrder[index - 1];
-    return mobDefeatsByKind[previousKind] >= previousTierDefeatsToUnlock;
+    return mobDefeatsByKind[previousKind] >= previousMobTierDefeatsTarget(previousKind);
   }
 
   function currentLifeSeconds() {
@@ -16792,7 +20051,7 @@
 
     const growthInterval = interval * mobSpawnCapGrowthIntervalMultiplier;
     const rawLimit = baseMaxMobSpawnBatchSize + Math.floor(currentLifeSeconds() / growthInterval);
-    return Math.max(1, Math.round(rawLimit * activeDifficulty().mobBatchScale));
+    return Math.max(1, Math.round(rawLimit * activeDifficulty().mobBatchScale) + mobBossSpawnPressure(kind) * mobBossSpawnBatchBonus);
   }
 
   function baseLiveMobCap(kind) {
@@ -16813,7 +20072,8 @@
     const growth = Math.min(5, Math.floor(currentLifeSeconds() / Math.max(45, interval * 3.5)));
     const effectiveCount = Math.min(crazyGamesRoomMaxPlayers, effectiveMobAnchorCount(anchors));
     const playerScale = 1 + Math.max(0, effectiveCount - 1) * 0.3;
-    return Math.max(1, Math.round((baseLiveMobCap(kind) + growth) * playerScale * activeDifficulty().mobBatchScale));
+    const bossPressureCap = mobBossSpawnPressure(kind) * mobBossLiveCapBonus;
+    return Math.max(1, Math.round((baseLiveMobCap(kind) + growth) * playerScale * activeDifficulty().mobBatchScale) + bossPressureCap);
   }
 
   function maxMobSpawnBatchSize(kind, playerCount) {
@@ -16821,11 +20081,22 @@
     return Math.max(1, Math.round(baseMobSpawnBatchLimit(kind) * (1 + Math.max(0, count - 1) * 0.55)));
   }
 
-  function mobSpawnBonusSlotChanceScale(bonusSlot) {
-    if (bonusSlot < 2) {
-      return activeDifficulty().mobBonusChanceScale;
+  function startingMobSpawnBonusChance(bonusSlot) {
+    const chances = activeDifficulty().mobStartingBatchBonusChances;
+    if (!Array.isArray(chances)) {
+      return 0;
     }
-    return Math.pow(thirdMobSpawnChanceScale, bonusSlot - 1) * activeDifficulty().mobBonusChanceScale;
+    return clamp(finiteOr(chances[bonusSlot - 1], 0), 0, 0.92);
+  }
+
+  function mobSpawnBonusSlotChance(kind, bonusSlot, defeats) {
+    const index = mobTierOrder.indexOf(kind);
+    const nextKind = mobTierOrder[index + 1];
+    const progressScale = bonusSlot < 2
+      ? activeDifficulty().mobBonusChanceScale
+      : Math.pow(thirdMobSpawnChanceScale, bonusSlot - 1) * activeDifficulty().mobBonusChanceScale;
+    const progressChance = clamp(defeats / (previousMobTierDefeatsTarget(nextKind || kind) * bonusSlot), 0, 0.92) * progressScale;
+    return clamp(Math.max(startingMobSpawnBonusChance(bonusSlot), progressChance), 0, 0.92);
   }
 
   function rollMobSpawnBatchSize(kind, batchLimit) {
@@ -16835,8 +20106,7 @@
     const defeats = Math.max(0, mobDefeatsByKind[nextKind || kind] || 0);
     let batchSize = 1;
     for (let bonusSlot = 1; bonusSlot < batchLimit; bonusSlot += 1) {
-      const chanceScale = mobSpawnBonusSlotChanceScale(bonusSlot);
-      const chance = clamp(defeats / (previousTierDefeatsToUnlock * bonusSlot), 0, 0.92) * chanceScale;
+      const chance = mobSpawnBonusSlotChance(kind, bonusSlot, defeats);
       if (Math.random() < chance) {
         batchSize += 1;
       }
@@ -16856,10 +20126,32 @@
     if (fractionalBonus > 0 && Math.random() < fractionalBonus * 0.55) {
       batchSize += rollMobSpawnBatchSize(kind, batchLimit);
     }
+    batchSize += mobBossSpawnPressure(kind) * mobBossSpawnBatchBonus;
     return Math.min(maxMobSpawnBatchSize(kind, count), Math.max(1, batchSize));
   }
 
-  function updateMobSpawnRest(dt) {
+  function mobSpawnIntervalWithBossPressure(kind) {
+    const interval = difficultyMobSpawnInterval(kind);
+    return interval * (mobBossSpawnPressure(kind) > 0 ? mobBossSpawnIntervalScale : 1);
+  }
+
+  function startMobSpawnGracePeriod() {
+    mobSpawnRestTimer = mobSpawnRestDuration;
+    mobSpawnRestDrainTimer = 0;
+    mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
+  }
+
+  function updateMobSpawnRest(dt, anchors) {
+    const manageableThreshold = manageableMobRestThreshold(anchors);
+
+    if (mobSpawnRestDrainTimer > 0) {
+      mobSpawnRestDrainTimer = Math.max(0, mobSpawnRestDrainTimer - dt);
+      if (totalLiveMobCount() <= manageableThreshold || mobSpawnRestDrainTimer <= 0) {
+        startMobSpawnGracePeriod();
+      }
+      return true;
+    }
+
     if (mobSpawnRestTimer > 0) {
       mobSpawnRestTimer = Math.max(0, mobSpawnRestTimer - dt);
       return true;
@@ -16870,14 +20162,18 @@
       return false;
     }
 
-    mobSpawnRestTimer = mobSpawnRestDuration;
+    mobSpawnRestDrainTimer = mobSpawnRestDrainMaxDuration;
     mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
+    if (totalLiveMobCount() <= manageableThreshold) {
+      startMobSpawnGracePeriod();
+    }
     return true;
   }
 
   function updateMobSpawns(dt) {
     const anchors = activeMobSpawnAnchors();
-    if (updateMobSpawnRest(dt)) {
+    updateMobBossWarnings(dt, anchors);
+    if (updateMobSpawnRest(dt, anchors)) {
       return;
     }
 
@@ -16895,7 +20191,8 @@
         for (let i = 0; i < batchSize; i += 1) {
           spawnMobByKind(kind, leastPopulatedMobSpawnAnchor(anchors), anchors);
         }
-        mobSpawnTimers[kind] += difficultyMobSpawnInterval(kind);
+        maybeScheduleMobBoss(kind);
+        mobSpawnTimers[kind] += mobSpawnIntervalWithBossPressure(kind);
       }
     }
   }
@@ -16967,6 +20264,14 @@
       x: finiteOr(source.x, player.x) + world.x,
       y: finiteOr(source.y, player.y) + world.y
     };
+  }
+
+  function relocatedMobOffscreenPoint(margin, spread, anchor) {
+    return randomOffscreenPoint(
+      Math.max(0, finiteOr(margin, 0)) + mobRelocationEdgePaddingBonus,
+      Math.max(0, finiteOr(spread, 0)) * mobRelocationSpreadMultiplier,
+      anchor
+    );
   }
 
   function getCursorAimAngle() {
@@ -17346,6 +20651,9 @@
   }
 
   function hasPlayerEnergy(amount = 0.05) {
+    if (areToolsDisabled()) {
+      return false;
+    }
     return player.energy > Math.max(0, amount);
   }
 
@@ -17361,14 +20669,12 @@
     return (
       (isSuctionEquipped() && isGadgetButtonPressed()) ||
       (equippedToolId === "spanner" && (mouse.left || mouse.right)) ||
-      isTouchBoostPressed() ||
-      keys.has("ShiftLeft") ||
-      keys.has("ShiftRight")
+      isJetpackBoostRequested()
     );
   }
 
   function canUseContinuousPlayerEnergy(rate, dt = 1 / 60) {
-    if (playerContinuousEnergyLocked) {
+    if (playerContinuousEnergyLocked || areToolsDisabled()) {
       return false;
     }
     return canSpendPlayerEnergy(continuousPlayerEnergyActivationCost(rate, dt));
@@ -17378,6 +20684,9 @@
     const cost = Math.max(0, finiteOr(amount, 0));
     if (cost <= 0) {
       return true;
+    }
+    if (areToolsDisabled()) {
+      return false;
     }
     if (player.energy < cost) {
       player.energy = 0;
@@ -17389,6 +20698,9 @@
   }
 
   function canSpendPlayerEnergy(amount) {
+    if (areToolsDisabled()) {
+      return false;
+    }
     return player.energy >= Math.max(0, finiteOr(amount, 0));
   }
 
@@ -17413,7 +20725,18 @@
   }
 
   function isJetpackBoostPressed() {
+    if (areToolsDisabled()) {
+      return false;
+    }
+    return isJetpackBoostRequested();
+  }
+
+  function isJetpackBoostRequested() {
     return keys.has("ShiftLeft") || keys.has("ShiftRight") || isTouchBoostPressed();
+  }
+
+  function canUseJetpackBoost(dt = 1 / 60) {
+    return isJetpackBoostPressed() && canUseContinuousPlayerEnergy(jetpackBoostEnergyDrain, dt);
   }
 
   function isMappedBody(particle) {
@@ -18673,6 +21996,11 @@
       return;
     }
 
+    if (player.spacecraftInterior) {
+      updateSpacecraftInteriorPlayer(dt);
+      return;
+    }
+
     let localX = 0;
     let localY = 0;
 
@@ -18715,8 +22043,14 @@
 
     const speed = length(player.vx, player.vy);
     const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.62;
-    const boostSpeed = isJetpackBoostPressed() && canUseContinuousPlayerEnergy(jetpackBoostEnergyDrain, dt) ? jetpackBoostSpeedMultiplier : 1;
-    const maxSpeed = vacuumHoldActive ? 0 : ((canUseSuctionControls() && isGadgetButtonPressed()) ? 275 : 430 * boostSpeed) * weaponSlowFactor;
+    const boostSpeed = canUseJetpackBoost(dt) ? jetpackBoostSpeedMultiplier : 1;
+    const rocketSuitActive = isRocketSuitEquipped() && mouse.left && !buildMenuOpen;
+    const rocketSuitMaxSpeed = rocketSuitBaseMaxSpeed + clamp(finiteOr(player.rocketSuitCharge, 0), 0, 1) * rocketSuitChargeMaxSpeed;
+    const maxSpeed = vacuumHoldActive
+      ? 0
+      : rocketSuitActive
+        ? rocketSuitMaxSpeed
+        : ((canUseSuctionControls() && isGadgetButtonPressed()) ? 275 : 430 * boostSpeed) * weaponSlowFactor;
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
@@ -18727,6 +22061,7 @@
     player.vy *= drag;
     player.x += player.vx * dt;
     player.y += player.vy * dt;
+    updatePlayerSpacecraftEntry();
   }
 
   function applyGadgetForces(target, aim, funnel, dt, options = {}) {
@@ -18738,7 +22073,9 @@
       middle: canUseSuctionControls() && mouse.middle,
       right: canUseSuctionControls() && mouse.right,
       suckFactor: currentGadgetSuckFactor(),
-      blowFactor: currentGadgetBlowFactor()
+      blowFactor: currentGadgetBlowFactor(),
+      toolId: equippedToolId,
+      viscious: isVisciousVacuumEquipped()
     }, dt, options);
   }
 
@@ -18754,6 +22091,8 @@
       right: enabled && mouse.right,
       suckFactor: currentGadgetSuckFactor(),
       blowFactor: currentGadgetBlowFactor(),
+      toolId: equippedToolId,
+      viscious: isVisciousVacuumEquipped(),
       bucketActive: enabled,
       bucketPadding: 0,
       landedBodyId: player.landed ? player.landed.bodyId : null,
@@ -18788,10 +22127,16 @@
     if (!mode || mode === "idle") {
       return 0;
     }
-    if (equippedTool === defaultToolId && isPartyGadgetActiveMode(mode)) {
+    if (isSuctionTool(equippedTool) && isPartyGadgetActiveMode(mode)) {
       return multiplayerContinuousEnergyActivationCost(suctionEnergyDrain, dt);
     }
     if (mode === "fire") {
+      if (isEmpTool(equippedTool)) {
+        return empPulseEnergyCost;
+      }
+      if (isPistonPunchTool(equippedTool)) {
+        return pistonPunchEnergyCost;
+      }
       const weapon = weaponByToolId(equippedTool);
       return weapon ? Math.max(0, finiteOr(weapon.energyCost, playerWeaponDefaults.energyCost)) : Infinity;
     }
@@ -18799,8 +22144,11 @@
   }
 
   function actorCanAffordMultiplayerToolMode(actor, equippedTool, mode, dt) {
+    if (finiteOr(actor && actor.toolDisabledTimer, 0) > 0) {
+      return false;
+    }
     const cost = multiplayerToolModeEnergyCost(equippedTool, mode, dt);
-    if (actor === player && playerContinuousEnergyLocked && equippedTool === defaultToolId && isPartyGadgetActiveMode(mode)) {
+    if (actor === player && playerContinuousEnergyLocked && isSuctionTool(equippedTool) && isPartyGadgetActiveMode(mode)) {
       return false;
     }
     return finiteOr(actor && actor.energy, 0) >= cost;
@@ -18813,7 +22161,13 @@
     if (isWeaponTool(equippedToolId)) {
       return mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt) ? "fire" : "idle";
     }
-    if (!isSuctionEquipped() || !actorCanAffordMultiplayerToolMode(player, defaultToolId, "pull", dt)) {
+    if (isEmpTool(equippedToolId)) {
+      return mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt) ? "fire" : "idle";
+    }
+    if (isPistonPunchTool(equippedToolId)) {
+      return mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt) ? "fire" : "idle";
+    }
+    if (!isSuctionEquipped() || !actorCanAffordMultiplayerToolMode(player, equippedToolId, "pull", dt)) {
       if (isSuctionEquipped() && isGadgetButtonPressed()) {
         playerContinuousEnergyLocked = true;
       }
@@ -18847,6 +22201,7 @@
       radius: finiteOr(snapshot.radius, player.radius),
       energy: finiteOr(snapshot.energy, player.energy),
       maxEnergy: finiteOr(snapshot.maxEnergy, player.maxEnergy),
+      toolDisabledTimer: Math.max(0, finiteOr(snapshot.toolDisabledTimer, 0)),
       equippedTool: typeof snapshot.equippedTool === "string" ? snapshot.equippedTool : equippedToolId,
       toolMode: normalizePartyGadgetMode(snapshot.toolMode),
       landed: normalizeLandingSnapshot(snapshot.landed),
@@ -18883,14 +22238,14 @@
   }
 
   function partyGadgetStateFromActor(actor, gadget, receivedAt, options) {
-    if (!actor || actor.equippedTool !== defaultToolId) {
+    if (!actor || !isSuctionTool(actor.equippedTool)) {
       return null;
     }
 
     const intent = gadget && typeof gadget === "object" ? gadget : null;
     const mode = normalizePartyGadgetMode(intent && intent.mode ? intent.mode : actor.toolMode);
     const active = isPartyGadgetActiveMode(mode) &&
-      actorCanAffordMultiplayerToolMode(actor, defaultToolId, mode, options && options.dt) &&
+      actorCanAffordMultiplayerToolMode(actor, actor.equippedTool || defaultToolId, mode, options && options.dt) &&
       (!intent || intent.active !== false);
     const aimAngle = finiteOr(intent && intent.aimAngle, actor.aimAngle);
     const aimWorld = normalize(Math.cos(aimAngle), Math.sin(aimAngle));
@@ -18911,6 +22266,8 @@
       right: active && mode === "push",
       suckFactor: finiteOr(options && options.suckFactor, 1),
       blowFactor: finiteOr(options && options.blowFactor, 1),
+      toolId: actor.equippedTool || defaultToolId,
+      viscious: actor.equippedTool === visciousVacuumToolId,
       bucketActive: true,
       bucketPadding: finiteOr(options && options.bucketPadding, 0),
       landedBodyId: actor.landed ? actor.landed.bodyId : null,
@@ -19129,6 +22486,162 @@
     }
 
     return leftActive || rightActive;
+  }
+
+  function visciousVacuumTargetInfluence(state, target, mode) {
+    if (!state || !state.viscious || !state.actor || !target) {
+      return null;
+    }
+    if (mode === "pull" && state.left !== true) {
+      return null;
+    }
+    if (mode === "push" && state.right !== true) {
+      return null;
+    }
+
+    const actor = state.actor;
+    const aimWorld = state.aimWorld || { x: 1, y: 0 };
+    const toTargetX = target.x - actor.x;
+    const toTargetY = target.y - actor.y;
+    const forward = toTargetX * aimWorld.x + toTargetY * aimWorld.y;
+    const sideX = toTargetX - aimWorld.x * forward;
+    const sideY = toTargetY - aimWorld.y * forward;
+    const side = length(sideX, sideY);
+    const targetRadius = Math.max(0, finiteOr(target.radius, 0));
+    const coneWidth = 64 + Math.max(0, forward) * 0.42;
+    const pullRange = forward > -70 && forward < gadgetForceReach + targetRadius && side < coneWidth + targetRadius * 0.28;
+    const pushRange = forward > -20 && forward < 470 + targetRadius && side < coneWidth * 0.95 + targetRadius * 0.28;
+    const activeRange = mode === "push" ? pushRange : pullRange;
+    if (!activeRange) {
+      return null;
+    }
+
+    const maxReach = mode === "push" ? 520 : 620;
+    return {
+      aimWorld,
+      sideX,
+      sideY,
+      forward,
+      side,
+      coneWidth,
+      pullStrength: clamp(1 - Math.max(0, forward) / maxReach, mode === "push" ? 0.18 : visciousVacuumBodyDrainMinStrength, 1),
+      centerStrength: clamp(1 - side / Math.max(1, coneWidth + targetRadius * 0.35), 0, 1)
+    };
+  }
+
+  function drainBodyWithVisciousVacuum(state, body, dt) {
+    if (!body || !isAsteroidOrLarger(body) || body.mass <= 1) {
+      return false;
+    }
+    const influence = visciousVacuumTargetInfluence(state, body, "pull");
+    if (!influence) {
+      return false;
+    }
+
+    const previousTier = body.tier;
+    const drain = Math.min(
+      body.mass - 1,
+      (visciousVacuumBodyDrainRate + Math.sqrt(body.mass) * 0.05) *
+        finiteOr(state.suckFactor, 1) *
+        influence.pullStrength *
+        (0.35 + influence.centerStrength * 0.65) *
+        dt
+    );
+    if (drain <= 0) {
+      return false;
+    }
+
+    const source = {
+      id: -1,
+      x: state.actor.x + influence.aimWorld.x * 44,
+      y: state.actor.y + influence.aimWorld.y * 44,
+      beamAngle: Math.atan2(influence.aimWorld.y, influence.aimWorld.x),
+      color: { r: 255, g: 95, b: 135 },
+      wobble: performance.now() * 0.001
+    };
+    body.mass -= drain;
+    updateBodyAfterMassChange(body, previousTier);
+    body.textureSeed += drain * 0.013;
+    emitUfoSapParticles(source, body, drain, influence.pullStrength, influence.centerStrength);
+    playSound("ufoSiphon", {
+      throttleKey: "visciousVacuumSiphon:" + (state.playerId || "local"),
+      throttle: 0.42,
+      volume: clamp(0.42 + influence.pullStrength * 0.38, 0.42, 0.82)
+    });
+    return true;
+  }
+
+  function applyVisciousVacuumToMob(state, mob, dt) {
+    if (!mob || mob.health <= 0 || !state || !state.viscious || !state.active || !gadgetStateMayReachTarget(state, mob, 80)) {
+      return false;
+    }
+
+    let affected = false;
+    if (state.right && visciousVacuumTargetInfluence(state, mob, "push")) {
+      applyActorGadgetForces(mob, {
+        ...state,
+        left: false,
+        middle: false,
+        right: true
+      }, dt, { captureInFunnel: false });
+      if (mob.landed) {
+        mob.landed = null;
+        mob.residentTier = null;
+      }
+      affected = true;
+    }
+
+    const influence = visciousVacuumTargetInfluence(state, mob, "pull");
+    if (!influence) {
+      return affected;
+    }
+
+    mob.visciousVacuumDrainTimer = Math.max(0, finiteOr(mob.visciousVacuumDrainTimer, 0) - dt);
+    if (mob.visciousVacuumDrainTimer > 0) {
+      return true;
+    }
+
+    mob.visciousVacuumDrainTimer += visciousVacuumMobDrainTickInterval;
+    const strength = influence.pullStrength * (0.4 + influence.centerStrength * 0.6) * finiteOr(state.suckFactor, 1);
+    const before = Math.max(0, finiteOr(mob.health, 0));
+    const damage = visciousVacuumMobDrainRate * visciousVacuumMobDrainTickInterval * strength;
+    damageMob(mob, damage, { r: 255, g: 95, b: 135 }, mobName(mob) + " drained by the Viscious Vacuum.", {
+      sourceTool: visciousVacuumToolId
+    });
+    const drained = Math.max(0, before - Math.max(0, finiteOr(mob.health, 0)));
+    if (drained > 0 && state.actor === player && player.health > 0) {
+      player.health = Math.min(player.maxHealth, player.health + drained);
+    }
+    return true;
+  }
+
+  function updateVisciousVacuumMobs(dt) {
+    const aim = getAim();
+    const states = [];
+    const localState = localGadgetStateForFrame(aim, getFunnel(aim));
+    if (localState && localState.viscious && localState.active) {
+      states.push(localState);
+    }
+    for (const state of activePartyGadgetStates()) {
+      if (state && state.viscious && state.active) {
+        states.push(state);
+      }
+    }
+    if (!states.length) {
+      return;
+    }
+
+    for (const mob of allCombatMobs()) {
+      if (!mob || mob.health <= 0) {
+        continue;
+      }
+      for (const state of states) {
+        applyVisciousVacuumToMob(state, mob, dt);
+        if (mob.health <= 0) {
+          break;
+        }
+      }
+    }
   }
 
   function collideFunnelSegment(state, ax, ay, bx, by, radius) {
@@ -19519,6 +23032,10 @@
       if (particle.ufoSapSourceGraceTimer !== undefined) {
         particle.ufoSapSourceGraceTimer = Math.max(0, finiteOr(particle.ufoSapSourceGraceTimer, 0) - dt);
       }
+      particle.spawnAge = Math.min(
+        particleSpawnTransitionDuration,
+        Math.max(0, finiteOr(particle.spawnAge, particleSpawnTransitionDuration)) + dt
+      );
 
       if (
         suctionActive &&
@@ -19526,10 +23043,12 @@
         gadgetStateMayReachTarget(localGadgetState, particle, 0)
       ) {
         applyActorGadgetForces(particle, localGadgetState, dt);
+        drainBodyWithVisciousVacuum(localGadgetState, particle, dt);
       }
       for (const state of partyGadgetStates) {
         if (partyGadgetCanAffectParticle(state, particle) && state.active && gadgetStateMayReachTarget(state, particle, 0)) {
           applyActorGadgetForces(particle, state, dt);
+          drainBodyWithVisciousVacuum(state, particle, dt);
         }
       }
 
@@ -19605,6 +23124,10 @@
     return particle && particle.tier && particle.tier.name === "boulder";
   }
 
+  function isAsteroidBody(particle) {
+    return particle && particle.tier && particle.tier.name === "asteroid";
+  }
+
   function isUfoBeamCargo(particle) {
     return particle && finiteOr(particle.ufoSapTimer, 0) > 0;
   }
@@ -19633,11 +23156,26 @@
     );
   }
 
-  function canUfoAbsorbParticle(particle) {
-    return particle && particle.tier && (particle.tier.name === "particle" || particle.tier.name === "rock");
+  function canUfoAbsorbParticle(ufo, particle) {
+    return Boolean(
+      particle &&
+      particle.tier &&
+      (
+        particle.tier.name === "particle" ||
+        particle.tier.name === "rock" ||
+        (ufo && ufo.isBoss && isBoulderBody(particle))
+      )
+    );
   }
 
-  function shouldUfoSiphonBody(particle) {
+  function shouldUfoImpactBody(ufo, particle) {
+    return ufo && ufo.isBoss ? isAsteroidBody(particle) : isBoulderBody(particle);
+  }
+
+  function shouldUfoSiphonBody(ufo, particle) {
+    if (ufo && ufo.isBoss) {
+      return isAsteroidOrLarger(particle) && !isAsteroidBody(particle);
+    }
     return isAsteroidOrLarger(particle);
   }
 
@@ -19870,6 +23408,7 @@
   }
 
   function updateSparks(dt) {
+
     for (let i = sparks.length - 1; i >= 0; i -= 1) {
       sparks[i].life -= dt;
       if (sparks[i].life <= 0) {
@@ -20277,6 +23816,28 @@
     return rivals.concat(ufos, rambots, engineers, teslas, rockets, fighters);
   }
 
+  function isPlayerTeamMob(mob) {
+    return Boolean(mob && mob.team === "player");
+  }
+
+  function hostileCombatMobs() {
+    return allCombatMobs().filter((mob) => mob && mob.health > 0 && !isPlayerTeamMob(mob));
+  }
+
+  function familiarCombatMobs() {
+    return allCombatMobs().filter((mob) => mob && mob.health > 0 && isPlayerTeamMob(mob));
+  }
+
+  function familiarCombatTargets() {
+    return familiarCombatMobs().map((mob) => ({
+      local: false,
+      remote: null,
+      familiar: true,
+      player: mob,
+      publicName: "Familiar " + mobName(mob)
+    }));
+  }
+
   function reflectEntityVelocity(entity, nx, ny, damping, minSpeed) {
     const dot = entity.vx * nx + entity.vy * ny;
     entity.vx = (entity.vx - 2 * dot * nx) * damping;
@@ -20290,7 +23851,7 @@
   }
 
   function tryFighterShieldBlock(fighter, projectile, nx, ny, options) {
-    if (!fighter || fighter.kind !== "fighter" || fighter.health <= 0 || fighter.shieldCharge <= 0) {
+    if (!fighter || fighter.kind !== "fighter" || fighter.health <= 0 || isMobDisabled(fighter) || fighter.shieldCharge <= 0) {
       return false;
     }
 
@@ -20332,7 +23893,7 @@
       }
 
       for (const mob of allCombatMobs()) {
-        if (mob.health <= 0 || mob.hitCooldown > 0) {
+        if (mob.health <= 0 || mob.hitCooldown > 0 || isPlayerTeamMob(mob) || !canDamageMobWithBody(mob, particle)) {
           continue;
         }
 
@@ -20350,7 +23911,9 @@
           continue;
         }
         const damage = Math.min(85, 18 + (speed - projectileDamageSpeed) * 0.16 + Math.sqrt(particle.mass) * 0.75);
+        markMobDamagedByBody(mob, particle);
         knockMob(mob, nx, ny, 170 + speed * 0.38);
+        triggerBossBodyEvade(mob, particle, nx, ny, speed);
         particle.vx *= 0.92;
         particle.vy *= 0.92;
 
@@ -20502,13 +24065,15 @@
         }
 
         const damageThreshold = body.tier.solid ? solidBodyDamageSpeed : rivalBodyImpactSpeed;
-        if (impactSpeed < damageThreshold || mob.hitCooldown > 0) {
+        if (impactSpeed < damageThreshold || mob.hitCooldown > 0 || !canDamageMobWithBody(mob, body)) {
           continue;
         }
 
         knockMob(mob, nx, ny, 145 + impactSpeed * 0.35);
         sendSharedBodyImpactEffect(contact, "mob-body-hit", nx, ny, impactSpeed);
         const damage = sharedBodyImpactDamage(body, impactSpeed, 12);
+        markMobDamagedByBody(mob, body);
+        triggerBossBodyEvade(mob, body, nx, ny, impactSpeed);
         if (damageMob(mob, damage, body.color, mobName(mob) + " crushed by " + body.tier.article + " " + body.tier.name + ".", {
           notification: bodyDefeatNotificationOptions(mob, body, "crushed")
         })) {
@@ -20523,33 +24088,51 @@
     const aim = getAim();
     const muzzleDistance = 80;
     const color = spec.color || playerWeaponDefaults.color;
+    const pelletCount = Math.max(1, Math.floor(finiteOr(spec.pelletCount, 1)));
+    const aimAngle = Math.atan2(aim.world.y, aim.world.x);
+    const spread = Math.max(0, finiteOr(spec.spread, 0));
 
-    playerLasers.push({
-      x: player.x + aim.world.x * muzzleDistance,
-      y: player.y + aim.world.y * muzzleDistance,
-      vx: aim.world.x * spec.speed + player.vx * 0.18,
-      vy: aim.world.y * spec.speed + player.vy * 0.18,
-      radius: spec.radius,
-      length: spec.length,
-      color,
-      life: spec.life,
-      maxLife: spec.life,
-      damage: spec.damage,
-      knockback: spec.knockback,
-      piercesMobs: Boolean(spec.piercesMobs),
-      hitMessage: null,
-      weaponLabel: spec.label,
-      sourceX: player.x,
-      sourceY: player.y
-    });
+    for (let i = 0; i < pelletCount; i += 1) {
+      const lineT = pelletCount <= 1 ? 0 : i / (pelletCount - 1) * 2 - 1;
+      const clusteredT = Math.sign(lineT) * Math.pow(Math.abs(lineT), 1.35);
+      const angleJitter = pelletCount > 1 ? randomRange(-0.06, 0.06) : (spread > 0 ? randomRange(-spread, spread) * 0.55 : 0);
+      const angleOffset = clusteredT * spread + angleJitter;
+      const dirX = Math.cos(aimAngle + angleOffset);
+      const dirY = Math.sin(aimAngle + angleOffset);
+      const sideX = -dirY;
+      const sideY = dirX;
+      const muzzleScatter = pelletCount > 1 ? randomRange(-9, 9) : 0;
+      const forwardScatter = pelletCount > 1 ? randomRange(-4, 8) : 0;
+      const speed = finiteOr(spec.speed, playerWeaponDefaults.speed) + (pelletCount > 1 ? randomRange(10, 120) : 0);
+      const life = finiteOr(spec.life, playerWeaponDefaults.life) * (pelletCount > 1 ? randomRange(0.9, 1.22) : 1);
+
+      playerLasers.push({
+        x: player.x + dirX * (muzzleDistance + forwardScatter) + sideX * muzzleScatter,
+        y: player.y + dirY * (muzzleDistance + forwardScatter) + sideY * muzzleScatter,
+        vx: dirX * speed + player.vx * 0.18,
+        vy: dirY * speed + player.vy * 0.18,
+        radius: finiteOr(spec.radius, playerWeaponDefaults.radius),
+        length: finiteOr(spec.length, playerWeaponDefaults.length),
+        color,
+        life,
+        maxLife: life,
+        damage: finiteOr(spec.damage, playerWeaponDefaults.damage),
+        knockback: finiteOr(spec.knockback, playerWeaponDefaults.knockback),
+        piercesMobs: Boolean(spec.piercesMobs),
+        hitMessage: null,
+        weaponLabel: spec.label,
+        sourceX: player.x,
+        sourceY: player.y
+      });
+    }
 
     sparks.push({
       x: player.x + aim.world.x * muzzleDistance,
       y: player.y + aim.world.y * muzzleDistance,
-      radius: 24,
+      radius: pelletCount > 1 ? 38 : 24,
       color,
-      life: 0.14,
-      maxLife: 0.14
+      life: pelletCount > 1 ? 0.2 : 0.14,
+      maxLife: pelletCount > 1 ? 0.2 : 0.14
     });
 
     if (!player.landed) {
@@ -20565,7 +24148,30 @@
         weaponSlowMax
       );
     }
-    playSound("laser");
+    playSound(pelletCount > 1 ? "enemyLaser" : "laser", { throttleKey: pelletCount > 1 ? "playerShotgun" : "laser" });
+  }
+
+  function fireEmpTool() {
+    if (!isEmpToolEquipped() || buildMenuOpen || !mouse.left || toolFireCooldown > 0 || isMultiplayerV2Active()) {
+      return false;
+    }
+    if (!canSpendPlayerEnergy(empPulseEnergyCost)) {
+      notifyEnergyDepleted();
+      return false;
+    }
+
+    spendPlayerEnergy(empPulseEnergyCost);
+    toolFireCooldown = empPulseCooldown;
+    const affected = applyEmpPulse(player.x, player.y, currentEmpPulseRange(), currentEmpPulseDisableDuration(), {
+      affectMobs: true,
+      affectPlayers: false,
+      affectStructures: false,
+      color: { r: 126, g: 232, b: 255 },
+      cause: "EMP tool"
+    });
+    maybeNotifyText(affected > 0 ? "EMP disabled " + affected + " mob" + (affected === 1 ? "." : "s.") : "EMP pulse discharged.");
+    resetMouseButtons();
+    return true;
   }
 
   function findSpannerRepairTarget() {
@@ -20763,7 +24369,7 @@
     let bestDistance = Infinity;
 
     for (const mob of allCombatMobs()) {
-      if (!isMechanicalMob(mob) || mob.health <= 0) {
+      if (!isMechanicalMob(mob) || mob.health <= 0 || isPlayerTeamMob(mob)) {
         continue;
       }
 
@@ -20816,8 +24422,436 @@
     return true;
   }
 
+  function pistonPunchSegment() {
+    const aim = getAim();
+    const startX = player.x + aim.world.x * 34;
+    const startY = player.y + aim.world.y * 34;
+    return {
+      ax: startX,
+      ay: startY,
+      bx: player.x + aim.world.x * pistonPunchRange,
+      by: player.y + aim.world.y * pistonPunchRange,
+      nx: aim.world.x,
+      ny: aim.world.y
+    };
+  }
+
+  function findPistonPunchTarget() {
+    const punch = pistonPunchSegment();
+    let best = null;
+    let bestDistance = Infinity;
+
+    for (const mob of allCombatMobs()) {
+      if (!mob || mob.health <= 0 || isPlayerTeamMob(mob) || isMobSummoning(mob)) {
+        continue;
+      }
+
+      const segmentDistance = distanceToSegment(mob.x, mob.y, punch.ax, punch.ay, punch.bx, punch.by);
+      const playerDistance = Math.hypot(mob.x - player.x, mob.y - player.y);
+      if (segmentDistance > mob.radius + 24 || playerDistance > pistonPunchRange + mob.radius || playerDistance >= bestDistance) {
+        continue;
+      }
+
+      best = mob;
+      bestDistance = playerDistance;
+    }
+
+    return best;
+  }
+
+  function firePistonPunch() {
+    if (!isPistonPunchEquipped() || !mouse.left || buildMenuOpen || toolFireCooldown > 0) {
+      return false;
+    }
+
+    if (!spendPlayerEnergy(pistonPunchEnergyCost)) {
+      notifyEnergyDepleted();
+      return false;
+    }
+
+    const punch = pistonPunchSegment();
+    const target = findPistonPunchTarget();
+    toolFireCooldown = pistonPunchCooldown;
+    if (!target) {
+      playSound("mobHit", { throttleKey: "pistonPunchMiss", throttle: 0.2, volume: 0.44 });
+      return true;
+    }
+
+    knockMob(target, punch.nx, punch.ny, pistonPunchKnockback);
+    damageMob(
+      target,
+      pistonPunchDamage,
+      { r: 255, g: 209, b: 102 },
+      mobName(target) + " punched by the Piston Punch.",
+      { sourceTool: pistonPunchToolId }
+    );
+    sparks.push({
+      x: target.x,
+      y: target.y,
+      radius: Math.max(62, target.radius * 1.8),
+      color: { r: 255, g: 209, b: 102 },
+      life: 0.28,
+      maxLife: 0.28
+    });
+    playSound("rambotCharge", { throttleKey: "pistonPunchHit", throttle: 0.18, volume: 0.72 });
+    return true;
+  }
+
+  function familiarNetSwipeSegment() {
+    const aim = getAim();
+    const startX = player.x + aim.world.x * 24;
+    const startY = player.y + aim.world.y * 24;
+    return {
+      ax: startX,
+      ay: startY,
+      bx: player.x + aim.world.x * familiarNetRange,
+      by: player.y + aim.world.y * familiarNetRange,
+      nx: aim.world.x,
+      ny: aim.world.y
+    };
+  }
+
+  function findFamiliarNetTarget() {
+    const swipe = familiarNetSwipeSegment();
+    let best = null;
+    let bestScore = Infinity;
+    const aimAngle = Math.atan2(swipe.ny, swipe.nx);
+
+    for (const mob of allCombatMobs()) {
+      if (!mob || mob.health <= 0 || mob.isBoss || isPlayerTeamMob(mob) || isMobSummoning(mob)) {
+        continue;
+      }
+
+      const mobDx = mob.x - player.x;
+      const mobDy = mob.y - player.y;
+      const segmentDistance = distanceToSegment(mob.x, mob.y, swipe.ax, swipe.ay, swipe.bx, swipe.by);
+      const playerDistance = Math.hypot(mobDx, mobDy);
+      const mobAngle = Math.atan2(mobDy, mobDx);
+      const angleDelta = Math.abs(shortestAngleDelta(aimAngle, mobAngle));
+      const inSwipeLine = segmentDistance <= mob.radius + familiarNetCatchLinePadding;
+      const inSwipeArc = angleDelta <= familiarNetCatchHalfAngle;
+      if (
+        playerDistance > familiarNetRange + mob.radius ||
+        (!inSwipeLine && !inSwipeArc)
+      ) {
+        continue;
+      }
+
+      const score = playerDistance + angleDelta * 55 + segmentDistance * 0.3;
+      if (score >= bestScore) {
+        continue;
+      }
+
+      best = mob;
+      bestScore = score;
+    }
+
+    return best;
+  }
+
+  function startFamiliarNetSwing(direction) {
+    familiarNetSwingTimer = familiarNetSwingDuration;
+    familiarNetSwingDirection = direction < 0 ? -1 : 1;
+  }
+
+  function removeMobFromCollection(mob) {
+    const collection = mob && mobCollectionByKind(mob.kind);
+    if (!Array.isArray(collection)) {
+      return false;
+    }
+    const index = collection.indexOf(mob);
+    if (index < 0) {
+      return false;
+    }
+    collection.splice(index, 1);
+    return true;
+  }
+
+  function captureMobWithFamiliarNet() {
+    if (!isFamiliarNetEquipped() || !mouse.left || buildMenuOpen || toolFireCooldown > 0) {
+      return false;
+    }
+
+    startFamiliarNetSwing(-1);
+    toolFireCooldown = familiarNetCooldown;
+    if (familiarNetCapture) {
+      playSound("mobHit", { throttleKey: "familiarNetFull", throttle: 0.22, volume: 0.34 });
+      maybeNotifyText("The familiar net is already holding one mob.");
+      resetMouseButtons();
+      return true;
+    }
+
+    const target = findFamiliarNetTarget();
+    if (!target) {
+      playSound("mobHit", { throttleKey: "familiarNetMiss", throttle: 0.22, volume: 0.42 });
+      resetMouseButtons();
+      return true;
+    }
+
+    familiarNetCapture = {
+      kind: target.kind,
+      health: clamp(finiteOr(target.health, target.maxHealth), 1, finiteOr(target.maxHealth, target.health || 1)),
+      maxHealth: Math.max(1, finiteOr(target.maxHealth, target.health || 1)),
+      color: target.color ? { ...target.color } : null
+    };
+    removeMobFromCollection(target);
+    sparks.push({
+      x: target.x,
+      y: target.y,
+      radius: Math.max(48, target.radius * 2.2),
+      color: target.color || { r: 102, g: 224, b: 184 },
+      life: 0.32,
+      maxLife: 0.32
+    });
+    playSound("pickupTech", { throttleKey: "familiarNetCatch", throttle: 0.18 });
+    maybeNotifyText("Caught " + mobName(target).toLowerCase() + " in the familiar net.");
+    resetMouseButtons();
+    return true;
+  }
+
+  function releaseFamiliarFromNet() {
+    if (!isFamiliarNetEquipped() || !mouse.right || buildMenuOpen || toolFireCooldown > 0) {
+      return false;
+    }
+
+    startFamiliarNetSwing(1);
+    if (!familiarNetCapture) {
+      toolFireCooldown = familiarNetReleaseCooldown;
+      playSound("mobHit", { throttleKey: "familiarNetEmpty", throttle: 0.22, volume: 0.28 });
+      resetMouseButtons();
+      return true;
+    }
+
+    const aim = getAim();
+    const releaseDistance = 118;
+    const x = player.x + aim.world.x * releaseDistance;
+    const y = player.y + aim.world.y * releaseDistance;
+    const familiar = createMobByKind(familiarNetCapture.kind, x, y, {
+      team: "player",
+      health: familiarNetCapture.health,
+      maxHealth: familiarNetCapture.maxHealth,
+      color: familiarNetCapture.color || undefined,
+      summonAge: 0,
+      summonDuration: 0.42,
+      summonSpinSpeed: 8
+    });
+    familiar.team = "player";
+    familiar.summonBaseRadius = Math.max(1, finiteOr(familiar.radius, 28));
+    familiar.radius = 0;
+    familiar.vx += aim.world.x * 140 + finiteOr(player.vx, 0) * 0.2;
+    familiar.vy += aim.world.y * 140 + finiteOr(player.vy, 0) * 0.2;
+    collectionPushMob(familiar.kind, familiar);
+    sparks.push({
+      x,
+      y,
+      radius: 82,
+      color: familiar.color || { r: 102, g: 224, b: 184 },
+      life: 0.36,
+      maxLife: 0.36,
+      summonTelegraph: true
+    });
+    familiarNetCapture = null;
+    toolFireCooldown = familiarNetReleaseCooldown;
+    playSound("pickupHealth", { throttleKey: "familiarNetRelease", throttle: 0.18 });
+    maybeNotifyText("Released familiar " + mobName(familiar).toLowerCase() + ".");
+    resetMouseButtons();
+    return true;
+  }
+
+  function isGuidedLauncherEquipped() {
+    return equippedToolId === guidedLauncherToolId && !areToolsDisabled();
+  }
+
+  function addGuidedLauncherPathPoint(missile, point) {
+    if (!missile || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      return;
+    }
+    const path = Array.isArray(missile.guidedPath) ? missile.guidedPath : (missile.guidedPath = []);
+    const last = path[path.length - 1];
+    if (last && Math.hypot(point.x - last.x, point.y - last.y) < guidedLauncherPathPointSpacing) {
+      last.x = point.x;
+      last.y = point.y;
+    } else {
+      path.push({ x: point.x, y: point.y });
+    }
+    while (path.length > guidedLauncherMaxPathPoints) {
+      path.splice(1, 1);
+      missile.guidedIndex = Math.max(1, finiteOr(missile.guidedIndex, 1) - 1);
+    }
+    missile.targetX = point.x;
+    missile.targetY = point.y;
+  }
+
+  function launchGuidedLauncherMissile() {
+    const aim = getAim();
+    const cursor = screenToWorld(mouse.x, mouse.y);
+    const muzzleDistance = 78;
+    const color = { r: 255, g: 184, b: 88 };
+    const startX = player.x + aim.world.x * muzzleDistance;
+    const startY = player.y + aim.world.y * muzzleDistance;
+    const missile = {
+      x: startX,
+      y: startY,
+      vx: aim.world.x * launcherMissileSpeed * 0.78 + finiteOr(player.vx, 0) * 0.14,
+      vy: aim.world.y * launcherMissileSpeed * 0.78 + finiteOr(player.vy, 0) * 0.14,
+      radius: 10,
+      length: 62,
+      color,
+      life: guidedLauncherMissileLife,
+      maxLife: guidedLauncherMissileLife,
+      damage: launcherMissileDamage * 0.88,
+      rocket: true,
+      guided: true,
+      guidedReleased: false,
+      guidedIndex: 1,
+      guidedPath: [{ x: startX, y: startY }],
+      targetX: cursor.x,
+      targetY: cursor.y,
+      targetCount: 1,
+      ignoredBodyId: player.landed ? player.landed.bodyId : null
+    };
+
+    addGuidedLauncherPathPoint(missile, cursor);
+    launcherMissiles.push(missile);
+    guidedLauncherState.activeMissile = missile;
+    toolFireCooldown = guidedLauncherCooldown;
+
+    if (!player.landed) {
+      player.weaponSlow = clamp(finiteOr(player.weaponSlow, 0) + 0.2, 0, weaponSlowMax);
+      player.vx -= aim.world.x * 34;
+      player.vy -= aim.world.y * 34;
+    }
+
+    sparks.push({
+      x: startX,
+      y: startY,
+      radius: 36,
+      color,
+      life: 0.22,
+      maxLife: 0.22
+    });
+    playSound("missile");
+    return true;
+  }
+
+  function updateGuidedLauncher() {
+    const active = guidedLauncherState.activeMissile;
+    if (active && !launcherMissiles.includes(active)) {
+      guidedLauncherState.activeMissile = null;
+    }
+
+    if (guidedLauncherState.activeMissile && (!isGuidedLauncherEquipped() || buildMenuOpen || !mouse.left)) {
+      guidedLauncherState.activeMissile.guidedReleased = true;
+      guidedLauncherState.activeMissile = null;
+    }
+
+    if (!isGuidedLauncherEquipped() || buildMenuOpen) {
+      return false;
+    }
+
+    if (guidedLauncherState.activeMissile) {
+      addGuidedLauncherPathPoint(guidedLauncherState.activeMissile, screenToWorld(mouse.x, mouse.y));
+      return true;
+    }
+
+    if (!mouse.left || toolFireCooldown > 0) {
+      return false;
+    }
+
+    if (!canSpendPlayerEnergy(guidedLauncherEnergyCost)) {
+      notifyEnergyDepleted();
+      toolFireCooldown = 0.25;
+      return true;
+    }
+
+    spendPlayerEnergy(guidedLauncherEnergyCost);
+    return launchGuidedLauncherMissile();
+  }
+
+  function updateRocketSuit(dt) {
+    const active = isRocketSuitEquipped() && mouse.left && !buildMenuOpen;
+    player.rocketSuitActive = false;
+
+    if (!active) {
+      player.rocketSuitCharge = Math.max(0, finiteOr(player.rocketSuitCharge, 0) - rocketSuitChargeDecay * dt);
+      return false;
+    }
+
+    if (!canUseContinuousPlayerEnergy(rocketSuitEnergyDrain, dt)) {
+      notifyEnergyDepleted();
+      player.rocketSuitCharge = Math.max(0, finiteOr(player.rocketSuitCharge, 0) - rocketSuitChargeDecay * dt);
+      return false;
+    }
+
+    if (player.landed) {
+      detachFromBody(95);
+    }
+
+    if (!drainContinuousPlayerEnergy(rocketSuitEnergyDrain, dt)) {
+      notifyEnergyDepleted();
+      return false;
+    }
+
+    const aim = getAim();
+    const charge = clamp(finiteOr(player.rocketSuitCharge, 0) + rocketSuitChargeRate * dt, 0, 1);
+    const thrust = rocketSuitBaseThrust + rocketSuitChargeThrust * charge;
+    const maxSpeed = rocketSuitBaseMaxSpeed + rocketSuitChargeMaxSpeed * charge;
+    player.rocketSuitCharge = charge;
+    player.rocketSuitActive = true;
+    player.vx += aim.world.x * thrust * dt;
+    player.vy += aim.world.y * thrust * dt;
+
+    const speed = Math.hypot(player.vx, player.vy);
+    if (speed > maxSpeed) {
+      player.vx = (player.vx / speed) * maxSpeed;
+      player.vy = (player.vy / speed) * maxSpeed;
+    }
+
+    const hitSpeed = Math.max(speed, Math.hypot(player.vx, player.vy));
+    if (hitSpeed > rocketImpactSpeed * 0.7) {
+      for (const mob of allCombatMobs()) {
+        if (!mob || mob.health <= 0 || mob.hitCooldown > 0 || isPlayerTeamMob(mob) || isMobSummoning(mob)) {
+          continue;
+        }
+        const dx = mob.x - player.x;
+        const dy = mob.y - player.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const hitDistance = mob.radius + player.radius * 0.72;
+        if (dist > hitDistance) {
+          continue;
+        }
+
+        const nx = dx / dist;
+        const ny = dy / dist;
+        knockMob(mob, nx, ny, rocketSuitMobKnockback + hitSpeed * 0.22);
+        damageMob(
+          mob,
+          rocketSuitMobDamage + Math.max(0, hitSpeed - rocketImpactSpeed * 0.7) * rocketSuitMobDamageSpeedScale,
+          { r: 169, g: 133, b: 255 },
+          mobName(mob) + " rammed by the Rocket Suit.",
+          { sourceTool: rocketSuitToolId }
+        );
+        player.vx -= nx * 120;
+        player.vy -= ny * 120;
+        break;
+      }
+    }
+
+    return true;
+  }
+
   function updateEquippedTool(dt) {
     toolFireCooldown = Math.max(0, toolFireCooldown - dt);
+    familiarNetSwingTimer = Math.max(0, familiarNetSwingTimer - dt);
+    if (updateRocketSuit(dt)) {
+      return;
+    }
+    if (captureMobWithFamiliarNet()) {
+      return;
+    }
+    if (releaseFamiliarFromNet()) {
+      return;
+    }
     if (repairWithSpanner(dt)) {
       return;
     }
@@ -20825,6 +24859,15 @@
       return;
     }
     if (strikeWithSpanner()) {
+      return;
+    }
+    if (firePistonPunch()) {
+      return;
+    }
+    if (fireEmpTool()) {
+      return;
+    }
+    if (updateGuidedLauncher()) {
       return;
     }
 
@@ -20852,6 +24895,2088 @@
 
     toolDisabledTimer = Math.max(0, toolDisabledTimer - dt);
     resetMouseButtons();
+  }
+
+  const rogueTraderEventId = "rogue-trader";
+  const rogueTraderMapColor = { r: 255, g: 184, b: 96 };
+  const rogueTraderEventSettings = {
+    duration: 62,
+    approachDuration: 14,
+    serviceDriftDistance: 220,
+    leaveSpeed: 640,
+    leaveVerticalDrift: -28,
+    disappearDistance: 2200,
+    disappearRightDistance: 1700,
+    radius: 900,
+    targetDistanceMin: 620,
+    targetDistanceMax: 960,
+    spawnDistance: 1850,
+    earliestSpawnTime: 10 * 60
+  };
+  const traderSniperRange = 1780;
+
+  const spacecraftBlueprints = {
+    "rogue-trader": {
+      id: "rogue-trader",
+      name: "Rogue Trader",
+      width: 1120,
+      height: 420,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      door: {
+        x: -560,
+        y: -38,
+        width: 142,
+        height: 278,
+        depth: 148,
+        threshold: 56
+      },
+      components: [
+        { id: "airlock", kind: "room", label: "Airlock", x: -440, y: -35, w: 210, h: 250, floorInset: 26, maxHealth: 240, color: "#30343d" },
+        { id: "cargo-room", kind: "room", label: "Cargo Hold", x: -245, y: -35, w: 300, h: 250, floorInset: 26, maxHealth: 320, color: "#2c3037" },
+        { id: "market-room", kind: "room", label: "Trading Bay", x: 75, y: -35, w: 380, h: 250, floorInset: 26, maxHealth: 390, color: "#282d34" },
+        { id: "engine-room", kind: "room", label: "Engine Room", x: 415, y: -35, w: 300, h: 250, floorInset: 26, maxHealth: 340, color: "#2a2e33" },
+        { id: "port-turret", kind: "turret", label: "Port Turret", x: -95, y: -224, radius: 32, maxHealth: 155, angle: -Math.PI / 2 },
+        { id: "ventral-turret", kind: "turret", label: "Ventral Turret", x: 340, y: 170, radius: 32, maxHealth: 155, angle: Math.PI / 2 },
+        { id: "generator", kind: "generator", label: "Generator", x: 80, y: 80, w: 102, h: 64, maxHealth: 180, color: "#596a44" },
+        { id: "battery", kind: "battery", label: "Battery", x: -155, y: 82, w: 96, h: 62, maxHealth: 155, color: "#566641" },
+        { id: "life-support", kind: "life-support", label: "Life Support", x: -210, y: -126, w: 116, h: 68, maxHealth: 155, color: "#426656" },
+        { id: "shield-core", kind: "shields", label: "Shield Core", x: 220, y: -126, w: 104, h: 66, maxHealth: 170, color: "#44526f" },
+        { id: "main-engine", kind: "engine", label: "Main Engine", x: 545, y: 8, w: 110, h: 190, maxHealth: 220, color: "#514846" }
+      ],
+      npcs: [
+        {
+          id: "rogue-trader",
+          name: "Rogue Trader",
+          x: 24,
+          y: 22,
+          speed: 70,
+          offers: [
+            { id: "weapon-for-plating", pay: { weapon: 3 }, receive: { plating: 2 } },
+            { id: "plating-for-shield", pay: { plating: 4 }, receive: { shield: 2 } },
+            { id: "energy-for-propulsion", pay: { energy: 3 }, receive: { propulsion: 2 } },
+            { id: "repair-plating-for-weapon", pay: { repair: 2, plating: 1 }, receive: { weapon: 2 } }
+          ]
+        }
+      ]
+    }
+  };
+
+  function spacecraftBlueprintById(id) {
+    return spacecraftBlueprints[id] || null;
+  }
+
+  function spacecraftHashUnit(seed) {
+    const value = Math.sin(seed * 12.9898) * 43758.5453;
+    return value - Math.floor(value);
+  }
+
+  function spacecraftStringSeed(value) {
+    const text = String(value || "");
+    let seed = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      seed += text.charCodeAt(i) * (i + 1);
+    }
+    return seed || 1;
+  }
+
+  function createSpacecraftFromBlueprint(blueprintId, overrides) {
+    const blueprint = spacecraftBlueprintById(blueprintId) || spacecraftBlueprints["rogue-trader"];
+    const settings = overrides || {};
+    const craft = {
+      id: Number.isFinite(Number(settings.id)) ? Math.max(1, Math.floor(Number(settings.id))) : nextSpacecraftId++,
+      kind: "spacecraft",
+      blueprintId: blueprint.id,
+      name: String(settings.name || blueprint.name || "Spacecraft"),
+      x: finiteOr(settings.x, blueprint.x || 0),
+      y: finiteOr(settings.y, blueprint.y || 0),
+      vx: finiteOr(settings.vx, 0),
+      vy: finiteOr(settings.vy, 0),
+      eventId: String(settings.eventId || ""),
+      rotation: finiteOr(settings.rotation, blueprint.rotation || 0),
+      width: finiteOr(settings.width, blueprint.width || 640),
+      height: finiteOr(settings.height, blueprint.height || 320),
+      door: Object.assign({}, blueprint.door || {}),
+      components: [],
+      npcs: []
+    };
+
+    craft.components = (blueprint.components || []).map((component) => createSpacecraftComponent(component));
+    craft.npcs = (blueprint.npcs || []).map((npc) => createSpacecraftNpc(npc, craft));
+    updateSpacecraftWorldFields(craft);
+    return craft;
+  }
+
+  function createSpacecraftComponent(component) {
+    const maxHealth = Math.max(1, finiteOr(component.maxHealth, 100));
+    const seed = spacecraftStringSeed(component.id || component.kind);
+    return {
+      id: String(component.id || "component"),
+      kind: String(component.kind || "room"),
+      label: String(component.label || component.kind || "Component"),
+      x: finiteOr(component.x, 0),
+      y: finiteOr(component.y, 0),
+      w: Math.max(1, finiteOr(component.w, finiteOr(component.radius, 24) * 2)),
+      h: Math.max(1, finiteOr(component.h, finiteOr(component.radius, 24) * 2)),
+      floorInset: Math.max(0, finiteOr(component.floorInset, 24)),
+      radius: Math.max(1, finiteOr(component.radius, Math.max(finiteOr(component.w, 40), finiteOr(component.h, 40)) * 0.5)),
+      angle: finiteOr(component.angle, 0),
+      aimAngle: finiteOr(component.angle, 0),
+      shootCooldown: 0.3 + spacecraftHashUnit(seed) * 1.1,
+      disabledTimer: 0,
+      flash: 0,
+      maxHealth,
+      health: maxHealth,
+      color: component.color || "#30343d"
+    };
+  }
+
+  function createSpacecraftNpc(npc, craft) {
+    const seed = spacecraftStringSeed(npc.id || npc.name);
+    return {
+      id: String(npc.id || "npc"),
+      name: String(npc.name || "Trader"),
+      x: finiteOr(npc.x, 0),
+      y: finiteOr(npc.y, 0),
+      targetX: finiteOr(npc.x, 0),
+      targetY: finiteOr(npc.y, 0),
+      speed: Math.max(20, finiteOr(npc.speed, 60)),
+      radius: 24,
+      walkCycle: spacecraftHashUnit(seed) * Math.PI * 2,
+      wanderIndex: 0,
+      aimAngle: 0,
+      crouching: false,
+      combatTarget: false,
+      sniperCooldown: 1.2 + spacecraftHashUnit(seed + 11) * 1.2,
+      sniperShotIndex: 0,
+      offers: (Array.isArray(npc.offers) ? npc.offers : []).map(normalizeNpcTradeOffer).filter(Boolean),
+      spacecraftId: craft.id
+    };
+  }
+
+  function normalizeNpcTradeOffer(offer) {
+    if (!offer || typeof offer !== "object") {
+      return null;
+    }
+
+    const pay = normalizeTradeOffer(offer.pay);
+    const receive = normalizeTradeOffer(offer.receive);
+    if (tradeOfferTotal(pay) <= 0 || tradeOfferTotal(receive) <= 0) {
+      return null;
+    }
+
+    return {
+      id: String(offer.id || "offer"),
+      pay,
+      receive
+    };
+  }
+
+  function ensureDefaultSpacecrafts() {
+    syncSpacecraftsToRandomEventState();
+  }
+
+  function seedSpacecrafts() {
+    spacecrafts.length = 0;
+    nextSpacecraftId = 1;
+  }
+
+  function serializeSpacecraft(craft) {
+    return {
+      id: craft.id,
+      blueprintId: craft.blueprintId,
+      name: craft.name,
+      x: craft.x,
+      y: craft.y,
+      vx: craft.vx,
+      vy: craft.vy,
+      eventId: craft.eventId || "",
+      rotation: craft.rotation,
+      width: craft.width,
+      height: craft.height,
+      components: craft.components.map((component) => ({
+        id: component.id,
+        kind: component.kind,
+        label: component.label,
+        x: component.x,
+        y: component.y,
+        w: component.w,
+        h: component.h,
+        floorInset: component.floorInset,
+        radius: component.radius,
+        angle: component.angle,
+        aimAngle: component.aimAngle,
+        shootCooldown: component.shootCooldown,
+        disabledTimer: component.disabledTimer,
+        maxHealth: component.maxHealth,
+        health: component.health,
+        color: component.color
+      })),
+      npcs: craft.npcs.map((npc) => ({
+        id: npc.id,
+        name: npc.name,
+        x: npc.x,
+        y: npc.y,
+        targetX: npc.targetX,
+        targetY: npc.targetY,
+        walkCycle: npc.walkCycle,
+        wanderIndex: npc.wanderIndex,
+        aimAngle: npc.aimAngle,
+        crouching: Boolean(npc.crouching),
+        combatTarget: Boolean(npc.combatTarget),
+        sniperCooldown: npc.sniperCooldown,
+        sniperShotIndex: npc.sniperShotIndex
+      }))
+    };
+  }
+
+  function normalizeSpacecraftSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+
+    const blueprintId = spacecraftBlueprintById(snapshot.blueprintId) ? snapshot.blueprintId : "rogue-trader";
+    const craft = createSpacecraftFromBlueprint(blueprintId, {
+      id: snapshot.id,
+      name: snapshot.name,
+      x: snapshot.x,
+      y: snapshot.y,
+      vx: snapshot.vx,
+      vy: snapshot.vy,
+      eventId: snapshot.eventId,
+      rotation: snapshot.rotation,
+      width: snapshot.width,
+      height: snapshot.height
+    });
+
+    if (Array.isArray(snapshot.components)) {
+      const byId = new Map(craft.components.map((component) => [component.id, component]));
+      for (const source of snapshot.components) {
+        const component = source && byId.get(String(source.id || ""));
+        if (!component) {
+          continue;
+        }
+        component.health = clamp(finiteOr(source.health, component.health), 0, Math.max(1, finiteOr(source.maxHealth, component.maxHealth)));
+        component.maxHealth = Math.max(1, finiteOr(source.maxHealth, component.maxHealth));
+        component.floorInset = Math.max(0, finiteOr(source.floorInset, component.floorInset));
+        component.aimAngle = finiteOr(source.aimAngle, component.aimAngle);
+        component.shootCooldown = Math.max(0, finiteOr(source.shootCooldown, component.shootCooldown));
+        component.disabledTimer = Math.max(0, finiteOr(source.disabledTimer, 0));
+      }
+    }
+
+    if (Array.isArray(snapshot.npcs)) {
+      const byId = new Map(craft.npcs.map((npc) => [npc.id, npc]));
+      for (const source of snapshot.npcs) {
+        const npc = source && byId.get(String(source.id || ""));
+        if (!npc) {
+          continue;
+        }
+        npc.x = finiteOr(source.x, npc.x);
+        npc.y = finiteOr(source.y, npc.y);
+        npc.targetX = finiteOr(source.targetX, npc.targetX);
+        npc.targetY = finiteOr(source.targetY, npc.targetY);
+        npc.walkCycle = finiteOr(source.walkCycle, npc.walkCycle);
+        npc.wanderIndex = Math.max(0, Math.floor(finiteOr(source.wanderIndex, npc.wanderIndex)));
+        npc.aimAngle = finiteOr(source.aimAngle, npc.aimAngle);
+        npc.crouching = Boolean(source.crouching);
+        npc.combatTarget = Boolean(source.combatTarget);
+        npc.sniperCooldown = Math.max(0, finiteOr(source.sniperCooldown, npc.sniperCooldown));
+        npc.sniperShotIndex = Math.max(0, Math.floor(finiteOr(source.sniperShotIndex, npc.sniperShotIndex)));
+      }
+    }
+
+    updateSpacecraftWorldFields(craft);
+    return craft;
+  }
+
+  function normalizeSpacecraftInteriorSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+
+    return {
+      spacecraftId: Math.max(1, Math.floor(finiteOr(snapshot.spacecraftId, 0))),
+      localX: finiteOr(snapshot.localX, 0),
+      localY: finiteOr(snapshot.localY, 0),
+      walkSpeed: finiteOr(snapshot.walkSpeed, 0),
+      onFloor: snapshot.onFloor !== false
+    };
+  }
+
+  function findSpacecraftById(id) {
+    const numericId = Math.max(1, Math.floor(finiteOr(id, 0)));
+    return spacecrafts.find((craft) => craft.id === numericId) || null;
+  }
+
+  function activePlayerSpacecraft() {
+    return player.spacecraftInterior ? findSpacecraftById(player.spacecraftInterior.spacecraftId) : null;
+  }
+
+  function isPlayerInsideSpacecraft() {
+    return Boolean(player.spacecraftInterior && activePlayerSpacecraft());
+  }
+
+  function playerIsOnFoot() {
+    return Boolean(player.landed || isPlayerInsideSpacecraft());
+  }
+
+  function spacecraftLocalToWorld(craft, localX, localY) {
+    const angle = finiteOr(craft.rotation, 0);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    return {
+      x: craft.x + localX * cos - localY * sin,
+      y: craft.y + localX * sin + localY * cos
+    };
+  }
+
+  function spacecraftWorldToLocal(craft, worldX, worldY) {
+    const angle = -finiteOr(craft.rotation, 0);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const dx = worldX - craft.x;
+    const dy = worldY - craft.y;
+    return {
+      x: dx * cos - dy * sin,
+      y: dx * sin + dy * cos
+    };
+  }
+
+  function updateSpacecraftWorldFields(craft) {
+    for (const component of craft.components) {
+      const world = spacecraftLocalToWorld(craft, component.x, component.y);
+      component.worldX = world.x;
+      component.worldY = world.y;
+      component.hitRadius = spacecraftComponentHitRadius(component);
+    }
+    for (const npc of craft.npcs) {
+      const world = spacecraftLocalToWorld(craft, npc.x, npc.y);
+      npc.worldX = world.x;
+      npc.worldY = world.y;
+    }
+  }
+
+  function rogueTraderWeight(state) {
+    if (currentRunElapsedSeconds() < rogueTraderEventSettings.earliestSpawnTime) {
+      return 0;
+    }
+    const history = Array.isArray(state && state.history) ? state.history : [];
+    if (!history.length) {
+      return 0.85;
+    }
+    const visits = randomEventHistoryCount(rogueTraderEventId);
+    return visits <= 0 ? 0.65 : 0.14;
+  }
+
+  function activeRogueTraderEvent() {
+    const active = randomEventState.active;
+    return active && active.id === rogueTraderEventId ? active : null;
+  }
+
+  function chooseRogueTraderRegion() {
+    const anchors = activePartyPlayerAnchors();
+    const source = anchors[Math.floor(Math.random() * anchors.length)] || player;
+    const targetDistance = randomRange(rogueTraderEventSettings.targetDistanceMin, rogueTraderEventSettings.targetDistanceMax);
+    const verticalOffset = randomRange(-260, 140);
+    const sourceX = finiteOr(source.x, player.x);
+    const sourceY = finiteOr(source.y, player.y);
+    const targetX = sourceX + targetDistance;
+    const targetY = sourceY + verticalOffset;
+    const spawnDistance = rogueTraderEventSettings.spawnDistance + randomRange(0, 260);
+    return {
+      targetX,
+      targetY,
+      startX: sourceX - spawnDistance,
+      startY: targetY + randomRange(-120, 120),
+      exitX: targetX + rogueTraderEventSettings.disappearRightDistance + 520,
+      exitY: targetY + randomRange(-160, 120),
+      radius: rogueTraderEventSettings.radius
+    };
+  }
+
+  function findRogueTraderEventCraft(active) {
+    if (active && active.spacecraftId) {
+      const byId = findSpacecraftById(active.spacecraftId);
+      if (byId && byId.eventId === rogueTraderEventId) {
+        return byId;
+      }
+    }
+    return spacecrafts.find((craft) => craft && craft.eventId === rogueTraderEventId) || null;
+  }
+
+  function createRogueTraderEventCraft(active) {
+    const craft = createSpacecraftFromBlueprint("rogue-trader", {
+      id: active && active.spacecraftId,
+      x: finiteOr(active && active.startX, player.x + 1600),
+      y: finiteOr(active && active.startY, player.y),
+      eventId: rogueTraderEventId
+    });
+    craft.eventId = rogueTraderEventId;
+    spacecrafts.push(craft);
+    if (active) {
+      active.spacecraftId = craft.id;
+    }
+    updateSpacecraftWorldFields(craft);
+    return craft;
+  }
+
+  function removeSpacecraft(craft, reason) {
+    if (!craft) {
+      return;
+    }
+    if (player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id) {
+      ejectPlayerFromSpacecraft(craft, reason || (craft.name + " leaving."));
+    }
+    const index = spacecrafts.indexOf(craft);
+    if (index >= 0) {
+      spacecrafts.splice(index, 1);
+    }
+  }
+
+  function syncSpacecraftsToRandomEventState() {
+    const active = activeRogueTraderEvent();
+    if (!active) {
+      for (let i = spacecrafts.length - 1; i >= 0; i -= 1) {
+        removeSpacecraft(spacecrafts[i], "Rogue Trader departing.");
+      }
+      return null;
+    }
+
+    let craft = findRogueTraderEventCraft(active);
+    if (!craft) {
+      craft = createRogueTraderEventCraft(active);
+    }
+    active.spacecraftId = craft.id;
+    for (let i = spacecrafts.length - 1; i >= 0; i -= 1) {
+      const candidate = spacecrafts[i];
+      if (candidate !== craft) {
+        removeSpacecraft(candidate, "Rogue Trader departing.");
+      }
+    }
+    return craft;
+  }
+
+  function smoothEventStep(value) {
+    const t = clamp(finiteOr(value, 0), 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+
+  function rogueTraderEventPosition(active) {
+    const elapsed = Math.max(0, finiteOr(active && active.elapsed, 0));
+    const duration = Math.max(1, finiteOr(active && active.duration, rogueTraderEventSettings.duration));
+    const approachDuration = Math.max(0.5, rogueTraderEventSettings.approachDuration);
+    const startX = finiteOr(active && active.startX, player.x + 1600);
+    const startY = finiteOr(active && active.startY, player.y);
+    const targetX = finiteOr(active && active.targetX, player.x + 920);
+    const targetY = finiteOr(active && active.targetY, player.y);
+
+    if (elapsed < approachDuration) {
+      const t = smoothEventStep(elapsed / approachDuration);
+      return {
+        x: startX + (targetX - startX) * t,
+        y: startY + (targetY - startY) * t,
+        departing: false
+      };
+    }
+
+    const serviceDuration = Math.max(0.5, duration - approachDuration);
+    const t = clamp((elapsed - approachDuration) / serviceDuration, 0, 1);
+    return {
+      x: targetX + rogueTraderEventSettings.serviceDriftDistance * smoothEventStep(t),
+      y: targetY,
+      departing: false
+    };
+  }
+
+  function rogueTraderPlayerClearance(craft) {
+    const anchors = activePartyPlayerAnchors();
+    const players = anchors.length ? anchors : [player];
+    return players.reduce(function (minimum, anchor) {
+      return Math.min(minimum, Math.hypot(craft.x - finiteOr(anchor.x, player.x), craft.y - finiteOr(anchor.y, player.y)));
+    }, Infinity);
+  }
+
+  function beginRogueTraderDeparture(craft, reason) {
+    if (!craft || craft.eventId !== rogueTraderEventId) {
+      return false;
+    }
+    craft.rogueTraderDeparting = true;
+    craft.rogueTraderDepartureReason = reason || "Rogue Trader departing.";
+    craft.vx = rogueTraderEventSettings.leaveSpeed;
+    craft.vy = finiteOr(craft.rogueTraderDepartureVy, rogueTraderEventSettings.leaveVerticalDrift);
+    craft.rotation = 0;
+    if (player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id) {
+      leaveSpacecraftInterior(craft, { speed: 260 });
+    }
+    if (multiplayer.trade && multiplayer.trade.kind === "npc" && multiplayer.trade.spacecraftId === craft.id) {
+      closeTradeSession();
+    }
+    return true;
+  }
+
+  function updateRogueTraderDepartureCraft(craft, dt) {
+    const seconds = Math.max(0, finiteOr(dt, 0));
+    craft.vx = rogueTraderEventSettings.leaveSpeed;
+    craft.vy = finiteOr(craft.vy, rogueTraderEventSettings.leaveVerticalDrift);
+    craft.x += craft.vx * seconds;
+    craft.y += craft.vy * seconds;
+    craft.rotation = 0;
+    if (player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id) {
+      leaveSpacecraftInterior(craft, { speed: 260 });
+    }
+    const rightClearance = craft.x - finiteOr(player.x, craft.x);
+    return (
+      rogueTraderPlayerClearance(craft) >= rogueTraderEventSettings.disappearDistance &&
+      rightClearance >= rogueTraderEventSettings.disappearRightDistance
+    );
+  }
+
+  function updateRogueTraderEventCraft(active, dt) {
+    const craft = syncSpacecraftsToRandomEventState();
+    if (!craft) {
+      return null;
+    }
+    const previousX = craft.x;
+    const previousY = craft.y;
+    const position = rogueTraderEventPosition(active);
+    craft.x = position.x;
+    craft.y = position.y;
+    craft.vx = dt > 0 ? (craft.x - previousX) / dt : 0;
+    craft.vy = dt > 0 ? (craft.y - previousY) / dt : 0;
+    craft.rotation = 0;
+    updateSpacecraftWorldFields(craft);
+    if (position.departing && player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id) {
+      leaveSpacecraftInterior(craft, { speed: 260 });
+    }
+    return craft;
+  }
+
+  function startRogueTraderEvent(active) {
+    const region = chooseRogueTraderRegion();
+    Object.assign(active, {
+      title: "Rogue Trader",
+      targetX: region.targetX,
+      targetY: region.targetY,
+      startX: region.startX,
+      startY: region.startY,
+      exitX: region.exitX,
+      exitY: region.exitY,
+      radius: region.radius
+    });
+    createRogueTraderEventCraft(active);
+    updateRogueTraderEventCraft(active, 0);
+    maybeNotifyText("Rogue Trader signal detected.", { groupKey: "random-event-rogue-trader" });
+    playSound("ui", { throttle: 0.5 });
+  }
+
+  function updateRogueTraderEvent(active, dt) {
+    updateRogueTraderEventCraft(active, Math.max(0, finiteOr(dt, 0)));
+  }
+
+  function finishRogueTraderEvent(active) {
+    const craft = findRogueTraderEventCraft(active);
+    if (craft) {
+      beginRogueTraderDeparture(craft, "Rogue Trader departing.");
+    }
+    for (let i = spacecrafts.length - 1; i >= 0; i -= 1) {
+      if (spacecrafts[i] && spacecrafts[i].eventId === rogueTraderEventId) {
+        beginRogueTraderDeparture(spacecrafts[i], "Rogue Trader departing.");
+      }
+    }
+    maybeNotifyText("Rogue Trader leaving local space.", { groupKey: "random-event-rogue-trader" });
+  }
+
+  function activeSpacecraftEventRegions(active) {
+    const source = active || randomEventState.active;
+    if (!source || source.id !== rogueTraderEventId) {
+      return [];
+    }
+    const craft = findRogueTraderEventCraft(source);
+    return [{
+      id: rogueTraderEventId,
+      label: "Trader",
+      x: craft ? craft.x : finiteOr(source.targetX, player.x),
+      y: craft ? craft.y : finiteOr(source.targetY, player.y),
+      radius: Math.max(240, finiteOr(source.radius, rogueTraderEventSettings.radius)),
+      color: rogueTraderMapColor,
+      progress: clamp(finiteOr(source.elapsed, 0) / Math.max(1, finiteOr(source.duration, rogueTraderEventSettings.duration)), 0, 1)
+    }];
+  }
+
+  registerRandomEvent({
+    id: rogueTraderEventId,
+    title: "Rogue Trader",
+    duration: rogueTraderEventSettings.duration,
+    weight: rogueTraderWeight,
+    canStart: function () {
+      return currentRunElapsedSeconds() >= rogueTraderEventSettings.earliestSpawnTime &&
+        !deathState.active &&
+        player.health > 0 &&
+        !isPlayerInsideSpacecraft() &&
+        spacecrafts.length === 0;
+    },
+    start: startRogueTraderEvent,
+    update: updateRogueTraderEvent,
+    finish: finishRogueTraderEvent
+  });
+
+  function spacecraftComponentHitRadius(component) {
+    if (component.kind === "turret") {
+      return Math.max(16, finiteOr(component.radius, 28));
+    }
+    return Math.max(22, Math.hypot(finiteOr(component.w, 40), finiteOr(component.h, 40)) * 0.34);
+  }
+
+  function spacecraftComponentRectContains(component, localX, localY, padding) {
+    const pad = Math.max(0, finiteOr(padding, 0));
+    return (
+      localX >= component.x - component.w * 0.5 + pad &&
+      localX <= component.x + component.w * 0.5 - pad &&
+      localY >= component.y - component.h * 0.5 + pad &&
+      localY <= component.y + component.h * 0.5 - pad
+    );
+  }
+
+  function spacecraftDoorContainsLocal(craft, localX, localY, padding) {
+    const door = craft.door || {};
+    const pad = Math.max(0, finiteOr(padding, 0));
+    const halfHeight = finiteOr(door.height, 120) * 0.5 + pad;
+    const doorX = finiteOr(door.x, -craft.width * 0.5);
+    const depth = Math.max(60, finiteOr(door.depth, 100));
+    return (
+      Math.abs(localY - finiteOr(door.y, 0)) <= halfHeight &&
+      localX >= doorX - 74 - pad &&
+      localX <= doorX + depth + pad
+    );
+  }
+
+  function spacecraftFloorForX(craft, localX, preferredY) {
+    let best = null;
+    let bestDelta = Infinity;
+    for (const component of craft.components) {
+      if (component.kind !== "room" || component.health <= 0) {
+        continue;
+      }
+      const inset = Math.max(10, player.radius * 0.24);
+      const minX = component.x - component.w * 0.5 + inset;
+      const maxX = component.x + component.w * 0.5 - inset;
+      if (localX < minX || localX > maxX) {
+        continue;
+      }
+      const floorY = component.y + component.h * 0.5 - Math.max(8, finiteOr(component.floorInset, 24));
+      const centerY = floorY - playerFootOffset;
+      const delta = Math.abs(centerY - finiteOr(preferredY, centerY));
+      if (delta < bestDelta) {
+        best = {
+          room: component,
+          floorY,
+          centerY,
+          minX,
+          maxX,
+          ceilingY: component.y - component.h * 0.5 + 26
+        };
+        bestDelta = delta;
+      }
+    }
+    if (!best) {
+      const airlock = craft.components.find((component) => component.id === "airlock" && component.kind === "room" && component.health > 0);
+      const door = craft.door || {};
+      if (airlock) {
+        const doorX = finiteOr(door.x, -craft.width * 0.5);
+        const minX = doorX - 82;
+        const maxX = airlock.x + airlock.w * 0.5 - Math.max(10, player.radius * 0.24);
+        const floorY = airlock.y + airlock.h * 0.5 - Math.max(8, finiteOr(airlock.floorInset, 24));
+        const centerY = floorY - playerFootOffset;
+        if (
+          localX >= minX &&
+          localX <= maxX &&
+          Math.abs(finiteOr(preferredY, centerY) - finiteOr(door.y, centerY)) <= finiteOr(door.height, 180) * 0.58
+        ) {
+          return {
+            room: airlock,
+            floorY,
+            centerY,
+            minX,
+            maxX,
+            ceilingY: airlock.y - airlock.h * 0.5 + 26
+          };
+        }
+      }
+    }
+    return best;
+  }
+
+  function spacecraftCanStandAt(craft, localX, localY) {
+    const floor = spacecraftFloorForX(craft, localX, localY);
+    return Boolean(floor && Math.abs(localY - floor.centerY) <= 48);
+  }
+
+  function spacecraftComponentAtLocal(craft, localX, localY) {
+    for (const component of craft.components) {
+      if (component.health <= 0) {
+        continue;
+      }
+      if (component.kind === "turret") {
+        const dist = Math.hypot(localX - component.x, localY - component.y);
+        if (dist <= component.radius + 14) {
+          return component;
+        }
+        continue;
+      }
+      if (spacecraftComponentRectContains(component, localX, localY, 0)) {
+        return component;
+      }
+    }
+    return null;
+  }
+
+  function enterSpacecraftInterior(craft, local) {
+    const entryX = finiteOr(local.x, craft.door.x + craft.door.depth * 0.5);
+    const floor = spacecraftFloorForX(craft, entryX, finiteOr(local.y, craft.door.y));
+    player.landed = null;
+    player.spacecraftInterior = {
+      spacecraftId: craft.id,
+      localX: entryX,
+      localY: floor ? floor.centerY : finiteOr(craft.door.y, 0),
+      walkSpeed: 0,
+      onFloor: true
+    };
+    player.vx = 0;
+    player.vy = 0;
+    cameraRoll = 0;
+    maybeNotifyText("Entered " + craft.name + ".");
+  }
+
+  function leaveSpacecraftInterior(craft, options) {
+    const settings = options || {};
+    const local = player.spacecraftInterior || {
+      localX: finiteOr(craft.door && craft.door.x, -craft.width * 0.5) - 36,
+      localY: finiteOr(craft.door && craft.door.y, 0)
+    };
+    const exitLocalX = finiteOr(settings.localX, finiteOr(craft.door && craft.door.x, -craft.width * 0.5) - 74);
+    const exitLocalY = finiteOr(settings.localY, local.localY);
+    const world = spacecraftLocalToWorld(craft, exitLocalX, exitLocalY);
+    const outward = spacecraftLocalToWorld(craft, exitLocalX - 1, exitLocalY);
+    const dir = normalize(outward.x - world.x, outward.y - world.y);
+    player.spacecraftInterior = null;
+    player.x = world.x;
+    player.y = world.y;
+    player.vx = dir.x * finiteOr(settings.speed, 190) + finiteOr(craft.vx, 0);
+    player.vy = dir.y * finiteOr(settings.speed, 190) + finiteOr(craft.vy, 0);
+    cameraRoll = 0;
+    maybeNotifyText("Exited " + craft.name + ".");
+  }
+
+  function ejectPlayerFromSpacecraft(craft, reason) {
+    const local = player.spacecraftInterior || { localX: 0, localY: 0 };
+    const world = spacecraftLocalToWorld(craft, local.localX, local.localY);
+    const dir = normalize(local.localX || -1, local.localY || 0.2);
+    player.spacecraftInterior = null;
+    player.x = world.x;
+    player.y = world.y;
+    player.vx = dir.x * 230 + finiteOr(craft.vx, 0);
+    player.vy = dir.y * 230 + finiteOr(craft.vy, 0);
+    cameraRoll = 0;
+    maybeNotifyText(reason || (craft.name + " ruptured."));
+  }
+
+  function updatePlayerSpacecraftEntry() {
+    if (player.spacecraftInterior || player.landed || deathState.active) {
+      return;
+    }
+
+    for (const craft of spacecrafts) {
+      updateSpacecraftWorldFields(craft);
+      const local = spacecraftWorldToLocal(craft, player.x, player.y);
+      const door = craft.door || {};
+      const doorX = finiteOr(door.x, -craft.width * 0.5);
+      const thresholdX = doorX + finiteOr(door.threshold, 40);
+      const floor = spacecraftFloorForX(craft, local.x, local.y);
+      if (
+        local.x >= thresholdX - 30 &&
+        local.x <= thresholdX + 74 &&
+        spacecraftDoorContainsLocal(craft, local.x, local.y, 0) &&
+        floor
+      ) {
+        enterSpacecraftInterior(craft, local);
+        return;
+      }
+      resolvePlayerSpacecraftExteriorCollision(craft, local);
+    }
+  }
+
+  function resolvePlayerSpacecraftExteriorCollision(craft, local) {
+    if (spacecraftDoorContainsLocal(craft, local.x, local.y, 0)) {
+      return;
+    }
+
+    const component = spacecraftComponentAtLocal(craft, local.x, local.y);
+    if (!component || component.kind === "turret") {
+      return;
+    }
+
+    const margin = Math.max(20, player.radius * 0.62);
+    const left = component.x - component.w * 0.5 - margin;
+    const right = component.x + component.w * 0.5 + margin;
+    const top = component.y - component.h * 0.5 - margin;
+    const bottom = component.y + component.h * 0.5 + margin;
+    const distances = [
+      { side: "left", value: Math.abs(local.x - left), x: left, y: local.y },
+      { side: "right", value: Math.abs(right - local.x), x: right, y: local.y },
+      { side: "top", value: Math.abs(local.y - top), x: local.x, y: top },
+      { side: "bottom", value: Math.abs(bottom - local.y), x: local.x, y: bottom }
+    ].sort((a, b) => a.value - b.value);
+    const pushed = distances[0];
+    const world = spacecraftLocalToWorld(craft, pushed.x, pushed.y);
+    const normal = normalize(world.x - player.x, world.y - player.y);
+    player.x = world.x;
+    player.y = world.y;
+    const outwardSpeed = Math.max(0, player.vx * normal.x + player.vy * normal.y);
+    player.vx = normal.x * Math.max(120, outwardSpeed * 0.4);
+    player.vy = normal.y * Math.max(120, outwardSpeed * 0.4);
+    sparks.push({
+      x: player.x,
+      y: player.y,
+      radius: 26,
+      color: { r: 255, g: 213, b: 122 },
+      life: 0.16,
+      maxLife: 0.16
+    });
+  }
+
+  function updateSpacecraftInteriorPlayer(dt) {
+    const craft = activePlayerSpacecraft();
+    if (!craft) {
+      player.spacecraftInterior = null;
+      return false;
+    }
+
+    updateSpacecraftWorldFields(craft);
+    const state = player.spacecraftInterior;
+    let localX = finiteOr(state.localX, 0);
+    let localY = finiteOr(state.localY, 0);
+    let inputX = 0;
+
+    if (!isVacuumHoldActive()) {
+      if (isMovementKeyPressed("left")) inputX -= 1;
+      if (isMovementKeyPressed("right")) inputX += 1;
+    }
+
+    const weaponSlowFactor = 1 - clamp(player.weaponSlow || 0, 0, weaponSlowMax) * 0.5;
+    let floor = spacecraftFloorForX(craft, localX, localY);
+    if (!floor) {
+      ejectPlayerFromSpacecraft(craft, craft.name + " compartment broke open.");
+      return true;
+    }
+
+    localY = floor.centerY;
+    const walkDirection = inputX < 0 ? -1 : inputX > 0 ? 1 : 0;
+    const walkSpeed = walkDirection ? 156 * weaponSlowFactor : 0;
+    if (walkDirection) {
+      const nextX = localX + walkDirection * walkSpeed * dt;
+      const nextFloor = spacecraftFloorForX(craft, nextX, localY);
+      if (nextFloor) {
+        floor = nextFloor;
+        localX = clamp(nextX, floor.minX, floor.maxX);
+        localY = floor.centerY;
+        player.walkCycle += (2.2 + walkSpeed * 0.038) * dt;
+      } else {
+        localX = clamp(localX, floor.minX, floor.maxX);
+        localY = floor.centerY;
+      }
+    }
+
+    const door = craft.door || {};
+    const doorX = finiteOr(door.x, -craft.width * 0.5);
+    if (spacecraftDoorContainsLocal(craft, localX, localY, -8) && localX < doorX - 48) {
+      leaveSpacecraftInterior(craft, { localX, localY, speed: 210 });
+      return true;
+    }
+
+    if (!spacecraftCanStandAt(craft, localX, localY)) {
+      ejectPlayerFromSpacecraft(craft, craft.name + " compartment broke open.");
+      return true;
+    }
+
+    state.localX = localX;
+    state.localY = localY;
+    state.walkSpeed = walkSpeed;
+    state.onFloor = true;
+    const world = spacecraftLocalToWorld(craft, localX, localY);
+    player.x = world.x;
+    player.y = world.y;
+    player.vx = finiteOr(craft.vx, 0) + walkDirection * walkSpeed;
+    player.vy = finiteOr(craft.vy, 0);
+    cameraRoll += shortestAngleDelta(cameraRoll, 0) * (1 - Math.pow(0.02, dt));
+    jumpQueued = false;
+    return true;
+  }
+
+  function liveSpacecraftComponents(craft) {
+    return craft.components.filter((component) => component.health > 0);
+  }
+
+  function spacecraftHasLiveKind(craft, kind) {
+    return craft.components.some((component) => component.kind === kind && component.health > 0);
+  }
+
+  function nearestSpacecraftCombatTarget(x, y, maxRange) {
+    const craft = activePlayerSpacecraft();
+    if (!craft) {
+      return null;
+    }
+
+    let best = null;
+    let bestDistance = Infinity;
+    const range = Math.max(1, finiteOr(maxRange, 1800));
+    for (const component of liveSpacecraftComponents(craft)) {
+      if (component.kind === "room" && component.id !== "airlock") {
+        continue;
+      }
+      const dist = Math.hypot(component.worldX - x, component.worldY - y);
+      const score = dist - (component.kind === "generator" || component.kind === "turret" ? 90 : 0);
+      if (dist <= range + component.hitRadius && score < bestDistance) {
+        best = component;
+        bestDistance = score;
+      }
+    }
+
+    if (!best) {
+      best = liveSpacecraftComponents(craft)[0] || null;
+    }
+
+    if (!best) {
+      return null;
+    }
+
+    return spacecraftComponentCombatTarget(craft, best);
+  }
+
+  function spacecraftComponentCombatTarget(craft, component) {
+    return {
+      local: false,
+      remote: null,
+      spacecraft: craft,
+      spacecraftComponent: component,
+      publicName: craft.name,
+      player: {
+        id: "spacecraft:" + craft.id + ":" + component.id,
+        name: component.label,
+        x: component.worldX,
+        y: component.worldY,
+        vx: finiteOr(craft.vx, 0),
+        vy: finiteOr(craft.vy, 0),
+        radius: component.hitRadius,
+        health: component.health,
+        maxHealth: component.maxHealth
+      }
+    };
+  }
+
+  function nearestSpacecraftComponentOnSegment(ax, ay, bx, by, radius, predicate) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const craft of spacecrafts) {
+      for (const component of liveSpacecraftComponents(craft)) {
+        if (predicate && !predicate(craft, component)) {
+          continue;
+        }
+        const hitRadius = component.hitRadius + Math.max(0, finiteOr(radius, 0));
+        const distance = distanceToSegment(component.worldX, component.worldY, ax, ay, bx, by);
+        if (distance > hitRadius) {
+          continue;
+        }
+        const fromStart = Math.hypot(component.worldX - ax, component.worldY - ay);
+        if (fromStart < bestDistance) {
+          best = { craft, component };
+          bestDistance = fromStart;
+        }
+      }
+    }
+    return best;
+  }
+
+  function damageSpacecraftComponent(craft, component, damage, color, message) {
+    if (!craft || !component || component.health <= 0) {
+      return false;
+    }
+
+    component.health = clamp(finiteOr(component.health, component.maxHealth) - Math.max(0, finiteOr(damage, 0)), 0, component.maxHealth);
+    component.flash = 0.34;
+    sparks.push({
+      x: component.worldX,
+      y: component.worldY,
+      radius: component.hitRadius * 1.4,
+      color: color || { r: 255, g: 184, b: 88 },
+      life: 0.28,
+      maxLife: 0.28
+    });
+    playSound("mobHit", { throttleKey: "spacecraftDamage" });
+
+    if (component.health <= 0) {
+      component.disabledTimer = Math.max(component.disabledTimer || 0, 1.2);
+      maybeNotifyText(message || (craft.name + " " + component.label.toLowerCase() + " destroyed."));
+      if (player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id) {
+        const local = player.spacecraftInterior;
+        if (!spacecraftCanStandAt(craft, local.localX, local.localY)) {
+          ejectPlayerFromSpacecraft(craft, craft.name + " compartment broke open.");
+        }
+      }
+    }
+
+    return component.health <= 0;
+  }
+
+  function damageSpacecraftComponentFromProjectile(projectile, tailX, tailY, hitRadius) {
+    const target = nearestSpacecraftComponentOnSegment(
+      tailX,
+      tailY,
+      projectile.x,
+      projectile.y,
+      hitRadius,
+      (_craft, component) => component.kind !== "room" || component.id === "airlock" || projectile.rocket || projectile.lightning
+    );
+    if (!target) {
+      return false;
+    }
+
+    const damage = projectile.lightning
+      ? difficultyMobDamage(teslaLightningDamage)
+      : difficultyMobDamage(projectile.rocket ? structureRocketDamage : finiteOr(projectile.damage, rivalProjectileDamage) * 0.82);
+    damageSpacecraftComponent(target.craft, target.component, damage, projectile.color);
+    return true;
+  }
+
+  function findSpacecraftDefenseTarget(craft, originX, originY, range) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const mob of allCombatMobs()) {
+      if (!mob || mob.health <= 0) {
+        continue;
+      }
+      const distance = Math.hypot(mob.x - originX, mob.y - originY);
+      if (distance > range || distance >= bestDistance) {
+        continue;
+      }
+      best = mob;
+      bestDistance = distance;
+    }
+    return best;
+  }
+
+  function findTraderSniperTarget(craft, originX, originY, range) {
+    const door = craft.door || {};
+    const doorX = finiteOr(door.x, -craft.width * 0.5);
+    const doorSideLimit = doorX + finiteOr(door.depth, 140) + 240;
+    let best = null;
+    let bestScore = Infinity;
+    let fallback = null;
+    let fallbackDistance = Infinity;
+
+    for (const mob of allCombatMobs()) {
+      if (!mob || mob.health <= 0) {
+        continue;
+      }
+      const distance = Math.hypot(mob.x - originX, mob.y - originY);
+      if (distance > range) {
+        continue;
+      }
+      if (distance < fallbackDistance) {
+        fallback = mob;
+        fallbackDistance = distance;
+      }
+      const local = spacecraftWorldToLocal(craft, mob.x, mob.y);
+      if (local.x > doorSideLimit) {
+        continue;
+      }
+      const score = distance + Math.max(0, local.x - doorX) * 1.4;
+      if (score < bestScore) {
+        best = mob;
+        bestScore = score;
+      }
+    }
+
+    return best || fallback;
+  }
+
+  function fireSpacecraftDefenseLaser(craft, originX, originY, target, options) {
+    const settings = options || {};
+    const speed = finiteOr(settings.speed, turretLaserSpeed);
+    const leadTime = clamp(Math.hypot(target.x - originX, target.y - originY) / speed, 0, 0.9);
+    const aim = normalize(
+      target.x + finiteOr(target.vx, 0) * leadTime * 0.45 - originX,
+      target.y + finiteOr(target.vy, 0) * leadTime * 0.45 - originY
+    );
+    const color = settings.color || { r: 255, g: 115, b: 173 };
+    const muzzleDistance = finiteOr(settings.muzzleDistance, 36);
+
+    playerLasers.push({
+      x: originX + aim.x * muzzleDistance,
+      y: originY + aim.y * muzzleDistance,
+      vx: aim.x * speed + finiteOr(craft.vx, 0) * 0.12,
+      vy: aim.y * speed + finiteOr(craft.vy, 0) * 0.12,
+      radius: finiteOr(settings.radius, 4),
+      length: finiteOr(settings.length, 42),
+      color,
+      life: finiteOr(settings.life, 1.05),
+      maxLife: finiteOr(settings.life, 1.05),
+      damage: finiteOr(settings.damage, turretLaserDamage),
+      knockback: finiteOr(settings.knockback, turretLaserKnockback),
+      hitMessage: mobName(target) + " picked off by " + craft.name + ".",
+      sourceX: originX,
+      sourceY: originY,
+      piercesMobs: Boolean(settings.piercesMobs),
+      weaponLabel: settings.weaponLabel || "ship turret"
+    });
+
+    sparks.push({
+      x: originX + aim.x * muzzleDistance,
+      y: originY + aim.y * muzzleDistance,
+      radius: finiteOr(settings.sparkRadius, 26),
+      color,
+      life: 0.16,
+      maxLife: 0.16
+    });
+    playSound(settings.sound || "turret", { throttleKey: settings.throttleKey || "spacecraftTurret" });
+    return Math.atan2(aim.y, aim.x);
+  }
+
+  function updateSpacecraftTurrets(craft, dt) {
+    const powered = spacecraftHasLiveKind(craft, "generator") || spacecraftHasLiveKind(craft, "battery");
+    for (const component of craft.components) {
+      if (component.kind !== "turret") {
+        continue;
+      }
+      component.shootCooldown = Math.max(0, finiteOr(component.shootCooldown, 0) - dt);
+      component.flash = Math.max(0, finiteOr(component.flash, 0) - dt);
+      if (component.health <= 0 || component.disabledTimer > 0 || !powered) {
+        component.disabledTimer = Math.max(0, finiteOr(component.disabledTimer, 0) - dt);
+        continue;
+      }
+
+      const target = findSpacecraftDefenseTarget(craft, component.worldX, component.worldY, 760);
+      if (target) {
+        const targetAngle = Math.atan2(target.y - component.worldY, target.x - component.worldX);
+        component.aimAngle += clamp(shortestAngleDelta(component.aimAngle, targetAngle), -4.4 * dt, 4.4 * dt);
+        if (component.shootCooldown <= 0) {
+          fireSpacecraftDefenseLaser(craft, component.worldX, component.worldY, target, {
+            damage: 26,
+            length: 46,
+            throttleKey: "spacecraftTurret:" + craft.id + ":" + component.id
+          });
+          component.shootCooldown = 1.9;
+          component.flash = 0.2;
+        }
+      } else {
+        component.aimAngle += clamp(shortestAngleDelta(component.aimAngle, component.angle + craft.rotation), -2.2 * dt, 2.2 * dt);
+      }
+    }
+  }
+
+  function updateSpacecraftNpc(craft, npc, dt) {
+    const trading = multiplayer.trade && multiplayer.trade.kind === "npc" && multiplayer.trade.peerId === npc.id;
+    const door = craft.door || {};
+    const perchX = finiteOr(door.x, -craft.width * 0.5) - 28;
+    const perchFloor = spacecraftFloorForX(craft, perchX, finiteOr(door.y, npc.y));
+    const perchY = perchFloor ? perchFloor.floorY - 48 : finiteOr(door.y, npc.y);
+    const perchWorld = spacecraftLocalToWorld(craft, perchX, perchY);
+    const nearbyTarget = !trading ? findTraderSniperTarget(craft, perchWorld.x, perchWorld.y, traderSniperRange) : null;
+
+    npc.combatTarget = Boolean(nearbyTarget);
+    npc.crouching = Boolean(nearbyTarget && !trading);
+
+    if (!trading && nearbyTarget) {
+      npc.targetX = perchX;
+      npc.targetY = perchY;
+    } else if (!trading && Math.hypot(npc.x - npc.targetX, npc.y - npc.targetY) < 12) {
+      const rooms = craft.components.filter((component) => component.kind === "room" && component.health > 0);
+      const room = rooms.length ? rooms[npc.wanderIndex % rooms.length] : null;
+      if (room) {
+        const seed = spacecraftStringSeed(npc.id) + craft.id * 17 + npc.wanderIndex * 31;
+        npc.targetX = room.x + (spacecraftHashUnit(seed) - 0.5) * room.w * 0.62;
+        const floor = spacecraftFloorForX(craft, npc.targetX, npc.y);
+        npc.targetY = floor ? floor.floorY - 42 : room.y + room.h * 0.32;
+        npc.wanderIndex += 1;
+      }
+    }
+
+    if (!trading) {
+      const dx = npc.targetX - npc.x;
+      const dy = npc.targetY - npc.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 1) {
+        const step = Math.min(dist, npc.speed * dt);
+        npc.x += dx / dist * step;
+        npc.y += dy / dist * step;
+        npc.walkCycle += (2.3 + npc.speed * 0.035) * dt;
+        npc.aimAngle = Math.atan2(dy, dx);
+      }
+    }
+
+    const world = spacecraftLocalToWorld(craft, npc.x, npc.y);
+    npc.worldX = world.x;
+    npc.worldY = world.y;
+    npc.sniperCooldown = Math.max(0, finiteOr(npc.sniperCooldown, 0) - dt);
+
+    if (nearbyTarget) {
+      npc.aimAngle = Math.atan2(nearbyTarget.y - npc.worldY, nearbyTarget.x - npc.worldX) - finiteOr(craft.rotation, 0);
+    }
+
+    if (!trading && nearbyTarget && npc.sniperCooldown <= 0) {
+      const shotAngle = fireSpacecraftDefenseLaser(craft, npc.worldX, npc.worldY, nearbyTarget, {
+        speed: 1160,
+        damage: 42,
+        length: 96,
+        radius: 4,
+        life: 2.15,
+        knockback: 320,
+        color: { r: 255, g: 213, b: 122 },
+        weaponLabel: "trader sniper",
+        sound: "laser",
+        throttleKey: "spacecraftSniper:" + craft.id + ":" + npc.id,
+        sparkRadius: 20,
+        piercesMobs: true
+      });
+      npc.aimAngle = shotAngle - finiteOr(craft.rotation, 0);
+      npc.sniperShotIndex += 1;
+      npc.sniperCooldown = 2.1 + spacecraftHashUnit(spacecraftStringSeed(npc.id) + npc.sniperShotIndex * 13) * 1.1;
+    }
+  }
+
+  function updateSpacecrafts(dt) {
+    const departingCraftsToRemove = [];
+    for (const craft of spacecrafts) {
+      if (!craft.eventId) {
+        craft.x += finiteOr(craft.vx, 0) * dt;
+        craft.y += finiteOr(craft.vy, 0) * dt;
+      } else if (craft.eventId === rogueTraderEventId && craft.rogueTraderDeparting) {
+        if (updateRogueTraderDepartureCraft(craft, dt)) {
+          departingCraftsToRemove.push(craft);
+        }
+      }
+      updateSpacecraftWorldFields(craft);
+      for (const component of craft.components) {
+        component.flash = Math.max(0, finiteOr(component.flash, 0) - dt);
+        component.disabledTimer = Math.max(0, finiteOr(component.disabledTimer, 0) - dt);
+      }
+      for (const npc of craft.npcs) {
+        updateSpacecraftNpc(craft, npc, dt);
+      }
+      updateSpacecraftTurrets(craft, dt);
+      updateSpacecraftWorldFields(craft);
+    }
+    for (const craft of departingCraftsToRemove) {
+      removeSpacecraft(craft, craft.rogueTraderDepartureReason || "Rogue Trader departing.");
+    }
+  }
+
+  function findNpcInteractionTargetById(spacecraftId, npcId) {
+    const craft = findSpacecraftById(spacecraftId);
+    if (!craft) {
+      return null;
+    }
+    const npc = craft.npcs.find((candidate) => candidate.id === npcId) || null;
+    return npc ? { kind: "npc", spacecraft: craft, npc, player: { x: npc.worldX, y: npc.worldY, radius: npc.radius, health: 100 }, publicName: npc.name } : null;
+  }
+
+  function findNearbyNpcInteractionTarget() {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const craft of spacecrafts) {
+      updateSpacecraftWorldFields(craft);
+      for (const npc of craft.npcs) {
+        const distance = Math.hypot(npc.worldX - player.x, npc.worldY - player.y);
+        if (distance <= playerInteractionRange && distance < bestDistance) {
+          best = { kind: "npc", spacecraft: craft, npc, player: { x: npc.worldX, y: npc.worldY, radius: npc.radius, health: 100 }, publicName: npc.name };
+          bestDistance = distance;
+        }
+      }
+    }
+    return best;
+  }
+
+  function openNpcTradeSession(craft, npc) {
+    if (!craft || !npc) {
+      return;
+    }
+    const offers = npc.offers.map((offer) => ({
+      id: offer.id,
+      pay: normalizeTradeOffer(offer.pay),
+      receive: normalizeTradeOffer(offer.receive)
+    }));
+    multiplayer.trade = {
+      kind: "npc",
+      peerId: npc.id,
+      peerName: npc.name,
+      spacecraftId: craft.id,
+      npcId: npc.id,
+      npcOffers: offers,
+      selectedOfferIndex: 0,
+      localOffer: normalizeTradeOffer(offers[0] && offers[0].pay),
+      remoteOffer: normalizeTradeOffer(offers[0] && offers[0].receive),
+      localSent: true,
+      remoteSent: true,
+      localAccepted: false,
+      remoteAccepted: true,
+      completed: false
+    };
+    setPlayerInteractionMenu(false);
+    renderTradePanel();
+  }
+
+  function selectedNpcTradeOffer(trade) {
+    if (!trade || trade.kind !== "npc" || !Array.isArray(trade.npcOffers) || !trade.npcOffers.length) {
+      return null;
+    }
+    const index = clamp(Math.floor(finiteOr(trade.selectedOfferIndex, 0)), 0, trade.npcOffers.length - 1);
+    return trade.npcOffers[index] || null;
+  }
+
+  function selectNpcTradeOffer(index) {
+    const trade = multiplayer.trade;
+    if (!trade || trade.kind !== "npc" || !Array.isArray(trade.npcOffers) || !trade.npcOffers.length) {
+      return;
+    }
+    trade.selectedOfferIndex = clamp(Math.floor(finiteOr(index, 0)), 0, trade.npcOffers.length - 1);
+    const offer = selectedNpcTradeOffer(trade);
+    trade.localOffer = normalizeTradeOffer(offer && offer.pay);
+    trade.remoteOffer = normalizeTradeOffer(offer && offer.receive);
+    trade.completed = false;
+    renderTradePanel();
+  }
+
+  function completeNpcTradeOffer() {
+    const trade = multiplayer.trade;
+    const offer = selectedNpcTradeOffer(trade);
+    if (!trade || trade.kind !== "npc" || !offer) {
+      return;
+    }
+    trade.localOffer = normalizeTradeOffer(offer.pay);
+    trade.remoteOffer = normalizeTradeOffer(offer.receive);
+    if (!canAffordTradeOffer(trade.localOffer)) {
+      updateTradeStatus();
+      return;
+    }
+
+    for (const tech of techTypes) {
+      techInventory[tech.key] = Math.max(0, Math.floor(techInventory[tech.key] || 0) - Math.max(0, Math.floor(trade.localOffer[tech.key] || 0)));
+      techInventory[tech.key] += Math.max(0, Math.floor(trade.remoteOffer[tech.key] || 0));
+    }
+
+    trade.completed = true;
+    updateTechUi();
+    void savePersistentState({ includeWorld: false });
+    renderTradePanel();
+    playSound("trade");
+    maybeNotifyText("Trade complete with " + trade.peerName + ".");
+  }
+
+  function describeTradeSide(offer) {
+    const parts = [];
+    for (const tech of techTypes) {
+      const amount = Math.max(0, Math.floor(offer && offer[tech.key] || 0));
+      if (amount > 0) {
+        parts.push(amount + " " + tech.label.replace(" Tech", ""));
+      }
+    }
+    return parts.length ? parts.join(", ") : "nothing";
+  }
+
+  function drawSpacecrafts(time) {
+    for (const craft of spacecrafts) {
+      const radius = Math.hypot(craft.width, craft.height) * 0.62;
+      if (!isWorldCircleNearView(craft.x, craft.y, radius, 420)) {
+        continue;
+      }
+      drawSpacecraft(craft, time);
+    }
+  }
+
+  function drawSpacecraft(craft, time) {
+    const inside = player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id;
+    ctx.save();
+    ctx.translate(craft.x, craft.y);
+    ctx.rotate(finiteOr(craft.rotation, 0));
+    if (inside) {
+      drawSpacecraftInterior(craft, time);
+    } else {
+      drawSpacecraftExterior(craft, time);
+    }
+    drawSpacecraftDoor(craft, inside, time);
+    drawSpacecraftNpcs(craft, time, inside);
+    ctx.restore();
+  }
+
+  function spacecraftHullPath(craft, inset) {
+    const pad = Math.max(0, finiteOr(inset, 0));
+    const left = -craft.width * 0.5 + pad;
+    const right = craft.width * 0.5 - pad;
+    const top = -craft.height * 0.5 + pad;
+    const bottom = craft.height * 0.5 - pad;
+    ctx.beginPath();
+    ctx.moveTo(left + 42, 54);
+    ctx.lineTo(left + 110, top + 92);
+    ctx.lineTo(left + 304, top + 58);
+    ctx.quadraticCurveTo(left + 442, top + 8, left + 612, top + 50);
+    ctx.lineTo(right - 198, top + 76);
+    ctx.quadraticCurveTo(right - 78, top + 84, right - 16, -20);
+    ctx.lineTo(right + 6, 56);
+    ctx.quadraticCurveTo(right - 74, bottom - 52, right - 226, bottom - 40);
+    ctx.lineTo(left + 252, bottom - 34);
+    ctx.quadraticCurveTo(left + 96, bottom - 32, left + 42, 54);
+    ctx.closePath();
+  }
+
+  function spacecraftDoorMetrics(craft) {
+    const door = craft.door || {};
+    const x = finiteOr(door.x, -craft.width * 0.5);
+    const y = finiteOr(door.y, 0);
+    const h = finiteOr(door.height, 220);
+    const w = finiteOr(door.width, 120);
+    return {
+      x,
+      y,
+      w,
+      h,
+      left: x - w * 0.36,
+      right: x + w * 0.68,
+      top: y - h * 0.5,
+      bottom: y + h * 0.5
+    };
+  }
+
+  function drawSpacecraftAirlockMouth(craft, inside, time) {
+    const door = spacecraftDoorMetrics(craft);
+    const pulse = 0.42 + Math.sin(time * 0.004) * 0.08;
+
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    const collarGradient = ctx.createLinearGradient(door.left, door.top, door.right + 34, door.bottom);
+    collarGradient.addColorStop(0, inside ? "rgba(30, 36, 43, 0.94)" : "rgba(35, 42, 50, 0.98)");
+    collarGradient.addColorStop(0.58, inside ? "rgba(18, 23, 30, 0.98)" : "rgba(27, 33, 41, 0.98)");
+    collarGradient.addColorStop(1, "rgba(8, 11, 17, 0.98)");
+    ctx.fillStyle = collarGradient;
+    ctx.strokeStyle = "rgba(8, 10, 15, 0.96)";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(door.left + 28, door.top + 8);
+    ctx.lineTo(door.right + 20, door.top + 34);
+    ctx.lineTo(door.right + 20, door.bottom - 34);
+    ctx.lineTo(door.left + 28, door.bottom - 8);
+    ctx.quadraticCurveTo(door.left - 18, door.y, door.left + 28, door.top + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(139, 151, 162, 0.32)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(door.right - 6, door.top + 42);
+    ctx.lineTo(door.right - 6, door.bottom - 42);
+    ctx.moveTo(door.left + 42, door.top + 22);
+    ctx.lineTo(door.right + 6, door.top + 44);
+    ctx.moveTo(door.left + 42, door.bottom - 22);
+    ctx.lineTo(door.right + 6, door.bottom - 44);
+    ctx.stroke();
+
+    ctx.fillStyle = inside ? "rgba(6, 9, 15, 0.82)" : "rgba(2, 5, 10, 0.92)";
+    ctx.strokeStyle = "rgba(3, 5, 9, 0.94)";
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(door.left + 34, door.top + 26);
+    ctx.lineTo(door.right - 18, door.top + 46);
+    ctx.lineTo(door.right - 18, door.bottom - 46);
+    ctx.lineTo(door.left + 32, door.bottom - 26);
+    ctx.quadraticCurveTo(door.left - 2, door.y, door.left + 34, door.top + 26);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255, 209, 102, " + pulse + ")";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(door.left + 40, door.top + 32);
+    ctx.lineTo(door.right - 28, door.top + 50);
+    ctx.lineTo(door.right - 28, door.bottom - 50);
+    ctx.lineTo(door.left + 38, door.bottom - 32);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(123, 134, 143, 0.34)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i += 1) {
+      const y = door.top + 56 + i * ((door.h - 112) / 3);
+      ctx.beginPath();
+      ctx.moveTo(door.left + 38, y);
+      ctx.lineTo(door.right - 32, y + 5);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "rgba(14, 18, 24, 0.9)";
+    roundRectPath(door.right - 18, door.top + 54, 14, door.h - 108, 5);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSpacecraftPlate(x, y, w, h, radius, fill, stroke) {
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke || "rgba(10, 13, 18, 0.72)";
+    ctx.lineWidth = 2;
+    roundRectPath(x, y, w, h, radius);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function spacecraftTextureUnit(seed, index) {
+    const value = textureNoise(seed, index);
+    return value - Math.floor(value);
+  }
+
+  function drawSpacecraftHullTexture(craft, time, inside) {
+    const seed = craft.id * 37 + (inside ? 19 : 3);
+    for (let i = 0; i < 24; i += 1) {
+      const n = spacecraftTextureUnit(seed, i);
+      const x = -craft.width * 0.42 + craft.width * ((n + i * 0.173) % 0.86);
+      const y = -craft.height * 0.34 + craft.height * ((n * 1.91 + i * 0.117) % 0.58);
+      const w = 28 + spacecraftTextureUnit(seed + 5, i) * 54;
+      const h = 8 + spacecraftTextureUnit(seed + 11, i) * 16;
+      const alpha = inside ? 0.28 : 0.42;
+      ctx.fillStyle = i % 3 === 0
+        ? "rgba(93, 101, 111, " + alpha + ")"
+        : "rgba(18, 22, 29, " + (alpha * 0.9) + ")";
+      roundRectPath(x, y, w, h, 3);
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = inside ? "rgba(110, 123, 132, 0.18)" : "rgba(136, 148, 158, 0.28)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i += 1) {
+      const x = -craft.width * 0.32 + i * craft.width * 0.12 + Math.sin(time * 0.001 + i) * 2;
+      ctx.beginPath();
+      ctx.moveTo(x, -craft.height * 0.34);
+      ctx.lineTo(x + 24, craft.height * 0.32);
+      ctx.stroke();
+    }
+  }
+
+  function drawSpacecraftSideThrusters(craft, time) {
+    const baseX = -craft.width * 0.5 + 470;
+    const nozzleY = 22;
+    const pulse = 0.64 + Math.sin(time * 0.011) * 0.18;
+    const nozzleX = baseX + Math.sin(time * 0.002) * 1.8;
+    const flameLength = 150 + Math.sin(time * 0.018) * 24;
+    const flameHalf = 34 + Math.sin(time * 0.014 + 1.2) * 4;
+
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    const recessGradient = ctx.createLinearGradient(nozzleX - 36, nozzleY - 46, nozzleX + 48, nozzleY + 46);
+    recessGradient.addColorStop(0, "rgba(12, 16, 22, 0.82)");
+    recessGradient.addColorStop(0.5, "rgba(29, 36, 44, 0.88)");
+    recessGradient.addColorStop(1, "rgba(7, 10, 15, 0.9)");
+    ctx.fillStyle = recessGradient;
+    ctx.strokeStyle = "rgba(5, 7, 11, 0.84)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(nozzleX - 42, nozzleY - 48);
+    ctx.lineTo(nozzleX + 30, nozzleY - 36);
+    ctx.quadraticCurveTo(nozzleX + 58, nozzleY, nozzleX + 30, nozzleY + 36);
+    ctx.lineTo(nozzleX - 42, nozzleY + 48);
+    ctx.quadraticCurveTo(nozzleX - 58, nozzleY, nozzleX - 42, nozzleY - 48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    const glow = ctx.createRadialGradient(nozzleX - 62, nozzleY, 8, nozzleX - 76, nozzleY, flameLength * 0.72);
+    glow.addColorStop(0, "rgba(255, 245, 154, " + (0.24 * pulse) + ")");
+    glow.addColorStop(0.45, "rgba(255, 210, 42, " + (0.16 * pulse) + ")");
+    glow.addColorStop(1, "rgba(255, 185, 35, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.ellipse(nozzleX - flameLength * 0.52, nozzleY, flameLength * 0.68, flameHalf * 1.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 16; i += 1) {
+      const lane = (i - 7.5) / 7.5;
+      const jitter = Math.sin(time * 0.026 + i * 1.45);
+      const startX = nozzleX - 16 - i * 1.3;
+      const startY = nozzleY + lane * flameHalf * 0.62 + jitter * 3.5;
+      const endX = nozzleX - flameLength * (0.36 + i * 0.026) - Math.max(0, jitter) * 12;
+      const endY = nozzleY + lane * flameHalf * (1.05 + Math.abs(jitter) * 0.22) + jitter * 5;
+      const strokeAlpha = 0.36 + (i % 4) * 0.1;
+
+      ctx.strokeStyle = i % 4 === 0
+        ? "rgba(255, 255, 196, " + strokeAlpha + ")"
+        : "rgba(255, 220, 34, " + strokeAlpha + ")";
+      ctx.lineWidth = i % 4 === 0 ? 2.8 : 1.7;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.quadraticCurveTo(
+        (startX + endX) * 0.5,
+        nozzleY + lane * flameHalf * 0.32 + jitter * 8,
+        endX,
+        endY
+      );
+      ctx.stroke();
+    }
+
+    const nozzleGradient = ctx.createLinearGradient(nozzleX - 34, nozzleY - 42, nozzleX + 34, nozzleY + 42);
+    nozzleGradient.addColorStop(0, "rgba(9, 12, 18, 0.98)");
+    nozzleGradient.addColorStop(0.42, "rgba(45, 52, 60, 0.98)");
+    nozzleGradient.addColorStop(1, "rgba(94, 100, 108, 0.94)");
+    ctx.fillStyle = nozzleGradient;
+    ctx.strokeStyle = "rgba(4, 6, 10, 0.92)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(nozzleX - 34, nozzleY - 34);
+    ctx.lineTo(nozzleX + 16, nozzleY - 26);
+    ctx.quadraticCurveTo(nozzleX + 42, nozzleY, nozzleX + 16, nozzleY + 26);
+    ctx.lineTo(nozzleX - 34, nozzleY + 34);
+    ctx.quadraticCurveTo(nozzleX - 50, nozzleY, nozzleX - 34, nozzleY - 34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(176, 186, 194, 0.4)";
+    ctx.lineWidth = 2;
+    for (let i = -2; i <= 2; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(nozzleX - 25, nozzleY + i * 10);
+      ctx.lineTo(nozzleX + 13, nozzleY + i * 6);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "rgba(255, 235, 118, " + (0.62 * pulse) + ")";
+    ctx.beginPath();
+    ctx.ellipse(nozzleX - 34, nozzleY, 9, 24, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawSpacecraftCockpit(craft, inside, time) {
+    const right = craft.width * 0.5;
+    const canopyX = right - 148;
+    const canopyY = -82;
+    const pulse = 0.74 + Math.sin(time * 0.004) * 0.08;
+
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    ctx.fillStyle = inside ? "rgba(8, 15, 22, 0.62)" : "rgba(5, 12, 20, 0.72)";
+    ctx.strokeStyle = "rgba(7, 10, 15, 0.82)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(canopyX - 66, canopyY - 44);
+    ctx.quadraticCurveTo(canopyX + 4, canopyY - 76, canopyX + 86, canopyY - 40);
+    ctx.quadraticCurveTo(canopyX + 112, canopyY - 5, canopyX + 78, canopyY + 38);
+    ctx.quadraticCurveTo(canopyX + 10, canopyY + 58, canopyX - 70, canopyY + 34);
+    ctx.quadraticCurveTo(canopyX - 92, canopyY - 2, canopyX - 66, canopyY - 44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    const glass = ctx.createLinearGradient(canopyX - 74, canopyY - 48, canopyX + 90, canopyY + 42);
+    glass.addColorStop(0, "rgba(170, 247, 255, " + (0.44 * pulse) + ")");
+    glass.addColorStop(0.42, "rgba(51, 122, 151, " + (0.34 * pulse) + ")");
+    glass.addColorStop(1, "rgba(16, 33, 52, " + (0.82 * pulse) + ")");
+    ctx.fillStyle = glass;
+    ctx.beginPath();
+    ctx.moveTo(canopyX - 50, canopyY - 32);
+    ctx.quadraticCurveTo(canopyX + 8, canopyY - 56, canopyX + 68, canopyY - 28);
+    ctx.quadraticCurveTo(canopyX + 88, canopyY - 2, canopyX + 58, canopyY + 24);
+    ctx.quadraticCurveTo(canopyX + 2, canopyY + 40, canopyX - 54, canopyY + 22);
+    ctx.quadraticCurveTo(canopyX - 70, canopyY - 4, canopyX - 50, canopyY - 32);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(214, 251, 255, 0.54)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(canopyX - 34, canopyY - 28);
+    ctx.quadraticCurveTo(canopyX + 8, canopyY - 42, canopyX + 50, canopyY - 24);
+    ctx.moveTo(canopyX - 18, canopyY + 20);
+    ctx.quadraticCurveTo(canopyX + 22, canopyY + 28, canopyX + 56, canopyY + 8);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(8, 12, 18, 0.62)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(canopyX - 4, canopyY - 48);
+    ctx.lineTo(canopyX + 4, canopyY + 34);
+    ctx.moveTo(canopyX + 48, canopyY - 34);
+    ctx.lineTo(canopyX + 22, canopyY + 30);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSpacecraftExterior(craft, time) {
+    const damaged = liveSpacecraftComponents(craft).length < craft.components.length;
+    const hullPulse = damaged ? 0.08 + Math.sin(time * 0.018) * 0.05 : 0;
+    ctx.save();
+    spacecraftHullPath(craft, 0);
+    ctx.fillStyle = "#20262e";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(7, 9, 14, 0.9)";
+    ctx.lineWidth = 7;
+    ctx.stroke();
+
+    spacecraftHullPath(craft, 10);
+    ctx.fillStyle = "rgba(54, 61, 69, " + (0.96 - hullPulse) + ")";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(137, 151, 163, 0.24)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.clip();
+
+    const roomColors = ["#394049", "#313842", "#44464a", "#2b3139"];
+    let roomIndex = 0;
+    for (const component of craft.components) {
+      if (component.health <= 0) {
+        continue;
+      }
+      if (component.kind !== "room") {
+        continue;
+      }
+      const healthRatio = clamp(component.health / Math.max(1, component.maxHealth), 0, 1);
+      const base = roomColors[roomIndex % roomColors.length];
+      roomIndex += 1;
+      ctx.fillStyle = healthRatio > 0.45 ? base : "#2b2527";
+      ctx.strokeStyle = component.flash > 0 ? "rgba(255, 213, 122, 0.95)" : "rgba(151, 164, 179, 0.42)";
+      ctx.lineWidth = component.flash > 0 ? 4 : 2;
+      roundRectPath(component.x - component.w * 0.5 + 6, component.y - component.h * 0.5 + 8, component.w - 12, component.h - 16, 8);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    drawSpacecraftHullTexture(craft, time, false);
+    drawSpacecraftSideThrusters(craft, time);
+
+    for (const component of craft.components) {
+      if (component.health <= 0 || component.kind === "room" || component.kind === "turret") {
+        continue;
+      }
+      const x = component.x - component.w * 0.5;
+      const y = component.y - component.h * 0.5;
+      const fill = component.kind === "engine" ? "#4b3b38" : component.color || "#4a535a";
+      drawSpacecraftPlate(x, y, component.w, component.h, 7, fill, component.flash > 0 ? "rgba(255, 213, 122, 0.9)" : "rgba(7, 9, 14, 0.72)");
+      if (component.kind === "engine") {
+        const pulse = 0.58 + Math.sin(time * 0.006) * 0.22;
+        ctx.fillStyle = "rgba(255, 139, 82, " + (pulse * 0.58) + ")";
+        ctx.beginPath();
+        ctx.ellipse(component.x + component.w * 0.28, component.y + 44, 13, component.h * 0.18, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    drawSpacecraftCockpit(craft, false, time);
+
+    ctx.restore();
+
+    for (const component of craft.components) {
+      if (component.health <= 0) {
+        drawBrokenSpacecraftComponent(component);
+      } else if (component.kind === "turret") {
+        drawSpacecraftTurret(component, time);
+      } else if (component.flash > 0 || component.health < component.maxHealth * 0.98) {
+        ctx.save();
+        ctx.translate(component.x, component.y);
+        drawSpacecraftComponentHealth(component);
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawSpacecraftInterior(craft, time) {
+    ctx.save();
+    spacecraftHullPath(craft, 0);
+    ctx.fillStyle = "#0f1319";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(4, 6, 10, 0.92)";
+    ctx.lineWidth = 7;
+    ctx.stroke();
+
+    spacecraftHullPath(craft, 12);
+    ctx.clip();
+    ctx.fillStyle = "#171c23";
+    ctx.fillRect(-craft.width * 0.5, -craft.height * 0.5, craft.width, craft.height);
+    drawSpacecraftHullTexture(craft, time, true);
+
+    for (const component of craft.components) {
+      if (component.kind === "turret") {
+        continue;
+      }
+      if (component.health <= 0) {
+        drawBrokenSpacecraftComponent(component);
+        continue;
+      }
+
+      if (component.kind === "room") {
+        const floorY = component.y + component.h * 0.5 - Math.max(8, finiteOr(component.floorInset, 24));
+        const ceilingY = component.y - component.h * 0.5 + 18;
+        const left = component.x - component.w * 0.5;
+        const right = component.x + component.w * 0.5;
+        ctx.fillStyle = component.color || "#252b33";
+        ctx.strokeStyle = component.flash > 0 ? "rgba(255, 213, 122, 0.95)" : "rgba(105, 118, 128, 0.3)";
+        ctx.lineWidth = component.flash > 0 ? 4 : 2;
+        roundRectPath(left + 4, ceilingY, component.w - 8, floorY - ceilingY + 8, 7);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(8, 10, 14, 0.82)";
+        roundRectPath(left + 2, floorY - 10, component.w - 4, 20, 5);
+        ctx.fill();
+        if (component.id === "airlock") {
+          const door = craft.door || {};
+          const thresholdLeft = finiteOr(door.x, -craft.width * 0.5) - 82;
+          const thresholdWidth = Math.max(12, left - thresholdLeft + 16);
+          roundRectPath(thresholdLeft, floorY - 10, thresholdWidth, 20, 5);
+          ctx.fill();
+        }
+        ctx.strokeStyle = "rgba(157, 169, 178, 0.32)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(left + 10, floorY - 11);
+        ctx.lineTo(right - 10, floorY - 11);
+        ctx.stroke();
+        if (component.id === "airlock") {
+          const door = craft.door || {};
+          const thresholdLeft = finiteOr(door.x, -craft.width * 0.5) - 82;
+          ctx.beginPath();
+          ctx.moveTo(thresholdLeft + 7, floorY - 11);
+          ctx.lineTo(left + 16, floorY - 11);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = "rgba(104, 112, 119, 0.22)";
+        ctx.lineWidth = 1.2;
+        for (let x = left + 18; x < right - 12; x += 30) {
+          ctx.beginPath();
+          ctx.moveTo(x, floorY - 9);
+          ctx.lineTo(x + 18, floorY + 8);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = "rgba(9, 12, 16, 0.6)";
+        roundRectPath(left + 7, ceilingY + 8, 6, floorY - ceilingY - 4, 3);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = component.color || "#4b535c";
+        roundRectPath(component.x - component.w * 0.38, component.y - component.h * 0.34, component.w * 0.76, component.h * 0.68, 6);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(230, 238, 240, 0.28)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.save();
+      ctx.translate(component.x, component.y);
+      drawSpacecraftComponentHealth(component);
+      ctx.restore();
+    }
+    drawSpacecraftCockpit(craft, true, time);
+    ctx.restore();
+
+    for (const component of craft.components) {
+      if (component.kind === "turret" && component.health > 0) {
+        drawSpacecraftTurret(component, time);
+      }
+    }
+  }
+
+  function drawBrokenSpacecraftComponent(component) {
+    ctx.save();
+    ctx.translate(component.x, component.y);
+    ctx.strokeStyle = "rgba(255, 126, 92, 0.42)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-component.w * 0.38, -component.h * 0.28);
+    ctx.lineTo(component.w * 0.36, component.h * 0.32);
+    ctx.moveTo(component.w * 0.3, -component.h * 0.34);
+    ctx.lineTo(-component.w * 0.32, component.h * 0.24);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSpacecraftDoor(craft, inside, time) {
+    drawSpacecraftAirlockMouth(craft, inside, time);
+  }
+
+  function drawSpacecraftTurret(component, time) {
+    ctx.save();
+    ctx.translate(component.x, component.y);
+    ctx.rotate(finiteOr(component.aimAngle, component.angle));
+    ctx.fillStyle = component.flash > 0 ? "#ffd57a" : "#6a5964";
+    ctx.strokeStyle = "rgba(18, 20, 28, 0.76)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, component.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#262b35";
+    roundRectPath(4, -6, 46, 12, 4);
+    ctx.fill();
+    ctx.stroke();
+    if (component.disabledTimer > 0 || component.health <= 0) {
+      ctx.strokeStyle = "rgba(255, 126, 92, 0.82)";
+      ctx.beginPath();
+      ctx.moveTo(-15, -15);
+      ctx.lineTo(15, 15);
+      ctx.moveTo(15, -15);
+      ctx.lineTo(-15, 15);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawSpacecraftComponentHealth(component) {
+    const ratio = clamp(component.health / Math.max(1, component.maxHealth), 0, 1);
+    if (ratio >= 0.98 && component.flash <= 0) {
+      return;
+    }
+    const w = Math.min(86, Math.max(46, component.w * 0.45));
+    const y = component.h * 0.5 - 14;
+    ctx.fillStyle = "rgba(6, 8, 12, 0.72)";
+    roundRectPath(-w * 0.5, y, w, 7, 3);
+    ctx.fill();
+    ctx.fillStyle = ratio > 0.45 ? "#9dff7a" : ratio > 0.2 ? "#ffd166" : "#ff7e5c";
+    roundRectPath(-w * 0.5, y, w * ratio, 7, 3);
+    ctx.fill();
+  }
+
+  function drawSpacecraftNpcs(craft, time, inside) {
+    for (const npc of craft.npcs) {
+      if (!inside && Math.hypot(npc.x - craft.door.x, npc.y - craft.door.y) > 130) {
+        continue;
+      }
+      drawTraderNpc(npc, time);
+    }
+  }
+
+  function drawTraderNpc(npc, time) {
+    ctx.save();
+    ctx.translate(npc.x, npc.y);
+    const crouching = Boolean(npc.crouching);
+    if (crouching) {
+      ctx.translate(0, 13);
+      ctx.scale(1, 0.86);
+    }
+    const walk = crouching ? 0 : Math.sin(npc.walkCycle || 0) * 4;
+    const oppositeWalk = Math.cos(npc.walkCycle || 0) * 3.5;
+    const aimAngle = finiteOr(npc.aimAngle, 0);
+    const shoulderBob = (crouching ? 7 : 0) + Math.sin((npc.walkCycle || 0) * 0.5) * 1.8;
+    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
+    ctx.lineCap = "round";
+
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(-12, -8);
+    ctx.lineTo(-17, 19 + walk);
+    ctx.lineTo(-18, 36 + walk * 0.3);
+    ctx.moveTo(12, -8);
+    ctx.lineTo(15, 19 - walk);
+    ctx.lineTo(18, 36 - walk * 0.3);
+    ctx.stroke();
+
+    ctx.fillStyle = "#302d2b";
+    roundRectPath(-25, 32 + walk * 0.3, 18, 10, 4);
+    ctx.fill();
+    roundRectPath(7, 32 - walk * 0.3, 18, 10, 4);
+    ctx.fill();
+
+    ctx.fillStyle = "#6d5845";
+    ctx.strokeStyle = "rgba(8, 10, 14, 0.84)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-24, -39 + shoulderBob);
+    ctx.quadraticCurveTo(0, -52 + shoulderBob, 24, -39 + shoulderBob);
+    ctx.lineTo(19, 15);
+    ctx.quadraticCurveTo(0, 27, -19, 15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#3e332b";
+    ctx.beginPath();
+    ctx.moveTo(-9, -42 + shoulderBob);
+    ctx.lineTo(0, 12);
+    ctx.lineTo(10, -42 + shoulderBob);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#caa98a";
+    ctx.beginPath();
+    ctx.arc(0, -65 + shoulderBob, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#42372f";
+    ctx.beginPath();
+    ctx.ellipse(0, -76 + shoulderBob, 24, 12, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#172534";
+    roundRectPath(-15, -70 + shoulderBob, 30, 10, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(113, 225, 236, 0.72)";
+    ctx.beginPath();
+    ctx.ellipse(-6, -65 + shoulderBob, 5.5, 3.5, -0.15, 0, Math.PI * 2);
+    ctx.ellipse(7, -65 + shoulderBob, 5.5, 3.5, 0.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-18, -31 + shoulderBob);
+    ctx.quadraticCurveTo(-34, -16 + walk * 0.25, -27, -1 + walk * 0.2);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(18, -31 + shoulderBob);
+    ctx.rotate(aimAngle);
+    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(-4, 0);
+    ctx.lineTo(20, oppositeWalk * 0.08);
+    ctx.stroke();
+
+    ctx.fillStyle = "#caa98a";
+    ctx.beginPath();
+    ctx.arc(21, oppositeWalk * 0.08, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#27313a";
+    ctx.strokeStyle = "rgba(7, 9, 13, 0.86)";
+    ctx.lineWidth = 3;
+    roundRectPath(18, -7, 56, 12, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#111821";
+    roundRectPath(64, -4, 22, 6, 3);
+    ctx.fill();
+    ctx.fillStyle = "#5c4a38";
+    roundRectPath(30, 5, 10, 13, 3);
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+
+    const screen = worldToScreen(npc.worldX, npc.worldY - 92);
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = "600 12px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(245, 237, 221, 0.86)";
+    ctx.fillText(npc.name, screen.x, screen.y);
+    ctx.restore();
   }
 
   function updatePlayerLasers(dt, options) {
@@ -20888,7 +27013,7 @@
 
       let stoppedByHit = false;
       for (const mob of allCombatMobs()) {
-        if (mob.health <= 0 || mob.hitCooldown > 0) {
+        if (mob.health <= 0 || mob.hitCooldown > 0 || isPlayerTeamMob(mob)) {
           continue;
         }
         const hitMobId = mob.kind + ":" + mob.id;
@@ -20955,7 +27080,7 @@
 
   function resolveMobBodyCollisions() {
     for (const mob of allCombatMobs()) {
-      if (mob.health <= 0) {
+      if (mob.health <= 0 || isPlayerTeamMob(mob)) {
         continue;
       }
 
@@ -21029,6 +27154,7 @@
           const damage = solidBodyImpactDamage(particle, impactSpeedForDamage, 18);
           markMobDamagedByBody(mob, particle);
           knockMob(mob, nx, ny, bodyImpactKnockbackForce(particle, impactSpeedForDamage));
+          triggerBossBodyEvade(mob, particle, nx, ny, impactSpeedForDamage);
           if (damageMob(mob, damage, particle.color, mobName(mob) + " crushed by " + particle.tier.article + " " + particle.tier.name + ".", {
             notification: bodyDefeatNotificationOptions(mob, particle, "crushed")
           })) {
@@ -21048,22 +27174,27 @@
     const muzzleDistance = rival.radius + 18;
     const laserColor = shadeColor(rival.color, 64);
 
-    rivalProjectiles.push({
-      id: nextRivalProjectileId++,
-      x: rival.x + aim.x * muzzleDistance,
-      y: rival.y + aim.y * muzzleDistance,
-      vx: aim.x * rivalProjectileSpeed + rival.vx * 0.18,
-      vy: aim.y * rivalProjectileSpeed + rival.vy * 0.18,
-      radius: 5,
-      length: randomRange(34, 46),
-      color: laserColor,
-      life: 2.2,
-      maxLife: 2.2,
-      damage: difficultyMobDamage(rivalProjectileDamage),
-      toolDisable: 0,
-      cause: "Alienoid laser",
-      targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
-    });
+    const bossShotOffsets = rival.isBoss ? [-13, 13] : [0];
+    for (const offset of bossShotOffsets) {
+      const normalX = -aim.y;
+      const normalY = aim.x;
+      rivalProjectiles.push({
+        id: nextRivalProjectileId++,
+        x: rival.x + aim.x * muzzleDistance + normalX * offset,
+        y: rival.y + aim.y * muzzleDistance + normalY * offset,
+        vx: aim.x * (rivalProjectileSpeed + (rival.isBoss ? 60 : 0)) + rival.vx * 0.18,
+        vy: aim.y * (rivalProjectileSpeed + (rival.isBoss ? 60 : 0)) + rival.vy * 0.18,
+        radius: rival.isBoss ? 7 : 5,
+        length: randomRange(rival.isBoss ? 48 : 34, rival.isBoss ? 64 : 46),
+        color: laserColor,
+        life: rival.isBoss ? 2.5 : 2.2,
+        maxLife: rival.isBoss ? 2.5 : 2.2,
+        damage: difficultyMobDamage(bossScaledDamage(rival, rivalProjectileDamage)),
+        toolDisable: 0,
+        cause: rival.isBoss ? "Alienoid boss laser" : "Alienoid laser",
+        targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
+      });
+    }
 
     sparks.push({
       x: rival.x + aim.x * muzzleDistance,
@@ -21075,7 +27206,7 @@
     });
 
     playSound("enemyLaser");
-    rival.shootCooldown = randomRange(4.5, 7.25);
+    rival.shootCooldown = randomRange(4.5, 7.25) * bossCooldownScale(rival);
     rival.rotation = Math.atan2(aim.y, aim.x) + Math.PI / 2;
   }
 
@@ -21096,19 +27227,19 @@
       vx: aim.x * 980 + tesla.vx * 0.08,
       vy: aim.y * 980 + tesla.vy * 0.08,
       radius: 8,
-      length: randomRange(76, 104),
+      length: randomRange(tesla.isBoss ? 108 : 76, tesla.isBoss ? 142 : 104),
       color,
       life: 0.58,
       maxLife: 0.58,
-      damage: difficultyMobDamage(teslaLightningDamage),
-      toolDisable: teslaToolDisableDuration,
-      cause: "Tesla lightning",
+      damage: tesla.isBoss ? difficultyMobDamage(bossScaledDamage(tesla, teslaLightningDamage)) : 0,
+      toolDisable: teslaToolDisableDuration * (tesla.isBoss ? 1.45 : 1),
+      cause: tesla.isBoss ? "Tesla boss lightning" : "Tesla lightning",
       lightning: true,
       targetStructureId: target && target.kind === "structure" ? target.structure.id : 0,
       targetPlayerId: target && target.target && !target.target.local && target.target.remote ? target.target.remote.playerId : ""
     });
 
-    tesla.shootCooldown = randomRange(2.3, 3.8);
+    tesla.shootCooldown = randomRange(2.3, 3.8) * bossCooldownScale(tesla);
     tesla.lightningFlash = 0.32;
     tesla.lightningWarmup = 0;
     tesla.lightningAngle = Math.atan2(aim.y, aim.x);
@@ -21142,14 +27273,14 @@
       y: rocket.y + aim.y * muzzleDistance + normalY * side * 17,
       vx: aim.x * satelliteMissileSpeed + rocket.vx * 0.12,
       vy: aim.y * satelliteMissileSpeed + rocket.vy * 0.12,
-      radius: 10,
-      length: randomRange(42, 54),
+      radius: rocket.isBoss ? 13 : 10,
+      length: randomRange(rocket.isBoss ? 58 : 42, rocket.isBoss ? 72 : 54),
       color,
       life: 2.4,
       maxLife: 2.4,
-      damage: difficultyMobDamage(satelliteMissileDamage),
+      damage: difficultyMobDamage(bossScaledDamage(rocket, satelliteMissileDamage)),
       toolDisable: 0,
-      cause: "Satellite missile",
+      cause: rocket.isBoss ? "Satellite boss missile" : "Satellite missile",
       rocket: true,
       targetStructureId: target && target.kind === "structure" ? target.structure.id : 0,
       targetPlayerId: target && target.target && !target.target.local && target.target.remote ? target.target.remote.playerId : ""
@@ -21171,6 +27302,64 @@
     playSound("missile");
   }
 
+  function fireSatelliteBossSeekingMissiles(rocket, playerTarget) {
+    if (!rocket || !rocket.isBoss) {
+      return;
+    }
+    const targetPlayer = playerTarget && playerTarget.player ? playerTarget.player : player;
+    const toTarget = normalize(targetPlayer.x - rocket.x, targetPlayer.y - rocket.y);
+    const baseAngle = Math.atan2(toTarget.y, toTarget.x);
+    const color = { r: 255, g: 184, b: 88 };
+    const muzzleDistance = rocket.radius + 22;
+
+    for (let i = 0; i < satelliteBossSeekingMissileCount; i += 1) {
+      const lineT = satelliteBossSeekingMissileCount <= 1 ? 0 : i / (satelliteBossSeekingMissileCount - 1) * 2 - 1;
+      const angle = baseAngle + lineT * 0.46;
+      const dirX = Math.cos(angle);
+      const dirY = Math.sin(angle);
+      const sideX = -toTarget.y;
+      const sideY = toTarget.x;
+      rivalProjectiles.push({
+        id: nextRivalProjectileId++,
+        x: rocket.x + toTarget.x * muzzleDistance + sideX * lineT * 28,
+        y: rocket.y + toTarget.y * muzzleDistance + sideY * lineT * 28,
+        vx: dirX * satelliteBossSeekingMissileSpeed + rocket.vx * 0.1,
+        vy: dirY * satelliteBossSeekingMissileSpeed + rocket.vy * 0.1,
+        radius: 12,
+        length: randomRange(62, 80),
+        color,
+        life: satelliteBossSeekingMissileLife,
+        maxLife: satelliteBossSeekingMissileLife,
+        damage: difficultyMobDamage(bossScaledDamage(rocket, satelliteMissileDamage * 0.82)),
+        toolDisable: 0,
+        cause: "Satellite boss heat-seeking missile",
+        rocket: true,
+        heatSeeking: true,
+        targetSpeed: satelliteMissileSpeed * 0.94,
+        turnRate: satelliteBossSeekingMissileTurnRate,
+        targetPlayerId: playerTarget && !playerTarget.local && playerTarget.remote ? playerTarget.remote.playerId : ""
+      });
+    }
+
+    rocket.blastTimer = 0.28;
+    rocket.blastDirX = toTarget.x;
+    rocket.blastDirY = toTarget.y;
+    rocket.rotation = baseAngle + Math.PI / 2;
+    rocket.recoverTimer = Math.max(finiteOr(rocket.recoverTimer, 0), 0.48);
+    rocket.scanProgress = Math.max(0, finiteOr(rocket.scanProgress, 0) - 0.35);
+    resetBossAltAttackCooldown(rocket);
+
+    sparks.push({
+      x: rocket.x + toTarget.x * muzzleDistance,
+      y: rocket.y + toTarget.y * muzzleDistance,
+      radius: 58,
+      color,
+      life: 0.28,
+      maxLife: 0.28
+    });
+    playSound("missile");
+  }
+
   function fireFighterGuns(fighter, target, dist) {
     const targetPlayer = target && target.player ? target.player : player;
     const leadTime = clamp(dist / rivalProjectileSpeed, 0, 1.15);
@@ -21181,7 +27370,7 @@
     const normalY = aim.x;
     const color = shadeColor(fighter.color, 46);
 
-    for (const side of [-1, 1]) {
+    for (const side of (fighter.isBoss ? [-1.45, 0, 1.45] : [-1, 1])) {
       rivalProjectiles.push({
         id: nextRivalProjectileId++,
         x: fighter.x + aim.x * (fighter.radius + 16) + normalX * side * 19,
@@ -21193,16 +27382,60 @@
         color,
         life: 2.0,
         maxLife: 2.0,
-        damage: difficultyMobDamage(9),
+        damage: difficultyMobDamage(bossScaledDamage(fighter, 9)),
         toolDisable: 0,
-        cause: "Fighter cannon",
+        cause: fighter.isBoss ? "Fighter boss cannon" : "Fighter cannon",
         targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
       });
     }
 
-    fighter.shootCooldown = randomRange(2.2, 3.4);
+    fighter.shootCooldown = randomRange(2.2, 3.4) * bossCooldownScale(fighter);
     fighter.rotation = Math.atan2(aim.y, aim.x) + Math.PI / 2;
     playSound("fighter");
+  }
+
+  function fireFighterBossMachineGunShot(fighter, target, dist) {
+    const targetPlayer = target && target.player ? target.player : player;
+    const leadTime = clamp(dist / (rivalProjectileSpeed + 180), 0, 0.9);
+    const targetX = targetPlayer.x + finiteOr(targetPlayer.vx, 0) * leadTime * 0.58;
+    const targetY = targetPlayer.y + finiteOr(targetPlayer.vy, 0) * leadTime * 0.58;
+    const baseAngle = Math.atan2(targetY - fighter.y, targetX - fighter.x);
+    const aimAngle = baseAngle + randomRange(-0.075, 0.075);
+    const aimX = Math.cos(aimAngle);
+    const aimY = Math.sin(aimAngle);
+    const normalX = -aimY;
+    const normalY = aimX;
+    const side = Math.floor(finiteOr(fighter.machineGunShots, 0)) % 2 === 0 ? -1 : 1;
+    const color = shadeColor(fighter.color, 64);
+
+    rivalProjectiles.push({
+      id: nextRivalProjectileId++,
+      x: fighter.x + aimX * (fighter.radius + 18) + normalX * side * 18,
+      y: fighter.y + aimY * (fighter.radius + 18) + normalY * side * 18,
+      vx: aimX * (rivalProjectileSpeed + randomRange(150, 235)) + fighter.vx * 0.12,
+      vy: aimY * (rivalProjectileSpeed + randomRange(150, 235)) + fighter.vy * 0.12,
+      radius: 4,
+      length: randomRange(30, 40),
+      color,
+      life: 1.55,
+      maxLife: 1.55,
+      damage: difficultyMobDamage(bossScaledDamage(fighter, 5.5)),
+      toolDisable: 0,
+      cause: "Fighter boss machine gun",
+      targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
+    });
+
+    sparks.push({
+      x: fighter.x + aimX * (fighter.radius + 24),
+      y: fighter.y + aimY * (fighter.radius + 24),
+      radius: 18,
+      color,
+      life: 0.09,
+      maxLife: 0.09
+    });
+
+    fighter.rotation = aimAngle + Math.PI / 2;
+    playSound("fighter", { throttleKey: "fighterBossMachineGun:" + fighter.id, throttle: 0.06 });
   }
 
   function distanceToSegment(px, py, ax, ay, bx, by) {
@@ -21534,7 +27767,7 @@
   function resolveShieldGeneratorMobCollisions(dt) {
     for (const mob of allCombatMobs()) {
       tickMobShieldImpactCooldowns(mob, dt);
-      if (mob.health <= 0) {
+      if (mob.health <= 0 || isPlayerTeamMob(mob)) {
         continue;
       }
 
@@ -21603,6 +27836,208 @@
     }
   }
 
+  function bossScaledDamage(mob, damage) {
+    return mob && mob.isBoss ? damage * mobBossDamageMultiplier : damage;
+  }
+
+  function bossCooldownScale(mob) {
+    return mob && mob.isBoss ? 0.68 : 1;
+  }
+
+  function isMobDisabled(mob) {
+    return Boolean(mob && finiteOr(mob.disabledTimer, 0) > 0);
+  }
+
+  function disableMob(mob, duration, color) {
+    if (!mob || mob.health <= 0) {
+      return false;
+    }
+
+    const disableDuration = Math.max(0, finiteOr(duration, 0));
+    if (disableDuration <= 0) {
+      return false;
+    }
+
+    mob.disabledTimer = Math.max(finiteOr(mob.disabledTimer, 0), disableDuration);
+    mob.flash = Math.max(finiteOr(mob.flash, 0), 0.16);
+    mob.lightningWarmup = 0;
+    mob.lockTimer = 0;
+    mob.volleyTimer = 0;
+    mob.volleyShots = 0;
+    mob.chargeTimer = 0;
+    mob.chargePower = 0;
+    mob.shieldActive = 0;
+
+    if (mob.kind === "ufo") {
+      mob.tractorDisabledTimer = Math.max(finiteOr(mob.tractorDisabledTimer, 0), disableDuration);
+    }
+    if (mob.kind === "rambot" || mob.kind === "rocket" || mob.kind === "satellite") {
+      mob.recoverTimer = Math.max(finiteOr(mob.recoverTimer, 0), Math.min(0.85, disableDuration));
+    }
+
+    if (color) {
+      sparks.push({
+        x: mob.x,
+        y: mob.y,
+        radius: mob.radius * 1.55,
+        color,
+        life: 0.24,
+        maxLife: 0.24
+      });
+    }
+    return true;
+  }
+
+  function updateDisabledMobDrift(mob, dt) {
+    mob.vx *= Math.pow(0.42, dt);
+    mob.vy *= Math.pow(0.42, dt);
+    mob.x += mob.vx * dt;
+    mob.y += mob.vy * dt;
+    mob.lightningWarmup = 0;
+    mob.scanProgress = 0;
+    mob.shieldActive = 0;
+    mob.rotation += Math.sin(performance.now() * 0.003 + finiteOr(mob.wobble, 0)) * 0.08 * dt;
+  }
+
+  function emitEmpPulseEffect(x, y, radius, color, life) {
+    sparks.push({
+      x,
+      y,
+      radius,
+      color,
+      life,
+      maxLife: life,
+      empPulse: true
+    });
+  }
+
+  function applyEmpPulse(x, y, radius, duration, options) {
+    const settings = options && typeof options === "object" ? options : {};
+    const color = settings.color || { r: 126, g: 232, b: 255 };
+    const range = Math.max(1, finiteOr(radius, empPulseRange));
+    const disableDuration = Math.max(0, finiteOr(duration, empPulseDisableDuration));
+    let affected = 0;
+
+    emitEmpPulseEffect(x, y, range, color, 0.72);
+
+    if (settings.affectMobs !== false) {
+      for (const mob of allCombatMobs()) {
+        if (!mob || mob === settings.sourceMob || mob.health <= 0 || isPlayerTeamMob(mob)) {
+          continue;
+        }
+        const distance = Math.hypot(mob.x - x, mob.y - y);
+        if (distance <= range + finiteOr(mob.radius, 0) * 0.75 && disableMob(mob, disableDuration, color)) {
+          affected += 1;
+          const away = normalize(mob.x - x, mob.y - y);
+          knockMob(mob, away.x, away.y, 95);
+        }
+      }
+    }
+
+    if (settings.affectStructures) {
+      for (const structure of structures) {
+        if (!structure || structure.health <= 0) {
+          continue;
+        }
+        const distance = Math.hypot(structure.x - x, structure.y - y);
+        if (distance <= range + structureHitRadius(structure)) {
+          disableStructure(structure, disableDuration, color);
+          affected += 1;
+        }
+      }
+    }
+
+    if (settings.affectPlayers) {
+      if (!deathState.active && player.health > 0 && !isPlayerInsideSpacecraft()) {
+        const distance = Math.hypot(player.x - x, player.y - y);
+        if (distance <= range + player.radius) {
+          jamLocalPlayerTools(disableDuration);
+          const away = normalize(player.x - x, player.y - y);
+          player.vx += away.x * 180;
+          player.vy += away.y * 180;
+          affected += 1;
+        }
+      }
+      for (const target of collectRemoteCombatPlayers()) {
+        const remotePlayer = target && target.player;
+        if (!remotePlayer || !target.remote || !canDamageRemotePlayerFromPve(target.remote)) {
+          continue;
+        }
+        const distance = Math.hypot(remotePlayer.x - x, remotePlayer.y - y);
+        if (distance <= range + (remotePlayer.radius || player.radius)) {
+          const away = normalize(remotePlayer.x - x, remotePlayer.y - y);
+          sendRemoteEntityEffect(target.remote, {
+            entityType: "player",
+            sourceKind: "mob",
+            cause: settings.cause || "EMP pulse",
+            damage: 0,
+            impulseX: away.x * 180,
+            impulseY: away.y * 180,
+            toolDisable: disableDuration,
+            color
+          });
+          affected += 1;
+        }
+      }
+    }
+
+    playSound("lightning", { throttleKey: "empPulse", throttle: 0.35, volume: 0.82 });
+    return affected;
+  }
+
+  function tickBossAltAttackCooldown(mob, dt) {
+    if (!mob || !mob.isBoss) {
+      return false;
+    }
+    mob.altAttackCooldown = finiteOr(mob.altAttackCooldown, randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax)) - dt;
+    return mob.altAttackCooldown <= 0;
+  }
+
+  function resetBossAltAttackCooldown(mob) {
+    if (mob && mob.isBoss) {
+      mob.altAttackCooldown = randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax);
+    }
+  }
+
+  function bossChaseMaxSpeed(mob, baseMaxSpeed, desiredX, desiredY) {
+    if (!mob) {
+      return baseMaxSpeed;
+    }
+    let chaseMaxSpeed = baseMaxSpeed;
+    if (mob.isBoss) {
+      const speed = Math.hypot(finiteOr(mob.vx, 0), finiteOr(mob.vy, 0));
+      const desiredLength = Math.hypot(finiteOr(desiredX, 0), finiteOr(desiredY, 0));
+      const alignment = speed > 8 && desiredLength > 0.001
+        ? clamp((mob.vx / speed) * (desiredX / desiredLength) + (mob.vy / speed) * (desiredY / desiredLength), 0, 1)
+        : 0;
+      const sustainedMotion = clamp((speed - baseMaxSpeed * 0.45) / Math.max(1, baseMaxSpeed * 0.9), 0, 1);
+      chaseMaxSpeed = baseMaxSpeed * (mobBossMaxSpeedMultiplier + mobBossDirectionalSpeedBonus * alignment * sustainedMotion);
+    }
+    if (finiteOr(mob.bossBodyEvadeTimer, 0) > 0) {
+      return Math.max(chaseMaxSpeed, clamp(finiteOr(mob.bossBodyEvadeSpeedCap, 0), chaseMaxSpeed, bossBodyEvadeMaxSpeed));
+    }
+    return chaseMaxSpeed;
+  }
+
+  function isMobSpawnRestActive() {
+    return mobSpawnRestTimer > 0 || mobSpawnRestDrainTimer > 0;
+  }
+
+  function updateBossSpawnPressure(mob, dt) {
+    if (!mob || !mob.isBoss || mob.health <= 0) {
+      return;
+    }
+    if (isMobSpawnRestActive()) {
+      return;
+    }
+    const kind = mob.bossBaseKind || mob.kind;
+    if (!mobSpawnTimers || !Object.prototype.hasOwnProperty.call(mobSpawnTimers, kind)) {
+      return;
+    }
+    const interval = difficultyMobSpawnInterval(kind);
+    mobSpawnTimers[kind] = Math.min(finiteOr(mobSpawnTimers[kind], interval), interval * mobBossSpawnTimerCeilingScale);
+  }
+
   function hasClearShotAtCombatTarget(rival, target) {
     const ignoredBodyId = rival.landed ? rival.landed.bodyId : null;
     const targetPlayer = target && target.player ? target.player : player;
@@ -21620,12 +28055,68 @@
     return !findBlockingLandableBody(x, y, mob.x, mob.y, mob.radius * 0.2, ignoredBodyId);
   }
 
+  function fireAlienoidBossShotgunBlast(rival, target, dist) {
+    const targetPlayer = target && target.player ? target.player : player;
+    const leadTime = clamp(dist / rivalProjectileSpeed, 0, 1.2);
+    const targetX = targetPlayer.x + finiteOr(targetPlayer.vx, 0) * leadTime * 0.6;
+    const targetY = targetPlayer.y + finiteOr(targetPlayer.vy, 0) * leadTime * 0.6;
+    const aim = normalize(targetX - rival.x, targetY - rival.y);
+    const aimAngle = Math.atan2(aim.y, aim.x);
+    const muzzleDistance = rival.radius + 20;
+    const pelletCount = 9;
+    const spread = 0.46;
+    const laserColor = shadeColor(rival.color, 82);
+    const targetPlayerId = target && !target.local && target.remote ? target.remote.playerId : "";
+
+    for (let i = 0; i < pelletCount; i += 1) {
+      const lineT = pelletCount <= 1 ? 0 : i / (pelletCount - 1) * 2 - 1;
+      const clusteredT = Math.sign(lineT) * Math.pow(Math.abs(lineT), 1.35);
+      const angleOffset = clusteredT * spread + randomRange(-0.085, 0.085);
+      const dirX = Math.cos(aimAngle + angleOffset);
+      const dirY = Math.sin(aimAngle + angleOffset);
+      const sideX = -dirY;
+      const sideY = dirX;
+      const muzzleScatter = randomRange(-12, 12);
+      const forwardScatter = randomRange(-5, 9);
+      const pelletSpeed = rivalProjectileSpeed + randomRange(45, 175);
+      const pelletLife = randomRange(1.18, 1.68);
+      rivalProjectiles.push({
+        id: nextRivalProjectileId++,
+        x: rival.x + dirX * (muzzleDistance + forwardScatter) + sideX * muzzleScatter,
+        y: rival.y + dirY * (muzzleDistance + forwardScatter) + sideY * muzzleScatter,
+        vx: dirX * pelletSpeed + rival.vx * 0.12,
+        vy: dirY * pelletSpeed + rival.vy * 0.12,
+        radius: randomRange(4.4, 6.2),
+        length: randomRange(32, 54),
+        color: laserColor,
+        life: pelletLife,
+        maxLife: pelletLife,
+        damage: difficultyMobDamage(bossScaledDamage(rival, rivalProjectileDamage * 0.42)),
+        toolDisable: 0,
+        cause: "Alienoid boss shotgun blast",
+        targetPlayerId
+      });
+    }
+
+    sparks.push({
+      x: rival.x + aim.x * muzzleDistance,
+      y: rival.y + aim.y * muzzleDistance,
+      radius: 42,
+      color: rival.color,
+      life: 0.22,
+      maxLife: 0.22
+    });
+    playSound("enemyLaser", { throttleKey: "alienoidBossShotgun:" + rival.id, throttle: 0.35 });
+    rival.rotation = aimAngle + Math.PI / 2;
+    resetBossAltAttackCooldown(rival);
+  }
+
   function findTurretTarget(turret) {
     let best = null;
     let bestDistance = Infinity;
 
     for (const mob of allCombatMobs()) {
-      if (mob.health <= 0) {
+      if (mob.health <= 0 || isPlayerTeamMob(mob)) {
         continue;
       }
 
@@ -21706,7 +28197,7 @@
     const minCount = Math.max(1, Math.floor(finiteOr(settings.minCount, missileLauncherMinClusterSize)));
     const clusterRadius = Math.max(40, finiteOr(settings.clusterRadius, missileLauncherClusterRadius));
     const mobs = allCombatMobs().filter((mob) => {
-      if (!mob || mob.health <= 0) {
+      if (!mob || mob.health <= 0 || isPlayerTeamMob(mob)) {
         return false;
       }
       if (sourceStructure && !launcherCanSeeMob(sourceStructure, mob)) {
@@ -21880,7 +28371,7 @@
     let hits = 0;
 
     for (const mob of allCombatMobs()) {
-      if (!mob || mob.health <= 0) {
+      if (!mob || mob.health <= 0 || isPlayerTeamMob(mob)) {
         continue;
       }
       const dist = Math.hypot(mob.x - x, mob.y - y);
@@ -21923,24 +28414,40 @@
       const previousY = missile.y;
       missile.life = Math.max(0, finiteOr(missile.life, launcherMissileLife) - dt);
 
-      const cluster = findMobCluster(missile.x, missile.y, 760, {
-        minCount: 1,
-        clusterRadius: missileLauncherClusterRadius,
-        preferredX: missile.targetX,
-        preferredY: missile.targetY
-      });
-      if (cluster) {
-        const leadTime = clamp(Math.hypot(cluster.x - missile.x, cluster.y - missile.y) / launcherMissileSpeed, 0, 0.8);
-        missile.targetX = cluster.x + finiteOr(cluster.vx, 0) * leadTime * 0.4;
-        missile.targetY = cluster.y + finiteOr(cluster.vy, 0) * leadTime * 0.4;
-        missile.targetCount = cluster.count;
+      if (missile.guided) {
+        const path = Array.isArray(missile.guidedPath) ? missile.guidedPath : [];
+        let targetIndex = clamp(Math.floor(finiteOr(missile.guidedIndex, 1)), 1, Math.max(1, path.length - 1));
+        while (path[targetIndex] && targetIndex < path.length - 1 && Math.hypot(path[targetIndex].x - missile.x, path[targetIndex].y - missile.y) < 46) {
+          targetIndex += 1;
+        }
+        missile.guidedIndex = targetIndex;
+        const pathTarget = path[targetIndex] || path[path.length - 1];
+        if (pathTarget) {
+          missile.targetX = pathTarget.x;
+          missile.targetY = pathTarget.y;
+        }
+      } else {
+        const cluster = findMobCluster(missile.x, missile.y, 760, {
+          minCount: 1,
+          clusterRadius: missileLauncherClusterRadius,
+          preferredX: missile.targetX,
+          preferredY: missile.targetY
+        });
+        if (cluster) {
+          const leadTime = clamp(Math.hypot(cluster.x - missile.x, cluster.y - missile.y) / launcherMissileSpeed, 0, 0.8);
+          missile.targetX = cluster.x + finiteOr(cluster.vx, 0) * leadTime * 0.4;
+          missile.targetY = cluster.y + finiteOr(cluster.vy, 0) * leadTime * 0.4;
+          missile.targetCount = cluster.count;
+        }
       }
 
       const desiredAngle = Math.atan2(missile.targetY - missile.y, missile.targetX - missile.x);
       const speed = Math.max(launcherMissileSpeed * 0.45, Math.hypot(missile.vx, missile.vy) || launcherMissileSpeed);
       const currentAngle = Math.atan2(missile.vy, missile.vx);
-      const angle = currentAngle + clamp(shortestAngleDelta(currentAngle, desiredAngle), -launcherMissileTurnRate * dt, launcherMissileTurnRate * dt);
-      const targetSpeed = launcherMissileSpeed * (missile.life > launcherMissileLife - 0.24 ? 0.74 : 1);
+      const turnRate = missile.guided ? launcherMissileTurnRate * 1.2 : launcherMissileTurnRate;
+      const angle = currentAngle + clamp(shortestAngleDelta(currentAngle, desiredAngle), -turnRate * dt, turnRate * dt);
+      const maxLife = finiteOr(missile.maxLife, launcherMissileLife);
+      const targetSpeed = launcherMissileSpeed * (missile.life > maxLife - 0.24 ? 0.74 : missile.guided ? 0.92 : 1);
       const nextSpeed = speed + (targetSpeed - speed) * (1 - Math.pow(0.05, dt));
       missile.vx = Math.cos(angle) * nextSpeed;
       missile.vy = Math.sin(angle) * nextSpeed;
@@ -21952,7 +28459,13 @@
       const dir = normalize(missile.vx, missile.vy);
       const tailX = missile.x - dir.x * sweptLength;
       const tailY = missile.y - dir.y * sweptLength;
-      let shouldExplode = Math.hypot(missile.x - missile.targetX, missile.y - missile.targetY) < 34;
+      const guidedAtFinalPoint = missile.guided && missile.guidedReleased && (
+        !Array.isArray(missile.guidedPath) ||
+        finiteOr(missile.guidedIndex, 1) >= missile.guidedPath.length - 1
+      );
+      let shouldExplode = missile.guided && !missile.guidedReleased
+        ? false
+        : Math.hypot(missile.x - missile.targetX, missile.y - missile.targetY) < (guidedAtFinalPoint ? 42 : 34);
 
       for (const mob of allCombatMobs()) {
         if (!mob || mob.health <= 0) {
@@ -22492,6 +29005,7 @@
       const previousX = projectile.x;
       const previousY = projectile.y;
       projectile.life -= dt;
+      steerHeatSeekingProjectile(projectile, dt);
       projectile.x += projectile.vx * dt;
       projectile.y += projectile.vy * dt;
 
@@ -22523,6 +29037,9 @@
           }
 
           if (projectile.lightning) {
+            if (projectile.damage > 0) {
+              damageStructure(structure, projectile.damage, projectile.color);
+            }
             disableStructure(structure, structureTeslaDisableDuration, projectile.color);
           } else {
             damageStructure(structure, difficultyMobDamage(structureRocketDamage), projectile.color);
@@ -22534,6 +29051,11 @@
       }
 
       if (hitStructure) {
+        continue;
+      }
+
+      if (damageSpacecraftComponentFromProjectile(projectile, tailX, tailY, hitRadius)) {
+        rivalProjectiles.splice(i, 1);
         continue;
       }
 
@@ -22553,27 +29075,57 @@
         continue;
       }
 
+      let hitFamiliar = false;
+      for (const familiar of familiarCombatMobs()) {
+        if (!familiar || familiar.health <= 0) {
+          continue;
+        }
+        const familiarDist = distanceToSegment(familiar.x, familiar.y, tailX, tailY, projectile.x, projectile.y);
+        if (familiarDist >= familiar.radius + hitRadius) {
+          continue;
+        }
+        knockMob(familiar, dirX, dirY, 125);
+        damageMob(familiar, Math.max(0, finiteOr(projectile.damage, rivalProjectileDamage)), projectile.color, "Your familiar was hit.");
+        sparks.push({
+          x: projectile.x,
+          y: projectile.y,
+          radius: 38,
+          color: projectile.color,
+          life: 0.28,
+          maxLife: 0.28
+        });
+        rivalProjectiles.splice(i, 1);
+        hitFamiliar = true;
+        break;
+      }
+
+      if (hitFamiliar) {
+        continue;
+      }
+
       const playerHitScale = projectile.rocket ? 0.86 : 0.72;
       const dist = distanceToPlayerHurtboxSegment(player, tailX, tailY, projectile.x, projectile.y);
       const hitDistance = player.radius * playerHitScale + hitRadius;
-      const overlapsPlayer = dist < hitDistance;
+      const overlapsPlayer = !isPlayerInsideSpacecraft() && dist < hitDistance;
       const canDamagePlayer = player.hitCooldown <= 0 || (projectile.rocket && player.hitCooldown <= 0.16);
+      const damage = Math.max(0, finiteOr(projectile.damage, rivalProjectileDamage));
+      const toolDisable = Math.max(0, finiteOr(projectile.toolDisable, 0));
 
-      if (overlapsPlayer && canDamagePlayer) {
+      if (overlapsPlayer && (canDamagePlayer || toolDisable > 0)) {
         const nx = dirX;
         const ny = dirY;
-        const damage = Math.max(0, finiteOr(projectile.damage, rivalProjectileDamage));
-        const toolDisable = Math.max(0, finiteOr(projectile.toolDisable, 0));
         if (player.landed) {
           detachFromBody(160);
         }
         player.vx += nx * 190 + projectile.vx * 0.34;
         player.vy += ny * 190 + projectile.vy * 0.34;
-        damageLocalPlayer(damage, {
-          cause: projectile.cause || "Alienoid laser",
-          cooldown: projectile.rocket ? 0.54 : 0.7,
-          flash: 0.28
-        });
+        if (canDamagePlayer && damage > 0) {
+          damageLocalPlayer(damage, {
+            cause: projectile.cause || "Alienoid laser",
+            cooldown: projectile.rocket ? 0.54 : 0.7,
+            flash: 0.28
+          });
+        }
         if (toolDisable > 0) {
           jamLocalPlayerTools(toolDisable);
         }
@@ -22646,12 +29198,209 @@
       const fromPlayer = Math.hypot(projectile.x - player.x, projectile.y - player.y);
       const cullDistance = Math.max(width, height) * 1.65 + 900;
       if (projectile.life <= 0 || fromPlayer > cullDistance) {
+        if (projectile.heatSeeking && projectile.life <= 0) {
+          sparks.push({
+            x: projectile.x,
+            y: projectile.y,
+            radius: 86,
+            color: projectile.color,
+            life: 0.32,
+            maxLife: 0.32
+          });
+          playSound("hit", { throttleKey: "seekingMissileExpire" });
+        }
         rivalProjectiles.splice(i, 1);
       }
     }
   }
 
+  function steerHeatSeekingProjectile(projectile, dt) {
+    if (!projectile || !projectile.heatSeeking) {
+      return;
+    }
+    const target = nearestCombatPlayerTarget(projectile.x, projectile.y);
+    const targetPlayer = target && target.player ? target.player : player;
+    const currentSpeed = Math.max(80, Math.hypot(projectile.vx, projectile.vy) || finiteOr(projectile.targetSpeed, satelliteMissileSpeed));
+    const targetSpeed = Math.max(120, finiteOr(projectile.targetSpeed, satelliteMissileSpeed));
+    const leadTime = clamp(Math.hypot(targetPlayer.x - projectile.x, targetPlayer.y - projectile.y) / targetSpeed, 0, 0.58);
+    const desiredAngle = Math.atan2(
+      targetPlayer.y + finiteOr(targetPlayer.vy, 0) * leadTime * 0.48 - projectile.y,
+      targetPlayer.x + finiteOr(targetPlayer.vx, 0) * leadTime * 0.48 - projectile.x
+    );
+    const currentAngle = Math.atan2(projectile.vy, projectile.vx);
+    const turnRate = Math.max(0.4, finiteOr(projectile.turnRate, satelliteBossSeekingMissileTurnRate));
+    const angle = currentAngle + clamp(shortestAngleDelta(currentAngle, desiredAngle), -turnRate * dt, turnRate * dt);
+    const nextSpeed = currentSpeed + (targetSpeed - currentSpeed) * (1 - Math.pow(0.04, dt));
+    projectile.vx = Math.cos(angle) * nextSpeed;
+    projectile.vy = Math.sin(angle) * nextSpeed;
+  }
+
+  function normalizeUfoBossBeamModeValue(mode) {
+    return mode === "cooldown" || mode === "drain" ? mode : "tractor";
+  }
+
+  function ufoBossBeamDuration(mode) {
+    if (mode === "cooldown") {
+      return ufoBossNoBeamDuration;
+    }
+    if (mode === "drain") {
+      return ufoBossDrainBeamDuration;
+    }
+    return ufoBossNormalBeamDuration;
+  }
+
+  function nextUfoBossBeamMode(mode) {
+    if (mode === "tractor") {
+      return "cooldown";
+    }
+    if (mode === "cooldown") {
+      return "drain";
+    }
+    return "tractor";
+  }
+
+  function updateUfoBossBeamState(ufo, dt) {
+    if (!ufo || !ufo.isBoss) {
+      return "tractor";
+    }
+
+    let mode = normalizeUfoBossBeamModeValue(ufo.bossBeamMode);
+    let timer = finiteOr(ufo.bossBeamTimer, ufoBossBeamDuration(mode)) - dt;
+    while (timer <= 0) {
+      mode = nextUfoBossBeamMode(mode);
+      timer += ufoBossBeamDuration(mode);
+    }
+    ufo.bossBeamMode = mode;
+    ufo.bossBeamTimer = timer;
+    return mode;
+  }
+
+  function ufoBossBeamMode(ufo) {
+    return ufo && ufo.isBoss ? normalizeUfoBossBeamModeValue(ufo.bossBeamMode) : "tractor";
+  }
+
+  function ufoHasActiveBeam(ufo) {
+    return Boolean(ufo && ufo.health > 0 && !isMobDisabled(ufo) && finiteOr(ufo.tractorDisabledTimer, 0) <= 0 && ufoBossBeamMode(ufo) !== "cooldown");
+  }
+
+  function ufoHasTractorBeam(ufo) {
+    return ufoHasActiveBeam(ufo) && (!ufo.isBoss || ufoBossBeamMode(ufo) === "tractor");
+  }
+
+  function ufoHasPlayerDrainBeam(ufo) {
+    return ufoHasActiveBeam(ufo) && ufo.isBoss && ufoBossBeamMode(ufo) === "drain";
+  }
+
+  function steerUfoBeamToward(ufo, targetX, targetY, dt, turnScale) {
+    if (!Number.isFinite(ufo.beamAngle)) {
+      ufo.beamAngle = Math.PI / 2;
+    }
+    const targetAngle = Math.atan2(targetY - ufo.y, targetX - ufo.x);
+    const turn = shortestAngleDelta(ufo.beamAngle, targetAngle);
+    ufo.beamAngle += clamp(turn, -ufoBeamMaxTurn * finiteOr(turnScale, 1) * dt, ufoBeamMaxTurn * finiteOr(turnScale, 1) * dt);
+  }
+
+  function ufoBeamHitStrength(ufo, targetPlayer) {
+    if (!ufo || !targetPlayer) {
+      return 0;
+    }
+
+    const dirX = Math.cos(ufo.beamAngle);
+    const dirY = Math.sin(ufo.beamAngle);
+    const normalX = -dirY;
+    const normalY = dirX;
+    const originX = ufo.x + dirX * 26;
+    const originY = ufo.y + dirY * 26;
+    const relX = targetPlayer.x - originX;
+    const relY = targetPlayer.y - originY;
+    const forward = relX * dirX + relY * dirY;
+    const side = relX * normalX + relY * normalY;
+    const targetReach = Math.max(0, finiteOr(targetPlayer.radius, player.radius) * 0.5);
+    const surfaceForward = clamp(forward - targetReach, 0, ufoTractorRange);
+    const beamHalf = ufoTractorWidth * (1 - clamp(surfaceForward / ufoTractorRange, 0, 1) * 0.55) + targetReach;
+
+    if (forward < -targetReach || forward - targetReach > ufoTractorRange || Math.abs(side) > beamHalf) {
+      return 0;
+    }
+    return clamp(1 - surfaceForward / ufoTractorRange, 0.28, 1) * clamp(1 - Math.abs(side) / Math.max(1, beamHalf), 0.2, 1);
+  }
+
+  function applyUfoBossPlayerDrainBeam(ufo, target, dt) {
+    if (!ufoHasPlayerDrainBeam(ufo)) {
+      return;
+    }
+
+    const playerTarget = target && target.player ? target.player : player;
+    steerUfoBeamToward(ufo, playerTarget.x, playerTarget.y, dt, 1.35);
+    const hitStrength = ufoBeamHitStrength(ufo, playerTarget);
+    if (hitStrength <= 0) {
+      ufo.playerDrainTickTimer = Math.max(0, finiteOr(ufo.playerDrainTickTimer, 0) - dt);
+      return;
+    }
+
+    const dirX = Math.cos(ufo.beamAngle);
+    const dirY = Math.sin(ufo.beamAngle);
+    const drainInterval = ufoBossPlayerDrainTickInterval;
+    ufo.playerDrainTickTimer = finiteOr(ufo.playerDrainTickTimer, 0) - dt;
+    if (ufo.playerDrainTickTimer > 0) {
+      return;
+    }
+    ufo.playerDrainTickTimer += drainInterval;
+
+    const damage = difficultyMobDamage(bossScaledDamage(ufo, ufoBossPlayerDrainRate) * drainInterval * hitStrength);
+    const impulseX = -dirX * 105 * hitStrength + finiteOr(ufo.vx, 0) * 0.12;
+    const impulseY = -dirY * 105 * hitStrength + finiteOr(ufo.vy, 0) * 0.12;
+    const beamColor = { r: 255, g: 73, b: 73 };
+
+    if (target && target.familiar) {
+      const familiar = target.player;
+      knockMob(familiar, -dirX, -dirY, 105 * hitStrength);
+      damageMob(familiar, damage, beamColor, "Your familiar was drained by the UFO boss.");
+    } else if (target && target.local) {
+      if (player.landed) {
+        detachFromBody(120);
+      }
+      player.vx += impulseX;
+      player.vy += impulseY;
+      damageLocalPlayer(damage, {
+        cause: "UFO boss drain beam",
+        cooldown: 0.18,
+        flash: 0.24
+      });
+    } else if (target && target.spacecraft && target.spacecraftComponent) {
+      damageSpacecraftComponent(target.spacecraft, target.spacecraftComponent, damage, beamColor);
+    } else if (target && target.remote && canDamageRemotePlayerFromPve(target.remote)) {
+      sendRemoteEntityEffect(target.remote, {
+        entityType: "player",
+        sourceKind: "mob",
+        cause: "UFO boss drain beam",
+        damage,
+        impulseX,
+        impulseY,
+        color: beamColor
+      });
+    }
+
+    sparks.push({
+      x: playerTarget.x,
+      y: playerTarget.y,
+      radius: 44,
+      color: beamColor,
+      life: 0.22,
+      maxLife: 0.22
+    });
+    playSound("ufoSiphon", {
+      throttleKey: "ufoBossDrain:" + ufo.id,
+      throttle: 0.42,
+      volume: 0.82
+    });
+  }
+
   function applyUfoTractorBeam(ufo, dt) {
+    if (!ufoHasTractorBeam(ufo)) {
+      return;
+    }
+
     let bestParticle = null;
     let bestScore = Infinity;
     const playerBody = player.landed ? bodyById(player.landed.bodyId) : null;
@@ -22679,9 +29428,7 @@
     }
 
     if (bestParticle) {
-      const targetAngle = Math.atan2(bestParticle.y - ufo.y, bestParticle.x - ufo.x);
-      const turn = shortestAngleDelta(ufo.beamAngle, targetAngle);
-      ufo.beamAngle += clamp(turn, -ufoBeamMaxTurn * dt, ufoBeamMaxTurn * dt);
+      steerUfoBeamToward(ufo, bestParticle.x, bestParticle.y, dt, 1);
     } else {
       const turn = shortestAngleDelta(ufo.beamAngle, ufo.rotation + Math.PI / 2);
       ufo.beamAngle += clamp(turn, -ufoBeamMaxTurn * 0.65 * dt, ufoBeamMaxTurn * 0.65 * dt);
@@ -22717,7 +29464,7 @@
       const toOriginX = originX - particle.x;
       const toOriginY = originY - particle.y;
 
-      if (shouldUfoSiphonBody(particle)) {
+      if (shouldUfoSiphonBody(ufo, particle)) {
         drainBodyWithUfoTractor(ufo, particle, pullStrength, centerStrength, dt);
         continue;
       }
@@ -22732,20 +29479,24 @@
 
       if (Math.hypot(toOriginX, toOriginY) < ufo.radius + particle.radius * 1.05) {
         const speed = Math.hypot(particle.vx, particle.vy);
-        if (isBoulderBody(particle)) {
+        if (shouldUfoImpactBody(ufo, particle)) {
           if (speed >= rivalBodyImpactSpeed && ufo.hitCooldown <= 0) {
             const damage = Math.min(90, 20 + Math.max(0, speed - rivalBodyImpactSpeed) * 0.18 + Math.sqrt(particle.mass) * 0.8);
             knockMob(ufo, toOrigin.x, toOrigin.y, 150 + speed * 0.34);
+            triggerBossBodyEvade(ufo, particle, toOrigin.x, toOrigin.y, speed);
             damageMob(ufo, damage, particle.color, "UFO cracked by " + particle.tier.article + " " + particle.tier.name + ".", {
               notification: bodyDefeatNotificationOptions(ufo, particle, "cracked")
             });
+            if (ufo.isBoss) {
+              ufo.tractorDisabledTimer = Math.max(finiteOr(ufo.tractorDisabledTimer, 0), ufoBossTractorImpactDisableDuration);
+            }
           }
           particle.vx -= toOrigin.x * (210 + speed * 0.18);
           particle.vy -= toOrigin.y * (210 + speed * 0.18);
           continue;
         }
 
-        if (!canUfoAbsorbParticle(particle)) {
+        if (!canUfoAbsorbParticle(ufo, particle)) {
           continue;
         }
 
@@ -22770,13 +29521,18 @@
     const previousTier = body.tier;
     const drain = Math.min(
       body.mass - 1,
-      (ufoBodyDrainRate + Math.sqrt(body.mass) * 0.045) * pullStrength * (0.35 + centerStrength * 0.65) * dt
+      bossScaledDamage(ufo, ufoBodyDrainRate + Math.sqrt(body.mass) * 0.045) * pullStrength * (0.35 + centerStrength * 0.65) * dt
     );
 
     if (drain <= 0) {
       return;
     }
 
+    playSound("ufoSiphon", {
+      throttleKey: "ufoSiphon:" + ufo.id,
+      throttle: 0.48,
+      volume: clamp(0.55 + pullStrength * 0.45, 0.55, 1)
+    });
     body.mass -= drain;
     updateBodyAfterMassChange(body, previousTier);
     body.textureSeed += drain * 0.013;
@@ -22948,7 +29704,7 @@
   }
 
   function updateUfoUndersideImpact(ufo) {
-    if (player.hitCooldown > 0 || deathState.active || player.health <= 0) {
+    if (!ufoHasTractorBeam(ufo) || player.hitCooldown > 0 || deathState.active || player.health <= 0) {
       return;
     }
 
@@ -22972,8 +29728,8 @@
 
     player.vx += dirX * 210 + ufo.vx * 0.38;
     player.vy += dirY * 210 + ufo.vy * 0.38;
-    damageLocalPlayer(difficultyMobDamage(ufoUndersideDamage), {
-      cause: "UFO underside",
+    damageLocalPlayer(difficultyMobDamage(bossScaledDamage(ufo, ufoUndersideDamage)), {
+      cause: ufo.isBoss ? "UFO boss underside" : "UFO underside",
       cooldown: 0.85,
       flash: 0.3
     });
@@ -23016,16 +29772,37 @@
     for (let i = ufos.length - 1; i >= 0; i -= 1) {
       const ufo = ufos[i];
       tickMobDamageTimers(ufo, dt);
+      ufo.tractorDisabledTimer = Math.max(0, finiteOr(ufo.tractorDisabledTimer, 0) - dt);
       ufo.flash = Math.max(0, ufo.flash - dt);
 
       if (ufo.health <= 0) {
         ufos.splice(i, 1);
         continue;
       }
+      if (isMobSummoning(ufo)) {
+        continue;
+      }
+      if (isPlayerTeamMob(ufo) && updateFamiliarMob(ufo, dt)) {
+        continue;
+      }
+      updateBossSpawnPressure(ufo, dt);
+      const beamMode = updateUfoBossBeamState(ufo, dt);
+      if (isMobDisabled(ufo)) {
+        ufo.tractorDisabledTimer = Math.max(finiteOr(ufo.tractorDisabledTimer, 0), finiteOr(ufo.disabledTimer, 0));
+        ufo.playerDrainTickTimer = 0;
+        updateDisabledMobDrift(ufo, dt);
+        continue;
+      }
 
       const target = nearestCombatPlayerTarget(ufo.x, ufo.y);
       const targetPlayer = target.player;
-      const attackTarget = ufoAttackTarget(target);
+      const attackTarget = ufo.isBoss && beamMode === "drain" ? {
+        kind: "player",
+        target,
+        x: targetPlayer.x,
+        y: targetPlayer.y,
+        radius: targetPlayer.radius || player.radius
+      } : ufoAttackTarget(target);
       const toPlayerX = targetPlayer.x - ufo.x;
       const toPlayerY = targetPlayer.y - ufo.y;
       const playerDist = Math.hypot(toPlayerX, toPlayerY) || 1;
@@ -23034,7 +29811,7 @@
       const dist = Math.hypot(toTargetX, toTargetY) || 1;
 
       if (playerDist > Math.max(width, height) * 2.7 + 1800) {
-        const spawn = randomOffscreenPoint(180, 560, targetPlayer);
+        const spawn = relocatedMobOffscreenPoint(180, 560, targetPlayer);
         ufo.x = spawn.x;
         ufo.y = spawn.y;
         ufo.vx = randomRange(-24, 24);
@@ -23047,8 +29824,9 @@
       const tangentX = -ny * ufo.strafeSign;
       const tangentY = nx * ufo.strafeSign;
       const desiredDistance = attackTarget.kind === "body" ? clamp(attackTarget.radius + 350, 430, 660) : 430;
-      const chaseForce = dist > desiredDistance ? 92 : -44;
-      const strafeForce = dist < 880 ? 56 : 18;
+      const noBeamBoost = ufo.isBoss && beamMode === "cooldown" ? 1.34 : 1;
+      const chaseForce = (dist > desiredDistance ? 92 : -44) * noBeamBoost;
+      const strafeForce = (dist < 880 ? 56 : 18) * noBeamBoost;
 
       ufo.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
       ufo.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
@@ -23058,7 +29836,7 @@
       ufo.vy *= Math.pow(0.75, dt);
 
       const speed = Math.hypot(ufo.vx, ufo.vy);
-      const maxSpeed = dist > 760 ? 170 : 132;
+      const maxSpeed = bossChaseMaxSpeed(ufo, (dist > 760 ? 170 : 132) * noBeamBoost, nx, ny);
       if (speed > maxSpeed) {
         ufo.vx = (ufo.vx / speed) * maxSpeed;
         ufo.vy = (ufo.vy / speed) * maxSpeed;
@@ -23067,9 +29845,72 @@
       ufo.x += ufo.vx * dt;
       ufo.y += ufo.vy * dt;
       applyUfoTractorBeam(ufo, dt);
+      applyUfoBossPlayerDrainBeam(ufo, target, dt);
       updateUfoUndersideImpact(ufo);
       ufo.rotation = ufo.beamAngle - Math.PI / 2;
     }
+  }
+
+  function nearestHostileMobTarget(source) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const mob of hostileCombatMobs()) {
+      if (!mob || mob === source || mob.health <= 0 || isMobSummoning(mob)) {
+        continue;
+      }
+      const distance = Math.hypot(mob.x - source.x, mob.y - source.y);
+      if (distance < bestDistance) {
+        best = mob;
+        bestDistance = distance;
+      }
+    }
+    return best ? { mob: best, distance: bestDistance } : null;
+  }
+
+  function updateFamiliarMob(mob, dt) {
+    const target = nearestHostileMobTarget(mob);
+    if (!target) {
+      mob.vx *= Math.pow(0.7, dt);
+      mob.vy *= Math.pow(0.7, dt);
+      mob.x += mob.vx * dt;
+      mob.y += mob.vy * dt;
+      return true;
+    }
+
+    const enemy = target.mob;
+    const dx = enemy.x - mob.x;
+    const dy = enemy.y - mob.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const tangentX = -ny * finiteOr(mob.strafeSign, 1);
+    const tangentY = nx * finiteOr(mob.strafeSign, 1);
+    const desiredDistance = Math.max(60, mob.radius + enemy.radius + 10);
+
+    mob.vx += nx * (dist > desiredDistance ? 165 : -48) * dt + tangentX * 32 * dt;
+    mob.vy += ny * (dist > desiredDistance ? 165 : -48) * dt + tangentY * 32 * dt;
+    mob.vx *= Math.pow(0.74, dt);
+    mob.vy *= Math.pow(0.74, dt);
+
+    const speed = Math.hypot(mob.vx, mob.vy);
+    const maxSpeed = mob.kind === "rocket" || mob.kind === "fighter" ? 230 : mob.kind === "rambot" ? 210 : 175;
+    if (speed > maxSpeed) {
+      mob.vx = (mob.vx / speed) * maxSpeed;
+      mob.vy = (mob.vy / speed) * maxSpeed;
+    }
+
+    mob.x += mob.vx * dt;
+    mob.y += mob.vy * dt;
+    mob.rotation = Math.atan2(mob.vy || ny, mob.vx || nx) + Math.PI / 2;
+
+    if (dist < mob.radius + enemy.radius + 14 && enemy.hitCooldown <= 0) {
+      knockMob(enemy, nx, ny, 125);
+      damageMob(enemy, familiarDamagePerSecond * dt * 6.5, mob.color, mobName(enemy) + " mauled by your familiar.");
+      mob.health = Math.max(0, finiteOr(mob.health, mob.maxHealth) - hostileFamiliarDamagePerSecond * dt * 3.5);
+      mob.flash = Math.max(finiteOr(mob.flash, 0), 0.1);
+    }
+
+    return true;
   }
 
   function updateRivals(dt) {
@@ -23082,8 +29923,20 @@
         rivals.splice(i, 1);
         continue;
       }
+      if (isMobSummoning(rival)) {
+        continue;
+      }
+      if (isPlayerTeamMob(rival) && updateFamiliarMob(rival, dt)) {
+        continue;
+      }
+      updateBossSpawnPressure(rival, dt);
 
       rival.shootCooldown = Math.max(0, rival.shootCooldown - dt);
+      const bossAltReady = tickBossAltAttackCooldown(rival, dt);
+      if (isMobDisabled(rival)) {
+        updateDisabledMobDrift(rival, dt);
+        continue;
+      }
 
       if (rival.landed) {
         updateLandedRival(rival, dt);
@@ -23097,7 +29950,7 @@
       const dist = Math.hypot(toPlayerX, toPlayerY) || 1;
 
       if (dist > Math.max(width, height) * 2.4 + 1600) {
-        const spawn = randomOffscreenPoint(150, 500, targetPlayer);
+        const spawn = relocatedMobOffscreenPoint(150, 500, targetPlayer);
         rival.x = spawn.x;
         rival.y = spawn.y;
         rival.vx = randomRange(-16, 16);
@@ -23120,6 +29973,9 @@
       if (dist < rivalShootRange && rival.shootCooldown <= 0 && hasClearShotAtCombatTarget(rival, target)) {
         fireRivalLaser(rival, target, dist);
       }
+      if (bossAltReady && dist < rivalShootRange * 1.16 && hasClearShotAtCombatTarget(rival, target)) {
+        fireAlienoidBossShotgunBlast(rival, target, dist);
+      }
 
       rival.vx += Math.sin(performance.now() * 0.0006 + rival.wobble) * 8 * dt;
       rival.vy += Math.cos(performance.now() * 0.0005 + rival.wobble) * 8 * dt;
@@ -23127,7 +29983,7 @@
       rival.vy *= Math.pow(0.72, dt);
 
       const speed = Math.hypot(rival.vx, rival.vy);
-      const maxSpeed = dist > 620 ? 185 : 142;
+      const maxSpeed = bossChaseMaxSpeed(rival, dist > 620 ? 275 : 190, nx, ny);
       if (speed > maxSpeed) {
         rival.vx = (rival.vx / speed) * maxSpeed;
         rival.vy = (rival.vy / speed) * maxSpeed;
@@ -23147,12 +30003,22 @@
       return;
     }
 
-    if (target && !target.local && target.remote) {
+    if (target && target.spacecraft && target.spacecraftComponent) {
+      damageSpacecraftComponent(
+        target.spacecraft,
+        target.spacecraftComponent,
+        difficultyMobDamage(bossScaledDamage(rambot, structureRambotDamage + rambotImpactDamage * 0.55)),
+        rambot.color,
+        target.spacecraft.name + " " + target.spacecraftComponent.label.toLowerCase() + " breached by a rambot."
+      );
+    } else if (target && target.familiar) {
+      damageMob(target.player, difficultyMobDamage(bossScaledDamage(rambot, rambotImpactDamage)), rambot.color, "Your familiar was rammed by a rambot.");
+    } else if (target && !target.local && target.remote) {
       sendRemoteEntityEffect(target.remote, {
         entityType: "player",
         sourceKind: "mob",
-        cause: "Rambot charge",
-        damage: difficultyMobDamage(rambotImpactDamage),
+        cause: rambot.isBoss ? "Rambot boss charge" : "Rambot charge",
+        damage: difficultyMobDamage(bossScaledDamage(rambot, rambotImpactDamage)),
         impulseX: nx * 360 + rambot.vx * 0.48,
         impulseY: ny * 360 + rambot.vy * 0.48,
         color: rambot.color
@@ -23164,8 +30030,8 @@
 
       player.vx += nx * 360 + rambot.vx * 0.48;
       player.vy += ny * 360 + rambot.vy * 0.48;
-      damageLocalPlayer(difficultyMobDamage(rambotImpactDamage), {
-        cause: "Rambot charge",
+      damageLocalPlayer(difficultyMobDamage(bossScaledDamage(rambot, rambotImpactDamage)), {
+        cause: rambot.isBoss ? "Rambot boss charge" : "Rambot charge",
         cooldown: 0.85,
         flash: 0.32
       });
@@ -23250,7 +30116,7 @@
       rambot.impactCooldown = 0.95;
       rambot.recoverTimer = Math.max(rambot.recoverTimer, 0.58);
       rambot.chargeTimer = 0;
-      damageStructure(structure, difficultyMobDamage(structureRambotDamage + Math.max(0, speed - rambotImpactSpeed) * 0.045), rambot.color);
+      damageStructure(structure, difficultyMobDamage(bossScaledDamage(rambot, structureRambotDamage + Math.max(0, speed - rambotImpactSpeed) * 0.045)), rambot.color);
       break;
     }
   }
@@ -23279,6 +30145,166 @@
     };
   }
 
+  function rambotBossBaseForwardAngle(rambot) {
+    return finiteOr(rambot.rotation, 0) - Math.PI / 2;
+  }
+
+  function clampedRambotBossHeadAngle(rambot, desiredAngle) {
+    const baseAngle = rambotBossBaseForwardAngle(rambot);
+    const offset = clamp(shortestAngleDelta(baseAngle, desiredAngle), -rambotBossHeadTurnLimit, rambotBossHeadTurnLimit);
+    return baseAngle + offset;
+  }
+
+  function updateRambotBossHeadTracking(rambot, x, y, dt, turnRate) {
+    if (!rambot || !rambot.isBoss) {
+      return;
+    }
+    const desiredAngle = Math.atan2(y - rambot.y, x - rambot.x);
+    const targetAngle = clampedRambotBossHeadAngle(rambot, desiredAngle);
+    const currentAngle = Number.isFinite(Number(rambot.headAngle)) ? rambot.headAngle : targetAngle;
+    rambot.headAngle = currentAngle + clamp(shortestAngleDelta(currentAngle, targetAngle), -turnRate * dt, turnRate * dt);
+  }
+
+  function tickRambotBossAltAttackCooldown(rambot, dt) {
+    if (!rambot || !rambot.isBoss) {
+      return false;
+    }
+    rambot.altAttackCooldown = finiteOr(rambot.altAttackCooldown, randomRange(rambotBossAltAttackCooldownMin, rambotBossAltAttackCooldownMax)) - dt;
+    return rambot.altAttackCooldown <= 0;
+  }
+
+  function resetRambotBossAltAttackCooldown(rambot) {
+    if (rambot && rambot.isBoss) {
+      rambot.altAttackCooldown = randomRange(rambotBossAltAttackCooldownMin, rambotBossAltAttackCooldownMax);
+    }
+  }
+
+  function rambotBossPistonExtension(rambot) {
+    const duration = Math.max(0.1, finiteOr(rambot.pistonDuration, rambotBossPistonDuration));
+    const elapsed = duration - Math.max(0, finiteOr(rambot.pistonTimer, 0));
+    const t = clamp(elapsed / duration, 0, 1);
+    if (t < 0.24) {
+      return 0;
+    }
+    if (t < 0.58) {
+      return (t - 0.24) / 0.34;
+    }
+    if (t < 0.78) {
+      return 1;
+    }
+    return 1 - (t - 0.78) / 0.22;
+  }
+
+  function startRambotBossPistonAttack(rambot, targetPlayer) {
+    rambot.pistonDuration = rambotBossPistonDuration;
+    rambot.pistonTimer = rambotBossPistonDuration;
+    rambot.pistonHit = false;
+    rambot.chargeTimer = 0;
+    rambot.recoverTimer = Math.max(finiteOr(rambot.recoverTimer, 0), 0.12);
+    rambot.vx *= 0.74;
+    rambot.vy *= 0.74;
+    updateRambotBossHeadTracking(rambot, targetPlayer.x, targetPlayer.y, 1 / 30, 18);
+    resetRambotBossAltAttackCooldown(rambot);
+    playSound("rambotCharge", { throttleKey: "rambotPiston:" + rambot.id, throttle: 0.65 });
+  }
+
+  function hitCombatPlayerWithRambotPiston(rambot, target, nx, ny, hitX, hitY) {
+    const targetPlayer = target && target.player ? target.player : player;
+    if (target && target.spacecraft && target.spacecraftComponent) {
+      damageSpacecraftComponent(
+        target.spacecraft,
+        target.spacecraftComponent,
+        difficultyMobDamage(bossScaledDamage(rambot, structureRambotDamage + rambotImpactDamage * 0.75)),
+        rambot.color,
+        target.spacecraft.name + " " + target.spacecraftComponent.label.toLowerCase() + " punched by the rambot boss."
+      );
+    } else if (target && target.familiar) {
+      knockMob(target.player, nx, ny, rambotBossPistonKnockback * 0.56);
+      damageMob(target.player, difficultyMobDamage(bossScaledDamage(rambot, rambotBossPistonDamage)), rambot.color, "Your familiar was punched by the rambot boss.");
+    } else if (target && !target.local && target.remote) {
+      sendRemoteEntityEffect(target.remote, {
+        entityType: "player",
+        sourceKind: "mob",
+        cause: "Rambot boss piston punch",
+        damage: difficultyMobDamage(bossScaledDamage(rambot, rambotBossPistonDamage)),
+        impulseX: nx * rambotBossPistonKnockback,
+        impulseY: ny * rambotBossPistonKnockback,
+        color: rambot.color
+      });
+    } else {
+      if (player.landed) {
+        detachFromBody(240);
+      }
+      player.vx += nx * rambotBossPistonKnockback;
+      player.vy += ny * rambotBossPistonKnockback;
+      damageLocalPlayer(difficultyMobDamage(bossScaledDamage(rambot, rambotBossPistonDamage)), {
+        cause: "Rambot boss piston punch",
+        cooldown: 0.82,
+        flash: 0.34
+      });
+    }
+
+    rambot.pistonHit = true;
+    rambot.impactCooldown = Math.max(finiteOr(rambot.impactCooldown, 0), 0.7);
+    rambot.vx -= nx * 140;
+    rambot.vy -= ny * 140;
+    sparks.push({
+      x: Number.isFinite(Number(hitX)) ? hitX : targetPlayer.x,
+      y: Number.isFinite(Number(hitY)) ? hitY : targetPlayer.y,
+      radius: 72,
+      color: rambot.color,
+      life: 0.34,
+      maxLife: 0.34
+    });
+  }
+
+  function updateRambotBossPistonImpact(rambot, target) {
+    if (!rambot || !rambot.isBoss || finiteOr(rambot.pistonTimer, 0) <= 0 || rambot.pistonHit) {
+      return;
+    }
+
+    const extension = rambotBossPistonExtension(rambot);
+    if (extension < 0.54) {
+      return;
+    }
+
+    const headAngle = Number.isFinite(Number(rambot.headAngle)) ? rambot.headAngle : rambotBossBaseForwardAngle(rambot);
+    const dirX = Math.cos(headAngle);
+    const dirY = Math.sin(headAngle);
+    const originX = rambot.x + dirX * (rambot.radius * 0.24);
+    const originY = rambot.y + dirY * (rambot.radius * 0.24);
+    const reach = rambot.radius * 0.42 + rambotBossPistonRange * extension;
+    const endX = originX + dirX * reach;
+    const endY = originY + dirY * reach;
+    const targetPlayer = target && target.player ? target.player : player;
+
+    if (targetPlayer && distanceToSegment(targetPlayer.x, targetPlayer.y, originX, originY, endX, endY) <= (targetPlayer.radius || player.radius) * 0.78 + 30) {
+      hitCombatPlayerWithRambotPiston(rambot, target || { local: true, remote: null, player }, dirX, dirY, endX, endY);
+      return;
+    }
+
+    for (const structure of structures) {
+      if (structure.health <= 0) {
+        continue;
+      }
+      if (distanceToSegment(structure.x, structure.y, originX, originY, endX, endY) > structureHitRadius(structure) + 28) {
+        continue;
+      }
+      damageStructure(structure, difficultyMobDamage(bossScaledDamage(rambot, structureRambotDamage + rambotBossPistonDamage * 0.72)), rambot.color);
+      rambot.pistonHit = true;
+      rambot.impactCooldown = Math.max(finiteOr(rambot.impactCooldown, 0), 0.7);
+      sparks.push({
+        x: structure.x,
+        y: structure.y,
+        radius: structureHitRadius(structure) * 1.45,
+        color: rambot.color,
+        life: 0.32,
+        maxLife: 0.32
+      });
+      break;
+    }
+  }
+
   function updateRambots(dt) {
     for (let i = rambots.length - 1; i >= 0; i -= 1) {
       const rambot = rambots[i];
@@ -23288,6 +30314,21 @@
 
       if (rambot.health <= 0) {
         rambots.splice(i, 1);
+        continue;
+      }
+      if (isMobSummoning(rambot)) {
+        continue;
+      }
+      if (isPlayerTeamMob(rambot) && updateFamiliarMob(rambot, dt)) {
+        continue;
+      }
+      updateBossSpawnPressure(rambot, dt);
+      const bossAltReady = tickRambotBossAltAttackCooldown(rambot, dt);
+      if (isMobDisabled(rambot)) {
+        rambot.chargeTimer = 0;
+        rambot.pistonTimer = 0;
+        rambot.recoverTimer = Math.max(finiteOr(rambot.recoverTimer, 0), 0.18);
+        updateDisabledMobDrift(rambot, dt);
         continue;
       }
 
@@ -23302,7 +30343,7 @@
       const dist = Math.hypot(toTargetX, toTargetY) || 1;
 
       if (playerDist > Math.max(width, height) * 2.5 + 1800) {
-        const spawn = randomOffscreenPoint(220, 640, targetPlayer);
+        const spawn = relocatedMobOffscreenPoint(220, 640, targetPlayer);
         rambot.x = spawn.x;
         rambot.y = spawn.y;
         rambot.vx = randomRange(-10, 10);
@@ -23310,6 +30351,7 @@
         rambot.chargeCooldown = randomRange(1.2, 2.6);
         rambot.chargeTimer = 0;
         rambot.recoverTimer = 0;
+        rambot.pistonTimer = 0;
         continue;
       }
 
@@ -23318,7 +30360,18 @@
       const tangentX = -ny * rambot.strafeSign;
       const tangentY = nx * rambot.strafeSign;
 
-      if (rambot.chargeTimer > 0) {
+      if (rambot.isBoss && finiteOr(rambot.pistonTimer, 0) > 0) {
+        rambot.pistonTimer = Math.max(0, finiteOr(rambot.pistonTimer, 0) - dt);
+        updateRambotBossHeadTracking(rambot, targetPlayer.x, targetPlayer.y, dt, 8.5);
+        updateRambotBossPistonImpact(rambot, target);
+        rambot.vx *= Math.pow(0.34, dt);
+        rambot.vy *= Math.pow(0.34, dt);
+        if (rambot.pistonTimer <= 0) {
+          rambot.recoverTimer = Math.max(finiteOr(rambot.recoverTimer, 0), 0.38);
+        }
+      } else if (bossAltReady && rambot.isBoss && attackTarget.kind === "player" && playerDist < 760) {
+        startRambotBossPistonAttack(rambot, targetPlayer);
+      } else if (rambot.chargeTimer > 0) {
         rambot.chargeTimer -= dt;
         rambot.vx += rambot.chargeDirX * 900 * dt;
         rambot.vy += rambot.chargeDirY * 900 * dt;
@@ -23332,8 +30385,10 @@
         rambot.vy *= Math.pow(0.22, dt);
       } else {
         rambot.chargeCooldown -= dt;
-        rambot.vx += nx * 118 * dt + tangentX * 22 * dt;
-        rambot.vy += ny * 118 * dt + tangentY * 22 * dt;
+        const chaseForce = rambot.isBoss ? 154 : 118;
+        const strafeForce = rambot.isBoss ? 32 : 22;
+        rambot.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
+        rambot.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
 
         const chargeRange = attackTarget.kind === "body" ? attackTarget.radius + 860 : 1080;
         if (dist < chargeRange && rambot.chargeCooldown <= 0) {
@@ -23341,6 +30396,7 @@
           rambot.chargeDirY = ny;
           rambot.chargeTimer = attackTarget.kind === "player" ? randomRange(0.92, 1.14) : randomRange(0.62, 0.82);
           rambot.impactCooldown = 0;
+          playSound("rambotCharge", { throttleKey: "rambotCharge:" + rambot.id, throttle: 0.55 });
           const launchImpulse = attackTarget.kind === "player" ? 220 : 170;
           rambot.vx += nx * launchImpulse;
           rambot.vy += ny * launchImpulse;
@@ -23353,7 +30409,12 @@
       rambot.vy *= Math.pow(rambot.chargeTimer > 0 ? 0.88 : 0.68, dt);
 
       const speed = Math.hypot(rambot.vx, rambot.vy);
-      const maxSpeed = rambot.chargeTimer > 0 ? 475 : 150;
+      const maxSpeed = bossChaseMaxSpeed(
+        rambot,
+        rambot.chargeTimer > 0 ? (rambot.isBoss ? 570 : 475) : (rambot.isBoss ? 215 : 150),
+        rambot.chargeTimer > 0 ? rambot.chargeDirX : nx,
+        rambot.chargeTimer > 0 ? rambot.chargeDirY : ny
+      );
       if (speed > maxSpeed) {
         rambot.vx = (rambot.vx / speed) * maxSpeed;
         rambot.vy = (rambot.vy / speed) * maxSpeed;
@@ -23364,6 +30425,7 @@
       updateRambotPlayerImpact(rambot, target);
       updateRambotStructureImpact(rambot);
       rambot.rotation = Math.atan2(rambot.vy || ny, rambot.vx || nx) + Math.PI / 2;
+      updateRambotBossHeadTracking(rambot, targetPlayer.x, targetPlayer.y, dt, rambot.chargeTimer > 0 ? 6.5 : 3.6);
     }
   }
 
@@ -23410,7 +30472,7 @@
     let bestScore = Infinity;
 
     for (const mob of allCombatMobs()) {
-      if (mob === engineer || mob.kind === "engineer" || mob.health <= 0 || mob.health >= mob.maxHealth) {
+      if (mob === engineer || mob.kind === "engineer" || mob.health <= 0 || mob.health >= mob.maxHealth || isPlayerTeamMob(mob)) {
         continue;
       }
 
@@ -23438,19 +30500,38 @@
         engineers.splice(i, 1);
         continue;
       }
+      if (isMobSummoning(engineer)) {
+        continue;
+      }
+      if (isPlayerTeamMob(engineer) && updateFamiliarMob(engineer, dt)) {
+        continue;
+      }
+      updateBossSpawnPressure(engineer, dt);
+      if (isMobDisabled(engineer)) {
+        engineer.healPulse = 0;
+        engineer.targetKind = "";
+        engineer.targetId = 0;
+        updateDisabledMobDrift(engineer, dt);
+        continue;
+      }
 
       const playerTarget = nearestCombatPlayerTarget(engineer.x, engineer.y);
       const targetPlayer = playerTarget.player;
       const playerDist = Math.hypot(targetPlayer.x - engineer.x, targetPlayer.y - engineer.y) || 1;
+      const bossAltReady = tickBossAltAttackCooldown(engineer, dt);
 
       if (playerDist > Math.max(width, height) * 2.55 + 1800) {
-        const spawn = randomOffscreenPoint(210, 600, targetPlayer);
+        const spawn = relocatedMobOffscreenPoint(210, 600, targetPlayer);
         engineer.x = spawn.x;
         engineer.y = spawn.y;
         engineer.vx = randomRange(-16, 16);
         engineer.vy = randomRange(-16, 16);
         engineer.healCooldown = randomRange(0.35, 0.9);
         continue;
+      }
+
+      if (bossAltReady && playerDist < 1180) {
+        summonEngineerBossMob(engineer, targetPlayer);
       }
 
       const healTarget = findEngineerHealTarget(engineer);
@@ -23471,7 +30552,7 @@
         engineer.vy += ny * chaseForce * dt + tangentY * 34 * dt;
 
         if (focusDist < engineerHealRange && engineer.healCooldown <= 0 && hasClearShotAtMob(engineer.x, engineer.y, healTarget, null)) {
-          const healed = Math.min(healTarget.maxHealth - healTarget.health, engineerHealRate);
+          const healed = Math.min(healTarget.maxHealth - healTarget.health, bossScaledDamage(engineer, engineerHealRate));
           if (healed > 0) {
             healTarget.health += healed;
             healTarget.flash = Math.max(healTarget.flash || 0, 0.12);
@@ -23489,7 +30570,7 @@
             });
             playSound("pickupHealth", { throttleKey: "engineerHeal", throttle: 0.22 });
           }
-          engineer.healCooldown = engineerHealCooldown;
+          engineer.healCooldown = engineerHealCooldown * bossCooldownScale(engineer);
         }
       } else {
         const awayX = engineer.x - targetPlayer.x;
@@ -23508,7 +30589,7 @@
       engineer.vy *= Math.pow(0.72, dt);
 
       const speed = Math.hypot(engineer.vx, engineer.vy);
-      const maxSpeed = healTarget && focusDist > 520 ? 170 : 132;
+      const maxSpeed = bossChaseMaxSpeed(engineer, healTarget && focusDist > 520 ? 170 : 132, nx, ny);
       if (speed > maxSpeed) {
         engineer.vx = (engineer.vx / speed) * maxSpeed;
         engineer.vy = (engineer.vy / speed) * maxSpeed;
@@ -23532,6 +30613,18 @@
         teslas.splice(i, 1);
         continue;
       }
+      if (isMobSummoning(tesla)) {
+        continue;
+      }
+      if (isPlayerTeamMob(tesla) && updateFamiliarMob(tesla, dt)) {
+        continue;
+      }
+      updateBossSpawnPressure(tesla, dt);
+      if (isMobDisabled(tesla)) {
+        tesla.lightningWarmup = 0;
+        updateDisabledMobDrift(tesla, dt);
+        continue;
+      }
 
       const playerTarget = nearestCombatPlayerTarget(tesla.x, tesla.y);
       const targetPlayer = playerTarget.player;
@@ -23540,15 +30633,31 @@
       const toPlayerY = target.y - tesla.y;
       const dist = Math.hypot(toPlayerX, toPlayerY) || 1;
       const playerDist = Math.hypot(targetPlayer.x - tesla.x, targetPlayer.y - tesla.y) || 1;
+      const previousWarmup = tesla.lightningWarmup || 0;
+      const bossAltReady = tickBossAltAttackCooldown(tesla, dt);
 
       if (playerDist > Math.max(width, height) * 2.6 + 1800) {
-        const spawn = randomOffscreenPoint(190, 560, targetPlayer);
+        const spawn = relocatedMobOffscreenPoint(190, 560, targetPlayer);
         tesla.x = spawn.x;
         tesla.y = spawn.y;
         tesla.vx = randomRange(-18, 18);
         tesla.vy = randomRange(-18, 18);
         tesla.shootCooldown = randomRange(1.2, 2.5);
         continue;
+      }
+
+      if (bossAltReady && playerDist < teslaBossEmpPulseRange * 1.12) {
+        applyEmpPulse(tesla.x, tesla.y, teslaBossEmpPulseRange, teslaBossEmpPulseDisableDuration, {
+          affectMobs: true,
+          affectPlayers: true,
+          affectStructures: true,
+          sourceMob: tesla,
+          color: tesla.color,
+          cause: "Tesla boss EMP"
+        });
+        resetBossAltAttackCooldown(tesla);
+        tesla.lightningWarmup = 0;
+        tesla.lightningFlash = Math.max(tesla.lightningFlash || 0, 0.48);
       }
 
       const nx = toPlayerX / dist;
@@ -23564,6 +30673,9 @@
 
       if (dist < teslaLightningRange && hasClearShotAtElectricTarget(tesla, target)) {
         tesla.lightningWarmup = clamp((tesla.lightningWarmup || 0) + dt * 1.65, 0, 1);
+        if (previousWarmup < 0.18 && tesla.lightningWarmup >= 0.18) {
+          playSound("teslaWarmup", { throttleKey: "teslaWarmup:" + tesla.id, throttle: 0.7 });
+        }
         if (tesla.shootCooldown <= 0 && tesla.lightningWarmup >= 1) {
           fireTeslaLightning(tesla, target, dist);
         }
@@ -23577,7 +30689,7 @@
       tesla.vy *= Math.pow(0.7, dt);
 
       const speed = Math.hypot(tesla.vx, tesla.vy);
-      const maxSpeed = dist > 760 ? 176 : 138;
+      const maxSpeed = bossChaseMaxSpeed(tesla, dist > 760 ? 176 : 138, nx, ny);
       if (speed > maxSpeed) {
         tesla.vx = (tesla.vx / speed) * maxSpeed;
         tesla.vy = (tesla.vy / speed) * maxSpeed;
@@ -23596,12 +30708,22 @@
       return;
     }
 
-    if (target && !target.local && target.remote) {
+    if (target && target.spacecraft && target.spacecraftComponent) {
+      damageSpacecraftComponent(
+        target.spacecraft,
+        target.spacecraftComponent,
+        difficultyMobDamage(bossScaledDamage(rocket, structureRocketDamage + rocketImpactDamage * 0.65)),
+        rocket.color,
+        target.spacecraft.name + " " + target.spacecraftComponent.label.toLowerCase() + " cracked by a rocket ship."
+      );
+    } else if (target && target.familiar) {
+      damageMob(target.player, difficultyMobDamage(bossScaledDamage(rocket, rocketImpactDamage)), rocket.color, "Your familiar was struck by a rocket ship.");
+    } else if (target && !target.local && target.remote) {
       sendRemoteEntityEffect(target.remote, {
         entityType: "player",
         sourceKind: "mob",
-        cause: "Rocket ship",
-        damage: difficultyMobDamage(rocketImpactDamage),
+        cause: rocket.isBoss ? "Rocket boss ship" : "Rocket ship",
+        damage: difficultyMobDamage(bossScaledDamage(rocket, rocketImpactDamage)),
         impulseX: nx * 420 + rocket.vx * 0.52,
         impulseY: ny * 420 + rocket.vy * 0.52,
         color: rocket.color
@@ -23613,8 +30735,8 @@
 
       player.vx += nx * 420 + rocket.vx * 0.52;
       player.vy += ny * 420 + rocket.vy * 0.52;
-      damageLocalPlayer(difficultyMobDamage(rocketImpactDamage), {
-        cause: "Rocket ship",
+      damageLocalPlayer(difficultyMobDamage(bossScaledDamage(rocket, rocketImpactDamage)), {
+        cause: rocket.isBoss ? "Rocket boss ship" : "Rocket ship",
         cooldown: 0.9,
         flash: 0.34
       });
@@ -23750,9 +30872,60 @@
       rocket.volleyShots = 0;
       rocket.vx -= nx * 240;
       rocket.vy -= ny * 240;
-      damageStructure(structure, difficultyMobDamage(structureRocketDamage + Math.max(0, speed - rocketImpactSpeed) * 0.035), rocket.color);
+      damageStructure(structure, difficultyMobDamage(bossScaledDamage(rocket, structureRocketDamage + Math.max(0, speed - rocketImpactSpeed) * 0.035)), rocket.color);
       break;
     }
+  }
+
+  function launchRocketBossSplitMinions(rocket, targetPlayer) {
+    if (!rocket || !rocket.isBoss || !targetPlayer) {
+      return;
+    }
+
+    const aim = normalize(targetPlayer.x - rocket.x, targetPlayer.y - rocket.y);
+    const sideX = -aim.y;
+    const sideY = aim.x;
+
+    for (const side of [-1, 1]) {
+      const minion = createRocket(
+        rocket.x + sideX * side * rocket.radius * 0.34,
+        rocket.y + sideY * side * rocket.radius * 0.34,
+        {
+          vx: finiteOr(rocket.vx, 0) * 0.18 + sideX * side * 280 + aim.x * 105,
+          vy: finiteOr(rocket.vy, 0) * 0.18 + sideY * side * 280 + aim.y * 105,
+          rotation: Math.atan2(sideY * side + aim.y * 0.28, sideX * side + aim.x * 0.28) + Math.PI / 2,
+          chargeCooldown: randomRange(0.42, 0.72),
+          recoverTimer: randomRange(0.18, 0.32),
+          chargeTimer: 0,
+          chargePower: 0,
+          chargeDirX: aim.x,
+          chargeDirY: aim.y,
+          blastTimer: 0.24,
+          summonAge: 0,
+          summonDuration: 0.22,
+          summonBaseRadius: mobEntityBlueprints.rocket.radius,
+          summonSpinSpeed: side * 4.8
+        }
+      );
+      minion.radius = Math.max(1, mobEntityBlueprints.rocket.radius * 0.2);
+      rockets.push(minion);
+    }
+
+    rocket.blastTimer = Math.max(finiteOr(rocket.blastTimer, 0), 0.44);
+    rocket.blastDirX = aim.x;
+    rocket.blastDirY = aim.y;
+    rocket.recoverTimer = Math.max(finiteOr(rocket.recoverTimer, 0), 0.56);
+    resetBossAltAttackCooldown(rocket);
+    sparks.push({
+      x: rocket.x,
+      y: rocket.y,
+      radius: rocket.radius * 1.6,
+      color: rocket.color,
+      life: 0.32,
+      maxLife: 0.32,
+      summonTelegraph: true
+    });
+    playSound("missile", { throttleKey: "rocketBossSplit", throttle: 0.3 });
   }
 
   function updateRocketShip(rocket, dt) {
@@ -23764,7 +30937,7 @@
     const dist = Math.hypot(toTargetX, toTargetY) || 1;
 
     if (dist > Math.max(width, height) * 2.9 + 2400) {
-      const spawn = randomOffscreenPoint(320, 900, targetPlayer);
+      const spawn = relocatedMobOffscreenPoint(320, 900, targetPlayer);
       rocket.x = spawn.x;
       rocket.y = spawn.y;
       rocket.vx = randomRange(-24, 24);
@@ -23782,6 +30955,7 @@
     const ny = toTargetY / dist;
     const tangentX = -ny * rocket.strafeSign;
     const tangentY = nx * rocket.strafeSign;
+    const bossAltReady = tickBossAltAttackCooldown(rocket, dt);
 
     if (rocket.chargeTimer > 0) {
       rocket.chargeTimer = Math.max(0, rocket.chargeTimer - dt);
@@ -23804,6 +30978,10 @@
       rocket.vy += (-ny * 88 + tangentY * 64) * dt;
       rocket.vx *= Math.pow(0.76, dt);
       rocket.vy *= Math.pow(0.76, dt);
+    } else if (bossAltReady && rocket.isBoss && Math.hypot(targetPlayer.x - rocket.x, targetPlayer.y - rocket.y) < 1280) {
+      launchRocketBossSplitMinions(rocket, targetPlayer);
+      rocket.vx += -nx * 120 * dt;
+      rocket.vy += -ny * 120 * dt;
     } else {
       rocket.chargeCooldown = Math.max(0, finiteOr(rocket.chargeCooldown, 0) - dt);
       const rangeForce = dist > 820 ? 180 : dist < 540 ? -176 : 24;
@@ -23821,7 +30999,7 @@
         const aim = normalize(rocket.lockX - rocket.x, rocket.lockY - rocket.y);
         rocket.chargeDirX = aim.x;
         rocket.chargeDirY = aim.y;
-        rocket.chargeTimer = rocketChargeDuration;
+        rocket.chargeTimer = rocketChargeDuration * (rocket.isBoss ? 1.18 : 1);
         rocket.chargePower = 0;
         rocket.blastTimer = 0.46;
       }
@@ -23833,11 +31011,17 @@
 
     const speed = Math.hypot(rocket.vx, rocket.vy);
     const chargeProgress = clamp(rocket.chargePower || 0, 0, 1);
-    const maxSpeed = rocket.chargeTimer > 0
+    const baseMaxSpeed = rocket.chargeTimer > 0
       ? 330 + chargeProgress * (rocketChargeMaxSpeed - 330)
       : rocket.recoverTimer > 0
         ? 520
         : 245;
+    const maxSpeed = bossChaseMaxSpeed(
+      rocket,
+      baseMaxSpeed,
+      rocket.chargeTimer > 0 ? rocket.chargeDirX : nx,
+      rocket.chargeTimer > 0 ? rocket.chargeDirY : ny
+    );
     if (speed > maxSpeed) {
       rocket.vx = (rocket.vx / speed) * maxSpeed;
       rocket.vy = (rocket.vy / speed) * maxSpeed;
@@ -23869,6 +31053,23 @@
         rockets.splice(i, 1);
         continue;
       }
+      if (isMobSummoning(rocket)) {
+        continue;
+      }
+      if (isPlayerTeamMob(rocket) && updateFamiliarMob(rocket, dt)) {
+        continue;
+      }
+      updateBossSpawnPressure(rocket, dt);
+      if (isMobDisabled(rocket)) {
+        rocket.lockTimer = 0;
+        rocket.volleyTimer = 0;
+        rocket.volleyShots = 0;
+        rocket.scanProgress = 0;
+        rocket.chargeTimer = 0;
+        rocket.chargePower = 0;
+        updateDisabledMobDrift(rocket, dt);
+        continue;
+      }
 
       if (rocket.kind !== "satellite") {
         updateRocketShip(rocket, dt);
@@ -23881,9 +31082,10 @@
       const toPlayerX = target.x - rocket.x;
       const toPlayerY = target.y - rocket.y;
       const dist = Math.hypot(toPlayerX, toPlayerY) || 1;
+      const bossAltReady = tickBossAltAttackCooldown(rocket, dt);
 
       if (dist > Math.max(width, height) * 2.7 + 2000) {
-        const spawn = randomOffscreenPoint(230, 680, targetPlayer);
+        const spawn = relocatedMobOffscreenPoint(230, 680, targetPlayer);
         rocket.x = spawn.x;
         rocket.y = spawn.y;
         rocket.vx = randomRange(-14, 14);
@@ -23905,7 +31107,9 @@
       const turn = shortestAngleDelta(rocket.scannerAngle || targetAngle, targetAngle);
       rocket.scannerAngle = (rocket.scannerAngle || targetAngle) + clamp(turn, -2.35 * dt, 2.35 * dt);
 
-      if (rocket.volleyShots > 0) {
+      if (bossAltReady && rocket.isBoss && Math.hypot(targetPlayer.x - rocket.x, targetPlayer.y - rocket.y) < 1280) {
+        fireSatelliteBossSeekingMissiles(rocket, playerTarget);
+      } else if (rocket.volleyShots > 0) {
         rocket.volleyTimer -= dt;
         rocket.vx += -nx * 42 * dt + tangentX * 24 * dt;
         rocket.vy += -ny * 42 * dt + tangentY * 24 * dt;
@@ -23940,6 +31144,7 @@
         const scanTurn = Math.abs(shortestAngleDelta(rocket.scannerAngle || targetAngle, targetAngle));
         const inRange = dist > 420 && dist < 1040;
         const scanning = inRange && scanTurn < 0.34 && hasClearShotAtRocketTarget(rocket, target);
+        const previousScanProgress = rocket.scanProgress || 0;
         rocket.scanProgress = clamp(rocket.scanProgress + (scanning ? dt * 0.86 : -dt * 1.05), 0, 1);
 
         const rangeForce = dist > 760 ? 132 : dist < 540 ? -128 : 12;
@@ -23952,6 +31157,9 @@
           rocket.lockY = target.y + finiteOr(target.vy, 0) * 0.46;
           rocket.lockTimer = satelliteLockDuration;
           rocket.scanProgress = 1;
+          if (previousScanProgress < 1) {
+            playSound("satelliteLock", { throttleKey: "satelliteLock:" + rocket.id, throttle: 0.58 });
+          }
         }
       }
 
@@ -23961,7 +31169,7 @@
       rocket.vy *= Math.pow(0.7, dt);
 
       const speed = Math.hypot(rocket.vx, rocket.vy);
-      const maxSpeed = rocket.volleyShots > 0 || rocket.lockTimer > 0 ? 118 : rocket.recoverTimer > 0 ? 152 : 194;
+      const maxSpeed = bossChaseMaxSpeed(rocket, rocket.volleyShots > 0 || rocket.lockTimer > 0 ? 118 : rocket.recoverTimer > 0 ? 152 : 194, nx, ny);
       if (speed > maxSpeed) {
         rocket.vx = (rocket.vx / speed) * maxSpeed;
         rocket.vy = (rocket.vy / speed) * maxSpeed;
@@ -23986,6 +31194,7 @@
       tickMobDamageTimers(fighter, dt);
       fighter.flash = Math.max(0, fighter.flash - dt);
       fighter.shootCooldown = Math.max(0, fighter.shootCooldown - dt);
+      fighter.machineGunTimer = Math.max(0, finiteOr(fighter.machineGunTimer, 0) - dt);
 
       if (fighter.shieldActive > 0) {
         const before = fighter.shieldActive;
@@ -24003,6 +31212,20 @@
         fighters.splice(i, 1);
         continue;
       }
+      if (isMobSummoning(fighter)) {
+        continue;
+      }
+      if (isPlayerTeamMob(fighter) && updateFamiliarMob(fighter, dt)) {
+        continue;
+      }
+      updateBossSpawnPressure(fighter, dt);
+      if (isMobDisabled(fighter)) {
+        fighter.shieldActive = 0;
+        fighter.shootCooldown = Math.max(fighter.shootCooldown, 0.24);
+        fighter.machineGunShots = 0;
+        updateDisabledMobDrift(fighter, dt);
+        continue;
+      }
 
       const target = nearestCombatPlayerTarget(fighter.x, fighter.y);
       const targetPlayer = target.player;
@@ -24011,7 +31234,7 @@
       const dist = Math.hypot(toPlayerX, toPlayerY) || 1;
 
       if (dist > Math.max(width, height) * 2.8 + 2200) {
-        const spawn = randomOffscreenPoint(260, 760, targetPlayer);
+        const spawn = relocatedMobOffscreenPoint(260, 760, targetPlayer);
         fighter.x = spawn.x;
         fighter.y = spawn.y;
         fighter.vx = randomRange(-20, 20);
@@ -24028,7 +31251,22 @@
       fighter.vx += nx * (dist > 560 ? 110 : -62) * dt + tangentX * (dist < 1050 ? 78 : 24) * dt;
       fighter.vy += ny * (dist > 560 ? 110 : -62) * dt + tangentY * (dist < 1050 ? 78 : 24) * dt;
 
-      if (dist < fighterShootRange && fighter.shootCooldown <= 0 && hasClearShotAtCombatTarget(fighter, target)) {
+      const bossAltReady = tickBossAltAttackCooldown(fighter, dt);
+      const clearShot = hasClearShotAtCombatTarget(fighter, target);
+      if (fighter.isBoss && finiteOr(fighter.machineGunShots, 0) > 0) {
+        if (fighter.machineGunTimer <= 0 && dist < fighterShootRange * 1.32 && clearShot) {
+          fireFighterBossMachineGunShot(fighter, target, dist);
+          fighter.machineGunShots = Math.max(0, Math.floor(finiteOr(fighter.machineGunShots, 0)) - 1);
+          fighter.machineGunTimer = fighter.machineGunShots > 0 ? 0.065 : 0;
+        } else if (!clearShot || dist >= fighterShootRange * 1.48) {
+          fighter.machineGunShots = 0;
+        }
+      } else if (bossAltReady && fighter.isBoss && dist < fighterShootRange * 1.25 && clearShot) {
+        fighter.machineGunShots = 16;
+        fighter.machineGunTimer = 0;
+        fighter.shootCooldown = Math.max(fighter.shootCooldown, 1.2);
+        resetBossAltAttackCooldown(fighter);
+      } else if (dist < fighterShootRange && fighter.shootCooldown <= 0 && clearShot) {
         fireFighterGuns(fighter, target, dist);
       }
 
@@ -24038,7 +31276,7 @@
       fighter.vy *= Math.pow(0.72, dt);
 
       const speed = Math.hypot(fighter.vx, fighter.vy);
-      const maxSpeed = dist > 820 ? 210 : 162;
+      const maxSpeed = bossChaseMaxSpeed(fighter, dist > 820 ? 210 : 162, nx, ny);
       if (speed > maxSpeed) {
         fighter.vx = (fighter.vx / speed) * maxSpeed;
         fighter.vy = (fighter.vy / speed) * maxSpeed;
@@ -24090,6 +31328,15 @@
     ctx.fill();
   }
 
+  function particleSpawnVisualState(particle) {
+    const age = finiteOr(particle && particle.spawnAge, particleSpawnTransitionDuration);
+    const progress = clamp(age / Math.max(0.001, particleSpawnTransitionDuration), 0, 1);
+    return {
+      scale: 1 - Math.pow(1 - progress, 3),
+      alpha: progress * progress * (3 - progress * 2)
+    };
+  }
+
   function drawRockShape(particle, radius, roughness, sides) {
     ctx.beginPath();
     for (let i = 0; i < sides; i += 1) {
@@ -24111,8 +31358,41 @@
     const light = shadeColor(particle.color, 48);
     const dark = shadeColor(particle.color, -52);
     const bodyAlpha = clamp(finiteOr(alpha, 0.94), 0, 1);
+    const tierName = particle && particle.tier ? particle.tier.name : "";
+    const rockyBody = tierName === "rock" || tierName === "boulder" || tierName === "asteroid";
 
     ctx.globalCompositeOperation = "source-over";
+    if (rockyBody) {
+      const roughness = tierName === "asteroid" ? 0.22 : 0.15;
+      const sides = tierName === "asteroid" ? 19 : 15;
+
+      ctx.save();
+      ctx.translate(particle.x, particle.y);
+      ctx.rotate(particle.textureSeed);
+
+      const gradient = ctx.createRadialGradient(
+        -radius * 0.32,
+        -radius * 0.34,
+        Math.max(1, radius * 0.08),
+        0,
+        0,
+        radius
+      );
+      gradient.addColorStop(0, colorString(light, bodyAlpha));
+      gradient.addColorStop(0.62, colorString(particle.color, bodyAlpha * 0.94));
+      gradient.addColorStop(1, colorString(dark, bodyAlpha * 0.96));
+      ctx.fillStyle = gradient;
+      drawRockShape(particle, radius, roughness, sides);
+      ctx.fill();
+
+      ctx.strokeStyle = colorString(light, bodyAlpha * 0.24);
+      ctx.lineWidth = Math.max(1, radius * 0.045);
+      drawRockShape(particle, radius + Math.max(1.5, radius * 0.035), roughness * 0.82, sides);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
     const gradient = ctx.createRadialGradient(
       particle.x - radius * 0.32,
       particle.y - radius * 0.34,
@@ -24300,10 +31580,19 @@
   function drawBody(particle, time) {
     const pulse = 1 + Math.sin(time * 0.004 * particle.pulse + particle.id) * 0.035;
     const spawnSizeScale = particle.tier.name === "particle" ? clamp(finiteOr(particle.spawnSizeScale, 1), 1, 1.18) : 1;
-    const radius = particle.radius * pulse * spawnSizeScale;
+    const spawnVisual = particleSpawnVisualState(particle);
+    const radius = particle.radius * pulse * spawnSizeScale * spawnVisual.scale;
+
+    if (radius <= 0.05 || spawnVisual.alpha <= 0.005) {
+      return;
+    }
+
+    ctx.save();
+    ctx.globalAlpha *= spawnVisual.alpha;
 
     if (particle.tier.name === "particle") {
       drawTinyParticle(particle, radius);
+      ctx.restore();
       return;
     }
 
@@ -24316,6 +31605,7 @@
     if (shouldDrawSimpleBody(particle, radius)) {
       drawSimpleBody(particle, radius, 0.96);
       drawBodyEnergyMeter(particle, radius);
+      ctx.restore();
       return;
     }
 
@@ -24328,6 +31618,7 @@
     }
 
     drawBodyEnergyMeter(particle, radius);
+    ctx.restore();
   }
 
   function drawBodyEnergyMeter(particle, radius) {
@@ -24483,6 +31774,36 @@
     ctx.restore();
   }
 
+  function drawBossMobEmbellishments(mob, time) {
+    if (!mob || !mob.isBoss) {
+      return;
+    }
+
+    const color = mob.color || { r: 255, g: 115, b: 173 };
+    const pulse = 0.76 + Math.sin(time * 0.012 + finiteOr(mob.wobble, 0)) * 0.18;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = colorString(color, 0.46 + pulse * 0.18);
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 62 + Math.sin(time * 0.008) * 4, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = colorString(shadeColor(color, 80), 0.62);
+    for (let i = 0; i < 8; i += 1) {
+      const angle = i * Math.PI / 4 + time * 0.0015;
+      const inner = 54;
+      const outer = 72 + (i % 2) * 8;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle - 0.08) * inner, Math.sin(angle - 0.08) * inner);
+      ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+      ctx.lineTo(Math.cos(angle + 0.08) * inner, Math.sin(angle + 0.08) * inner);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawRival(rival, time) {
     if (rival.health <= 0) {
       return;
@@ -24495,6 +31816,10 @@
     ctx.translate(rival.x, rival.y);
     ctx.rotate(rival.rotation || 0);
     ctx.scale(pulse, pulse);
+    if (rival.isBoss) {
+      ctx.scale(1.32, 1.32);
+      drawBossMobEmbellishments(rival, time);
+    }
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#151829";
@@ -24617,7 +31942,7 @@
     ctx.lineWidth = 3.5;
     ctx.stroke();
 
-    if (!rival.landed) {
+    if (!rival.landed || rival.isBoss) {
       const healthPct = clamp(rival.health / rival.maxHealth, 0, 1);
       ctx.fillStyle = "rgba(0, 0, 0, 0.48)";
       roundRectPath(-24, -43, 48, 6, 3);
@@ -24631,10 +31956,11 @@
   }
 
   function drawUfoTractorBeam(ufo, time) {
-    if (ufo.health <= 0) {
+    if (!ufoHasActiveBeam(ufo)) {
       return;
     }
 
+    const drainBeam = ufoHasPlayerDrainBeam(ufo);
     const dirX = Math.cos(ufo.beamAngle);
     const dirY = Math.sin(ufo.beamAngle);
     const normalX = -dirY;
@@ -24651,9 +31977,9 @@
     ctx.globalCompositeOperation = "lighter";
 
     const gradient = ctx.createLinearGradient(originX, originY, endX, endY);
-    gradient.addColorStop(0, "rgba(116, 244, 255, 0.48)");
-    gradient.addColorStop(0.58, "rgba(116, 244, 255, 0.22)");
-    gradient.addColorStop(1, "rgba(116, 244, 255, 0)");
+    gradient.addColorStop(0, drainBeam ? "rgba(255, 60, 60, 0.62)" : "rgba(116, 244, 255, 0.48)");
+    gradient.addColorStop(0.58, drainBeam ? "rgba(255, 88, 75, 0.27)" : "rgba(116, 244, 255, 0.22)");
+    gradient.addColorStop(1, drainBeam ? "rgba(255, 60, 60, 0)" : "rgba(116, 244, 255, 0)");
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.moveTo(originX + normalX * topHalf, originY + normalY * topHalf);
@@ -24663,7 +31989,7 @@
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(205, 255, 255, 0.2)";
+    ctx.strokeStyle = drainBeam ? "rgba(255, 214, 214, 0.25)" : "rgba(205, 255, 255, 0.2)";
     ctx.lineWidth = 2;
     for (let i = -1; i <= 1; i += 1) {
       const side = i * 24 * pulse;
@@ -24694,6 +32020,10 @@
     ctx.translate(ufo.x, ufo.y);
     ctx.rotate(ufo.rotation || 0);
     ctx.scale(pulse, pulse);
+    if (ufo.isBoss) {
+      ctx.scale(1.32, 1.32);
+      drawBossMobEmbellishments(ufo, time);
+    }
 
     ctx.globalCompositeOperation = "lighter";
     const glow = ctx.createRadialGradient(0, 0, 8, 0, 0, 72);
@@ -24736,7 +32066,7 @@
       ctx.stroke();
     }
 
-    if (gameSettings.hudEnabled !== false) {
+    if (gameSettings.hudEnabled !== false || ufo.isBoss) {
       const healthPct = clamp(ufo.health / ufo.maxHealth, 0, 1);
       ctx.fillStyle = "rgba(0, 0, 0, 0.48)";
       roundRectPath(-28, -46, 56, 6, 3);
@@ -24747,6 +32077,141 @@
     }
 
     ctx.restore();
+  }
+
+  function drawRambotBoss(rambot, time, metal, chargeGlow) {
+    const extension = rambotBossPistonExtension(rambot);
+    const headAngle = Number.isFinite(Number(rambot.headAngle)) ? rambot.headAngle : (finiteOr(rambot.rotation, 0) - Math.PI / 2);
+    const relativeHeadAngle = shortestAngleDelta(finiteOr(rambot.rotation, 0) - Math.PI / 2, headAngle);
+    const pistonReach = 28 + extension * 90;
+    const flash = extension > 0.5 ? 0.16 + Math.sin(time * 0.028) * 0.06 : 0;
+
+    ctx.globalCompositeOperation = "lighter";
+    const glow = ctx.createRadialGradient(0, -2, 8, 0, -2, 88 + extension * 52);
+    glow.addColorStop(0, "rgba(255, 209, 102, " + (chargeGlow + flash) + ")");
+    glow.addColorStop(1, "rgba(255, 209, 102, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, -2, 88 + extension * 24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.strokeStyle = "#121722";
+    ctx.lineWidth = 5;
+    ctx.fillStyle = colorString(shadeColor(metal, -66), 0.98);
+    roundRectPath(-43, -3, 86, 53, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = colorString(shadeColor(metal, -92), 0.95);
+    roundRectPath(-52, 4, 17, 48, 6);
+    ctx.fill();
+    ctx.stroke();
+    roundRectPath(35, 4, 17, 48, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = colorString(shadeColor(metal, 28), 0.98);
+    roundRectPath(-32, -34, 64, 42, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = colorString(shadeColor(metal, -18), 0.96);
+    roundRectPath(-24, -19, 48, 22, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(0, -26);
+    ctx.rotate(relativeHeadAngle);
+
+    ctx.strokeStyle = "#121722";
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(0, 7);
+    ctx.lineTo(0, -pistonReach);
+    ctx.stroke();
+
+    const pistonGradient = ctx.createLinearGradient(-10, 4, 10, -pistonReach);
+    pistonGradient.addColorStop(0, "#5f6879");
+    pistonGradient.addColorStop(0.48, "#f8fbff");
+    pistonGradient.addColorStop(1, "#ffd166");
+    ctx.strokeStyle = pistonGradient;
+    ctx.lineWidth = 7;
+    ctx.stroke();
+
+    ctx.fillStyle = "#d9e3e8";
+    ctx.strokeStyle = "#121722";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 4, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.translate(0, -pistonReach);
+    const headGradient = ctx.createLinearGradient(0, -36, 0, 18);
+    headGradient.addColorStop(0, colorString(shadeColor(metal, 74), 0.98));
+    headGradient.addColorStop(0.55, colorString(metal, 0.98));
+    headGradient.addColorStop(1, colorString(shadeColor(metal, -82), 0.96));
+    ctx.fillStyle = headGradient;
+    ctx.beginPath();
+    ctx.moveTo(-25, -20);
+    ctx.lineTo(0, -43);
+    ctx.lineTo(25, -20);
+    ctx.lineTo(20, 15);
+    ctx.lineTo(-20, 15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath();
+    ctx.arc(-9, -12, 4.8, 0, Math.PI * 2);
+    ctx.arc(9, -12, 4.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = colorString(shadeColor(metal, 74), 0.42);
+    roundRectPath(-13, 1, 26, 7, 3);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath();
+    ctx.arc(-16, -20, 4.5, 0, Math.PI * 2);
+    ctx.arc(16, -20, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "#ff7766";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-29, -40);
+    ctx.lineTo(-43, -55);
+    ctx.moveTo(29, -40);
+    ctx.lineTo(43, -55);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#121722";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-24, 45);
+    ctx.lineTo(-33, 66);
+    ctx.moveTo(24, 45);
+    ctx.lineTo(33, 66);
+    ctx.stroke();
+
+    ctx.strokeStyle = colorString(shadeColor(metal, -16), 0.96);
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    const healthPct = clamp(rambot.health / rambot.maxHealth, 0, 1);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    roundRectPath(-40, -98, 80, 8, 4);
+    ctx.fill();
+    ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+    roundRectPath(-40, -98, 80 * healthPct, 8, 4);
+    ctx.fill();
   }
 
   function drawRambot(rambot, time) {
@@ -24763,6 +32228,13 @@
     ctx.translate(rambot.x, rambot.y);
     ctx.rotate(rambot.rotation || 0);
     ctx.scale(pulse, pulse);
+    if (rambot.isBoss) {
+      ctx.scale(1.32, 1.32);
+      drawBossMobEmbellishments(rambot, time);
+      drawRambotBoss(rambot, time, metal, chargeGlow);
+      ctx.restore();
+      return;
+    }
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 
@@ -24843,7 +32315,7 @@
     ctx.lineWidth = 3.5;
     ctx.stroke();
 
-    if (gameSettings.hudEnabled !== false) {
+    if (gameSettings.hudEnabled !== false || rambot.isBoss) {
       const healthPct = clamp(rambot.health / rambot.maxHealth, 0, 1);
       ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
       roundRectPath(-32, -76, 64, 7, 3.5);
@@ -24869,6 +32341,10 @@
     ctx.translate(tesla.x, tesla.y);
     ctx.rotate(tesla.rotation || 0);
     ctx.scale(pulse, pulse);
+    if (tesla.isBoss) {
+      ctx.scale(1.32, 1.32);
+      drawBossMobEmbellishments(tesla, time);
+    }
 
     ctx.globalCompositeOperation = "lighter";
     const glow = ctx.createRadialGradient(0, 0, 5, 0, 0, 78);
@@ -24906,7 +32382,7 @@
     ctx.arc(0, 0, 44, 0, Math.PI * 2);
     ctx.fill();
 
-    if (gameSettings.hudEnabled !== false) {
+    if (gameSettings.hudEnabled !== false || tesla.isBoss) {
       const healthPct = clamp(tesla.health / tesla.maxHealth, 0, 1);
       ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
       roundRectPath(-28, -48, 56, 6, 3);
@@ -24931,6 +32407,10 @@
     ctx.save();
     ctx.translate(engineer.x, engineer.y);
     ctx.rotate(engineer.rotation || 0);
+    if (engineer.isBoss) {
+      ctx.scale(1.32, 1.32);
+      drawBossMobEmbellishments(engineer, time);
+    }
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 
@@ -24980,7 +32460,7 @@
 
     ctx.restore();
 
-    if (gameSettings.hudEnabled !== false) {
+    if (gameSettings.hudEnabled !== false || engineer.isBoss) {
       const healthPct = clamp(engineer.health / engineer.maxHealth, 0, 1);
       ctx.save();
       ctx.translate(engineer.x, engineer.y);
@@ -25049,6 +32529,10 @@
     ctx.save();
     ctx.translate(rocket.x, rocket.y);
     ctx.rotate(rocket.rotation || 0);
+    if (rocket.isBoss) {
+      ctx.scale(1.32, 1.32);
+      drawBossMobEmbellishments(rocket, time);
+    }
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 
@@ -25094,7 +32578,7 @@
     ctx.fill();
     ctx.stroke();
 
-    if (gameSettings.hudEnabled !== false) {
+    if (gameSettings.hudEnabled !== false || rocket.isBoss) {
       const healthPct = clamp(rocket.health / rocket.maxHealth, 0, 1);
       ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
       roundRectPath(-30, -76, 60, 7, 3.5);
@@ -25166,6 +32650,10 @@
     ctx.save();
     ctx.translate(rocket.x, rocket.y);
     ctx.rotate(rocket.rotation || 0);
+    if (rocket.isBoss) {
+      ctx.scale(1.32, 1.32);
+      drawBossMobEmbellishments(rocket, time);
+    }
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 
@@ -25220,7 +32708,7 @@
     ctx.stroke();
     ctx.globalCompositeOperation = "source-over";
 
-    if (gameSettings.hudEnabled !== false) {
+    if (gameSettings.hudEnabled !== false || rocket.isBoss) {
       const satelliteHealthPct = clamp(rocket.health / rocket.maxHealth, 0, 1);
       ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
       roundRectPath(-30, -74, 60, 7, 3.5);
@@ -25324,6 +32812,10 @@
     ctx.save();
     ctx.translate(fighter.x, fighter.y);
     ctx.rotate(fighter.rotation || 0);
+    if (fighter.isBoss) {
+      ctx.scale(1.32, 1.32);
+      drawBossMobEmbellishments(fighter, time);
+    }
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 
@@ -25370,7 +32862,7 @@
       ctx.stroke();
     }
 
-    if (gameSettings.hudEnabled !== false) {
+    if (gameSettings.hudEnabled !== false || fighter.isBoss) {
       const shieldChargePct = clamp((fighter.shieldCharge || 0) / fighterShieldMaxCharge, 0, 1);
       const healthPct = clamp(fighter.health / fighter.maxHealth, 0, 1);
       ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
@@ -26342,6 +33834,10 @@
     }
 
     for (const missile of launcherMissiles) {
+      drawGuidedLauncherPath(missile);
+    }
+
+    for (const missile of launcherMissiles) {
       if (!isWorldCircleNearView(missile.x, missile.y, finiteOr(missile.length, 90), 460)) {
         continue;
       }
@@ -26403,16 +33899,34 @@
     ctx.restore();
   }
 
+  function drawGuidedLauncherPath(missile) {
+    if (!missile || !missile.guided || !Array.isArray(missile.guidedPath) || missile.guidedPath.length < 2) {
+      return;
+    }
+
+    const startIndex = clamp(Math.floor(finiteOr(missile.guidedIndex, 1)) - 1, 0, missile.guidedPath.length - 2);
+    const color = missile.color || { r: 255, g: 184, b: 88 };
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = colorString(color, missile.guidedReleased ? 0.28 : 0.48);
+    ctx.lineWidth = missile.guidedReleased ? 2.5 : 4;
+    ctx.setLineDash(missile.guidedReleased ? [12, 14] : [18, 12]);
+    ctx.beginPath();
+    ctx.moveTo(missile.x, missile.y);
+    for (let i = startIndex + 1; i < missile.guidedPath.length; i += 1) {
+      const point = missile.guidedPath[i];
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   const dynamicLightingWarmColor = { r: 255, g: 185, b: 116 };
   const dynamicLightingFlameColor = { r: 255, g: 206, b: 134 };
+  const jetpackFlameLightColor = { r: 255, g: 218, b: 84 };
   const dynamicLightingMaxAlpha = 0.115;
-  const backgroundNebulae = [
-    { x: -1260, y: -920, r: 520, color: { r: 83, g: 121, b: 255 }, alpha: 0.18 },
-    { x: 880, y: -740, r: 460, color: { r: 211, g: 79, b: 194 }, alpha: 0.15 },
-    { x: -1460, y: 980, r: 540, color: { r: 255, g: 109, b: 171 }, alpha: 0.13 },
-    { x: 1280, y: 1000, r: 620, color: { r: 63, g: 183, b: 255 }, alpha: 0.14 },
-    { x: 320, y: 1450, r: 420, color: { r: 121, g: 89, b: 255 }, alpha: 0.12 }
-  ];
   const gadgetGatherCache = {
     frameId: -1,
     limit: 0,
@@ -26433,6 +33947,14 @@
   };
   let dynamicLightingPlayerBoost = 1;
   let dynamicLightingPlayerBoostTime = 0;
+  const jetpackDirectionSmoothing = 7.6;
+  const localJetpackExhaust = {
+    x: 0,
+    y: 1,
+    angle: Math.PI / 2,
+    time: 0
+  };
+  const remoteJetpackExhausts = new Map();
 
   function invalidateRenderCaches() {
     mapBodyCache.frameId = -1;
@@ -26450,6 +33972,13 @@
   }
 
   function drawBackground() {
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#06102d");
+    gradient.addColorStop(0.5, "#080716");
+    gradient.addColorStop(1, "#101234");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
     ctx.save();
     ctx.translate(width / 2, height / 2);
     ctx.scale(cameraZoom, cameraZoom);
@@ -26457,32 +33986,6 @@
     ctx.translate(-player.x, -player.y);
 
     const backgroundReach = Math.hypot(width, height) / Math.max(0.001, cameraZoom) + 240;
-    const gradient = ctx.createLinearGradient(
-      player.x - backgroundReach,
-      player.y - backgroundReach,
-      player.x + backgroundReach,
-      player.y + backgroundReach
-    );
-    gradient.addColorStop(0, "#06102d");
-    gradient.addColorStop(0.5, "#080716");
-    gradient.addColorStop(1, "#101234");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(player.x - backgroundReach, player.y - backgroundReach, backgroundReach * 2, backgroundReach * 2);
-
-    for (const nebula of backgroundNebulae) {
-      const wrap = 3600;
-      const x = nebula.x + Math.round((player.x - nebula.x) / wrap) * wrap;
-      const y = nebula.y + Math.round((player.y - nebula.y) / wrap) * wrap;
-      const nebulaGradient = ctx.createRadialGradient(x, y, 0, x, y, nebula.r);
-      nebulaGradient.addColorStop(0, colorString(nebula.color, nebula.alpha));
-      nebulaGradient.addColorStop(0.48, colorString(nebula.color, nebula.alpha * 0.34));
-      nebulaGradient.addColorStop(1, colorString(nebula.color, 0));
-      ctx.fillStyle = nebulaGradient;
-      ctx.beginPath();
-      ctx.arc(x, y, nebula.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
     ctx.fillStyle = "rgba(1, 3, 12, 0.18)";
     ctx.fillRect(player.x - backgroundReach, player.y - backgroundReach, backgroundReach * 2, backgroundReach * 2);
 
@@ -26514,9 +34017,25 @@
       }
       const progress = 1 - spark.life / spark.maxLife;
       ctx.beginPath();
-      ctx.strokeStyle = colorString(spark.color, 0.36 * (1 - progress));
-      ctx.lineWidth = 2.5;
-      ctx.arc(spark.x, spark.y, spark.radius * (0.65 + progress), 0, Math.PI * 2);
+      if (spark.empPulse) {
+        ctx.strokeStyle = colorString(spark.color, 0.62 * (1 - progress));
+        ctx.lineWidth = 4.5 + (1 - progress) * 3;
+        ctx.arc(spark.x, spark.y, spark.radius * clamp(progress, 0.04, 1), 0, Math.PI * 2);
+      } else if (spark.summonTelegraph) {
+        const pulse = 0.72 + Math.sin(performance.now() * 0.018) * 0.18;
+        ctx.strokeStyle = colorString(spark.color, (0.5 + pulse * 0.2) * (1 - progress));
+        ctx.lineWidth = 3.5;
+        ctx.arc(spark.x, spark.y, spark.radius * (0.92 + progress * 0.08), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.strokeStyle = colorString(shadeColor(spark.color, 70), 0.28 * (1 - progress));
+        ctx.lineWidth = 1.8;
+        ctx.arc(spark.x, spark.y, spark.radius * 0.55 * (0.9 + pulse * 0.12), 0, Math.PI * 2);
+      } else {
+        ctx.strokeStyle = colorString(spark.color, 0.36 * (1 - progress));
+        ctx.lineWidth = 2.5;
+        ctx.arc(spark.x, spark.y, spark.radius * (0.65 + progress), 0, Math.PI * 2);
+      }
       ctx.stroke();
     }
 
@@ -26528,6 +34047,8 @@
     }
 
     ctx.globalCompositeOperation = "source-over";
+    drawSpacecrafts(time);
+
     for (const pickup of healthPickups) {
       if (!isWorldCircleNearView(pickup.x, pickup.y, 42, 180)) {
         continue;
@@ -26609,6 +34130,42 @@
     ctx.beginPath();
     ctx.arc(x, y, lightRadius, 0, Math.PI * 2);
     ctx.fill();
+    return true;
+  }
+
+  function drawScreenDirectionalDynamicLight(x, y, dirX, dirY, length, widthSize, color, alpha) {
+    const axisLength = Math.max(1, finiteOr(length, 0));
+    const axisWidth = Math.max(1, finiteOr(widthSize, 0));
+    const lightAlpha = clamp(finiteOr(alpha, 0), 0, dynamicLightingMaxAlpha);
+    if (lightAlpha <= 0) {
+      return false;
+    }
+
+    const lengthPadding = axisLength * 0.72;
+    const widthPadding = axisWidth * 0.72;
+    if (
+      x + lengthPadding < 0 ||
+      x - lengthPadding > width ||
+      y + widthPadding < 0 ||
+      y - widthPadding > height
+    ) {
+      return false;
+    }
+
+    const angle = Math.atan2(dirY || 1, dirX || 0);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.scale(1, axisWidth / axisLength);
+    const gradient = ctx.createRadialGradient(-axisLength * 0.36, 0, axisLength * 0.04, 0, 0, axisLength);
+    gradient.addColorStop(0, colorString(color, lightAlpha));
+    gradient.addColorStop(0.34, colorString(color, lightAlpha * 0.48));
+    gradient.addColorStop(1, colorString(color, 0));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(0, 0, axisLength, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
     return true;
   }
 
@@ -26924,7 +34481,8 @@
       return;
     }
 
-    const boostTarget = isJetpackBoostPressed() ? 1.18 : 1;
+    const exhaust = smoothedLocalJetpackExhaust(time);
+    const boostTarget = canUseJetpackBoost() ? 1.36 : 1;
     const boostDt = dynamicLightingPlayerBoostTime > 0
       ? clamp((time - dynamicLightingPlayerBoostTime) / 1000, 0, 0.08)
       : 1 / 60;
@@ -26932,9 +34490,22 @@
     dynamicLightingPlayerBoost += (boostTarget - dynamicLightingPlayerBoost) * (1 - Math.exp(-boostDt * 8.5));
 
     const boost = dynamicLightingPlayerBoost;
+    const pulse = 0.92 + Math.sin(time * 0.024) * 0.07 + Math.sin(time * 0.071) * 0.035;
     const bob = Math.sin(time * 0.004) * 2.4;
-    const radius = clamp(128 * cameraZoom * boost, 54, 166);
-    drawScreenDynamicLight(width / 2, height / 2 + (bob + 58) * cameraZoom, radius, dynamicLightingFlameColor, 0.09 * boost, 0.08);
+    const nozzleX = width / 2 + exhaust.x * (34 + boost * 8) * cameraZoom;
+    const nozzleY = height / 2 + (bob + 50) * cameraZoom + exhaust.y * (34 + boost * 10) * cameraZoom;
+    const radius = clamp(134 * cameraZoom * boost * pulse, 58, 188);
+    drawScreenDynamicLight(nozzleX, nozzleY, radius, jetpackFlameLightColor, 0.102 * boost * pulse, 0.07);
+    drawScreenDirectionalDynamicLight(
+      nozzleX + exhaust.x * radius * 0.2,
+      nozzleY + exhaust.y * radius * 0.2,
+      exhaust.x,
+      exhaust.y,
+      clamp(178 * cameraZoom * boost, 76, 232),
+      clamp(88 * cameraZoom * boost, 42, 124),
+      jetpackFlameLightColor,
+      0.052 * boost * pulse
+    );
   }
 
   function dynamicStructureColor(structure) {
@@ -27002,9 +34573,12 @@
       const pulse = 0.9 + Math.sin(time * 0.008 + ufo.beamPulse) * 0.1;
       drawWorldDynamicLight(ufo.x, ufo.y, 188, ufo.color, 0.062 * pulse, { minRadius: 54, maxRadius: 260, warmth: 0.72, core: 0.12 });
 
-      const beamX = ufo.x + Math.cos(ufo.beamAngle) * 210;
-      const beamY = ufo.y + Math.sin(ufo.beamAngle) * 210;
-      drawWorldDynamicLight(beamX, beamY, 190, ufo.color, 0.028 * pulse, { minRadius: 46, maxRadius: 220, warmth: 0.68, core: 0.08 });
+      if (ufoHasActiveBeam(ufo)) {
+        const beamX = ufo.x + Math.cos(ufo.beamAngle) * 210;
+        const beamY = ufo.y + Math.sin(ufo.beamAngle) * 210;
+        const beamColor = ufoHasPlayerDrainBeam(ufo) ? { r: 255, g: 73, b: 73 } : ufo.color;
+        drawWorldDynamicLight(beamX, beamY, 190, beamColor, 0.028 * pulse, { minRadius: 46, maxRadius: 220, warmth: 0.68, core: 0.08 });
+      }
     }
 
     for (const rambot of rambots) {
@@ -27427,22 +35001,55 @@
     ctx.restore();
   }
 
-  function drawRemoteJetFlames(time) {
-    const flicker = 1 + Math.sin(time * 0.032) * 0.18;
-
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    for (const x of [-16, 16]) {
-      const gradient = ctx.createRadialGradient(x, 50, 0, x, 56, 25 * flicker);
-      gradient.addColorStop(0, "rgba(255, 255, 184, 0.92)");
-      gradient.addColorStop(0.42, "rgba(78, 218, 255, 0.56)");
-      gradient.addColorStop(1, "rgba(75, 111, 255, 0)");
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.ellipse(x, 54, 9 * flicker, 25 * flicker, 0, 0, Math.PI * 2);
-      ctx.fill();
+  function smoothedRemoteJetpackExhaust(remotePlayer, bodyRotation, time) {
+    const remoteId = String(remotePlayer.id || remotePlayer.name || "remote");
+    const localVelocity = rotatePoint(remotePlayer.vx || 0, remotePlayer.vy || 0, -bodyRotation);
+    const speed = Math.hypot(localVelocity.x, localVelocity.y);
+    let target = null;
+    if (speed > 8) {
+      target = {
+        x: -localVelocity.x / speed,
+        y: -localVelocity.y / speed
+      };
     }
-    ctx.restore();
+
+    let state = remoteJetpackExhausts.get(remoteId);
+    if (!state) {
+      state = {
+        x: target ? target.x : 0,
+        y: target ? target.y : 1,
+        angle: target ? Math.atan2(target.y, target.x) : Math.PI / 2,
+        time
+      };
+      remoteJetpackExhausts.set(remoteId, state);
+      return { x: state.x, y: state.y };
+    }
+
+    if (!target) {
+      target = { x: state.x, y: state.y };
+    }
+
+    const dt = state.time > 0 ? clamp((time - state.time) / 1000, 0, 0.08) : 1 / 60;
+    const smoothed = easeJetpackExhaustAngle(state, target, dt, jetpackDirectionSmoothing * 0.82);
+    state.x = smoothed.x;
+    state.y = smoothed.y;
+    state.angle = smoothed.angle;
+    state.time = time;
+
+    if (remoteJetpackExhausts.size > 64) {
+      const oldestAllowed = time - 8000;
+      for (const [id, entry] of remoteJetpackExhausts) {
+        if (finiteOr(entry.time, 0) < oldestAllowed) {
+          remoteJetpackExhausts.delete(id);
+        }
+      }
+    }
+
+    return smoothed;
+  }
+
+  function drawRemoteJetFlames(remotePlayer, time, bodyRotation) {
+    drawJetpackFlamePlumes(time, smoothedRemoteJetpackExhaust(remotePlayer, bodyRotation, time), 0);
   }
 
   function drawRemoteAstronautSuit(remotePlayer, time, bob, bodyRotation) {
@@ -27468,7 +35075,7 @@
     }
 
     if (!remotePlayer.landed && (remotePlayer.moving || Math.hypot(remotePlayer.vx || 0, remotePlayer.vy || 0) > 34)) {
-      drawRemoteJetFlames(time);
+      drawRemoteJetFlames(remotePlayer, time, bodyRotation);
     }
 
     ctx.lineJoin = "round";
@@ -27597,8 +35204,11 @@
     drawRemoteHeldArm(24, 32, lowerHand, 18, aimAngle + 0.18, bob, bodyRotation);
   }
 
-  function drawRemoteLaserPistol(active, rifle) {
-    const barrelLength = rifle ? 76 : 52;
+  function drawRemoteLaserPistol(active, weaponId) {
+    const rifle = weaponId === "laser-rifle";
+    const shotgun = weaponId === "shotgun";
+    const machineGun = weaponId === machineGunToolId;
+    const barrelLength = rifle ? 76 : machineGun ? 68 : shotgun ? 58 : 52;
     const muzzleX = 60 + barrelLength;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -27627,11 +35237,18 @@
     const barrelGradient = ctx.createLinearGradient(55, -8, muzzleX, 8);
     barrelGradient.addColorStop(0, "#5f6879");
     barrelGradient.addColorStop(0.42, "#fbf7ff");
-    barrelGradient.addColorStop(1, "#ff73ad");
+    barrelGradient.addColorStop(1, machineGun ? "#77a7ff" : shotgun ? "#ffdc7a" : "#ff73ad");
     ctx.fillStyle = barrelGradient;
     roundRectPath(55, -9, barrelLength, 18, 7);
     ctx.fill();
     ctx.stroke();
+
+    if (shotgun) {
+      ctx.fillStyle = "#34394d";
+      roundRectPath(55, 7, barrelLength - 6, 12, 5);
+      ctx.fill();
+      ctx.stroke();
+    }
 
     if (rifle) {
       ctx.fillStyle = "#252b3e";
@@ -27640,12 +35257,21 @@
       ctx.stroke();
     }
 
+    if (machineGun) {
+      ctx.fillStyle = "#252b3e";
+      for (let i = 0; i < 3; i += 1) {
+        roundRectPath(74 + i * 14, -18, 8, 9, 3);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
     ctx.fillStyle = "#2a3047";
     roundRectPath(24, 14, 22, 28, 7);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#ff73ad";
+    ctx.fillStyle = machineGun ? "#77a7ff" : shotgun ? "#ffdc7a" : "#ff73ad";
     ctx.beginPath();
     ctx.arc(51, 0, 5, 0, Math.PI * 2);
     ctx.fill();
@@ -27654,8 +35280,8 @@
       ctx.globalCompositeOperation = "lighter";
       const flash = ctx.createRadialGradient(muzzleX + 5, 0, 2, muzzleX + 5, 0, 42);
       flash.addColorStop(0, "rgba(255, 255, 255, 0.92)");
-      flash.addColorStop(0.35, "rgba(255, 115, 173, 0.66)");
-      flash.addColorStop(1, "rgba(255, 115, 173, 0)");
+      flash.addColorStop(0.35, machineGun ? "rgba(119, 167, 255, 0.7)" : shotgun ? "rgba(255, 220, 122, 0.68)" : "rgba(255, 115, 173, 0.66)");
+      flash.addColorStop(1, machineGun ? "rgba(119, 167, 255, 0)" : shotgun ? "rgba(255, 220, 122, 0)" : "rgba(255, 115, 173, 0)");
       ctx.fillStyle = flash;
       ctx.beginPath();
       ctx.arc(muzzleX + 5, 0, 42, 0, Math.PI * 2);
@@ -27741,6 +35367,50 @@
     }
   }
 
+  function drawRemotePistonPunch(remotePlayer) {
+    const active = remotePlayer.toolMode === "fire";
+    const reach = active ? 108 : 58;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(8, 14);
+    ctx.lineTo(50, 18);
+    ctx.stroke();
+    ctx.strokeStyle = "#f8fbff";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#29324c";
+    roundRectPath(13, -18, 48, 36, 10);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.moveTo(52, 0);
+    ctx.lineTo(reach, 0);
+    ctx.stroke();
+
+    const pistonGradient = ctx.createLinearGradient(52, -7, reach, 7);
+    pistonGradient.addColorStop(0, "#6f7785");
+    pistonGradient.addColorStop(0.45, "#f8fbff");
+    pistonGradient.addColorStop(1, "#ffd166");
+    ctx.strokeStyle = pistonGradient;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffd166";
+    roundRectPath(reach - 2, -18, 34, 36, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
+
   function drawRemoteTool(remotePlayer, aimAngle, bob, time) {
     if (!remotePlayer.equippedTool) {
       return;
@@ -27751,7 +35421,9 @@
     ctx.rotate(aimAngle);
 
     if (isWeaponTool(remotePlayer.equippedTool)) {
-      drawRemoteLaserPistol(remotePlayer.toolMode === "fire", remotePlayer.equippedTool === "laser-rifle");
+      drawRemoteLaserPistol(remotePlayer.toolMode === "fire", remotePlayer.equippedTool);
+    } else if (remotePlayer.equippedTool === pistonPunchToolId) {
+      drawRemotePistonPunch(remotePlayer);
     } else {
       drawRemoteSuctionGadget(remotePlayer, time);
     }
@@ -27796,6 +35468,8 @@
     if (gameSettings.hudEnabled !== false) {
       const screen = worldToScreen(remotePlayer.x, remotePlayer.y);
       const pct = clamp(remotePlayer.health / Math.max(1, remotePlayer.maxHealth || 100), 0, 1);
+      const energyPct = clamp(finiteOr(remotePlayer.energy, remotePlayer.maxEnergy || 100) / Math.max(1, finiteOr(remotePlayer.maxEnergy, 100)), 0, 1);
+      const toolsDisabled = finiteOr(remotePlayer.toolDisabledTimer, 0) > 0;
       const label = publicName || remotePlayer.name || "Contact";
 
       ctx.save();
@@ -27806,6 +35480,20 @@
       ctx.fillStyle = pct > 0.55 ? "#61f59a" : pct > 0.28 ? "#f5d65b" : "#ff6262";
       roundRectPath(screen.x - 37, screen.y - 91, 74 * pct, 8, 4);
       ctx.fill();
+
+      if (gameSettings.playerEnergyBar !== false && (energyPct < 0.995 || toolsDisabled)) {
+        const energyColors = playerEnergyStatusBarColors(toolsDisabled, energyPct);
+        ctx.fillStyle = "rgba(3, 8, 24, 0.62)";
+        roundRectPath(screen.x - 37, screen.y + 72, 74, 8, 4);
+        ctx.fill();
+        ctx.strokeStyle = toolsDisabled ? energyColors.strokeColor : "rgba(255, 255, 255, 0.16)";
+        ctx.lineWidth = 1;
+        roundRectPath(screen.x - 37, screen.y + 72, 74, 8, 4);
+        ctx.stroke();
+        ctx.fillStyle = energyColors.fillStart;
+        roundRectPath(screen.x - 37, screen.y + 72, 74 * energyPct, 8, 4);
+        ctx.fill();
+      }
 
       if (quality >= 0.64) {
         ctx.font = "800 11px Inter, system-ui, sans-serif";
@@ -27932,41 +35620,154 @@
   }
 
   function roundRectPath(x, y, w, h, r) {
-    const radius = Math.min(r, w / 2, h / 2);
+    const widthValue = finiteOr(w, 0);
+    const heightValue = finiteOr(h, 0);
+    if (widthValue <= 0 || heightValue <= 0) {
+      ctx.beginPath();
+      return;
+    }
+    const radius = Math.max(0, Math.min(Math.abs(finiteOr(r, 0)), widthValue / 2, heightValue / 2));
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
-    ctx.arcTo(x + w, y, x + w, y + h, radius);
-    ctx.arcTo(x + w, y + h, x, y + h, radius);
-    ctx.arcTo(x, y + h, x, y, radius);
-    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.arcTo(x + widthValue, y, x + widthValue, y + heightValue, radius);
+    ctx.arcTo(x + widthValue, y + heightValue, x, y + heightValue, radius);
+    ctx.arcTo(x, y + heightValue, x, y, radius);
+    ctx.arcTo(x, y, x + widthValue, y, radius);
     ctx.closePath();
   }
 
-  function drawJetFlames(time) {
-    const moving = isMoving();
-    if (!moving || player.landed) {
-      return;
+  function jetpackLocalMoveVector() {
+    let x = 0;
+    let y = 0;
+    if (isMovementKeyPressed("left")) {
+      x -= 1;
+    }
+    if (isMovementKeyPressed("right")) {
+      x += 1;
+    }
+    if (isMovementKeyPressed("up")) {
+      y -= 1;
+    }
+    if (isMovementKeyPressed("down")) {
+      y += 1;
     }
 
-    const flicker = 1 + Math.sin(time * 0.032) * 0.18;
+    const length = Math.hypot(x, y);
+    if (length <= 0.001) {
+      return { x: 0, y: -1 };
+    }
+    return {
+      x: x / length,
+      y: y / length
+    };
+  }
+
+  function easeJetpackExhaustAngle(current, target, dt, response) {
+    const blend = 1 - Math.exp(-Math.max(0, finiteOr(dt, 0)) * Math.max(0.001, finiteOr(response, 1)));
+    const currentAngle = Number.isFinite(Number(current.angle))
+      ? finiteOr(current.angle, Math.PI / 2)
+      : Math.atan2(finiteOr(current.y, 1), finiteOr(current.x, 0));
+    const targetAngle = Math.atan2(finiteOr(target.y, 1), finiteOr(target.x, 0));
+    const easedAngle = currentAngle + shortestAngleDelta(currentAngle, targetAngle) * blend;
+    return {
+      x: Math.cos(easedAngle),
+      y: Math.sin(easedAngle),
+      angle: easedAngle
+    };
+  }
+
+  function smoothedLocalJetpackExhaust(time) {
+    const input = jetpackLocalMoveVector();
+    const target = {
+      x: -input.x,
+      y: -input.y
+    };
+    const dt = localJetpackExhaust.time > 0
+      ? clamp((time - localJetpackExhaust.time) / 1000, 0, 0.08)
+      : 1 / 60;
+    const smoothed = easeJetpackExhaustAngle(localJetpackExhaust, target, dt, jetpackDirectionSmoothing);
+    localJetpackExhaust.x = smoothed.x;
+    localJetpackExhaust.y = smoothed.y;
+    localJetpackExhaust.angle = smoothed.angle;
+    localJetpackExhaust.time = time;
+    return smoothed;
+  }
+
+  function drawJetpackFlamePlumes(time, exhaust, boost) {
+    const boostAmount = clamp(finiteOr(boost, 0), 0, 1);
+    const boostScale = 1 + boostAmount * 0.38;
+    const exhaustAngle = Math.atan2(finiteOr(exhaust.y, 1), finiteOr(exhaust.x, 0)) - Math.PI / 2;
+    const flicker = clamp(
+      0.9 + Math.sin(time * 0.031) * 0.14 + Math.sin(time * 0.087 + finiteOr(exhaust.x, 0) * 2.7) * 0.09,
+      0.68,
+      1.18
+    );
+
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
 
     for (const x of [-16, 16]) {
-      const gradient = ctx.createRadialGradient(x, 50, 0, x, 56, 25 * flicker);
-      gradient.addColorStop(0, "rgba(255, 255, 184, 0.96)");
-      gradient.addColorStop(0.42, "rgba(78, 218, 255, 0.58)");
-      gradient.addColorStop(1, "rgba(75, 111, 255, 0)");
-      ctx.fillStyle = gradient;
+      const splay = x < 0 ? -0.08 : 0.08;
+      const plumeLength = (34 + boostAmount * 20) * boostScale * flicker;
+      const widthSize = (8.5 + boostAmount * 3.2) * (0.92 + Math.sin(time * 0.052 + x) * 0.08);
+      const outerLength = plumeLength * (1.18 + Math.sin(time * 0.066 + x * 0.4) * 0.08);
+
+      ctx.save();
+      ctx.translate(x, 43);
+      ctx.rotate(exhaustAngle + splay);
+
+      const glow = ctx.createRadialGradient(0, outerLength * 0.42, 0, 0, outerLength * 0.5, outerLength * 0.72);
+      glow.addColorStop(0, "rgba(255, 207, 64, " + (0.36 + boostAmount * 0.18) + ")");
+      glow.addColorStop(0.46, "rgba(255, 151, 38, " + (0.2 + boostAmount * 0.14) + ")");
+      glow.addColorStop(1, "rgba(255, 101, 24, 0)");
+      ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.ellipse(x, 54, 9 * flicker, 25 * flicker, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, outerLength * 0.5, widthSize * 2.3, outerLength * 0.58, 0, 0, Math.PI * 2);
       ctx.fill();
+
+      const plume = ctx.createLinearGradient(0, 2, 0, plumeLength);
+      plume.addColorStop(0, "rgba(255, 244, 106, " + (0.95 + boostAmount * 0.05) + ")");
+      plume.addColorStop(0.24, "rgba(255, 205, 58, " + (0.78 + boostAmount * 0.16) + ")");
+      plume.addColorStop(0.58, "rgba(255, 137, 45, " + (0.5 + boostAmount * 0.18) + ")");
+      plume.addColorStop(1, "rgba(255, 82, 24, 0)");
+      ctx.fillStyle = plume;
+      ctx.beginPath();
+      ctx.moveTo(-widthSize, 3);
+      ctx.quadraticCurveTo(-widthSize * 0.42, plumeLength * 0.42, -widthSize * 0.16, plumeLength * 0.72);
+      ctx.quadraticCurveTo(0, plumeLength * (0.92 + boostAmount * 0.08), widthSize * 0.18, plumeLength * 0.7);
+      ctx.quadraticCurveTo(widthSize * 0.5, plumeLength * 0.36, widthSize, 3);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255, 238, 84, " + (0.34 + boostAmount * 0.2) + ")";
+      ctx.lineWidth = 1.5 + boostAmount * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-widthSize * 0.34, 9);
+      ctx.quadraticCurveTo(-widthSize * 0.16, plumeLength * 0.36, -widthSize * 0.05, plumeLength * 0.72);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(widthSize * 0.34, 8);
+      ctx.quadraticCurveTo(widthSize * 0.16, plumeLength * 0.34, widthSize * 0.04, plumeLength * 0.66);
+      ctx.stroke();
+      ctx.restore();
     }
 
     ctx.restore();
   }
 
+  function drawJetFlames(time) {
+    const moving = isMoving();
+    if (!moving || playerIsOnFoot()) {
+      return;
+    }
+
+    drawJetpackFlamePlumes(time, smoothedLocalJetpackExhaust(time), canUseJetpackBoost() ? 1 : 0);
+  }
+
   function playerSurfaceRotation() {
+    if (player.spacecraftInterior) {
+      return 0;
+    }
     if (!player.landed) {
       return 0;
     }
@@ -27980,7 +35781,7 @@
   }
 
   function playerLocalToScreen(x, y, time, rotation) {
-    const bob = player.landed ? 0 : Math.sin(time * 0.004) * 2.4;
+    const bob = playerIsOnFoot() ? 0 : Math.sin(time * 0.004) * 2.4;
     const point = rotatePoint(x, y, rotation);
     return {
       x: width / 2 + point.x,
@@ -28123,11 +35924,14 @@
   }
 
   function drawAstronautBody(time, localVelocity, bodyRotation) {
+    const onFoot = playerIsOnFoot();
     const crouching = player.landed && isMovementKeyPressed("down");
-    const walkSpeed = player.landed ? player.landed.walkSpeed || 0 : 0;
-    const bob = player.landed ? 0 : Math.sin(time * 0.004) * 2.4;
-    const lean = player.landed ? 0 : clamp(localVelocity.x / 460, -1, 1) * 0.14;
-    const walkBounce = player.landed && !crouching && Math.abs(walkSpeed) > 1
+    const walkSpeed = player.landed
+      ? player.landed.walkSpeed || 0
+      : (player.spacecraftInterior ? player.spacecraftInterior.walkSpeed || 0 : 0);
+    const bob = onFoot ? 0 : Math.sin(time * 0.004) * 2.4;
+    const lean = onFoot ? 0 : clamp(localVelocity.x / 460, -1, 1) * 0.14;
+    const walkBounce = onFoot && !crouching && Math.abs(walkSpeed) > 1
       ? Math.max(0, Math.sin(player.walkCycle * 2)) * 3
       : 0;
 
@@ -28220,10 +36024,106 @@
     ctx.restore();
   }
 
+  function drawRocketSuitBody(time, localVelocity, aim) {
+    const charge = clamp(finiteOr(player.rocketSuitCharge, 0), 0, 1);
+    const speed = Math.hypot(finiteOr(player.vx, 0), finiteOr(player.vy, 0));
+    const flameScale = clamp(speed / 760 + charge * 0.65, 0.35, 1.65);
+    const bob = Math.sin(time * 0.006) * 1.4;
+
+    ctx.save();
+    ctx.translate(width / 2, height / 2 + bob);
+    ctx.rotate(aim.angle + Math.PI / 2);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    ctx.globalCompositeOperation = "lighter";
+    const flameLength = 54 * flameScale;
+    const flame = ctx.createLinearGradient(0, 64, 0, 64 + flameLength);
+    flame.addColorStop(0, "rgba(255, 246, 138, 0.95)");
+    flame.addColorStop(0.38, "rgba(255, 167, 56, 0.7)");
+    flame.addColorStop(1, "rgba(255, 86, 34, 0)");
+    ctx.fillStyle = flame;
+    ctx.beginPath();
+    ctx.moveTo(-20, 58);
+    ctx.quadraticCurveTo(-7, 76 + flameLength * 0.25, 0, 64 + flameLength);
+    ctx.quadraticCurveTo(9, 76 + flameLength * 0.25, 20, 58);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    ctx.lineWidth = 5;
+    const hull = ctx.createLinearGradient(-34, -74, 34, 70);
+    hull.addColorStop(0, "#ffffff");
+    hull.addColorStop(0.48, "#dfe6f1");
+    hull.addColorStop(1, "#a985ff");
+    ctx.fillStyle = hull;
+    ctx.beginPath();
+    ctx.moveTo(0, -86);
+    ctx.quadraticCurveTo(35, -44, 29, 42);
+    ctx.quadraticCurveTo(18, 72, 0, 78);
+    ctx.quadraticCurveTo(-18, 72, -29, 42);
+    ctx.quadraticCurveTo(-35, -44, 0, -86);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#f8f5ec";
+    ctx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-29, 22);
+    ctx.lineTo(-54, 58);
+    ctx.lineTo(-18, 51);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(29, 22);
+    ctx.lineTo(54, 58);
+    ctx.lineTo(18, 51);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    const visorGradient = ctx.createLinearGradient(-23, -50, 23, -14);
+    visorGradient.addColorStop(0, "#172847");
+    visorGradient.addColorStop(0.5, "#050a18");
+    visorGradient.addColorStop(1, "#0d3f6a");
+    ctx.fillStyle = visorGradient;
+    ctx.beginPath();
+    ctx.ellipse(0, -34, 23, 17, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+    ctx.beginPath();
+    ctx.ellipse(-10, -42, 6, 3, -0.55, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#cfd7e7";
+    roundRectPath(-17, 17, 34, 25, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#64e3ff";
+    ctx.beginPath();
+    ctx.arc(-6, 32, 2.6 + charge * 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ef6262";
+    ctx.beginPath();
+    ctx.arc(7, 32, 2.6 + charge * 1.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
   function drawLaserPistol(aim, time, weaponId) {
     const rifle = weaponId === "laser-rifle";
+    const shotgun = weaponId === "shotgun";
+    const machineGun = weaponId === machineGunToolId;
     const weapon = weaponByToolId(weaponId) || playerWeaponDefaults;
-    const barrelLength = rifle ? 76 : 52;
+    const barrelLength = rifle ? 76 : machineGun ? 68 : shotgun ? 58 : 52;
     const muzzleX = 60 + barrelLength;
     const centerX = width / 2;
     const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
@@ -28260,11 +36160,18 @@
     const barrelGradient = ctx.createLinearGradient(55, -8, muzzleX, 8);
     barrelGradient.addColorStop(0, "#5f6879");
     barrelGradient.addColorStop(0.42, "#fbf7ff");
-    barrelGradient.addColorStop(1, "#ff73ad");
+    barrelGradient.addColorStop(1, machineGun ? "#77a7ff" : shotgun ? "#ffdc7a" : "#ff73ad");
     ctx.fillStyle = barrelGradient;
     roundRectPath(55, -9, barrelLength, 18, 7);
     ctx.fill();
     ctx.stroke();
+
+    if (shotgun) {
+      ctx.fillStyle = "#34394d";
+      roundRectPath(55, 7, barrelLength - 6, 12, 5);
+      ctx.fill();
+      ctx.stroke();
+    }
 
     if (rifle) {
       ctx.fillStyle = "#252b3e";
@@ -28273,12 +36180,21 @@
       ctx.stroke();
     }
 
+    if (machineGun) {
+      ctx.fillStyle = "#252b3e";
+      for (let i = 0; i < 3; i += 1) {
+        roundRectPath(74 + i * 14, -18, 8, 9, 3);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
     ctx.fillStyle = "#2a3047";
     roundRectPath(24, 14, 22, 28, 7);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#ff73ad";
+    ctx.fillStyle = machineGun ? "#77a7ff" : shotgun ? "#ffdc7a" : "#ff73ad";
     ctx.beginPath();
     ctx.arc(51, 0, 5, 0, Math.PI * 2);
     ctx.fill();
@@ -28287,8 +36203,8 @@
       ctx.globalCompositeOperation = "lighter";
       const flash = ctx.createRadialGradient(muzzleX + 5, 0, 2, muzzleX + 5, 0, 42);
       flash.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-      flash.addColorStop(0.35, "rgba(255, 115, 173, 0.68)");
-      flash.addColorStop(1, "rgba(255, 115, 173, 0)");
+      flash.addColorStop(0.35, machineGun ? "rgba(119, 167, 255, 0.72)" : shotgun ? "rgba(255, 220, 122, 0.7)" : "rgba(255, 115, 173, 0.68)");
+      flash.addColorStop(1, machineGun ? "rgba(119, 167, 255, 0)" : shotgun ? "rgba(255, 220, 122, 0)" : "rgba(255, 115, 173, 0)");
       ctx.fillStyle = flash;
       ctx.beginPath();
       ctx.arc(muzzleX + 5, 0, 42, 0, Math.PI * 2);
@@ -28355,6 +36271,168 @@
     ctx.restore();
   }
 
+  function drawFamiliarNet(aim, time) {
+    const centerX = width / 2;
+    const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
+    const swingProgress = familiarNetSwingDuration > 0 ? clamp(1 - familiarNetSwingTimer / familiarNetSwingDuration, 0, 1) : 0;
+    const swingEase = Math.sin(swingProgress * Math.PI);
+    const swingDirection = familiarNetSwingDirection < 0 ? -1 : 1;
+    const active = !areToolsDisabled() && (familiarNetSwingTimer > 0 || mouse.left || mouse.right);
+    const swing = swingEase * 0.82 * swingDirection + (mouse.right && familiarNetSwingTimer <= 0 ? 0.22 : 0);
+    const held = familiarNetCapture ? 1 : 0;
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(aim.angle + swing);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (familiarNetSwingTimer > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "rgba(102, 224, 184, " + (0.22 + swingEase * 0.5).toFixed(3) + ")";
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.arc(96, -8, 78 + swingEase * 16, -0.78, 0.78);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(248, 251, 255, " + (0.18 + swingEase * 0.34).toFixed(3) + ")";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(96, -8, 92 + swingEase * 20, -0.64, 0.64);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(10, 15);
+    ctx.lineTo(95, -10);
+    ctx.stroke();
+    ctx.strokeStyle = "#f8fbff";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.translate(112, -15);
+    ctx.rotate(-0.18);
+    ctx.fillStyle = "rgba(102, 224, 184, " + (held ? 0.24 : 0.12) + ")";
+    ctx.strokeStyle = active || held ? "#66e0b8" : "rgba(248, 251, 255, 0.8)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 33, 25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(223, 252, 255, 0.72)";
+    ctx.lineWidth = 2;
+    for (let i = -2; i <= 2; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(-26, i * 8);
+      ctx.quadraticCurveTo(0, i * 4 + Math.sin(time * 0.008 + i) * 2, 26, i * 8);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(i * 10, -20);
+      ctx.quadraticCurveTo(i * 5, 0, i * 10, 20);
+      ctx.stroke();
+    }
+
+    if (held) {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "rgba(102, 224, 184, 0.72)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 40 + Math.sin(time * 0.018) * 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    ctx.restore();
+  }
+
+  function drawPistonPunch(aim, time) {
+    const centerX = width / 2;
+    const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
+    const active = !areToolsDisabled() && mouse.left && toolFireCooldown > pistonPunchCooldown * 0.45;
+    const extension = active ? clamp((toolFireCooldown - pistonPunchCooldown * 0.45) / (pistonPunchCooldown * 0.55), 0, 1) : 0;
+    const reach = 54 + extension * 58;
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(aim.angle);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(8, 14);
+    ctx.lineTo(50, 18);
+    ctx.stroke();
+    ctx.strokeStyle = "#f8fbff";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#29324c";
+    roundRectPath(13, -18, 48, 36, 10);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.moveTo(52, 0);
+    ctx.lineTo(reach, 0);
+    ctx.stroke();
+
+    const pistonGradient = ctx.createLinearGradient(52, -7, reach, 7);
+    pistonGradient.addColorStop(0, "#6f7785");
+    pistonGradient.addColorStop(0.45, "#f8fbff");
+    pistonGradient.addColorStop(1, "#ffd166");
+    ctx.strokeStyle = pistonGradient;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+
+    ctx.fillStyle = "#d9e3e8";
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(52, 0, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    const headGradient = ctx.createLinearGradient(reach - 4, -20, reach + 34, 20);
+    headGradient.addColorStop(0, "#f8fbff");
+    headGradient.addColorStop(0.52, "#ffd166");
+    headGradient.addColorStop(1, "#8e9aae");
+    ctx.fillStyle = headGradient;
+    roundRectPath(reach - 2, -20, 38, 40, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#151829";
+    roundRectPath(reach + 6, -11, 20, 6, 3);
+    ctx.fill();
+    roundRectPath(reach + 6, 5, 20, 6, 3);
+    ctx.fill();
+
+    if (active) {
+      ctx.globalCompositeOperation = "lighter";
+      const flash = ctx.createRadialGradient(reach + 32, 0, 3, reach + 32, 0, 46);
+      flash.addColorStop(0, "rgba(255, 255, 255, 0.86)");
+      flash.addColorStop(0.38, "rgba(255, 209, 102, 0.58)");
+      flash.addColorStop(1, "rgba(255, 209, 102, 0)");
+      ctx.fillStyle = flash;
+      ctx.beginPath();
+      ctx.arc(reach + 32, 0, 46, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    ctx.restore();
+  }
+
   function drawGadget(aim, time) {
     if (!equippedToolId) {
       return;
@@ -28364,8 +36442,20 @@
       drawLaserPistol(aim, time, equippedToolId);
       return;
     }
+    if (equippedToolId === guidedLauncherToolId) {
+      drawLaserPistol(aim, time, "shotgun");
+      return;
+    }
     if (equippedToolId === "spanner") {
       drawSpanner(aim, time);
+      return;
+    }
+    if (equippedToolId === familiarNetToolId) {
+      drawFamiliarNet(aim, time);
+      return;
+    }
+    if (equippedToolId === pistonPunchToolId) {
+      drawPistonPunch(aim, time);
       return;
     }
 
@@ -28373,7 +36463,8 @@
     const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
     const mode = localGadgetModeForRender();
     const active = mode === "pull" || mode === "push" || mode === "hold";
-    const energyColor = mode === "hold" ? "#8fffd0" : mode === "push" ? "#ffb35c" : "#67edff";
+    const viscious = isVisciousVacuumEquipped();
+    const energyColor = mode === "hold" ? "#8fffd0" : mode === "push" ? "#ffb35c" : viscious ? "#ff5f87" : "#67edff";
 
     ctx.save();
     ctx.translate(centerX, centerY);
@@ -28393,7 +36484,7 @@
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.fillStyle = "#edf1f5";
+    ctx.fillStyle = viscious ? "#ffe6ee" : "#edf1f5";
     roundRectPath(8, -19, 60, 38, 14);
     ctx.fill();
     ctx.strokeStyle = "#171b2c";
@@ -28403,7 +36494,7 @@
     const barrelGradient = ctx.createLinearGradient(35, -13, 98, 13);
     barrelGradient.addColorStop(0, "#98a8c1");
     barrelGradient.addColorStop(0.42, "#f8fbff");
-    barrelGradient.addColorStop(1, "#8ccfe8");
+    barrelGradient.addColorStop(1, viscious ? "#ff5f87" : "#8ccfe8");
     ctx.fillStyle = barrelGradient;
     roundRectPath(42, -13, 54, 26, 11);
     ctx.fill();
@@ -28438,8 +36529,8 @@
       funnelShape.rimHalf
     );
     funnelGradient.addColorStop(0, "#fff7da");
-    funnelGradient.addColorStop(0.45, "#78ddf7");
-    funnelGradient.addColorStop(1, "#a46bff");
+    funnelGradient.addColorStop(0.45, viscious ? "#ff8caf" : "#78ddf7");
+    funnelGradient.addColorStop(1, viscious ? "#7139ff" : "#a46bff");
     ctx.fillStyle = funnelGradient;
     ctx.globalAlpha = 0.32;
     ctx.beginPath();
@@ -28510,15 +36601,172 @@
     ctx.scale(cameraZoom, cameraZoom);
     ctx.translate(-width / 2, -height / 2);
     drawGadgetField(aim);
-    drawAstronautBody(time, localVelocity, bodyRotation);
-    drawHeldArms(aim, time, "back");
-    drawGadget(aim, time);
-    drawHeldArms(aim, time, "front");
+    if (player.rocketSuitActive || finiteOr(player.rocketSuitCharge, 0) > 0.04) {
+      drawRocketSuitBody(time, localVelocity, aim);
+    } else {
+      drawAstronautBody(time, localVelocity, bodyRotation);
+      drawHeldArms(aim, time, "back");
+      drawGadget(aim, time);
+      drawHeldArms(aim, time, "front");
+    }
     ctx.restore();
-    drawPlayerHealthBar();
+    drawPlayerHealthBar(time);
   }
 
-  function drawPlayerHealthBar() {
+  function playerStatusBarAlpha(state, value, variant, time) {
+    const changed = state.value === null ||
+      Math.abs(finiteOr(value, 0) - finiteOr(state.value, 0)) > 0.002 ||
+      state.variant !== variant;
+
+    if (changed) {
+      state.value = value;
+      state.variant = variant;
+      state.changedAt = time;
+      return 1;
+    }
+
+    const settleDelay = 1000;
+    const fadeDuration = 650;
+    const minAlpha = 0.42;
+    const age = Math.max(0, time - finiteOr(state.changedAt, time));
+    const fade = clamp((age - settleDelay) / fadeDuration, 0, 1);
+    return 1 - fade * (1 - minAlpha);
+  }
+
+  function isLocalPlayerEnergyDisabled() {
+    return areToolsDisabled();
+  }
+
+  function playerEnergyStatusBarColors(disabled, pct) {
+    if (disabled) {
+      return {
+        iconColor: "rgba(255, 45, 58, 1)",
+        glowColor: "rgba(255, 0, 24, 0.72)",
+        strokeColor: "rgba(255, 45, 58, 0.92)",
+        fillStart: "#ff1f2f",
+        fillEnd: "#ff1f2f"
+      };
+    }
+    return {
+      iconColor: "rgba(157, 255, 122, 0.98)",
+      glowColor: "rgba(157, 255, 122, 0.42)",
+      strokeColor: "rgba(255, 255, 255, 0.18)",
+      fillStart: pct > 0.35 ? "#86f66e" : "#f5d65b",
+      fillEnd: pct > 0.35 ? "#b8ff8f" : "#ffe981"
+    };
+  }
+
+  function drawPlayerStatusBar(options) {
+    const pct = clamp(options.pct, 0, 1);
+    const fillWidth = options.width * pct;
+
+    ctx.save();
+    ctx.globalAlpha *= clamp(options.alpha, 0, 1);
+    ctx.font = "13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = options.glowColor;
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = options.iconColor;
+    ctx.fillText(options.icon, options.iconX, options.y + options.height * 0.5);
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(2, 5, 14, 0.62)";
+    roundRectPath(options.x - 1, options.y - 1, options.width + 2, options.height + 2, options.height * 0.5 + 1);
+    ctx.fill();
+
+    ctx.strokeStyle = options.strokeColor;
+    ctx.lineWidth = 1;
+    roundRectPath(options.x - 1, options.y - 1, options.width + 2, options.height + 2, options.height * 0.5 + 1);
+    ctx.stroke();
+
+    if (fillWidth > 0.5) {
+      const fill = ctx.createLinearGradient(options.x, options.y, options.x + options.width, options.y);
+      fill.addColorStop(0, options.fillStart);
+      fill.addColorStop(1, options.fillEnd);
+      ctx.fillStyle = fill;
+      roundRectPath(options.x, options.y, fillWidth, options.height, options.height * 0.5);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawPlayerStatusBars(time) {
+    if (gameSettings.hudEnabled === false) {
+      return;
+    }
+    const showHealthBar = gameSettings.playerHealthBar !== false;
+    const showEnergyBar = gameSettings.playerEnergyBar !== false;
+    if (!showHealthBar && !showEnergyBar) {
+      return;
+    }
+
+    const pct = clamp(player.health / player.maxHealth, 0, 1);
+    const energyPct = playerEnergyPct();
+    const energyDisabled = isLocalPlayerEnergyDisabled();
+    const barWidth = 76;
+    const barHeight = 8;
+    const barX = width / 2 - barWidth / 2;
+    const zoomedOutBarBlend = clamp(
+      (cameraZoom - cameraZoomMin) / Math.max(0.001, cameraZoomDefault - cameraZoomMin),
+      0,
+      1
+    );
+    const healthOffset = 56 + (Math.max(110, 114 * cameraZoom) - 56) * zoomedOutBarBlend;
+    const energyOffset = 64 + (Math.max(118, 126 * cameraZoom) - 64) * zoomedOutBarBlend;
+    const healthY = height / 2 - healthOffset;
+    const iconX = barX - 12;
+    const drawTime = Number.isFinite(Number(time)) ? time : performance.now();
+    const healthAlpha = playerStatusBarAlpha(playerStatusBarState.health, pct, "health", drawTime);
+
+    if (showHealthBar) {
+      const healthLow = pct <= 0.28;
+      const healthMid = pct > 0.28 && pct <= 0.55;
+      drawPlayerStatusBar({
+        x: barX,
+        y: healthY,
+        width: barWidth,
+        height: barHeight,
+        pct,
+        alpha: healthAlpha,
+        icon: "\u2665",
+        iconX,
+        iconColor: healthLow ? "rgba(255, 112, 112, 0.98)" : "rgba(255, 132, 146, 0.98)",
+        glowColor: "rgba(255, 90, 112, 0.45)",
+        strokeColor: "rgba(255, 255, 255, 0.18)",
+        fillStart: healthLow ? "#ff6262" : healthMid ? "#f5d65b" : "#53e68d",
+        fillEnd: healthLow ? "#ff9b76" : healthMid ? "#ffe981" : "#79f7a3"
+      });
+    }
+
+    if (showEnergyBar && (energyPct < 0.995 || energyDisabled)) {
+      const energyY = height / 2 + energyOffset;
+      const energyVariant = energyDisabled ? "disabled" : energyPct > 0.35 ? "energy" : "energy-low";
+      const energyAlpha = playerStatusBarAlpha(playerStatusBarState.energy, energyPct, energyVariant, drawTime);
+      const energyColors = playerEnergyStatusBarColors(energyDisabled, energyPct);
+      drawPlayerStatusBar({
+        x: barX,
+        y: energyY,
+        width: barWidth,
+        height: barHeight,
+        pct: energyPct,
+        alpha: energyAlpha,
+        icon: "\u26a1",
+        iconX,
+        iconColor: energyColors.iconColor,
+        glowColor: energyColors.glowColor,
+        strokeColor: energyColors.strokeColor,
+        fillStart: energyColors.fillStart,
+        fillEnd: energyColors.fillEnd
+      });
+    }
+  }
+
+  function drawPlayerHealthBar(time) {
+    drawPlayerStatusBars(time);
+    return;
+
     if (gameSettings.hudEnabled === false) {
       return;
     }
@@ -28775,6 +37023,50 @@
     ctx.restore();
   }
 
+  function drawMapEventRegion(region, centerX, centerY, mapRadius, range) {
+    if (!region) {
+      return;
+    }
+    const marker = projectMapPoint(region.x, region.y, centerX, centerY, mapRadius, range);
+    const color = region.color || particleStormMapColor;
+    const progress = clamp(finiteOr(region.progress, 0), 0, 1);
+    const pulse = 1 + Math.sin(performance.now() * 0.006 + progress * Math.PI * 2) * 0.08;
+    const regionRadius = marker.clamped
+      ? Math.max(10, mapRadius * 0.08)
+      : clamp((finiteOr(region.radius, 0) / Math.max(1, range)) * (mapRadius - 14), 10, mapRadius * 0.82);
+    const alpha = 0.78 - progress * 0.22;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = colorString(color, 0.08 * alpha);
+    ctx.strokeStyle = colorString(color, 0.62 * alpha);
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, regionRadius * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = colorString(color, 0.26 * alpha);
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, regionRadius * 0.62, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.font = "850 8px Inter, ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const labelBase = String(region.label || "Storm").toUpperCase();
+    const label = marker.clamped ? labelBase + " " + formatMapDistance(marker.distance) : labelBase;
+    const labelWidth = Math.min(74, ctx.measureText(label).width + 12);
+    ctx.fillStyle = "rgba(3, 8, 24, 0.72)";
+    roundRectPath(marker.x - labelWidth / 2, marker.y - regionRadius - 16, labelWidth, 13, 5);
+    ctx.fill();
+    ctx.fillStyle = colorString(color, 0.95 * alpha);
+    ctx.fillText(label, marker.x, marker.y - regionRadius - 9.2, labelWidth - 5);
+    ctx.restore();
+  }
+
   function drawMapRangeLabel(centerX, centerY, radius, label) {
     const x = centerX + radius * 0.72;
     const y = centerY - radius * 0.72;
@@ -28817,6 +37109,296 @@
   function setStyleWidthIfChanged(element, value) {
     if (element && element.style.width !== value) {
       element.style.width = value;
+    }
+  }
+
+  function setDeveloperOverlayOpen(open) {
+    developerMetricsState.open = Boolean(open);
+    if (!developerOverlay) {
+      return;
+    }
+
+    developerOverlay.classList.toggle("is-open", developerMetricsState.open);
+    developerOverlay.setAttribute("aria-hidden", developerMetricsState.open ? "false" : "true");
+    if (developerMetricsState.open) {
+      updateDeveloperOverlay(true);
+    }
+  }
+
+  function toggleDeveloperOverlay() {
+    setDeveloperOverlayOpen(!developerMetricsState.open);
+  }
+
+  function formatDeveloperNumber(value, digits) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return "n/a";
+    }
+    if (Number.isFinite(Number(digits)) && digits > 0) {
+      return number.toFixed(digits);
+    }
+    return Math.round(number).toLocaleString("en-US");
+  }
+
+  function formatDeveloperPercent(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.round(clamp(number, 0, 1) * 100) + "%" : "n/a";
+  }
+
+  function formatDeveloperBytes(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value < 0) {
+      return "n/a";
+    }
+
+    const units = ["B", "KB", "MB", "GB"];
+    let unitIndex = 0;
+    let scaled = value;
+    while (scaled >= 1024 && unitIndex < units.length - 1) {
+      scaled /= 1024;
+      unitIndex += 1;
+    }
+    return (unitIndex === 0 ? Math.round(scaled) : scaled.toFixed(1)) + " " + units[unitIndex];
+  }
+
+  function developerMemorySummary() {
+    const memory = window.performance && window.performance.memory ? window.performance.memory : null;
+    if (!memory) {
+      return "Memory: unavailable";
+    }
+
+    return "Memory: " + formatDeveloperBytes(memory.usedJSHeapSize) +
+      " / " + formatDeveloperBytes(memory.totalJSHeapSize) +
+      " (limit " + formatDeveloperBytes(memory.jsHeapSizeLimit) + ")";
+  }
+
+  function developerMobSummary() {
+    const groups = [
+      ["alien", rivals],
+      ["ufo", ufos],
+      ["rambot", rambots],
+      ["engineer", engineers],
+      ["tesla", teslas],
+      ["rocket", rockets],
+      ["fighter", fighters]
+    ];
+    let total = 0;
+    let bosses = 0;
+    const parts = [];
+
+    for (const group of groups) {
+      const list = group[1];
+      const count = Array.isArray(list) ? list.length : 0;
+      total += count;
+      bosses += Array.isArray(list) ? list.filter((mob) => mob && mob.isBoss).length : 0;
+      parts.push(group[0] + " " + count);
+    }
+
+    return {
+      total,
+      bosses,
+      detail: parts.join(", ")
+    };
+  }
+
+  function addDeveloperWorldBound(bounds, x, y, radius) {
+    const worldX = Number(x);
+    const worldY = Number(y);
+    if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) {
+      return;
+    }
+
+    const r = Math.max(0, finiteOr(radius, 0));
+    bounds.minX = Math.min(bounds.minX, worldX - r);
+    bounds.minY = Math.min(bounds.minY, worldY - r);
+    bounds.maxX = Math.max(bounds.maxX, worldX + r);
+    bounds.maxY = Math.max(bounds.maxY, worldY + r);
+    bounds.maxDistanceFromPlayer = Math.max(bounds.maxDistanceFromPlayer, Math.hypot(worldX - player.x, worldY - player.y) + r);
+  }
+
+  function addDeveloperListBounds(bounds, list, fallbackRadius) {
+    if (!Array.isArray(list)) {
+      return;
+    }
+
+    for (const entity of list) {
+      if (!entity) {
+        continue;
+      }
+      addDeveloperWorldBound(bounds, entity.x, entity.y, Number.isFinite(Number(entity.radius)) ? entity.radius : fallbackRadius);
+    }
+  }
+
+  function developerWorldBounds() {
+    const bounds = {
+      minX: player.x,
+      minY: player.y,
+      maxX: player.x,
+      maxY: player.y,
+      maxDistanceFromPlayer: 0
+    };
+
+    addDeveloperWorldBound(bounds, player.x, player.y, player.radius);
+    addDeveloperListBounds(bounds, particles, 8);
+    addDeveloperListBounds(bounds, structures, 60);
+    addDeveloperListBounds(bounds, spacecrafts, 220);
+    addDeveloperListBounds(bounds, healthPickups, 18);
+    addDeveloperListBounds(bounds, techPickups, 18);
+    addDeveloperListBounds(bounds, rivals, 30);
+    addDeveloperListBounds(bounds, ufos, 42);
+    addDeveloperListBounds(bounds, rambots, 32);
+    addDeveloperListBounds(bounds, engineers, 34);
+    addDeveloperListBounds(bounds, teslas, 34);
+    addDeveloperListBounds(bounds, rockets, 34);
+    addDeveloperListBounds(bounds, fighters, 34);
+    addDeveloperListBounds(bounds, rivalProjectiles, 8);
+    addDeveloperListBounds(bounds, playerLasers, 8);
+    addDeveloperListBounds(bounds, launcherMissiles, 8);
+
+    return {
+      width: bounds.maxX - bounds.minX,
+      height: bounds.maxY - bounds.minY,
+      radiusFromPlayer: bounds.maxDistanceFromPlayer
+    };
+  }
+
+  function developerWorldMassSummary() {
+    let totalMass = 0;
+    let largestMass = 0;
+    let majorBodies = 0;
+
+    for (const particle of particles) {
+      const mass = Math.max(0, finiteOr(particle && particle.mass, 0));
+      totalMass += mass;
+      largestMass = Math.max(largestMass, mass);
+      if (mass >= mappedBodyThreshold) {
+        majorBodies += 1;
+      }
+    }
+
+    return {
+      totalMass,
+      largestMass,
+      majorBodies
+    };
+  }
+
+  function developerSocketState() {
+    if (!multiplayer.socket) {
+      return "none";
+    }
+
+    return ["connecting", "open", "closing", "closed"][multiplayer.socket.readyState] || String(multiplayer.socket.readyState);
+  }
+
+  function developerRunMode() {
+    if (isMultiplayerV2Active()) {
+      return "party-v2";
+    }
+    if (isSharedWorldFollower()) {
+      return "shared-follower";
+    }
+    if (isPartySessionActive()) {
+      return "party";
+    }
+    if (multiplayer.connected) {
+      return "online";
+    }
+    return "solo";
+  }
+
+  function developerV2EntityCount() {
+    const state = multiplayer.v2 && multiplayer.v2.state ? multiplayer.v2.state : null;
+    const world = state && state.world ? state.world : null;
+    if (!world) {
+      return 0;
+    }
+
+    return [
+      "particles",
+      "structures",
+      "healthPickups",
+      "techPickups",
+      "rivalProjectiles",
+      "alienoids",
+      "ufos",
+      "rambots",
+      "engineers",
+      "teslas",
+      "rockets",
+      "fighters"
+    ].reduce(function (total, key) {
+      return total + (Array.isArray(world[key]) ? world[key].length : 0);
+    }, 0);
+  }
+
+  function buildDeveloperMetricsText() {
+    const frameDt = finiteOr(renderPerformance.lastFrameDt, 0);
+    const fps = frameDt > 0 ? 1 / frameDt : 0;
+    const mobs = developerMobSummary();
+    const world = developerWorldBounds();
+    const mass = developerWorldMassSummary();
+    const randomEvent = randomEventState.active && randomEventState.active.id
+      ? randomEventState.active.id + " " + formatDeveloperNumber(randomEventState.active.timer || 0, 1) + "s"
+      : "none";
+    const playerSpeed = Math.hypot(finiteOr(player.vx, 0), finiteOr(player.vy, 0));
+    const deviceMemory = Number(navigator.deviceMemory);
+    const deviceMemoryText = Number.isFinite(deviceMemory) ? deviceMemory + " GB" : "n/a";
+
+    return [
+      "Runtime",
+      "  mode: " + developerRunMode() + " | active " + runState.active + " | paused " + gamePaused + " | death " + deathState.active,
+      "  difficulty: " + runState.difficultyId + " | event: " + randomEvent,
+      "  score: " + formatDeveloperNumber(lifeStats.currentScore) + " current, " + formatDeveloperNumber(lifeStats.bestScore) + " best",
+      "",
+      "Frame",
+      "  fps: " + formatDeveloperNumber(fps, 1) + " | frame dt: " + formatDeveloperNumber(frameDt * 1000, 1) + " ms | frame: " + renderPerformance.frameId,
+      "  render quality: " + formatDeveloperPercent(renderQuality()) + " | glow budgets: tiny " + renderBudgets.tinyParticleGlows + ", body " + renderBudgets.bodyGlows,
+      "  viewport: " + width + "x" + height + " @ " + formatDeveloperNumber(dpr, 2) + " dpr | zoom " + formatDeveloperNumber(cameraZoom * 100) + "%",
+      "",
+      "World",
+      "  extent: " + formatDeveloperNumber(world.width) + " x " + formatDeveloperNumber(world.height) + " | farthest " + formatDeveloperNumber(world.radiusFromPlayer),
+      "  particles: " + particles.length + " / target " + targetParticles + " | major bodies " + mass.majorBodies,
+      "  mass: total " + formatDeveloperNumber(mass.totalMass) + " | largest " + formatDeveloperNumber(mass.largestMass),
+      "  structures: " + structures.length + " | spacecraft: " + spacecrafts.length + " | pickups: health " + healthPickups.length + ", tech " + techPickups.length,
+      "",
+      "Combat",
+      "  mobs: " + mobs.total + " | bosses " + mobs.bosses,
+      "  " + mobs.detail,
+      "  projectiles: rival " + rivalProjectiles.length + ", lasers " + playerLasers.length + ", missiles " + launcherMissiles.length,
+      "  effects: sparks " + sparks.length + ", star dust " + starDust.length,
+      "",
+      "Player",
+      "  hp: " + formatDeveloperNumber(player.health, 1) + "/" + formatDeveloperNumber(player.maxHealth, 1) + " | energy " + formatDeveloperNumber(player.energy, 1) + "/" + formatDeveloperNumber(player.maxEnergy, 1),
+      "  pos: " + formatDeveloperNumber(player.x) + ", " + formatDeveloperNumber(player.y) + " | speed " + formatDeveloperNumber(playerSpeed, 1),
+      "  landed: " + (player.landed ? "body " + player.landed.bodyId : "no") + " | interior " + (player.spacecraftInterior ? player.spacecraftInterior.craftId : "no"),
+      "",
+      "Network",
+      "  socket: " + developerSocketState() + " | connected " + multiplayer.connected + " | room players " + multiplayer.roomPlayerCount + "/" + multiplayer.roomMaxPlayers,
+      "  remote universes: " + multiplayer.remoteUniverses.size + " | party snapshots " + multiplayer.partyPlayerSnapshots.size + " | online " + multiplayer.onlineCount,
+      "  v2 active: " + Boolean(multiplayer.v2 && multiplayer.v2.active) + " | tick " + (multiplayer.v2 ? multiplayer.v2.clientTick : 0) + " | entities " + developerV2EntityCount(),
+      "",
+      "Device",
+      "  " + developerMemorySummary(),
+      "  cores: " + (navigator.hardwareConcurrency || "n/a") + " | device memory: " + deviceMemoryText
+    ].join("\n");
+  }
+
+  function updateDeveloperOverlay(force) {
+    if (!developerMetricsState.open || !developerMetricsText) {
+      return;
+    }
+
+    const now = performance.now();
+    if (!force && now - developerMetricsState.lastUpdateAt < developerMetricsRefreshMs) {
+      return;
+    }
+
+    developerMetricsState.lastUpdateAt = now;
+    const text = buildDeveloperMetricsText();
+    if (text !== developerMetricsState.lastText) {
+      developerMetricsState.lastText = text;
+      developerMetricsText.textContent = text;
     }
   }
 
@@ -28891,6 +37473,7 @@
     const mapRadius = size * 0.41;
     const bodies = mappedBodiesForFrame();
     const remoteContacts = collectRemoteMapContacts();
+    const eventRegions = activeRandomEventRegions();
     let farthest = 0;
 
     for (const body of bodies) {
@@ -28901,6 +37484,9 @@
     }
     for (const contact of remoteContacts.players) {
       farthest = Math.max(farthest, Math.hypot(contact.player.x - player.x, contact.player.y - player.y));
+    }
+    for (const region of eventRegions) {
+      farthest = Math.max(farthest, Math.hypot(region.x - player.x, region.y - player.y) + finiteOr(region.radius, 0));
     }
 
     const range = clamp(farthest * 1.08, 1400, 9000);
@@ -28937,6 +37523,10 @@
     ctx.lineTo(centerX, centerY + mapRadius);
     ctx.stroke();
 
+    for (const region of eventRegions) {
+      drawMapEventRegion(region, centerX, centerY, mapRadius, range);
+    }
+
     for (const body of bodies) {
       const marker = projectMapPoint(body.x, body.y, centerX, centerY, mapRadius, range);
       drawMapBodyMarker(body, marker, { showDistance: body.tier.name === "moon" || body.tier.name === "planet" || marker.clamped });
@@ -28971,6 +37561,8 @@
   }
 
   function updateHud() {
+    updateDeveloperOverlay(false);
+
     if (gameSettings.hudEnabled === false) {
       return;
     }
@@ -28982,11 +37574,13 @@
       const energyPct = Math.round(playerEnergyPct() * 100);
       setTextIfChanged(energyValue, "EP: " + Math.round(player.energy) + "/" + Math.round(player.maxEnergy));
       setStyleWidthIfChanged(energyFill, energyPct + "%");
+      energyFill.classList.toggle("is-disabled", areToolsDisabled());
     }
     updateDifficultyUi();
     if (scoreValue) {
       setTextIfChanged(scoreValue, Math.max(0, Math.round(lifeStats.bestScore || lifeStats.currentScore || 0)) + " pts");
     }
+    updateObjectiveState();
     updateTouchLandButton();
 
     const progressSnapshot = hudProgressSnapshot();
@@ -29032,8 +37626,11 @@
     updateEquippedTool(dt);
     updateLandedGadgetThrust(dt);
     updatePartyLandedGadgetThrusts(dt);
+    updateRandomEvents(dt);
     updateMobSpawns(dt);
     updateParticles(dt);
+    updateVisciousVacuumMobs(dt);
+    updateSpacecrafts(dt);
     applyLandedSurfaceConstraint();
     updateRivals(dt);
     updateUfos(dt);
@@ -29122,6 +37719,7 @@
     const dt = Math.min(0.033, frameDt);
     lastTime = now;
     beginRenderFrame(frameDt);
+    requestAudioResume();
 
     if (!runState.active) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -29248,14 +37846,25 @@
         maxHealth: player.maxHealth,
         energy: player.energy,
         maxEnergy: player.maxEnergy,
+        toolDisabledTimer,
         aimAngle: Math.atan2(getAim().world.y, getAim().world.x),
         aimLocalAngle: getAim().angle,
         landed: normalizeLandingSnapshot(player.landed),
+        spacecraftInterior: normalizeSpacecraftInteriorSnapshot(player.spacecraftInterior),
         walkCycle: player.walkCycle,
         cameraRoll,
+        cameraZoom,
         bodyRotation: typeof playerSurfaceRotation === "function" ? playerSurfaceRotation() : 0,
         hitCooldown: player.hitCooldown,
         respawnInvulnerable: multiplayer.partyRespawnInvulnerableTimer
+      },
+      renderStatus: {
+        playerEnergyBar: {
+          disabled: typeof isLocalPlayerEnergyDisabled === "function" ? isLocalPlayerEnergyDisabled() : toolDisabledTimer > 0,
+          colors: typeof playerEnergyStatusBarColors === "function"
+            ? playerEnergyStatusBarColors(typeof isLocalPlayerEnergyDisabled === "function" ? isLocalPlayerEnergyDisabled() : toolDisabledTimer > 0, playerEnergyPct())
+            : null
+        }
       },
       particles: {
         count: particles.length,
@@ -29269,6 +37878,33 @@
       structures: {
         count: structures.length
       },
+      spacecrafts: spacecrafts.map(function (craft) {
+        return {
+          id: craft.id,
+          blueprintId: craft.blueprintId,
+          eventId: craft.eventId || "",
+          name: craft.name,
+          x: craft.x,
+          y: craft.y,
+          vx: craft.vx,
+          vy: craft.vy,
+          door: craft.door ? { ...craft.door } : null,
+          components: craft.components.map(function (component) {
+            return {
+              id: component.id,
+              kind: component.kind,
+              x: component.x,
+              y: component.y,
+              w: component.w,
+              h: component.h,
+              floorInset: component.floorInset,
+              health: component.health,
+              maxHealth: component.maxHealth
+            };
+          })
+        };
+      }),
+      randomEvent: randomEventState.active ? { ...randomEventState.active } : null,
       effects: {
         sparks: {
           count: sparks.length,
@@ -29391,6 +38027,9 @@
     if (Number.isFinite(Number(config.energy))) {
       player.energy = clamp(Number(config.energy), 0, player.maxEnergy);
     }
+    if (Number.isFinite(Number(config.toolDisabledTimer))) {
+      toolDisabledTimer = Math.max(0, Number(config.toolDisabledTimer));
+    }
     if (Number.isFinite(Number(config.respawnInvulnerable))) {
       multiplayer.partyRespawnInvulnerableTimer = Math.max(0, Number(config.respawnInvulnerable));
     }
@@ -29439,6 +38078,21 @@
       healthPickups.reduce((largest, pickup) => Math.max(largest, finiteOr(pickup.id, 0) + 1), 1)
     );
     return healthPickups.map(serializeHealthPickup);
+  }
+
+  function setClusternautsTestTeslas(list) {
+    teslas.length = 0;
+    for (const entry of Array.isArray(list) ? list : []) {
+      const tesla = normalizeTeslaSnapshot(entry);
+      if (tesla) {
+        teslas.push(tesla);
+      }
+    }
+    nextTeslaId = Math.max(
+      nextTeslaId,
+      teslas.reduce((largest, tesla) => Math.max(largest, finiteOr(tesla.id, 0) + 1), 1)
+    );
+    return teslas.map(serializeTesla);
   }
 
   function createClusternautsTestPartyState(config) {
@@ -29498,11 +38152,17 @@
     }
 
     window.__clusternautsTestHarness = {
+      snapshot: function () {
+        return createClusternautsFrameRateSnapshot();
+      },
       startRun: function (options) {
         const config = options || {};
         if (config.viewport) {
           window.innerWidth = Math.max(1, Math.floor(finiteOr(config.viewport.width, window.innerWidth || 1280)));
           window.innerHeight = Math.max(1, Math.floor(finiteOr(config.viewport.height, window.innerHeight || 720)));
+        }
+        if (Number.isFinite(Number(config.cameraZoom))) {
+          setCameraZoom(Number(config.cameraZoom));
         }
         resize();
         resetSoloMultiplayerSession();
@@ -29527,6 +38187,24 @@
       },
       requestLandingToggle: function () {
         return requestLandingToggle();
+      },
+      startRandomEvent: function (id) {
+        const eventId = String(id || "");
+        const definition = randomEventDefinitions.find(function (candidate) {
+          return candidate.id === eventId;
+        });
+        if (!definition) {
+          return null;
+        }
+        if (randomEventState.active) {
+          finishRandomEvent("test");
+        }
+        startRandomEvent(definition);
+        return createClusternautsFrameRateSnapshot();
+      },
+      finishRandomEvent: function () {
+        finishRandomEvent("test");
+        return createClusternautsFrameRateSnapshot();
       },
       step: function (dt) {
         const seconds = Math.max(0, finiteOr(dt, 0));
@@ -29587,6 +38265,14 @@
       multiplayerV2State: function () {
         return multiplayer.v2.state && mpV2Sim ? mpV2Sim.serializeState(multiplayer.v2.state) : null;
       },
+      applyMultiplayerV2Snapshot: function (message) {
+        applyMultiplayerV2Snapshot(message || {});
+        return createClusternautsFrameRateSnapshot();
+      },
+      processMultiplayerV2Events: function (events, options) {
+        processMultiplayerV2Events(events, options || {});
+        return createClusternautsFrameRateSnapshot();
+      },
       setPlayerState: function (options) {
         configureClusternautsTestPlayerState(options);
         return createClusternautsFrameRateSnapshot();
@@ -29626,6 +38312,13 @@
       getHealthPickups: function () {
         return healthPickups.map(serializeHealthPickup);
       },
+      setTeslas: setClusternautsTestTeslas,
+      getTeslas: function () {
+        return teslas.map(serializeTesla);
+      },
+      getRivalProjectiles: function () {
+        return rivalProjectiles.map(serializeProjectile);
+      },
       localPhysicsOwner: function (type, id) {
         const session = localPartyPhysicsSession(type, id, performance.now());
         return session ? session.playerId || "" : "";
@@ -29638,6 +38331,7 @@
         applyWorldSnapshot(world || {}, options || { smoothParticles: true, smoothEntities: true });
         return {
           particles: particles.map(serializeParticle),
+          rivalProjectiles: rivalProjectiles.map(serializeProjectile),
           techPickups: techPickups.map(serializeTechPickup),
           healthPickups: healthPickups.map(serializeHealthPickup)
         };
@@ -29922,8 +38616,12 @@
       clampTechLedgerPosition(rect.left, rect.top);
     }
   });
-  window.addEventListener("pointerdown", unlockAudio, { once: true, capture: true });
-  window.addEventListener("keydown", unlockAudio, { once: true, capture: true });
+  window.addEventListener("pointerdown", resumeAudioFromUserGesture, { capture: true });
+  window.addEventListener("mousedown", resumeAudioFromUserGesture, { capture: true });
+  window.addEventListener("touchend", resumeAudioFromUserGesture, { capture: true });
+  window.addEventListener("keydown", resumeAudioFromUserGesture, { capture: true });
+  window.addEventListener("focus", requestAudioResume);
+  window.addEventListener("pageshow", requestAudioResume);
 
   if (soundToggle) {
     soundToggle.addEventListener("click", function () {
@@ -29940,6 +38638,12 @@
   if (settingsToggle) {
     settingsToggle.addEventListener("click", function () {
       setSettingsOpen(!settingsOpen);
+    });
+  }
+
+  if (objectiveToggle) {
+    objectiveToggle.addEventListener("click", function () {
+      setObjectivesOpen(!objectivesOpen);
     });
   }
 
@@ -30454,6 +39158,31 @@
     });
   }
 
+  if (objectiveTreeClose) {
+    objectiveTreeClose.addEventListener("click", function () {
+      setObjectivesOpen(false);
+    });
+  }
+
+  if (objectiveClaimAll) {
+    objectiveClaimAll.addEventListener("click", claimAllObjectiveRewards);
+  }
+
+  if (objectiveTreeList) {
+    objectiveTreeList.addEventListener("pointerdown", beginObjectiveTreePan);
+    objectiveTreeList.addEventListener("pointermove", updateObjectiveTreePan);
+    objectiveTreeList.addEventListener("pointerup", endObjectiveTreePan);
+    objectiveTreeList.addEventListener("pointercancel", endObjectiveTreePan);
+    objectiveTreeList.addEventListener("wheel", zoomObjectiveTree, { passive: false });
+    objectiveTreeList.addEventListener("scroll", function () {
+      if (!objectiveTreeList) {
+        return;
+      }
+      objectiveState.scrollLeft = objectiveTreeList.scrollLeft;
+      objectiveState.scrollTop = objectiveTreeList.scrollTop;
+    }, { passive: true });
+  }
+
   if (buildMenuDetail) {
     buildMenuDetail.addEventListener("click", function (event) {
       const upgradeAction = closestEventTarget(event, ".build-detail__upgrade-action");
@@ -30501,6 +39230,11 @@
 
   if (tradeOfferList) {
     tradeOfferList.addEventListener("click", function (event) {
+      const npcOffer = closestEventTarget(event, "button[data-npc-offer]");
+      if (npcOffer) {
+        selectNpcTradeOffer(Number(npcOffer.dataset.npcOffer));
+        return;
+      }
       const button = closestEventTarget(event, "button[data-trade-key]");
       if (!button) {
         return;
@@ -30540,6 +39274,12 @@
   window.addEventListener("keydown", function (event) {
     if (isBrowserScrollKey(event) && !settingsOpen && !isEditableEventTarget(event) && !isKeyboardControlEventTarget(event)) {
       event.preventDefault();
+    }
+
+    if (event.code === "F10" && !event.repeat) {
+      event.preventDefault();
+      toggleDeveloperOverlay();
+      return;
     }
 
     if (settingsOpen) {
@@ -30642,6 +39382,18 @@
         setResourcesHudOpen(!resourcesHudOpen);
         return;
       }
+      if (event.code === controlCodeFor("objectives") && !event.repeat) {
+        event.preventDefault();
+        setObjectivesOpen(!objectivesOpen);
+        return;
+      }
+
+      const directAction = actionForControlCode(event.code, directControlActions);
+      if (directAction && (!event.repeat || directAction === "zoomIn" || directAction === "zoomOut")) {
+        event.preventDefault();
+        performDirectControlAction(directAction);
+        return;
+      }
     }
 
     if (event.code === "Slash" && !event.repeat) {
@@ -30677,6 +39429,11 @@
     if (event.code === "Escape" && leaderboard.open) {
       event.preventDefault();
       setLeaderboardOpen(false);
+      return;
+    }
+    if (event.code === "Escape" && objectivesOpen) {
+      event.preventDefault();
+      setObjectivesOpen(false);
       return;
     }
     if (event.code === "Escape" && multiplayer.pendingSignal) {
@@ -30718,7 +39475,9 @@
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") {
       setCrazyGamesGameplayActive(false, "visibility-hidden");
+      requestAudioResume();
     } else {
+      requestAudioResume();
       updateCrazyGamesGameplayState("visibility-visible");
     }
   });
@@ -30753,6 +39512,16 @@
   });
 
   window.addEventListener("mousedown", function (event) {
+    if (pendingControlRemap) {
+      const code = mouseControlCode(event);
+      if (code) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        remapControl(pendingControlRemap, code);
+      }
+      return;
+    }
+
     if (shouldSuppressSyntheticMouseEvent()) {
       event.preventDefault();
       return;
@@ -30767,6 +39536,13 @@
     }
 
     updatePointerAimFromEvent(event);
+
+    const directAction = actionForControlCode(mouseControlCode(event), directControlActions);
+    if (directAction) {
+      event.preventDefault();
+      performDirectControlAction(directAction);
+      return;
+    }
 
     if (activePlacementRecipeId) {
       event.preventDefault();
@@ -30812,6 +39588,12 @@
   });
 
   window.addEventListener("mouseup", function (event) {
+    const directAction = actionForControlCode(mouseControlCode(event), directControlActions);
+    if (directAction) {
+      event.preventDefault();
+      return;
+    }
+
     if (shouldSuppressSyntheticMouseEvent()) {
       event.preventDefault();
       return;
@@ -30851,6 +39633,16 @@
   });
 
   window.addEventListener("wheel", function (event) {
+    if (pendingControlRemap) {
+      const code = wheelControlCode(event.deltaY);
+      if (code) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        remapControl(pendingControlRemap, code);
+      }
+      return;
+    }
+
     if (deathState.active || !runState.active) {
       event.preventDefault();
       return;
@@ -30861,7 +39653,10 @@
     }
 
     event.preventDefault();
-    adjustCameraZoomFromWheel(event.deltaY);
+    const directAction = actionForControlCode(wheelControlCode(event.deltaY), directControlActions);
+    if (directAction) {
+      performDirectControlAction(directAction, { wheelDeltaY: event.deltaY });
+    }
   }, { passive: false });
 
   async function startGame() {
@@ -30881,6 +39676,7 @@
     syncCompactHudControls();
     seedStarDust();
     seedParticles();
+    seedSpacecrafts();
     applyDifficulty(defaultDifficultyId);
     resetLifeStats();
     setStartMenuView("main", { push: false });
@@ -30889,8 +39685,9 @@
     updateOnlineUi();
     updateAccountUi();
     setFriendJoinsEnabled(false, "startup", { persist: false, notify: false, startRun: false });
+    ensureOnlinePresence();
     void initializeCrazyGamesIntegration().then(async function () {
-      if (isCrazyGamesRuntime()) {
+      if (isPlatformLocalSaveRuntime()) {
         await loadPersistentState();
       }
       updateCrazyGamesGameplayState("sdk-ready");
@@ -30902,6 +39699,7 @@
     if (!particles.length) {
       seedParticles();
     }
+    ensureDefaultSpacecrafts();
 
     resetFrameClock();
     resetRenderPerformance();

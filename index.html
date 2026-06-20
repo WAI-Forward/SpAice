@@ -71,6 +71,14 @@
       </section>
     </div>
 
+    <section class="developer-overlay" id="developerOverlay" aria-label="Developer metrics" aria-hidden="true">
+      <div class="developer-overlay__header">
+        <strong>Developer Metrics</strong>
+        <span>F10</span>
+      </div>
+      <pre class="developer-overlay__metrics" id="developerMetricsText">Metrics paused</pre>
+    </section>
+
     <div class="reticle" aria-hidden="true"></div>
     <div class="compact-hud-toggles" aria-label="Compact HUD controls">
       <button class="compact-hud-toggle" id="vitalsToggle" type="button" aria-label="Toggle vitals" aria-controls="gameVitalsHud" aria-expanded="false">
@@ -86,6 +94,11 @@
       <button class="compact-hud-toggle" id="buildToggle" type="button" aria-label="Open build menu" aria-controls="buildMenu" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M9.7 3.5 4.1 9.1l2.4 2.4 1.5-1.5 2.1 2.1-6.8 6.8 2.7 2.7 6.8-6.8 2.1 2.1-1.5 1.5 2.4 2.4 5.6-5.6-2.4-2.4-1.5 1.5-2.1-2.1 2.1-2.1 1.4 1.4 2.2-2.2-6.7-6.7-2.2 2.2 1.4 1.4-2.1 2.1-2.1-2.1 1.5-1.5-2.2-2.2Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="objectiveToggle" type="button" aria-label="Toggle objective tree" aria-controls="objectiveTree" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 4.5h4.5V9H5V4.5Zm1.6 1.6v1.3h1.3V6.1H6.6Zm7.4-.7h5v1.8h-5V5.4Zm-9 5.9h4.5v4.5H5v-4.5Zm1.6 1.6v1.3h1.3v-1.3H6.6Zm5.2-3.5h1.8v3.1H19v1.8h-5.4v3.2h-1.8V9.4Zm2.2 7.2h5v1.8h-5v-1.8Zm-9 1.5h4.5v4.5H5v-4.5Zm1.6 1.6V21h1.3v-1.3H6.6Z"/>
         </svg>
       </button>
       <button class="compact-hud-toggle" id="mapToggle" type="button" aria-label="Toggle map" aria-expanded="false">
@@ -108,6 +121,22 @@
       <div class="tech-ledger__title">Tech</div>
       <div class="tech-ledger__list" id="techLedgerList"></div>
     </aside>
+    <section class="objective-tree" id="objectiveTree" aria-label="Objective tree" aria-hidden="true">
+      <div class="objective-tree__panel">
+        <div class="objective-tree__header">
+          <span>Objectives</span>
+          <div class="objective-tree__header-actions">
+            <strong id="objectiveSummary">Find matter, grow, and survive.</strong>
+            <button class="objective-tree__claim-all" id="objectiveClaimAll" type="button" disabled>Claim All</button>
+            <button class="objective-tree__close" id="objectiveTreeClose" type="button" aria-label="Close objective tree">x</button>
+          </div>
+        </div>
+        <div class="objective-tree__body">
+          <div class="objective-tree__map" id="objectiveTreeList"></div>
+          <aside class="objective-tree__detail" id="objectiveTreeDetail" aria-live="polite"></aside>
+        </div>
+      </div>
+    </section>
     <section class="build-menu" id="buildMenu" aria-label="Build menu" aria-hidden="true">
       <div class="build-menu__panel">
         <div class="build-menu__header">
@@ -218,7 +247,7 @@
           <section class="settings-panel__section" data-settings-section="controls">
             <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsControlsSection" data-settings-section-toggle="controls">
               <span>Controls</span>
-              <span class="settings-panel__section-summary">Key bindings</span>
+              <span class="settings-panel__section-summary">Key, mouse, wheel bindings</span>
             </button>
             <div class="settings-panel__section-body" id="settingsControlsSection" hidden>
               <div class="settings-panel__group settings-panel__group--controls">
@@ -362,18 +391,18 @@
           <div class="difficulty-screen__options">
             <button class="difficulty-card" type="button" data-difficulty="easy">
               <strong>Easy</strong>
-              <span>Fast mobs, softer hits</span>
-              <small>0.82x spawn / 0.62x damage / 1.45x health</small>
+              <span>Relaxed growth with forgiving enemies</span>
+              <small>Softer hits, more recovery drops, and smaller score rewards.</small>
             </button>
             <button class="difficulty-card is-recommended" type="button" data-difficulty="medium">
               <strong>Medium</strong>
-              <span>Busy mobs, lighter hits</span>
-              <small>0.72x spawn / 0.82x damage / 1.20x health</small>
+              <span>Balanced pressure and score rewards</span>
+              <small>Regular attacks, fair damage, and the standard score target.</small>
             </button>
             <button class="difficulty-card" type="button" data-difficulty="hard">
               <strong>Hard</strong>
-              <span>More mobs</span>
-              <small>0.62x spawn / 1.00x damage / 1.00x health</small>
+              <span>Hostile space with bigger score payouts</span>
+              <small>More enemies, fewer safety drops, and stronger mob-point rewards.</small>
             </button>
           </div>
         </div>
@@ -399,11 +428,11 @@
             <div class="lobby-panel__difficulty" id="lobbyDifficultyOptions">
               <span id="lobbyDifficultyLabel">Difficulty</span>
               <div class="lobby-difficulty-select" id="lobbyDifficultySelect">
-                <button class="lobby-difficulty-select__toggle" id="lobbyDifficultyToggle" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="lobbyDifficultyLabel lobbyDifficultyToggle">Medium - Busy mobs, lighter hits</button>
+                <button class="lobby-difficulty-select__toggle" id="lobbyDifficultyToggle" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="lobbyDifficultyLabel lobbyDifficultyToggle">Medium - Balanced pressure</button>
                 <div class="lobby-difficulty-select__menu" id="lobbyDifficultyMenu" role="listbox" aria-labelledby="lobbyDifficultyLabel" hidden>
-                  <button type="button" role="option" data-lobby-difficulty="easy">Easy - Fast mobs, softer hits</button>
-                  <button type="button" role="option" data-lobby-difficulty="medium">Medium - Busy mobs, lighter hits</button>
-                  <button type="button" role="option" data-lobby-difficulty="hard">Hard - More mobs</button>
+                  <button type="button" role="option" data-lobby-difficulty="easy">Easy - Relaxed growth</button>
+                  <button type="button" role="option" data-lobby-difficulty="medium">Medium - Balanced pressure</button>
+                  <button type="button" role="option" data-lobby-difficulty="hard">Hard - Hostile space</button>
                 </div>
               </div>
             </div>
@@ -524,7 +553,10 @@
     </section>
     <div class="notifications" id="notifications" aria-live="polite"></div>
 
-    <script src="src/mp-v2-sim.js" defer></script>
-    <script src="src/game.js" defer></script>
+    <script>
+      window.CLUSTERNAUTS_CLIENT_BUILD = "8e2432b25a18";
+    </script>
+    <script src="src/mp-v2-sim.js?v=8e2432b25a18" defer></script>
+    <script src="src/game.js?v=8e2432b25a18" defer></script>
   </body>
 </html>

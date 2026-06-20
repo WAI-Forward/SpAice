@@ -33,14 +33,22 @@ const accountSessionCookie = "clusternauts_session";
 const crazyGamesPublicKeyUrl = "https://sdk.crazygames.com/publicKey.json";
 const overlapRoomMaxPlayers = 4;
 const techKeys = ["suction", "weapon", "plating", "energy", "repair", "target", "propulsion", "shield", "communication"];
-const toolKeys = ["suction-gadget", "laser-pistol", "laser-rifle", "spanner"];
+const toolKeys = ["suction-gadget", "viscious-vacuum", "laser-pistol", "laser-rifle", "shotgun", "machine-gun", "spanner", "emp-tool", "familiar-net", "piston-punch", "guided-launcher"];
 const toolUpgradeKeys = {
   "suction-gadget": ["suck", "blow"],
+  "viscious-vacuum": ["suck", "blow"],
   "laser-pistol": ["damage", "range"],
   "laser-rifle": ["damage", "range"],
-  spanner: ["repair-speed", "dismantle-speed"]
+  shotgun: ["damage", "range"],
+  "machine-gun": ["damage", "range"],
+  spanner: ["repair-speed", "dismantle-speed"],
+  "emp-tool": ["range", "duration"]
 };
 const mobTierOrder = ["alienoid", "ufo", "rambot", "tesla", "engineer", "satellite", "rocket", "fighter"];
+const mobBossHealthMultiplier = 6;
+const mobBossWarningDuration = 60;
+const mobBossMinionCooldownMax = 14;
+const mobBossAltAttackCooldownMax = 10;
 const memoryPersistence = {
   worlds: new Map(),
   players: new Map(),
@@ -263,6 +271,7 @@ function createDefaultWorldState() {
       fighter: 960
     },
     mobSpawnRestTimer: 0,
+    mobSpawnRestDrainTimer: 0,
     mobSpawnRestCooldownTimer: 150,
     mobDefeatsByKind: {
       alienoid: 0,
@@ -274,6 +283,11 @@ function createDefaultWorldState() {
       rocket: 0,
       fighter: 0
     },
+    mobBossWarnings: Object.fromEntries(mobTierOrder.map((kind) => [kind, {
+      active: false,
+      timer: 0,
+      lastNoticeSecond: -1
+    }])),
     lastEvolvedAt: Date.now()
   };
 }
@@ -2786,11 +2800,13 @@ function normalizeWorldState(snapshot) {
     nextTechPickupId: Math.max(1, Math.floor(Number(source.nextTechPickupId) || 1)),
     nextHealthPickupId: Math.max(1, Math.floor(Number(source.nextHealthPickupId) || 1)),
     mobSpawnTimers: normalizeMobSpawnTimers(source.mobSpawnTimers),
-    mobSpawnRestTimer: clampNumber(source.mobSpawnRestTimer, 0, 24),
+    mobSpawnRestTimer: clampNumber(source.mobSpawnRestTimer, 0, 45),
+    mobSpawnRestDrainTimer: clampNumber(source.mobSpawnRestDrainTimer, 0, 90),
     mobSpawnRestCooldownTimer: Number.isFinite(Number(source.mobSpawnRestCooldownTimer))
       ? clampNumber(source.mobSpawnRestCooldownTimer, 0, 150)
       : 150,
     mobDefeatsByKind: normalizeMobDefeatsByKind(source.mobDefeatsByKind),
+    mobBossWarnings: normalizeMobBossWarnings(source.mobBossWarnings),
     lastEvolvedAt: clampNumber(source.lastEvolvedAt, 0, Date.now()) || Date.now()
   };
 }
@@ -2928,11 +2944,37 @@ function normalizeMobDefeatsByKind(source) {
   return defeats;
 }
 
+function normalizeMobBossWarnings(source) {
+  const snapshot = source && typeof source === "object" ? source : {};
+  const warnings = {};
+  for (const kind of mobTierOrder) {
+    const warning = snapshot[kind] && typeof snapshot[kind] === "object" ? snapshot[kind] : {};
+    warnings[kind] = {
+      active: Boolean(warning.active),
+      timer: clampNumber(warning.timer, 0, mobBossWarningDuration),
+      lastNoticeSecond: Math.floor(clampNumber(warning.lastNoticeSecond, -1, mobBossWarningDuration))
+    };
+  }
+  return warnings;
+}
+
+function normalizeMobBossFields(source, kind, baseHealth) {
+  const isBoss = Boolean(source && source.isBoss);
+  const maxHealth = isBoss ? baseHealth * mobBossHealthMultiplier : baseHealth;
+  return {
+    isBoss,
+    bossBaseKind: isBoss && mobTierOrder.includes(source.bossBaseKind) ? source.bossBaseKind : (isBoss ? kind : ""),
+    minionCooldown: isBoss ? clampNumber(source.minionCooldown, 0, mobBossMinionCooldownMax) : 0,
+    maxHealth
+  };
+}
+
 function normalizeAlienoid(source) {
   if (!source || typeof source !== "object") {
     return null;
   }
 
+  const boss = normalizeMobBossFields(source, "alienoid", 100);
   return {
     kind: "alienoid",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
@@ -2941,18 +2983,22 @@ function normalizeAlienoid(source) {
     vx: clampNumber(source.vx, -1200, 1200),
     vy: clampNumber(source.vy, -1200, 1200),
     radius: clampNumber(source.radius, 8, 120),
-    health: clampNumber(source.health, 0, 100),
-    maxHealth: clampNumber(source.maxHealth, 1, 100),
+    health: clampNumber(source.health, 0, boss.maxHealth),
+    maxHealth: clampNumber(source.maxHealth, 1, boss.maxHealth),
     color: normalizeColor(source.color),
     flash: clampNumber(source.flash, 0, 5),
     hitCooldown: clampNumber(source.hitCooldown, 0, 10),
+    disabledTimer: clampNumber(source.disabledTimer, 0, 20),
     respawnTimer: clampNumber(source.respawnTimer, 0, 3600),
     landed: normalizeLanding(source.landed),
     residentTier: sanitizeText(source.residentTier, 32) || null,
     shootCooldown: clampNumber(source.shootCooldown, 0, 60),
     strafeSign: Number(source.strafeSign) < 0 ? -1 : 1,
     rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
-    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
+    isBoss: boss.isBoss,
+    bossBaseKind: boss.bossBaseKind,
+    minionCooldown: boss.minionCooldown
   };
 }
 
@@ -2961,6 +3007,7 @@ function normalizeUfo(source) {
     return null;
   }
 
+  const boss = normalizeMobBossFields(source, "ufo", 130);
   return {
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
@@ -2968,17 +3015,22 @@ function normalizeUfo(source) {
     vx: clampNumber(source.vx, -1200, 1200),
     vy: clampNumber(source.vy, -1200, 1200),
     radius: clampNumber(source.radius, 8, 140),
-    health: clampNumber(source.health, 0, 130),
-    maxHealth: clampNumber(source.maxHealth, 1, 130),
+    health: clampNumber(source.health, 0, boss.maxHealth),
+    maxHealth: clampNumber(source.maxHealth, 1, boss.maxHealth),
     color: normalizeColor(source.color),
     flash: clampNumber(source.flash, 0, 5),
     hitCooldown: clampNumber(source.hitCooldown, 0, 10),
+    disabledTimer: clampNumber(source.disabledTimer, 0, 20),
     respawnTimer: clampNumber(source.respawnTimer, 0, 3600),
     strafeSign: Number(source.strafeSign) < 0 ? -1 : 1,
     rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
     beamAngle: clampNumber(source.beamAngle, -Math.PI * 16, Math.PI * 16),
     beamPulse: clampNumber(source.beamPulse, -Math.PI * 16, Math.PI * 16),
-    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
+    tractorDisabledTimer: clampNumber(source.tractorDisabledTimer, 0, 20),
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
+    isBoss: boss.isBoss,
+    bossBaseKind: boss.bossBaseKind,
+    minionCooldown: boss.minionCooldown
   };
 }
 
@@ -2987,6 +3039,7 @@ function normalizeRambot(source) {
     return null;
   }
 
+  const boss = normalizeMobBossFields(source, "rambot", 210);
   return {
     kind: "rambot",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
@@ -2995,11 +3048,12 @@ function normalizeRambot(source) {
     vx: clampNumber(source.vx, -1200, 1200),
     vy: clampNumber(source.vy, -1200, 1200),
     radius: clampNumber(source.radius, 8, 160),
-    health: clampNumber(source.health, 0, 210),
-    maxHealth: clampNumber(source.maxHealth, 1, 210),
+    health: clampNumber(source.health, 0, boss.maxHealth),
+    maxHealth: clampNumber(source.maxHealth, 1, boss.maxHealth),
     color: normalizeColor(source.color),
     flash: clampNumber(source.flash, 0, 5),
     hitCooldown: clampNumber(source.hitCooldown, 0, 10),
+    disabledTimer: clampNumber(source.disabledTimer, 0, 20),
     strafeSign: Number(source.strafeSign) < 0 ? -1 : 1,
     rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
     chargeCooldown: clampNumber(source.chargeCooldown, 0, 60),
@@ -3008,7 +3062,10 @@ function normalizeRambot(source) {
     chargeDirX: clampNumber(source.chargeDirX, -1, 1),
     chargeDirY: clampNumber(source.chargeDirY, -1, 1),
     impactCooldown: clampNumber(source.impactCooldown, 0, 10),
-    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
+    isBoss: boss.isBoss,
+    bossBaseKind: boss.bossBaseKind,
+    minionCooldown: boss.minionCooldown
   };
 }
 
@@ -3017,6 +3074,7 @@ function normalizeEngineer(source) {
     return null;
   }
 
+  const boss = normalizeMobBossFields(source, "engineer", 140);
   return {
     kind: "engineer",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
@@ -3025,11 +3083,12 @@ function normalizeEngineer(source) {
     vx: clampNumber(source.vx, -1200, 1200),
     vy: clampNumber(source.vy, -1200, 1200),
     radius: clampNumber(source.radius, 8, 140),
-    health: clampNumber(source.health, 0, 140),
-    maxHealth: clampNumber(source.maxHealth, 1, 140),
+    health: clampNumber(source.health, 0, boss.maxHealth),
+    maxHealth: clampNumber(source.maxHealth, 1, boss.maxHealth),
     color: normalizeColor(source.color),
     flash: clampNumber(source.flash, 0, 5),
     hitCooldown: clampNumber(source.hitCooldown, 0, 10),
+    disabledTimer: clampNumber(source.disabledTimer, 0, 20),
     strafeSign: Number(source.strafeSign) < 0 ? -1 : 1,
     rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
     healCooldown: clampNumber(source.healCooldown, 0, 10),
@@ -3037,7 +3096,10 @@ function normalizeEngineer(source) {
     repairBeamAngle: clampNumber(source.repairBeamAngle, -Math.PI * 16, Math.PI * 16),
     targetKind: sanitizeText(source.targetKind, 32) || "",
     targetId: Math.max(0, Math.floor(Number(source.targetId) || 0)),
-    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
+    isBoss: boss.isBoss,
+    bossBaseKind: boss.bossBaseKind,
+    minionCooldown: boss.minionCooldown
   };
 }
 
@@ -3046,6 +3108,7 @@ function normalizeTesla(source) {
     return null;
   }
 
+  const boss = normalizeMobBossFields(source, "tesla", 150);
   return {
     kind: "tesla",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
@@ -3054,18 +3117,22 @@ function normalizeTesla(source) {
     vx: clampNumber(source.vx, -1200, 1200),
     vy: clampNumber(source.vy, -1200, 1200),
     radius: clampNumber(source.radius, 8, 140),
-    health: clampNumber(source.health, 0, 150),
-    maxHealth: clampNumber(source.maxHealth, 1, 150),
+    health: clampNumber(source.health, 0, boss.maxHealth),
+    maxHealth: clampNumber(source.maxHealth, 1, boss.maxHealth),
     color: normalizeColor(source.color),
     flash: clampNumber(source.flash, 0, 5),
     hitCooldown: clampNumber(source.hitCooldown, 0, 10),
+    disabledTimer: clampNumber(source.disabledTimer, 0, 20),
     strafeSign: Number(source.strafeSign) < 0 ? -1 : 1,
     rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
     shootCooldown: clampNumber(source.shootCooldown, 0, 60),
     lightningWarmup: clampNumber(source.lightningWarmup, 0, 1),
     lightningFlash: clampNumber(source.lightningFlash, 0, 5),
     lightningAngle: clampNumber(source.lightningAngle, -Math.PI * 16, Math.PI * 16),
-    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
+    isBoss: boss.isBoss,
+    bossBaseKind: boss.bossBaseKind,
+    minionCooldown: boss.minionCooldown
   };
 }
 
@@ -3077,6 +3144,7 @@ function normalizeRocket(source) {
   const legacyShooter = !Number.isFinite(Number(source.chargeCooldown)) && Number.isFinite(Number(source.scanProgress));
   const kind = source.kind === "satellite" || legacyShooter ? "satellite" : "rocket";
   const maxHealth = kind === "satellite" ? 180 : 170;
+  const boss = normalizeMobBossFields(source, kind, maxHealth);
 
   return {
     kind,
@@ -3086,11 +3154,12 @@ function normalizeRocket(source) {
     vx: clampNumber(source.vx, -1600, 1600),
     vy: clampNumber(source.vy, -1600, 1600),
     radius: clampNumber(source.radius, 8, 150),
-    health: clampNumber(source.health, 0, maxHealth),
-    maxHealth: clampNumber(source.maxHealth, 1, maxHealth),
+    health: clampNumber(source.health, 0, boss.maxHealth),
+    maxHealth: clampNumber(source.maxHealth, 1, boss.maxHealth),
     color: normalizeColor(source.color),
     flash: clampNumber(source.flash, 0, 5),
     hitCooldown: clampNumber(source.hitCooldown, 0, 10),
+    disabledTimer: clampNumber(source.disabledTimer, 0, 20),
     strafeSign: Number(source.strafeSign) < 0 ? -1 : 1,
     rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
     scannerAngle: clampNumber(source.scannerAngle, -Math.PI * 16, Math.PI * 16),
@@ -3110,7 +3179,10 @@ function normalizeRocket(source) {
     chargeDirY: clampNumber(source.chargeDirY, -1, 1),
     chargePower: clampNumber(source.chargePower, 0, 1),
     impactCooldown: clampNumber(source.impactCooldown, 0, 10),
-    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
+    isBoss: boss.isBoss,
+    bossBaseKind: boss.bossBaseKind,
+    minionCooldown: boss.minionCooldown
   };
 }
 
@@ -3119,6 +3191,7 @@ function normalizeFighter(source) {
     return null;
   }
 
+  const boss = normalizeMobBossFields(source, "fighter", 230);
   return {
     kind: "fighter",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
@@ -3127,18 +3200,25 @@ function normalizeFighter(source) {
     vx: clampNumber(source.vx, -1200, 1200),
     vy: clampNumber(source.vy, -1200, 1200),
     radius: clampNumber(source.radius, 8, 160),
-    health: clampNumber(source.health, 0, 230),
-    maxHealth: clampNumber(source.maxHealth, 1, 230),
+    health: clampNumber(source.health, 0, boss.maxHealth),
+    maxHealth: clampNumber(source.maxHealth, 1, boss.maxHealth),
     color: normalizeColor(source.color),
     flash: clampNumber(source.flash, 0, 5),
     hitCooldown: clampNumber(source.hitCooldown, 0, 10),
+    disabledTimer: clampNumber(source.disabledTimer, 0, 20),
     strafeSign: Number(source.strafeSign) < 0 ? -1 : 1,
     rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
     shootCooldown: clampNumber(source.shootCooldown, 0, 60),
+    machineGunShots: Math.max(0, Math.floor(clampNumber(source.machineGunShots, 0, 24))),
+    machineGunTimer: clampNumber(source.machineGunTimer, 0, 2),
     shieldCharge: clampNumber(source.shieldCharge, 0, 3),
     shieldRecharge: clampNumber(source.shieldRecharge, 0, 10),
     shieldActive: clampNumber(source.shieldActive, 0, 5),
-    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
+    wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
+    isBoss: boss.isBoss,
+    bossBaseKind: boss.bossBaseKind,
+    minionCooldown: boss.minionCooldown,
+    altAttackCooldown: boss.isBoss ? clampNumber(source.altAttackCooldown, 0, mobBossAltAttackCooldownMax) : 0
   };
 }
 
@@ -3218,10 +3298,16 @@ function normalizeProjectile(source) {
     toolDisable: clampNumber(source.toolDisable, 0, 20),
     cause: sanitizeText(source.cause, 64) || "",
     sourcePlayerId: sanitizeText(source.sourcePlayerId, 80) || "",
+    sourceStructureId: sanitizeText(source.sourceStructureId, 80) || "",
     weaponLabel: sanitizeText(source.weaponLabel, 64) || "",
     piercesMobs: Boolean(source.piercesMobs),
     lightning: Boolean(source.lightning),
-    rocket: Boolean(source.rocket)
+    rocket: Boolean(source.rocket),
+    targetPlayerId: sanitizeText(source.targetPlayerId, 80) || "",
+    targetStructureId: Math.max(0, Math.floor(Number(source.targetStructureId) || 0)),
+    heatSeeking: Boolean(source.heatSeeking),
+    targetSpeed: clampNumber(source.targetSpeed, 0, 2000),
+    turnRate: clampNumber(source.turnRate, 0, 20)
   };
 }
 
@@ -5480,6 +5566,34 @@ function sanitizePartyCommand(message) {
       source: sanitizePartyCommandSource(message.source)
     };
   }
+  if (command === "spawnBoss") {
+    const mob = sanitizeText(message.mob, 32).toLowerCase().replace(/[-_\s]+/g, "");
+    const allowed = mpV2Sim.constants.MOB_TIER_ORDER.includes(mob);
+    const amount = Math.max(1, Math.floor(clampNumber(message.amount, 1, 20)));
+    return {
+      command,
+      mob: allowed ? mob : "",
+      amount,
+      source: sanitizePartyCommandSource(message.source)
+    };
+  }
+  if (command === "spawnEvent") {
+    const event = sanitizeText(message.event, 48).toLowerCase().replace(/[_\s]+/g, "-");
+    return {
+      command,
+      event: event === "particle-storm" || event === "meteor-shower" || event === "rogue-trader" ? event : "",
+      source: sanitizePartyCommandSource(message.source)
+    };
+  }
+  if (command === "spawnNpc") {
+    const npc = sanitizeText(message.npc, 32).toLowerCase().replace(/[-_\s]+/g, "");
+    return {
+      command,
+      npc: npc === "trader" || npc === "roguetrader" ? "trader" : "",
+      event: npc === "trader" || npc === "roguetrader" ? "rogue-trader" : "",
+      source: sanitizePartyCommandSource(message.source)
+    };
+  }
   return { command: "" };
 }
 
@@ -5508,6 +5622,12 @@ function handlePartyCommand(client, message) {
       }
     } else if (payload.command === "spawnMob" && payload.mob) {
       changed = mpV2Sim.spawnMob(room.state, payload.mob, payload.amount, payload.source) > 0;
+    } else if (payload.command === "spawnBoss" && payload.mob) {
+      changed = mpV2Sim.spawnBoss(room.state, payload.mob, payload.amount, payload.source) > 0;
+    } else if (payload.command === "spawnEvent" && payload.event) {
+      changed = mpV2Sim.forceRandomEvent(room.state, payload.event);
+    } else if (payload.command === "spawnNpc" && payload.event) {
+      changed = mpV2Sim.forceRandomEvent(room.state, payload.event);
     }
     if (changed) {
       room.lastTouchedAt = Date.now();
@@ -5517,11 +5637,14 @@ function handlePartyCommand(client, message) {
     return;
   }
 
-  if (
-    (payload.command !== "spawnBody" || !payload.body) &&
-    (payload.command !== "spawnMob" || !payload.mob) ||
-    session.hostPlayerId === client.playerId
-  ) {
+  const canRelayHostCommand =
+    (payload.command === "spawnBody" && payload.body) ||
+    (payload.command === "spawnMob" && payload.mob) ||
+    (payload.command === "spawnBoss" && payload.mob) ||
+    (payload.command === "spawnEvent" && payload.event) ||
+    (payload.command === "spawnNpc" && payload.npc);
+
+  if (!canRelayHostCommand || session.hostPlayerId === client.playerId) {
     return;
   }
 
@@ -5532,6 +5655,8 @@ function handlePartyCommand(client, message) {
     command: payload.command,
     body: payload.body,
     mob: payload.mob,
+    event: payload.event,
+    npc: payload.npc,
     amount: payload.amount,
     source: payload.source
   });
