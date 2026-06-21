@@ -5101,6 +5101,7 @@ function handlePartyV2Input(client, message) {
     aimLocalAngle: message.aimLocalAngle,
     equippedTool: message.equippedTool,
     toolMode: message.toolMode,
+    familiarCommand: message.familiarCommand,
     buttons: message.buttons
   });
   input.playerId = client.playerId;

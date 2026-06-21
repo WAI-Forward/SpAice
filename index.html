@@ -107,6 +107,17 @@
         </svg>
       </button>
     </div>
+    <label class="map-filter" id="mapMinimumBodyControl" aria-hidden="true">
+      <span>Min body</span>
+      <select id="mapMinimumBodyFilter" aria-label="Minimum body shown on map">
+        <option value="rock">Rock</option>
+        <option value="boulder">Boulder</option>
+        <option value="asteroid">Asteroid</option>
+        <option value="dwarf moon">Dwarf Moon</option>
+        <option value="moon">Moon</option>
+        <option value="planet">Planet</option>
+      </select>
+    </label>
     <div class="touch-joystick touch-joystick--move" id="touchJoystick" aria-hidden="true">
       <div class="touch-joystick__base">
         <div class="touch-joystick__stick" id="touchJoystickStick"></div>
@@ -554,9 +565,9 @@
     <div class="notifications" id="notifications" aria-live="polite"></div>
 
     <script>
-      window.CLUSTERNAUTS_CLIENT_BUILD = "8e2432b25a18";
+      window.CLUSTERNAUTS_CLIENT_BUILD = "a7671454db3d";
     </script>
-    <script src="src/mp-v2-sim.js?v=8e2432b25a18" defer></script>
-    <script src="src/game.js?v=8e2432b25a18" defer></script>
+    <script src="src/mp-v2-sim.js?v=a7671454db3d" defer></script>
+    <script src="src/game.js?v=a7671454db3d" defer></script>
   </body>
 </html>

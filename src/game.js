@@ -34,6 +34,8 @@
   const objectiveSummary = document.getElementById("objectiveSummary");
   const objectiveClaimAll = document.getElementById("objectiveClaimAll");
   const mapToggle = document.getElementById("mapToggle");
+  const mapMinimumBodyControl = document.getElementById("mapMinimumBodyControl");
+  const mapMinimumBodyFilter = document.getElementById("mapMinimumBodyFilter");
   const touchJoystick = document.getElementById("touchJoystick");
   const touchJoystickStick = document.getElementById("touchJoystickStick");
   const touchFireJoystick = document.getElementById("touchFireJoystick");
@@ -660,7 +662,7 @@
     right: false,
     seen: false
   };
-  const gameplayPointerBlockSelector = ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .hud__land-action, .compact-hud-toggles, .touch-joystick, .tech-ledger, .notifications";
+  const gameplayPointerBlockSelector = ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .hud__land-action, .compact-hud-toggles, .map-filter, .touch-joystick, .tech-ledger, .notifications";
   const touchControlState = {
     active: false,
     pointerId: null,
@@ -760,8 +762,8 @@
   const bodyImpactBaseKnockback = 145;
   const bodyImpactMaxKnockback = 320;
   const bossBodyEvadeDuration = 1.05;
-  const bossBodyEvadeMinSpeed = 430;
-  const bossBodyEvadeMaxSpeed = 820;
+  const bossBodyEvadeMinSpeed = 520;
+  const bossBodyEvadeMaxSpeed = 960;
   const solidBodyDamageSpeed = 92;
   const solidBodyPlayerDamageSpeed = 520;
   const weaponSlowDecay = 0.18;
@@ -787,7 +789,7 @@
   const guidedLauncherToolId = "guided-launcher";
   const machineGunToolId = "machine-gun";
   const rocketSuitToolId = "rocket-suit";
-  const empPulseRange = 520;
+  const empPulseRange = 900;
   const empPulseDisableDuration = 4.8;
   const empPulseEnergyCost = 28;
   const empPulseCooldown = 7.5;
@@ -979,8 +981,8 @@
   const mobBossSpawnTimerCeilingScale = 0.32;
   const mobBossSpawnBatchBonus = 1;
   const mobBossLiveCapBonus = 3;
-  const mobBossMaxSpeedMultiplier = 1.28;
-  const mobBossDirectionalSpeedBonus = 0.48;
+  const mobBossMaxSpeedMultiplier = 1.42;
+  const mobBossDirectionalSpeedBonus = 0.62;
   const engineerBossSummonDuration = 1.35;
   const engineerBossSummonRadius = 118;
   const familiarNetRange = 210;
@@ -1069,7 +1071,7 @@
       length: 38,
       radius: 5.4,
       pelletCount: 9,
-      spread: 0.46,
+      spread: 0.28,
       color: { r: 255, g: 220, b: 122 },
       label: "shotgun"
     },
@@ -1529,6 +1531,9 @@
   const multiplayerV2MaxFrameDt = 0.16;
   const multiplayerV2MaxCatchUpSteps = 6;
   const multiplayerV2MaxAccumulator = multiplayerV2MaxFrameDt;
+  const multiplayerV2ReplayInputLimit = 72;
+  const multiplayerV2QueuedSnapshotEventLimit = 120;
+  const multiplayerV2StaleSnapshotTickTolerance = 2;
   const multiplayerV2LocalCorrectionBlendPerFrame = 0.42;
   const multiplayerV2RemoteSnapshotRenderDelay = 0.07;
   const multiplayerV2RemoteSnapshotExtrapolateLimit = 0.16;
@@ -1613,7 +1618,10 @@
       fixedAccumulator: 0,
       sendAccumulator: 0,
       pendingInputs: [],
+      pendingSnapshot: null,
       landRequested: "",
+      familiarNetFireHeld: false,
+      familiarNetReleaseHeld: false,
       lastServerTick: 0,
       lastAckInputSeq: 0,
       ignoreDeathEventsBeforeTick: 0,
@@ -1625,6 +1633,13 @@
         reconcileMs: 0,
         syncMs: 0,
         pendingInputs: 0,
+        replayInputs: 0,
+        droppedReplayInputs: 0,
+        queuedSnapshots: 0,
+        droppedSnapshots: 0,
+        skippedSnapshots: 0,
+        pendingSnapshotEvents: 0,
+        ackMissing: 0,
         entityCount: 0,
         snapshotBytes: 0,
         serverStepMs: 0,
@@ -2147,6 +2162,7 @@
       hudEnabled: true,
       playerHealthBar: true,
       playerEnergyBar: true,
+      mapMinimumBodyTier: "rock",
       controls: Object.assign({}, defaultControlBindings)
     };
 
@@ -2168,6 +2184,7 @@
         hudEnabled: typeof stored.hudEnabled === "boolean" ? stored.hudEnabled : defaults.hudEnabled,
         playerHealthBar: typeof stored.playerHealthBar === "boolean" ? stored.playerHealthBar : defaults.playerHealthBar,
         playerEnergyBar: typeof stored.playerEnergyBar === "boolean" ? stored.playerEnergyBar : defaults.playerEnergyBar,
+        mapMinimumBodyTier: typeof stored.mapMinimumBodyTier === "string" ? stored.mapMinimumBodyTier : defaults.mapMinimumBodyTier,
         controls: normalizeControlBindings(stored.controls)
       };
     } catch (error) {
@@ -2186,6 +2203,7 @@
         hudEnabled: gameSettings.hudEnabled,
         playerHealthBar: gameSettings.playerHealthBar,
         playerEnergyBar: gameSettings.playerEnergyBar,
+        mapMinimumBodyTier: gameSettings.mapMinimumBodyTier,
         controls: gameSettings.controls
       }));
     } catch (error) {
@@ -2422,6 +2440,43 @@
     }
     syncCompactHudControls();
     updateToolHotbar();
+  }
+
+  function normalizeMapMinimumBodyTierName(name) {
+    const normalized = String(name || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ");
+    const tier = bodyTiers.find((candidate) => candidate.name === normalized);
+    return tier && tier.threshold >= mappedBodyThreshold ? tier.name : "rock";
+  }
+
+  function mapMinimumBodyThreshold() {
+    const tierName = normalizeMapMinimumBodyTierName(gameSettings.mapMinimumBodyTier);
+    const tier = bodyTiers.find((candidate) => candidate.name === tierName);
+    return tier ? tier.threshold : mappedBodyThreshold;
+  }
+
+  function isBodyVisibleOnMap(body) {
+    return Boolean(body && body.tier && body.tier.threshold >= mapMinimumBodyThreshold());
+  }
+
+  function syncMapMinimumBodyFilter() {
+    gameSettings.mapMinimumBodyTier = normalizeMapMinimumBodyTierName(gameSettings.mapMinimumBodyTier);
+    if (mapMinimumBodyFilter) {
+      mapMinimumBodyFilter.value = gameSettings.mapMinimumBodyTier;
+    }
+    invalidateRenderCaches();
+  }
+
+  function setMapMinimumBodyTier(name) {
+    const nextTier = normalizeMapMinimumBodyTierName(name);
+    if (gameSettings.mapMinimumBodyTier !== nextTier) {
+      gameSettings.mapMinimumBodyTier = nextTier;
+      writeGameSettings();
+    }
+    syncMapMinimumBodyFilter();
   }
 
   function updatePlayerBarSettingsUi() {
@@ -4876,8 +4931,12 @@
     return showerCount <= 0 ? 5 : 1.1;
   }
 
+  function meteorShowerCanStartWithUfoBoss() {
+    return Math.max(0, Math.floor(finiteOr(mobDefeatsByKind.ufo, 0))) >= mobBossDefeatsToUnlock;
+  }
+
   function meteorShowerCanStartAfterParticleStorms() {
-    return randomEventHistoryCount(particleStormEventId) >= 3;
+    return randomEventHistoryCount(particleStormEventId) >= 3 && meteorShowerCanStartWithUfoBoss();
   }
 
   function currentRunElapsedSeconds() {
@@ -6188,6 +6247,16 @@
     return window.innerWidth <= compactHudBreakpoint || window.innerHeight <= compactHudHeightBreakpoint;
   }
 
+  function syncMapMinimumBodyControlVisibility(compact) {
+    if (!mapMinimumBodyControl) {
+      return;
+    }
+    const compactViewport = typeof compact === "boolean" ? compact : isCompactHudViewport();
+    const visible = gameSettings.hudEnabled !== false && runState.active && !deathState.active && (!compactViewport || mapHudOpen);
+    mapMinimumBodyControl.classList.toggle("is-open", visible);
+    mapMinimumBodyControl.setAttribute("aria-hidden", visible ? "false" : "true");
+  }
+
   function syncCompactHudControls() {
     if (gameSettings.hudEnabled === false) {
       if (gameVitalsHud) {
@@ -6208,6 +6277,7 @@
           toggle.setAttribute("aria-expanded", "false");
         }
       }
+      syncMapMinimumBodyControlVisibility(false);
       return;
     }
 
@@ -6249,6 +6319,8 @@
       mapToggle.classList.toggle("is-active", compact && mapHudOpen);
       mapToggle.setAttribute("aria-expanded", compact && mapHudOpen ? "true" : "false");
     }
+
+    syncMapMinimumBodyControlVisibility(compact);
   }
 
   function setVitalsHudOpen(open) {
@@ -7544,13 +7616,30 @@
     multiplayer.v2.fixedAccumulator = 0;
     multiplayer.v2.sendAccumulator = 0;
     multiplayer.v2.pendingInputs = [];
+    multiplayer.v2.pendingSnapshot = null;
     multiplayer.v2.landRequested = "";
+    multiplayer.v2.familiarNetFireHeld = false;
+    multiplayer.v2.familiarNetReleaseHeld = false;
     multiplayer.v2.lastServerTick = 0;
     multiplayer.v2.lastAckInputSeq = 0;
     multiplayer.v2.ignoreDeathEventsBeforeTick = 0;
     multiplayer.v2.visualBlend = null;
     multiplayer.v2.pendingMergeVisuals = [];
     multiplayer.v2.eventKeys = new Map();
+    updateMultiplayerV2Perf({
+      clientStepMs: 0,
+      reconcileMs: 0,
+      syncMs: 0,
+      pendingInputs: 0,
+      replayInputs: 0,
+      droppedReplayInputs: 0,
+      queuedSnapshots: 0,
+      droppedSnapshots: 0,
+      skippedSnapshots: 0,
+      pendingSnapshotEvents: 0,
+      ackMissing: 0,
+      entityCount: 0
+    });
   }
 
   function resetSoloMultiplayerSession() {
@@ -7804,6 +7893,48 @@
       } else if (event.type === "emp.pulse") {
         playSound("lightning", { throttleKey: "mpV2EmpPulse", throttle: 0.16, volume: 0.82 });
         pushMultiplayerV2EventSpark(event, { radius: finiteOr(event.radius, empPulseRange), life: 0.72, fallbackColor: { r: 126, g: 232, b: 255 }, empPulse: true });
+      } else if (event.type === "familiarNet.swung") {
+        if (String(event.playerId || "") === player.id) {
+          startFamiliarNetSwing(-1);
+          playSound("mobHit", { throttleKey: "mpV2FamiliarNetMiss", throttle: 0.22, volume: 0.42 });
+        }
+      } else if (event.type === "familiarNet.full") {
+        if (String(event.playerId || "") === player.id) {
+          startFamiliarNetSwing(-1);
+          playSound("mobHit", { throttleKey: "mpV2FamiliarNetFull", throttle: 0.22, volume: 0.34 });
+          maybeNotifyText("The familiar net is already holding one mob.");
+        }
+      } else if (event.type === "familiarNet.active") {
+        if (String(event.playerId || "") === player.id) {
+          startFamiliarNetSwing(event.action === "release" ? 1 : -1);
+          playSound("mobHit", { throttleKey: "mpV2FamiliarNetActive", throttle: 0.22, volume: 0.34 });
+          maybeNotifyText("Your familiar is already out.");
+        }
+      } else if (event.type === "familiarNet.empty") {
+        if (String(event.playerId || "") === player.id) {
+          startFamiliarNetSwing(1);
+          playSound("mobHit", { throttleKey: "mpV2FamiliarNetEmpty", throttle: 0.22, volume: 0.28 });
+        }
+      } else if (event.type === "familiarNet.command") {
+        if (String(event.playerId || "") === player.id) {
+          startFamiliarNetSwing(1);
+          playSound("pickupTech", { throttleKey: "mpV2FamiliarNetCommand", throttle: 0.16, volume: 0.55 });
+        }
+        pushMultiplayerV2EventSpark(event, { radius: 42, life: 0.24, fallbackColor: { r: 102, g: 224, b: 184 } });
+      } else if (event.type === "familiarNet.caught") {
+        if (String(event.playerId || "") === player.id) {
+          startFamiliarNetSwing(-1);
+          playSound("pickupTech", { throttleKey: "mpV2FamiliarNetCatch", throttle: 0.18 });
+          maybeNotifyText("Caught " + mobName({ kind: event.kind }).toLowerCase() + " in the familiar net.");
+        }
+        pushMultiplayerV2EventSpark(event, { radius: 54, life: 0.32, fallbackColor: { r: 102, g: 224, b: 184 } });
+      } else if (event.type === "familiarNet.released") {
+        if (String(event.playerId || "") === player.id) {
+          startFamiliarNetSwing(1);
+          playSound("pickupHealth", { throttleKey: "mpV2FamiliarNetRelease", throttle: 0.18 });
+          maybeNotifyText("Released familiar " + mobName({ kind: event.kind }).toLowerCase() + ".");
+        }
+        pushMultiplayerV2EventSpark(event, { radius: 82, life: 0.36, fallbackColor: { r: 102, g: 224, b: 184 } });
       } else if (event.type === "projectile.blocked") {
         pushMultiplayerV2EventSpark(event, { radius: 34, life: 0.22, fallbackColor: { r: 255, g: 115, b: 173 } });
       } else if (event.type === "structure.shieldBlockedProjectile") {
@@ -7875,9 +8006,15 @@
     if (!isContinuousPlayerEnergyInputPressed()) {
       playerContinuousEnergyLocked = false;
     }
-    const aim = getAim();
     const toolMode = multiplayerLocalToolModeForInput();
+    if (toolMode === "fire" && isPistonPunchTool(equippedToolId)) {
+      gadgetAngle = getCursorAimAngle();
+    }
+    const aim = getAim();
     const landAction = multiplayer.v2.landRequested === "takeoff" ? "takeoff" : multiplayer.v2.landRequested === "land" ? "land" : "";
+    const familiarCommand = equippedToolId === familiarNetToolId && toolMode === "release"
+      ? screenToWorld(mouse.x, mouse.y)
+      : null;
     multiplayer.v2.landRequested = "";
     return {
       playerId: player.id,
@@ -7888,6 +8025,7 @@
       aimLocalAngle: aim.angle,
       equippedTool: equippedToolId || defaultToolId,
       toolMode,
+      familiarCommand: familiarCommand ? { x: familiarCommand.x, y: familiarCommand.y } : null,
       buttons: {
         up: isMovementKeyPressed("up"),
         down: isMovementKeyPressed("down"),
@@ -7899,7 +8037,8 @@
         pull: toolMode === "pull",
         push: toolMode === "push",
         hold: toolMode === "hold",
-        fire: toolMode === "fire"
+        fire: toolMode === "fire",
+        release: toolMode === "release"
       }
     };
   }
@@ -7941,6 +8080,7 @@
       aimLocalAngle: input.aimLocalAngle,
       equippedTool: input.equippedTool,
       toolMode: input.toolMode,
+      familiarCommand: input.familiarCommand || null,
       buttons: input.buttons
     });
   }
@@ -8014,6 +8154,77 @@
     }
   }
 
+  function multiplayerV2SnapshotTick(message) {
+    const state = message && message.state && typeof message.state === "object" ? message.state : null;
+    return Math.max(0, Math.floor(finiteOr(message && message.serverTick, state ? state.tick : 0)));
+  }
+
+  function multiplayerV2LocalAckFromSnapshot(message) {
+    const ackSeq = message && message.ackInputSeq && typeof message.ackInputSeq === "object"
+      ? message.ackInputSeq
+      : null;
+    if (!ackSeq) {
+      return {
+        value: multiplayer.v2.lastAckInputSeq,
+        missing: false
+      };
+    }
+    if (!Object.prototype.hasOwnProperty.call(ackSeq, player.id)) {
+      return {
+        value: multiplayer.v2.lastAckInputSeq,
+        missing: true
+      };
+    }
+    return {
+      value: Math.max(0, Math.floor(finiteOr(ackSeq[player.id], multiplayer.v2.lastAckInputSeq))),
+      missing: false
+    };
+  }
+
+  function queueMultiplayerV2Snapshot(message) {
+    if (!mpV2Sim || !message || !message.state) {
+      return;
+    }
+    if (!multiplayer.v2.active) {
+      applyMultiplayerV2Snapshot(message);
+      return;
+    }
+
+    const previous = multiplayer.v2.pendingSnapshot;
+    const queuedEvents = [];
+    if (previous && Array.isArray(previous.events)) {
+      queuedEvents.push(...previous.events);
+    }
+    if (Array.isArray(message.events)) {
+      queuedEvents.push(...message.events);
+    }
+    if (queuedEvents.length > multiplayerV2QueuedSnapshotEventLimit) {
+      queuedEvents.splice(0, queuedEvents.length - multiplayerV2QueuedSnapshotEventLimit);
+    }
+
+    multiplayer.v2.pendingSnapshot = {
+      ...message,
+      events: queuedEvents
+    };
+    updateMultiplayerV2Perf({
+      queuedSnapshots: finiteOr(multiplayer.v2.perf && multiplayer.v2.perf.queuedSnapshots, 0) + 1,
+      droppedSnapshots: finiteOr(multiplayer.v2.perf && multiplayer.v2.perf.droppedSnapshots, 0) + (previous ? 1 : 0),
+      pendingSnapshotEvents: queuedEvents.length
+    });
+  }
+
+  function flushQueuedMultiplayerV2Snapshot() {
+    const snapshot = multiplayer.v2.pendingSnapshot;
+    if (!snapshot) {
+      return;
+    }
+    multiplayer.v2.pendingSnapshot = null;
+    updateMultiplayerV2Perf({
+      pendingSnapshotEvents: 0
+    });
+    applyMultiplayerV2Snapshot(snapshot);
+  }
+
   function applyMultiplayerV2Snapshot(message) {
     if (!mpV2Sim || !message || !message.state) {
       return;
@@ -8024,13 +8235,23 @@
       multiplayer.v2.active = true;
       multiplayer.v2.roomId = String(message.roomId || "");
     }
-    const ack = message.ackInputSeq && typeof message.ackInputSeq === "object"
-      ? Math.max(0, Math.floor(finiteOr(message.ackInputSeq[player.id], multiplayer.v2.lastAckInputSeq)))
-      : multiplayer.v2.lastAckInputSeq;
+    const serverTick = multiplayerV2SnapshotTick(message);
+    if (
+      multiplayer.v2.lastServerTick > 0 &&
+      serverTick + multiplayerV2StaleSnapshotTickTolerance < multiplayer.v2.lastServerTick
+    ) {
+      updateMultiplayerV2Perf({
+        skippedSnapshots: finiteOr(multiplayer.v2.perf && multiplayer.v2.perf.skippedSnapshots, 0) + 1
+      });
+      return;
+    }
+
+    const ackResult = multiplayerV2LocalAckFromSnapshot(message);
+    const ack = ackResult.value;
     multiplayer.v2.lastAckInputSeq = Math.max(multiplayer.v2.lastAckInputSeq, ack);
     multiplayer.v2.pendingInputs = multiplayer.v2.pendingInputs.filter((input) => input.seq > multiplayer.v2.lastAckInputSeq);
     multiplayer.v2.authoritativeState = mpV2Sim.serializeState(message.state);
-    multiplayer.v2.lastServerTick = Math.max(multiplayer.v2.lastServerTick, Math.floor(finiteOr(message.serverTick, message.state.tick || 0)));
+    multiplayer.v2.lastServerTick = Math.max(multiplayer.v2.lastServerTick, serverTick);
     if (message.perf && typeof message.perf === "object") {
       updateMultiplayerV2Perf({
         serverStepMs: finiteOr(message.perf.stepMs, multiplayer.v2.perf && multiplayer.v2.perf.serverStepMs),
@@ -8042,6 +8263,11 @@
 
     const oldX = player.x;
     const oldY = player.y;
+    let droppedReplayInputs = 0;
+    if (multiplayer.v2.pendingInputs.length > multiplayerV2ReplayInputLimit) {
+      droppedReplayInputs = multiplayer.v2.pendingInputs.length - multiplayerV2ReplayInputLimit;
+      multiplayer.v2.pendingInputs.splice(0, droppedReplayInputs);
+    }
     const replayInputs = multiplayer.v2.pendingInputs.map((input) => Object.assign({}, input));
     multiplayer.v2.state = mpV2Sim.replayFromSnapshot(multiplayer.v2.authoritativeState, replayInputs, {
       dt: mpV2Sim.TICK_DT,
@@ -8053,6 +8279,9 @@
     updateMultiplayerV2Perf({
       reconcileMs: performance.now() - reconcileStart,
       pendingInputs: multiplayer.v2.pendingInputs.length,
+      replayInputs: replayInputs.length,
+      droppedReplayInputs: finiteOr(multiplayer.v2.perf && multiplayer.v2.perf.droppedReplayInputs, 0) + droppedReplayInputs,
+      ackMissing: finiteOr(multiplayer.v2.perf && multiplayer.v2.perf.ackMissing, 0) + (ackResult.missing ? 1 : 0),
       entityCount: multiplayerV2WorldEntityCount(message.state.world)
     });
   }
@@ -8092,6 +8321,7 @@
       syncTechInventoryFromMultiplayerV2(local.tech);
       applyToolInventory(local.tools, local.equippedTool, local.equippedTools);
       applyToolUpgrades(local.toolUpgrades);
+      familiarNetCapture = normalizeMultiplayerV2FamiliarNetCapture(local.familiarNetCapture);
       if (!deathState.active && previousHealth > player.health && player.health > 0) {
         playSound("hit", { throttleKey: "mpV2LocalDamage", throttle: 0.08 });
       }
@@ -8111,6 +8341,23 @@
       entityCount: multiplayerV2WorldEntityCount(state.world)
     });
     updateHud();
+  }
+
+  function normalizeMultiplayerV2FamiliarNetCapture(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+    const kind = String(snapshot.kind || "");
+    if (!mobTierOrder.includes(kind)) {
+      return null;
+    }
+    const maxHealth = Math.max(1, finiteOr(snapshot.maxHealth, snapshot.health || 1));
+    return {
+      kind,
+      health: clamp(finiteOr(snapshot.health, maxHealth), 1, maxHealth),
+      maxHealth,
+      color: snapshot.color ? normalizeColorSnapshot(snapshot.color, { r: 102, g: 224, b: 184 }) : null
+    };
   }
 
   function syncTechInventoryFromMultiplayerV2(snapshot) {
@@ -8283,6 +8530,10 @@
     if (!isMultiplayerV2Active()) {
       return;
     }
+    flushQueuedMultiplayerV2Snapshot();
+    if (!isMultiplayerV2Active()) {
+      return;
+    }
     const frameDt = multiplayerV2FrameDt(dt);
     updateGadgetAim(frameDt);
     multiplayer.v2.fixedAccumulator = Math.min(multiplayerV2MaxAccumulator, multiplayer.v2.fixedAccumulator + frameDt);
@@ -8294,7 +8545,7 @@
       const input = buildMultiplayerV2Input(multiplayer.v2.inputSeq + 1);
       multiplayer.v2.inputSeq = input.seq;
       multiplayer.v2.pendingInputs.push(input);
-      while (multiplayer.v2.pendingInputs.length > 180) {
+      while (multiplayer.v2.pendingInputs.length > multiplayerV2ReplayInputLimit * 2) {
         multiplayer.v2.pendingInputs.shift();
       }
       mpV2Sim.step(multiplayer.v2.state, { [player.id]: input }, {
@@ -14146,7 +14397,11 @@
     }
 
     if (message.type === "mp.v2.snapshot") {
-      applyMultiplayerV2Snapshot(message);
+      if (typeof queueMultiplayerV2Snapshot === "function") {
+        queueMultiplayerV2Snapshot(message);
+      } else {
+        applyMultiplayerV2Snapshot(message);
+      }
       return;
     }
 
@@ -15975,7 +16230,7 @@
     const energy = clamp(finiteOr(snapshot.energy, maxEnergy), 0, maxEnergy);
     const equippedTool = toolCatalog.some((tool) => tool.id === snapshot.equippedTool) ? snapshot.equippedTool : null;
     const toolDisabledTimer = Math.max(0, finiteOr(snapshot.toolDisabledTimer, 0));
-    const toolMode = ["pull", "push", "hold", "fire", "idle"].includes(snapshot.toolMode) ? snapshot.toolMode : "idle";
+    const toolMode = ["pull", "push", "hold", "fire", "release", "idle"].includes(snapshot.toolMode) ? snapshot.toolMode : "idle";
     const activeToolMode = equippedTool && actorCanAffordMultiplayerToolMode({ energy, toolDisabledTimer }, equippedTool, toolMode) ? toolMode : "idle";
     const camera = finiteOr(snapshot.cameraRoll, 0);
     const hasAimAngle = Number.isFinite(Number(snapshot.aimAngle));
@@ -17572,6 +17827,10 @@
   function mobTeamSnapshotFields(mob) {
     return {
       team: isPlayerTeamMob(mob) ? "player" : "",
+      familiarOwnerPlayerId: typeof (mob && mob.familiarOwnerPlayerId) === "string" ? mob.familiarOwnerPlayerId : "",
+      familiarCommandX: finiteOr(mob && mob.familiarCommandX, mob && mob.x),
+      familiarCommandY: finiteOr(mob && mob.familiarCommandY, mob && mob.y),
+      familiarCommandTimer: Math.max(0, finiteOr(mob && mob.familiarCommandTimer, 0)),
       summonAge: Math.max(0, finiteOr(mob && mob.summonAge, 0)),
       summonDuration: Math.max(0, finiteOr(mob && mob.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(mob && mob.summonBaseRadius, mob && mob.radius)),
@@ -17799,8 +18058,10 @@
       damage: projectile.damage,
       toolDisable: projectile.toolDisable,
       cause: projectile.cause,
+      team: projectile.team === "player" ? "player" : "",
       sourcePlayerId: projectile.sourcePlayerId,
       sourceStructureId: projectile.sourceStructureId,
+      sourceMobId: projectile.sourceMobId,
       weaponLabel: projectile.weaponLabel,
       knockback: projectile.knockback,
       piercesMobs: Boolean(projectile.piercesMobs),
@@ -17951,6 +18212,10 @@
   function normalizeMobTeamSnapshotFields(snapshot, fallbackRadius) {
     return {
       team: snapshot && snapshot.team === "player" ? "player" : "",
+      familiarOwnerPlayerId: typeof (snapshot && snapshot.familiarOwnerPlayerId) === "string" ? snapshot.familiarOwnerPlayerId : "",
+      familiarCommandX: finiteOr(snapshot && snapshot.familiarCommandX, 0),
+      familiarCommandY: finiteOr(snapshot && snapshot.familiarCommandY, 0),
+      familiarCommandTimer: Math.max(0, finiteOr(snapshot && snapshot.familiarCommandTimer, 0)),
       summonAge: Math.max(0, finiteOr(snapshot && snapshot.summonAge, 0)),
       summonDuration: Math.max(0, finiteOr(snapshot && snapshot.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(snapshot && snapshot.summonBaseRadius, fallbackRadius)),
@@ -18408,8 +18673,10 @@
       knockback: finiteOr(snapshot.knockback, 0),
       toolDisable: finiteOr(snapshot.toolDisable, 0),
       cause: typeof snapshot.cause === "string" ? snapshot.cause : "",
+      team: snapshot.team === "player" ? "player" : "",
       sourcePlayerId: typeof snapshot.sourcePlayerId === "string" ? snapshot.sourcePlayerId : "",
       sourceStructureId: typeof snapshot.sourceStructureId === "string" ? snapshot.sourceStructureId : "",
+      sourceMobId: Math.max(0, Math.floor(finiteOr(snapshot.sourceMobId, 0))),
       weaponLabel: typeof snapshot.weaponLabel === "string" ? snapshot.weaponLabel : "",
       piercesMobs: Boolean(snapshot.piercesMobs),
       hitMobIds: Array.isArray(snapshot.hitMobIds) ? snapshot.hitMobIds.map(String) : [],
@@ -19542,7 +19809,7 @@
     mob.lastDamageTool = options && options.sourceTool ? options.sourceTool : "";
     mob.health = Math.max(0, mob.health - damage);
     mob.flash = 0.28;
-    mob.hitCooldown = 0.42;
+    mob.hitCooldown = Math.max(finiteOr(mob.hitCooldown, 0), 0.42);
     emitMobDamageParticles(mob, damage, color);
 
     if (color) {
@@ -19639,7 +19906,7 @@
   }
 
   function triggerBossBodyEvade(mob, body, nx, ny, impactSpeed) {
-    if (!mob || !body) {
+    if (!mob || !body || !mob.isBoss) {
       return;
     }
 
@@ -19663,6 +19930,7 @@
     mob.vx += evade.x * extraSpeed;
     mob.vy += evade.y * extraSpeed;
     mob.strafeSign = side;
+    mob.hitCooldown = Math.max(finiteOr(mob.hitCooldown, 0), 0.68);
     mob.bossBodyEvadeTimer = Math.max(finiteOr(mob.bossBodyEvadeTimer, 0), bossBodyEvadeDuration);
     mob.bossBodyEvadeSpeedCap = Math.max(finiteOr(mob.bossBodyEvadeSpeedCap, 0), boostSpeed * 1.08);
   }
@@ -22127,8 +22395,19 @@
     if (!mode || mode === "idle") {
       return 0;
     }
+    if (equippedTool === "spanner") {
+      if (mode === "fire") {
+        return multiplayerContinuousEnergyActivationCost(spannerRepairEnergyDrain, dt);
+      }
+      if (mode === "dismantle") {
+        return multiplayerContinuousEnergyActivationCost(spannerDismantleEnergyDrain, dt);
+      }
+    }
     if (isSuctionTool(equippedTool) && isPartyGadgetActiveMode(mode)) {
       return multiplayerContinuousEnergyActivationCost(suctionEnergyDrain, dt);
+    }
+    if (equippedTool === familiarNetToolId && (mode === "fire" || mode === "release")) {
+      return 0;
     }
     if (mode === "fire") {
       if (isEmpTool(equippedTool)) {
@@ -22156,7 +22435,15 @@
 
   function multiplayerLocalToolModeForInput(dt) {
     if (areToolsDisabled()) {
+      if (equippedToolId === familiarNetToolId) {
+        multiplayer.v2.familiarNetFireHeld = mouse.left;
+        multiplayer.v2.familiarNetReleaseHeld = mouse.right;
+      }
       return "idle";
+    }
+    if (equippedToolId !== familiarNetToolId) {
+      multiplayer.v2.familiarNetFireHeld = mouse.left;
+      multiplayer.v2.familiarNetReleaseHeld = mouse.right;
     }
     if (isWeaponTool(equippedToolId)) {
       return mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt) ? "fire" : "idle";
@@ -22166,6 +22453,30 @@
     }
     if (isPistonPunchTool(equippedToolId)) {
       return mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt) ? "fire" : "idle";
+    }
+    if (equippedToolId === familiarNetToolId) {
+      const firePressed = mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt);
+      const releasePressed = mouse.right && actorCanAffordMultiplayerToolMode(player, equippedToolId, "release", dt);
+      const fireStarted = firePressed && !multiplayer.v2.familiarNetFireHeld;
+      const releaseStarted = releasePressed && !multiplayer.v2.familiarNetReleaseHeld;
+      multiplayer.v2.familiarNetFireHeld = mouse.left;
+      multiplayer.v2.familiarNetReleaseHeld = mouse.right;
+      if (fireStarted) {
+        return "fire";
+      }
+      if (releaseStarted) {
+        return "release";
+      }
+      return "idle";
+    }
+    if (equippedToolId === "spanner") {
+      if (mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt)) {
+        return "fire";
+      }
+      if (mouse.right && actorCanAffordMultiplayerToolMode(player, equippedToolId, "dismantle", dt)) {
+        return "dismantle";
+      }
+      return "idle";
     }
     if (!isSuctionEquipped() || !actorCanAffordMultiplayerToolMode(player, equippedToolId, "pull", dt)) {
       if (isSuctionEquipped() && isGadgetButtonPressed()) {
@@ -23828,6 +24139,65 @@
     return allCombatMobs().filter((mob) => mob && mob.health > 0 && isPlayerTeamMob(mob));
   }
 
+  function localFamiliarOwnerId() {
+    return String(player && player.id || "local-player");
+  }
+
+  function isLocalPlayerFamiliar(mob) {
+    if (!isPlayerTeamMob(mob)) {
+      return false;
+    }
+    const ownerId = String(mob.familiarOwnerPlayerId || "");
+    return !ownerId || ownerId === localFamiliarOwnerId();
+  }
+
+  function hasActiveLocalPlayerFamiliar() {
+    return familiarCombatMobs().some(isLocalPlayerFamiliar);
+  }
+
+  function localPlayerFamiliars() {
+    return familiarCombatMobs().filter(isLocalPlayerFamiliar);
+  }
+
+  function commandLocalFamiliarsToCursor() {
+    if (!isFamiliarNetEquipped() || !mouse.right || buildMenuOpen || toolFireCooldown > 0) {
+      return false;
+    }
+    const familiars = localPlayerFamiliars();
+    if (!familiars.length) {
+      return false;
+    }
+    const cursor = screenToWorld(mouse.x, mouse.y);
+    for (const familiar of familiars) {
+      const dx = cursor.x - finiteOr(familiar.x, 0);
+      const dy = cursor.y - finiteOr(familiar.y, 0);
+      const dist = Math.hypot(dx, dy) || 1;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const towardSpeed = finiteOr(familiar.vx, 0) * nx + finiteOr(familiar.vy, 0) * ny;
+      if (towardSpeed < 0) {
+        familiar.vx -= nx * towardSpeed;
+        familiar.vy -= ny * towardSpeed;
+      }
+      familiar.familiarCommandX = cursor.x;
+      familiar.familiarCommandY = cursor.y;
+      familiar.familiarCommandTimer = 8;
+    }
+    toolFireCooldown = familiarNetReleaseCooldown;
+    startFamiliarNetSwing(1);
+    sparks.push({
+      x: cursor.x,
+      y: cursor.y,
+      radius: 42,
+      color: { r: 102, g: 224, b: 184 },
+      life: 0.24,
+      maxLife: 0.24
+    });
+    playSound("pickupTech", { throttleKey: "familiarNetCommand", throttle: 0.16, volume: 0.55 });
+    resetMouseButtons();
+    return true;
+  }
+
   function familiarCombatTargets() {
     return familiarCombatMobs().map((mob) => ({
       local: false,
@@ -24051,10 +24421,19 @@
           mob.residentTier = null;
         }
 
+        const damageThreshold = body.tier.solid ? solidBodyDamageSpeed : rivalBodyImpactSpeed;
+        const canTriggerBodyDamage = impactSpeed >= damageThreshold && mob.hitCooldown <= 0 && canDamageMobWithBody(mob, body);
+        const bodyDashActive = finiteOr(mob.bossBodyEvadeTimer, 0) > 0 && finiteOr(mob.hitCooldown, 0) > 0;
+
         if (body.tier.solid) {
           const overlap = minDist - dist;
-          mob.x += nx * overlap * 0.78;
-          mob.y += ny * overlap * 0.78;
+          const correctionDistance = canTriggerBodyDamage
+            ? Math.min(overlap, 18)
+            : bodyDashActive
+              ? Math.min(overlap, 12)
+              : overlap;
+          mob.x += nx * correctionDistance * 0.78;
+          mob.y += ny * correctionDistance * 0.78;
 
           if (incomingSpeed > 0) {
             const impulse = incomingSpeed * 0.82;
@@ -24064,8 +24443,7 @@
           }
         }
 
-        const damageThreshold = body.tier.solid ? solidBodyDamageSpeed : rivalBodyImpactSpeed;
-        if (impactSpeed < damageThreshold || mob.hitCooldown > 0 || !canDamageMobWithBody(mob, body)) {
+        if (!canTriggerBodyDamage) {
           continue;
         }
 
@@ -24095,7 +24473,7 @@
     for (let i = 0; i < pelletCount; i += 1) {
       const lineT = pelletCount <= 1 ? 0 : i / (pelletCount - 1) * 2 - 1;
       const clusteredT = Math.sign(lineT) * Math.pow(Math.abs(lineT), 1.35);
-      const angleJitter = pelletCount > 1 ? randomRange(-0.06, 0.06) : (spread > 0 ? randomRange(-spread, spread) * 0.55 : 0);
+      const angleJitter = pelletCount > 1 ? randomRange(-0.04, 0.04) : (spread > 0 ? randomRange(-spread, spread) * 0.55 : 0);
       const angleOffset = clusteredT * spread + angleJitter;
       const dirX = Math.cos(aimAngle + angleOffset);
       const dirY = Math.sin(aimAngle + angleOffset);
@@ -24422,8 +24800,8 @@
     return true;
   }
 
-  function pistonPunchSegment() {
-    const aim = getAim();
+  function pistonPunchSegment(aimOverride) {
+    const aim = aimOverride || getAim();
     const startX = player.x + aim.world.x * 34;
     const startY = player.y + aim.world.y * 34;
     return {
@@ -24436,8 +24814,8 @@
     };
   }
 
-  function findPistonPunchTarget() {
-    const punch = pistonPunchSegment();
+  function findPistonPunchTarget(punchOverride) {
+    const punch = punchOverride || pistonPunchSegment();
     let best = null;
     let bestDistance = Infinity;
 
@@ -24459,6 +24837,22 @@
     return best;
   }
 
+  function snapPistonPunchAimToCursor() {
+    gadgetAngle = getCursorAimAngle();
+    return getAim();
+  }
+
+  function emitPistonPunchMiss(punch) {
+    sparks.push({
+      x: punch.bx,
+      y: punch.by,
+      radius: 52,
+      color: { r: 255, g: 209, b: 102 },
+      life: 0.18,
+      maxLife: 0.18
+    });
+  }
+
   function firePistonPunch() {
     if (!isPistonPunchEquipped() || !mouse.left || buildMenuOpen || toolFireCooldown > 0) {
       return false;
@@ -24469,10 +24863,11 @@
       return false;
     }
 
-    const punch = pistonPunchSegment();
-    const target = findPistonPunchTarget();
+    const punch = pistonPunchSegment(snapPistonPunchAimToCursor());
+    const target = findPistonPunchTarget(punch);
     toolFireCooldown = pistonPunchCooldown;
     if (!target) {
+      emitPistonPunchMiss(punch);
       playSound("mobHit", { throttleKey: "pistonPunchMiss", throttle: 0.2, volume: 0.44 });
       return true;
     }
@@ -24580,6 +24975,12 @@
       resetMouseButtons();
       return true;
     }
+    if (hasActiveLocalPlayerFamiliar()) {
+      playSound("mobHit", { throttleKey: "familiarNetActive", throttle: 0.22, volume: 0.34 });
+      maybeNotifyText("Your familiar is already out.");
+      resetMouseButtons();
+      return true;
+    }
 
     const target = findFamiliarNetTarget();
     if (!target) {
@@ -24616,8 +25017,18 @@
 
     startFamiliarNetSwing(1);
     if (!familiarNetCapture) {
+      if (commandLocalFamiliarsToCursor()) {
+        return true;
+      }
       toolFireCooldown = familiarNetReleaseCooldown;
       playSound("mobHit", { throttleKey: "familiarNetEmpty", throttle: 0.22, volume: 0.28 });
+      resetMouseButtons();
+      return true;
+    }
+    if (hasActiveLocalPlayerFamiliar()) {
+      toolFireCooldown = familiarNetReleaseCooldown;
+      playSound("mobHit", { throttleKey: "familiarNetActive", throttle: 0.22, volume: 0.34 });
+      maybeNotifyText("Your familiar is already out.");
       resetMouseButtons();
       return true;
     }
@@ -24636,6 +25047,7 @@
       summonSpinSpeed: 8
     });
     familiar.team = "player";
+    familiar.familiarOwnerPlayerId = localFamiliarOwnerId();
     familiar.summonBaseRadius = Math.max(1, finiteOr(familiar.radius, 28));
     familiar.radius = 0;
     familiar.vx += aim.world.x * 140 + finiteOr(player.vx, 0) * 0.2;
@@ -27125,13 +27537,20 @@
           continue;
         }
 
-        mob.x += nx * overlap * mobShare;
-        mob.y += ny * overlap * mobShare;
-        particle.x -= nx * overlap * bodyShare;
-        particle.y -= ny * overlap * bodyShare;
-
         const relativeVelocity = (mob.vx - particle.vx) * nx + (mob.vy - particle.vy) * ny;
         const impactSpeed = Math.max(0, -relativeVelocity);
+        const canTriggerBodyDamage = bodySpeed > solidBodyDamageSpeed && mob.hitCooldown <= 0 && canDamageMobWithBody(mob, particle);
+        const bodyDashActive = finiteOr(mob.bossBodyEvadeTimer, 0) > 0 && finiteOr(mob.hitCooldown, 0) > 0;
+        const correctionDistance = canTriggerBodyDamage
+          ? Math.min(overlap, 18)
+          : bodyDashActive
+            ? Math.min(overlap, 12)
+            : overlap;
+        mob.x += nx * correctionDistance * mobShare;
+        mob.y += ny * correctionDistance * mobShare;
+        particle.x -= nx * correctionDistance * bodyShare;
+        particle.y -= ny * correctionDistance * bodyShare;
+
         if (relativeVelocity < 0) {
           const impulse = -relativeVelocity * 0.96;
           mob.vx += nx * impulse * 0.86;
@@ -27149,7 +27568,7 @@
           damageBodyWithRambot(mob, particle, nx, ny, Math.max(mobSpeed, impactSpeed));
         }
 
-        if (bodySpeed > solidBodyDamageSpeed && mob.hitCooldown <= 0 && canDamageMobWithBody(mob, particle)) {
+        if (canTriggerBodyDamage) {
           const impactSpeedForDamage = Math.max(bodySpeed, impactSpeed);
           const damage = solidBodyImpactDamage(particle, impactSpeedForDamage, 18);
           markMobDamagedByBody(mob, particle);
@@ -27163,6 +27582,17 @@
         }
       }
     }
+  }
+
+  function mobProjectileSourceFields(mob) {
+    return {
+      team: isPlayerTeamMob(mob) ? "player" : "",
+      sourceMobId: mob && mob.id ? mob.id : 0
+    };
+  }
+
+  function isPlayerTeamProjectile(projectile) {
+    return Boolean(projectile && projectile.team === "player");
   }
 
   function fireRivalLaser(rival, target, dist) {
@@ -27192,6 +27622,7 @@
         damage: difficultyMobDamage(bossScaledDamage(rival, rivalProjectileDamage)),
         toolDisable: 0,
         cause: rival.isBoss ? "Alienoid boss laser" : "Alienoid laser",
+        ...mobProjectileSourceFields(rival),
         targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
       });
     }
@@ -27234,6 +27665,7 @@
       damage: tesla.isBoss ? difficultyMobDamage(bossScaledDamage(tesla, teslaLightningDamage)) : 0,
       toolDisable: teslaToolDisableDuration * (tesla.isBoss ? 1.45 : 1),
       cause: tesla.isBoss ? "Tesla boss lightning" : "Tesla lightning",
+      ...mobProjectileSourceFields(tesla),
       lightning: true,
       targetStructureId: target && target.kind === "structure" ? target.structure.id : 0,
       targetPlayerId: target && target.target && !target.target.local && target.target.remote ? target.target.remote.playerId : ""
@@ -27281,6 +27713,7 @@
       damage: difficultyMobDamage(bossScaledDamage(rocket, satelliteMissileDamage)),
       toolDisable: 0,
       cause: rocket.isBoss ? "Satellite boss missile" : "Satellite missile",
+      ...mobProjectileSourceFields(rocket),
       rocket: true,
       targetStructureId: target && target.kind === "structure" ? target.structure.id : 0,
       targetPlayerId: target && target.target && !target.target.local && target.target.remote ? target.target.remote.playerId : ""
@@ -27333,6 +27766,7 @@
         damage: difficultyMobDamage(bossScaledDamage(rocket, satelliteMissileDamage * 0.82)),
         toolDisable: 0,
         cause: "Satellite boss heat-seeking missile",
+        ...mobProjectileSourceFields(rocket),
         rocket: true,
         heatSeeking: true,
         targetSpeed: satelliteMissileSpeed * 0.94,
@@ -27385,6 +27819,7 @@
         damage: difficultyMobDamage(bossScaledDamage(fighter, 9)),
         toolDisable: 0,
         cause: fighter.isBoss ? "Fighter boss cannon" : "Fighter cannon",
+        ...mobProjectileSourceFields(fighter),
         targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
       });
     }
@@ -27422,6 +27857,7 @@
       damage: difficultyMobDamage(bossScaledDamage(fighter, 5.5)),
       toolDisable: 0,
       cause: "Fighter boss machine gun",
+      ...mobProjectileSourceFields(fighter),
       targetPlayerId: target && !target.local && target.remote ? target.remote.playerId : ""
     });
 
@@ -27844,6 +28280,14 @@
     return mob && mob.isBoss ? 0.68 : 1;
   }
 
+  function bossChaseForce(mob, baseForce) {
+    return mob && mob.isBoss ? baseForce * 1.18 : baseForce;
+  }
+
+  function bossStrafeForce(mob, baseForce) {
+    return mob && mob.isBoss ? baseForce * 1.35 : baseForce;
+  }
+
   function isMobDisabled(mob) {
     return Boolean(mob && finiteOr(mob.disabledTimer, 0) > 0);
   }
@@ -28064,14 +28508,14 @@
     const aimAngle = Math.atan2(aim.y, aim.x);
     const muzzleDistance = rival.radius + 20;
     const pelletCount = 9;
-    const spread = 0.46;
+    const spread = 0.28;
     const laserColor = shadeColor(rival.color, 82);
     const targetPlayerId = target && !target.local && target.remote ? target.remote.playerId : "";
 
     for (let i = 0; i < pelletCount; i += 1) {
       const lineT = pelletCount <= 1 ? 0 : i / (pelletCount - 1) * 2 - 1;
       const clusteredT = Math.sign(lineT) * Math.pow(Math.abs(lineT), 1.35);
-      const angleOffset = clusteredT * spread + randomRange(-0.085, 0.085);
+      const angleOffset = clusteredT * spread + randomRange(-0.04, 0.04);
       const dirX = Math.cos(aimAngle + angleOffset);
       const dirY = Math.sin(aimAngle + angleOffset);
       const sideX = -dirY;
@@ -28094,6 +28538,7 @@
         damage: difficultyMobDamage(bossScaledDamage(rival, rivalProjectileDamage * 0.42)),
         toolDisable: 0,
         cause: "Alienoid boss shotgun blast",
+        ...mobProjectileSourceFields(rival),
         targetPlayerId
       });
     }
@@ -29018,6 +29463,61 @@
       const tailY = projectile.y - dirY * sweptLength;
       const hitRadius = projectile.radius * (projectile.rocket ? 1.65 : 1);
 
+      if (isPlayerTeamProjectile(projectile)) {
+        const blocker = findBlockingLandableBody(tailX, tailY, projectile.x, projectile.y, projectile.radius);
+        if (blocker) {
+          sparks.push({
+            x: blocker.x,
+            y: blocker.y,
+            radius: 34,
+            color: projectile.color,
+            life: 0.22,
+            maxLife: 0.22
+          });
+          playSound("mobHit", { throttleKey: "familiarProjectileImpact" });
+          rivalProjectiles.splice(i, 1);
+          continue;
+        }
+
+        let hitHostile = false;
+        for (const mob of hostileCombatMobs()) {
+          if (!mob || mob.health <= 0 || mob.hitCooldown > 0) {
+            continue;
+          }
+          const mobDist = distanceToSegment(mob.x, mob.y, tailX, tailY, projectile.x, projectile.y);
+          if (mobDist >= mob.radius + hitRadius) {
+            continue;
+          }
+          const damage = Math.max(0, finiteOr(projectile.damage, rivalProjectileDamage));
+          const toolDisable = Math.max(0, finiteOr(projectile.toolDisable, 0));
+          knockMob(mob, dirX, dirY, projectile.rocket ? 170 : 125);
+          if (damage > 0) {
+            damageMob(mob, damage, projectile.color, mobName(mob) + " hit by your familiar.");
+          }
+          if (toolDisable > 0) {
+            disableMob(mob, toolDisable, projectile.color);
+          }
+          sparks.push({
+            x: projectile.x,
+            y: projectile.y,
+            radius: projectile.rocket ? 58 : 38,
+            color: projectile.color,
+            life: 0.28,
+            maxLife: 0.28
+          });
+          rivalProjectiles.splice(i, 1);
+          hitHostile = true;
+          break;
+        }
+        if (hitHostile) {
+          continue;
+        }
+        if (projectile.life <= 0) {
+          rivalProjectiles.splice(i, 1);
+        }
+        continue;
+      }
+
       const shieldBlocker = findProjectileShieldBlocker(tailX, tailY, projectile.x, projectile.y, hitRadius, projectile);
       if (shieldBlocker && activateShieldGeneratorBlock(shieldBlocker.structure, shieldBlocker.body, shieldBlocker.cost, shieldBlocker.x, shieldBlocker.y, projectile.color, projectile.rocket ? 0.24 : 0.16)) {
         rivalProjectiles.splice(i, 1);
@@ -29218,7 +29718,10 @@
     if (!projectile || !projectile.heatSeeking) {
       return;
     }
-    const target = nearestCombatPlayerTarget(projectile.x, projectile.y);
+    const familiarTarget = isPlayerTeamProjectile(projectile)
+      ? nearestHostileMobTarget({ x: projectile.x, y: projectile.y })
+      : null;
+    const target = familiarTarget ? familiarEnemyCombatTarget(familiarTarget.mob) : nearestCombatPlayerTarget(projectile.x, projectile.y);
     const targetPlayer = target && target.player ? target.player : player;
     const currentSpeed = Math.max(80, Math.hypot(projectile.vx, projectile.vy) || finiteOr(projectile.targetSpeed, satelliteMissileSpeed));
     const targetSpeed = Math.max(120, finiteOr(projectile.targetSpeed, satelliteMissileSpeed));
@@ -29352,7 +29855,11 @@
     const impulseY = -dirY * 105 * hitStrength + finiteOr(ufo.vy, 0) * 0.12;
     const beamColor = { r: 255, g: 73, b: 73 };
 
-    if (target && target.familiar) {
+    if (target && target.familiarEnemy) {
+      const enemy = target.player;
+      knockMob(enemy, -dirX, -dirY, 105 * hitStrength);
+      damageMob(enemy, damage, beamColor, mobName(enemy) + " drained by your UFO familiar.");
+    } else if (target && target.familiar) {
       const familiar = target.player;
       knockMob(familiar, -dirX, -dirY, 105 * hitStrength);
       damageMob(familiar, damage, beamColor, "Your familiar was drained by the UFO boss.");
@@ -29406,17 +29913,17 @@
     const playerBody = player.landed ? bodyById(player.landed.bodyId) : null;
 
     for (const particle of particles) {
-      if (!canUfoTractorAffectParticle(particle)) {
+      if (!canUfoTractorAffectParticle(particle) || !canUfoPreferTractorTarget(ufo, particle)) {
         continue;
       }
 
       const distance = Math.hypot(particle.x - ufo.x, particle.y - ufo.y);
       const surfaceDistance = Math.max(0, distance - Math.max(0, particle.radius || 0));
-      let score = surfaceDistance;
+      let score = surfaceDistance + ufoTractorTargetPriority(ufo, particle) * 10000;
       if (particle === playerBody) {
-        score *= 0.18;
+        score = surfaceDistance * 0.18;
       } else if (particle.tier.solid) {
-        score = surfaceDistance * 0.55 - particle.radius;
+        score = surfaceDistance * 0.55 - particle.radius + ufoTractorTargetPriority(ufo, particle) * 10000;
       } else if (particle.tier.name === "particle") {
         score += 80;
       }
@@ -29511,6 +30018,33 @@
         particles.splice(i, 1);
       }
     }
+  }
+
+  function canUfoPreferTractorTarget(ufo, particle) {
+    if (!particle || !particle.tier) {
+      return false;
+    }
+    if (ufo && ufo.isBoss) {
+      return particle.tier.name === "boulder" || particle.tier.name === "rock" || particle.tier.name === "particle" || isAsteroidOrLarger(particle);
+    }
+    return particle.tier.name === "rock" || particle.tier.name === "particle" || isAsteroidOrLarger(particle);
+  }
+
+  function ufoTractorTargetPriority(ufo, particle) {
+    if (!particle || !particle.tier) {
+      return 99;
+    }
+    if (ufo && ufo.isBoss) {
+      if (particle.tier.name === "boulder") return 0;
+      if (particle.tier.name === "rock") return 1;
+      if (isAsteroidOrLarger(particle)) return 2;
+      if (particle.tier.name === "particle") return 4;
+      return 8;
+    }
+    if (particle.tier.name === "rock") return 0;
+    if (isAsteroidOrLarger(particle)) return 2;
+    if (particle.tier.name === "particle") return 4;
+    return 8;
   }
 
   function drainBodyWithUfoTractor(ufo, body, pullStrength, centerStrength, dt) {
@@ -29744,7 +30278,59 @@
     });
   }
 
-  function ufoAttackTarget(playerTarget) {
+  function ufoCleanupTarget(ufo) {
+    let bestBody = null;
+    let bestScore = Infinity;
+    const maxDistance = (ufo && ufo.isBoss ? 3600 : 3000) + Math.max(width, height) * 0.55;
+
+    for (const body of particles) {
+      if (!canUfoPreferTractorTarget(ufo, body)) {
+        continue;
+      }
+      const distance = Math.hypot(body.x - ufo.x, body.y - ufo.y);
+      if (distance > maxDistance + finiteOr(body.radius, 0)) {
+        continue;
+      }
+
+      const priority = ufoTractorTargetPriority(ufo, body);
+      if (priority > 2) {
+        continue;
+      }
+      const eventBias = body.randomEventId === meteorShowerEventId || body.randomEventId === particleStormEventId ? -520 : 0;
+      const sizeBias = ufo && ufo.isBoss && body.tier && body.tier.name === "boulder" ? -finiteOr(body.mass, 0) * 3.2 : -finiteOr(body.mass, 0) * 0.7;
+      const score = priority * 10000 + distance + eventBias + sizeBias;
+      if (score < bestScore) {
+        bestBody = body;
+        bestScore = score;
+      }
+    }
+
+    return bestBody ? {
+      kind: "body",
+      body: bestBody,
+      x: bestBody.x,
+      y: bestBody.y,
+      radius: bestBody.radius
+    } : null;
+  }
+
+  function ufoAttackTarget(ufo, playerTarget) {
+    if (playerTarget && playerTarget.familiarEnemy) {
+      const targetPlayer = playerTarget.player;
+      return {
+        kind: "player",
+        target: playerTarget,
+        x: targetPlayer.x,
+        y: targetPlayer.y,
+        radius: targetPlayer.radius || player.radius
+      };
+    }
+
+    const cleanup = ufoCleanupTarget(ufo);
+    if (cleanup) {
+      return cleanup;
+    }
+
     if (playerTarget && playerTarget.local && player.landed) {
       const body = bodyById(player.landed.bodyId);
       if (isAsteroidOrLarger(body)) {
@@ -29782,9 +30368,6 @@
       if (isMobSummoning(ufo)) {
         continue;
       }
-      if (isPlayerTeamMob(ufo) && updateFamiliarMob(ufo, dt)) {
-        continue;
-      }
       updateBossSpawnPressure(ufo, dt);
       const beamMode = updateUfoBossBeamState(ufo, dt);
       if (isMobDisabled(ufo)) {
@@ -29794,7 +30377,11 @@
         continue;
       }
 
-      const target = nearestCombatPlayerTarget(ufo.x, ufo.y);
+      const target = combatTargetForMob(ufo);
+      if (!target) {
+        updateFamiliarMob(ufo, dt);
+        continue;
+      }
       const targetPlayer = target.player;
       const attackTarget = ufo.isBoss && beamMode === "drain" ? {
         kind: "player",
@@ -29802,7 +30389,7 @@
         x: targetPlayer.x,
         y: targetPlayer.y,
         radius: targetPlayer.radius || player.radius
-      } : ufoAttackTarget(target);
+      } : ufoAttackTarget(ufo, target);
       const toPlayerX = targetPlayer.x - ufo.x;
       const toPlayerY = targetPlayer.y - ufo.y;
       const playerDist = Math.hypot(toPlayerX, toPlayerY) || 1;
@@ -29825,8 +30412,8 @@
       const tangentY = nx * ufo.strafeSign;
       const desiredDistance = attackTarget.kind === "body" ? clamp(attackTarget.radius + 350, 430, 660) : 430;
       const noBeamBoost = ufo.isBoss && beamMode === "cooldown" ? 1.34 : 1;
-      const chaseForce = (dist > desiredDistance ? 92 : -44) * noBeamBoost;
-      const strafeForce = (dist < 880 ? 56 : 18) * noBeamBoost;
+      const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
+      const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);
 
       ufo.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
       ufo.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
@@ -29846,7 +30433,9 @@
       ufo.y += ufo.vy * dt;
       applyUfoTractorBeam(ufo, dt);
       applyUfoBossPlayerDrainBeam(ufo, target, dt);
-      updateUfoUndersideImpact(ufo);
+      if (!isPlayerTeamMob(ufo)) {
+        updateUfoUndersideImpact(ufo);
+      }
       ufo.rotation = ufo.beamAngle - Math.PI / 2;
     }
   }
@@ -29867,7 +30456,80 @@
     return best ? { mob: best, distance: bestDistance } : null;
   }
 
+  function familiarEnemyCombatTarget(mob) {
+    return {
+      local: false,
+      remote: null,
+      familiarEnemy: true,
+      player: mob,
+      publicName: mobName(mob)
+    };
+  }
+
+  function activeFamiliarCommand(mob) {
+    if (!isPlayerTeamMob(mob) || finiteOr(mob.familiarCommandTimer, 0) <= 0) {
+      return null;
+    }
+    if (!Number.isFinite(Number(mob.familiarCommandX)) || !Number.isFinite(Number(mob.familiarCommandY))) {
+      mob.familiarCommandTimer = 0;
+      return null;
+    }
+    return {
+      x: finiteOr(mob.familiarCommandX, mob.x),
+      y: finiteOr(mob.familiarCommandY, mob.y)
+    };
+  }
+
+  function clearFamiliarCommand(mob) {
+    mob.familiarCommandTimer = 0;
+    mob.familiarCommandX = finiteOr(mob.x, 0);
+    mob.familiarCommandY = finiteOr(mob.y, 0);
+  }
+
+  function combatTargetForMob(mob) {
+    if (isPlayerTeamMob(mob)) {
+      if (activeFamiliarCommand(mob)) {
+        return null;
+      }
+      const target = nearestHostileMobTarget(mob);
+      return target ? familiarEnemyCombatTarget(target.mob) : null;
+    }
+    return nearestCombatPlayerTarget(mob.x, mob.y);
+  }
+
   function updateFamiliarMob(mob, dt) {
+    const command = activeFamiliarCommand(mob);
+    if (command) {
+      mob.familiarCommandTimer = Math.max(0, finiteOr(mob.familiarCommandTimer, 0) - dt);
+      const dx = command.x - mob.x;
+      const dy = command.y - mob.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      if (dist <= Math.max(34, mob.radius + 12) || mob.familiarCommandTimer <= 0) {
+        clearFamiliarCommand(mob);
+        mob.vx *= Math.pow(0.48, dt);
+        mob.vy *= Math.pow(0.48, dt);
+      } else {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const slowRadius = Math.max(90, mob.radius * 3.2);
+        const force = dist > slowRadius ? 260 : 128;
+        mob.vx += nx * force * dt;
+        mob.vy += ny * force * dt;
+        mob.vx *= Math.pow(0.7, dt);
+        mob.vy *= Math.pow(0.7, dt);
+        const speed = Math.hypot(mob.vx, mob.vy);
+        const maxSpeed = mob.kind === "rocket" || mob.kind === "fighter" ? 280 : mob.kind === "rambot" ? 245 : 220;
+        if (speed > maxSpeed) {
+          mob.vx = (mob.vx / speed) * maxSpeed;
+          mob.vy = (mob.vy / speed) * maxSpeed;
+        }
+        mob.rotation = Math.atan2(mob.vy || ny, mob.vx || nx) + Math.PI / 2;
+      }
+      mob.x += mob.vx * dt;
+      mob.y += mob.vy * dt;
+      return true;
+    }
+
     const target = nearestHostileMobTarget(mob);
     if (!target) {
       mob.vx *= Math.pow(0.7, dt);
@@ -29926,9 +30588,6 @@
       if (isMobSummoning(rival)) {
         continue;
       }
-      if (isPlayerTeamMob(rival) && updateFamiliarMob(rival, dt)) {
-        continue;
-      }
       updateBossSpawnPressure(rival, dt);
 
       rival.shootCooldown = Math.max(0, rival.shootCooldown - dt);
@@ -29943,7 +30602,11 @@
         continue;
       }
 
-      const target = nearestCombatPlayerTarget(rival.x, rival.y);
+      const target = combatTargetForMob(rival);
+      if (!target) {
+        updateFamiliarMob(rival, dt);
+        continue;
+      }
       const targetPlayer = target.player;
       const toPlayerX = targetPlayer.x - rival.x;
       const toPlayerY = targetPlayer.y - rival.y;
@@ -29964,8 +30627,8 @@
       const tangentX = -ny * rival.strafeSign;
       const tangentY = nx * rival.strafeSign;
       const desiredDistance = 300;
-      const chaseForce = dist > desiredDistance ? 136 : -62;
-      const strafeForce = dist < rivalShootRange ? 46 : 12;
+      const chaseForce = bossChaseForce(rival, dist > desiredDistance ? 136 : -62);
+      const strafeForce = bossStrafeForce(rival, dist < rivalShootRange ? 46 : 12);
 
       rival.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
       rival.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
@@ -30003,7 +30666,11 @@
       return;
     }
 
-    if (target && target.spacecraft && target.spacecraftComponent) {
+    if (target && target.familiarEnemy) {
+      const enemy = target.player;
+      knockMob(enemy, nx, ny, 210);
+      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rambot, rambotImpactDamage)), rambot.color, mobName(enemy) + " rammed by your rambot familiar.");
+    } else if (target && target.spacecraft && target.spacecraftComponent) {
       damageSpacecraftComponent(
         target.spacecraft,
         target.spacecraftComponent,
@@ -30073,6 +30740,9 @@
     if (target && target.local) {
       player.x += nx * overlap * 0.72;
       player.y += ny * overlap * 0.72;
+    } else if (target && target.familiarEnemy) {
+      target.player.x += nx * overlap * 0.72;
+      target.player.y += ny * overlap * 0.72;
     }
     rambot.x -= nx * overlap * 0.28;
     rambot.y -= ny * overlap * 0.28;
@@ -30083,6 +30753,9 @@
   }
 
   function updateRambotStructureImpact(rambot) {
+    if (isPlayerTeamMob(rambot)) {
+      return;
+    }
     if (rambot.impactCooldown > 0) {
       return;
     }
@@ -30210,7 +30883,10 @@
 
   function hitCombatPlayerWithRambotPiston(rambot, target, nx, ny, hitX, hitY) {
     const targetPlayer = target && target.player ? target.player : player;
-    if (target && target.spacecraft && target.spacecraftComponent) {
+    if (target && target.familiarEnemy) {
+      knockMob(target.player, nx, ny, rambotBossPistonKnockback * 0.56);
+      damageMob(target.player, difficultyMobDamage(bossScaledDamage(rambot, rambotBossPistonDamage)), rambot.color, mobName(target.player) + " punched by your rambot familiar.");
+    } else if (target && target.spacecraft && target.spacecraftComponent) {
       damageSpacecraftComponent(
         target.spacecraft,
         target.spacecraftComponent,
@@ -30283,6 +30959,10 @@
       return;
     }
 
+    if (isPlayerTeamMob(rambot)) {
+      return;
+    }
+
     for (const structure of structures) {
       if (structure.health <= 0) {
         continue;
@@ -30319,9 +30999,6 @@
       if (isMobSummoning(rambot)) {
         continue;
       }
-      if (isPlayerTeamMob(rambot) && updateFamiliarMob(rambot, dt)) {
-        continue;
-      }
       updateBossSpawnPressure(rambot, dt);
       const bossAltReady = tickRambotBossAltAttackCooldown(rambot, dt);
       if (isMobDisabled(rambot)) {
@@ -30332,7 +31009,11 @@
         continue;
       }
 
-      const target = nearestCombatPlayerTarget(rambot.x, rambot.y);
+      const target = combatTargetForMob(rambot);
+      if (!target) {
+        updateFamiliarMob(rambot, dt);
+        continue;
+      }
       const targetPlayer = target.player;
       const toPlayerX = targetPlayer.x - rambot.x;
       const toPlayerY = targetPlayer.y - rambot.y;
@@ -30385,8 +31066,8 @@
         rambot.vy *= Math.pow(0.22, dt);
       } else {
         rambot.chargeCooldown -= dt;
-        const chaseForce = rambot.isBoss ? 154 : 118;
-        const strafeForce = rambot.isBoss ? 32 : 22;
+        const chaseForce = bossChaseForce(rambot, rambot.isBoss ? 154 : 118);
+        const strafeForce = bossStrafeForce(rambot, rambot.isBoss ? 32 : 22);
         rambot.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
         rambot.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
 
@@ -30431,6 +31112,18 @@
 
   function electricAttackTarget(tesla, playerTarget) {
     const targetPlayer = playerTarget && playerTarget.player ? playerTarget.player : player;
+    if (playerTarget && playerTarget.familiarEnemy) {
+      return {
+        kind: "player",
+        target: playerTarget,
+        x: targetPlayer.x,
+        y: targetPlayer.y,
+        vx: finiteOr(targetPlayer.vx, 0),
+        vy: finiteOr(targetPlayer.vy, 0),
+        radius: targetPlayer.radius || player.radius
+      };
+    }
+
     const playerDistance = Math.hypot(targetPlayer.x - tesla.x, targetPlayer.y - tesla.y);
     const structure = nearestStructureTarget(tesla.x, tesla.y, teslaLightningRange * 0.95, (candidate) => candidate.health > 0);
 
@@ -30470,9 +31163,10 @@
   function findEngineerHealTarget(engineer) {
     let best = null;
     let bestScore = Infinity;
+    const healPlayerTeam = isPlayerTeamMob(engineer);
 
     for (const mob of allCombatMobs()) {
-      if (mob === engineer || mob.kind === "engineer" || mob.health <= 0 || mob.health >= mob.maxHealth || isPlayerTeamMob(mob)) {
+      if (mob === engineer || mob.kind === "engineer" || mob.health <= 0 || mob.health >= mob.maxHealth || isPlayerTeamMob(mob) !== healPlayerTeam) {
         continue;
       }
 
@@ -30503,9 +31197,6 @@
       if (isMobSummoning(engineer)) {
         continue;
       }
-      if (isPlayerTeamMob(engineer) && updateFamiliarMob(engineer, dt)) {
-        continue;
-      }
       updateBossSpawnPressure(engineer, dt);
       if (isMobDisabled(engineer)) {
         engineer.healPulse = 0;
@@ -30515,7 +31206,11 @@
         continue;
       }
 
-      const playerTarget = nearestCombatPlayerTarget(engineer.x, engineer.y);
+      const playerTarget = combatTargetForMob(engineer);
+      if (!playerTarget) {
+        updateFamiliarMob(engineer, dt);
+        continue;
+      }
       const targetPlayer = playerTarget.player;
       const playerDist = Math.hypot(targetPlayer.x - engineer.x, targetPlayer.y - engineer.y) || 1;
       const bossAltReady = tickBossAltAttackCooldown(engineer, dt);
@@ -30547,9 +31242,10 @@
 
       if (healTarget) {
         const desiredDistance = 260;
-        const chaseForce = focusDist > desiredDistance ? 116 : -34;
-        engineer.vx += nx * chaseForce * dt + tangentX * 34 * dt;
-        engineer.vy += ny * chaseForce * dt + tangentY * 34 * dt;
+        const chaseForce = bossChaseForce(engineer, focusDist > desiredDistance ? 116 : -34);
+        const strafeForce = bossStrafeForce(engineer, 34);
+        engineer.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
+        engineer.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
 
         if (focusDist < engineerHealRange && engineer.healCooldown <= 0 && hasClearShotAtMob(engineer.x, engineer.y, healTarget, null)) {
           const healed = Math.min(healTarget.maxHealth - healTarget.health, bossScaledDamage(engineer, engineerHealRate));
@@ -30577,8 +31273,10 @@
         const awayY = engineer.y - targetPlayer.y;
         const awayDist = Math.hypot(awayX, awayY) || 1;
         const keepAway = playerDist < 520 ? 90 : -18;
-        engineer.vx += (awayX / awayDist) * keepAway * dt + tangentX * 22 * dt;
-        engineer.vy += (awayY / awayDist) * keepAway * dt + tangentY * 22 * dt;
+        const evadeForce = bossChaseForce(engineer, keepAway);
+        const strafeForce = bossStrafeForce(engineer, 22);
+        engineer.vx += (awayX / awayDist) * evadeForce * dt + tangentX * strafeForce * dt;
+        engineer.vy += (awayY / awayDist) * evadeForce * dt + tangentY * strafeForce * dt;
         engineer.targetKind = "";
         engineer.targetId = 0;
       }
@@ -30616,9 +31314,6 @@
       if (isMobSummoning(tesla)) {
         continue;
       }
-      if (isPlayerTeamMob(tesla) && updateFamiliarMob(tesla, dt)) {
-        continue;
-      }
       updateBossSpawnPressure(tesla, dt);
       if (isMobDisabled(tesla)) {
         tesla.lightningWarmup = 0;
@@ -30626,7 +31321,11 @@
         continue;
       }
 
-      const playerTarget = nearestCombatPlayerTarget(tesla.x, tesla.y);
+      const playerTarget = combatTargetForMob(tesla);
+      if (!playerTarget) {
+        updateFamiliarMob(tesla, dt);
+        continue;
+      }
       const targetPlayer = playerTarget.player;
       const target = electricAttackTarget(tesla, playerTarget);
       const toPlayerX = target.x - tesla.x;
@@ -30649,8 +31348,8 @@
       if (bossAltReady && playerDist < teslaBossEmpPulseRange * 1.12) {
         applyEmpPulse(tesla.x, tesla.y, teslaBossEmpPulseRange, teslaBossEmpPulseDisableDuration, {
           affectMobs: true,
-          affectPlayers: true,
-          affectStructures: true,
+          affectPlayers: !isPlayerTeamMob(tesla),
+          affectStructures: !isPlayerTeamMob(tesla),
           sourceMob: tesla,
           color: tesla.color,
           cause: "Tesla boss EMP"
@@ -30665,8 +31364,8 @@
       const tangentX = -ny * tesla.strafeSign;
       const tangentY = nx * tesla.strafeSign;
       const desiredDistance = 520;
-      const chaseForce = dist > desiredDistance ? 92 : -64;
-      const strafeForce = dist < 940 ? 72 : 20;
+      const chaseForce = bossChaseForce(tesla, dist > desiredDistance ? 92 : -64);
+      const strafeForce = bossStrafeForce(tesla, dist < 940 ? 72 : 20);
 
       tesla.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
       tesla.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
@@ -30708,7 +31407,11 @@
       return;
     }
 
-    if (target && target.spacecraft && target.spacecraftComponent) {
+    if (target && target.familiarEnemy) {
+      const enemy = target.player;
+      knockMob(enemy, nx, ny, 245);
+      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rocket, rocketImpactDamage)), rocket.color, mobName(enemy) + " struck by your rocket familiar.");
+    } else if (target && target.spacecraft && target.spacecraftComponent) {
       damageSpacecraftComponent(
         target.spacecraft,
         target.spacecraftComponent,
@@ -30768,6 +31471,18 @@
 
   function rocketAttackTarget(rocket, playerTarget) {
     const targetPlayer = playerTarget && playerTarget.player ? playerTarget.player : player;
+    if (playerTarget && playerTarget.familiarEnemy) {
+      return {
+        kind: "player",
+        target: playerTarget,
+        x: targetPlayer.x,
+        y: targetPlayer.y,
+        vx: finiteOr(targetPlayer.vx, 0),
+        vy: finiteOr(targetPlayer.vy, 0),
+        radius: targetPlayer.radius || player.radius
+      };
+    }
+
     const playerDistance = Math.hypot(targetPlayer.x - rocket.x, targetPlayer.y - rocket.y);
     const structure = nearestStructureTarget(rocket.x, rocket.y, 1180, (candidate) => candidate.health > 0);
 
@@ -30823,6 +31538,9 @@
     if (target && target.local) {
       player.x += nx * overlap * 0.68;
       player.y += ny * overlap * 0.68;
+    } else if (target && target.familiarEnemy) {
+      target.player.x += nx * overlap * 0.68;
+      target.player.y += ny * overlap * 0.68;
     }
     rocket.x -= nx * overlap * 0.32;
     rocket.y -= ny * overlap * 0.32;
@@ -30833,6 +31551,9 @@
   }
 
   function updateRocketStructureImpact(rocket) {
+    if (isPlayerTeamMob(rocket)) {
+      return;
+    }
     if (rocket.impactCooldown > 0) {
       return;
     }
@@ -30929,7 +31650,11 @@
   }
 
   function updateRocketShip(rocket, dt) {
-    const playerTarget = nearestCombatPlayerTarget(rocket.x, rocket.y);
+    const playerTarget = combatTargetForMob(rocket);
+    if (!playerTarget) {
+      updateFamiliarMob(rocket, dt);
+      return;
+    }
     const target = rocketAttackTarget(rocket, playerTarget);
     const targetPlayer = playerTarget && playerTarget.player ? playerTarget.player : player;
     const toTargetX = target.x - rocket.x;
@@ -30974,8 +31699,10 @@
       }
     } else if (rocket.recoverTimer > 0) {
       rocket.recoverTimer = Math.max(0, rocket.recoverTimer - dt);
-      rocket.vx += (-nx * 88 + tangentX * 64) * dt;
-      rocket.vy += (-ny * 88 + tangentY * 64) * dt;
+      const recoverForce = bossChaseForce(rocket, 88);
+      const recoverStrafeForce = bossStrafeForce(rocket, 64);
+      rocket.vx += (-nx * recoverForce + tangentX * recoverStrafeForce) * dt;
+      rocket.vy += (-ny * recoverForce + tangentY * recoverStrafeForce) * dt;
       rocket.vx *= Math.pow(0.76, dt);
       rocket.vy *= Math.pow(0.76, dt);
     } else if (bossAltReady && rocket.isBoss && Math.hypot(targetPlayer.x - rocket.x, targetPlayer.y - rocket.y) < 1280) {
@@ -30984,8 +31711,8 @@
       rocket.vy += -ny * 120 * dt;
     } else {
       rocket.chargeCooldown = Math.max(0, finiteOr(rocket.chargeCooldown, 0) - dt);
-      const rangeForce = dist > 820 ? 180 : dist < 540 ? -176 : 24;
-      const strafeForce = 92 + Math.sin(performance.now() * 0.001 + rocket.wobble) * 16;
+      const rangeForce = bossChaseForce(rocket, dist > 820 ? 180 : dist < 540 ? -176 : 24);
+      const strafeForce = bossStrafeForce(rocket, 92 + Math.sin(performance.now() * 0.001 + rocket.wobble) * 16);
       rocket.vx += (nx * rangeForce + tangentX * strafeForce) * dt;
       rocket.vy += (ny * rangeForce + tangentY * strafeForce) * dt;
       rocket.vx *= Math.pow(0.72, dt);
@@ -31056,9 +31783,6 @@
       if (isMobSummoning(rocket)) {
         continue;
       }
-      if (isPlayerTeamMob(rocket) && updateFamiliarMob(rocket, dt)) {
-        continue;
-      }
       updateBossSpawnPressure(rocket, dt);
       if (isMobDisabled(rocket)) {
         rocket.lockTimer = 0;
@@ -31076,7 +31800,11 @@
         continue;
       }
 
-      const playerTarget = nearestCombatPlayerTarget(rocket.x, rocket.y);
+      const playerTarget = combatTargetForMob(rocket);
+      if (!playerTarget) {
+        updateFamiliarMob(rocket, dt);
+        continue;
+      }
       const target = rocketAttackTarget(rocket, playerTarget);
       const targetPlayer = playerTarget.player;
       const toPlayerX = target.x - rocket.x;
@@ -31111,8 +31839,10 @@
         fireSatelliteBossSeekingMissiles(rocket, playerTarget);
       } else if (rocket.volleyShots > 0) {
         rocket.volleyTimer -= dt;
-        rocket.vx += -nx * 42 * dt + tangentX * 24 * dt;
-        rocket.vy += -ny * 42 * dt + tangentY * 24 * dt;
+        const volleyRetreatForce = bossChaseForce(rocket, 42);
+        const volleyStrafeForce = bossStrafeForce(rocket, 24);
+        rocket.vx += -nx * volleyRetreatForce * dt + tangentX * volleyStrafeForce * dt;
+        rocket.vy += -ny * volleyRetreatForce * dt + tangentY * volleyStrafeForce * dt;
 
         if (rocket.volleyTimer <= 0) {
           fireRocketMissile(rocket, target);
@@ -31127,8 +31857,10 @@
         rocket.lockTimer -= dt;
         rocket.vx *= Math.pow(0.16, dt);
         rocket.vy *= Math.pow(0.16, dt);
-        rocket.vx += tangentX * 18 * dt - nx * 18 * dt;
-        rocket.vy += tangentY * 18 * dt - ny * 18 * dt;
+        const lockStrafeForce = bossStrafeForce(rocket, 18);
+        const lockRetreatForce = bossChaseForce(rocket, 18);
+        rocket.vx += tangentX * lockStrafeForce * dt - nx * lockRetreatForce * dt;
+        rocket.vy += tangentY * lockStrafeForce * dt - ny * lockRetreatForce * dt;
         if (rocket.lockTimer <= 0) {
           rocket.volleyShots = satelliteVolleyCount;
           rocket.volleyTimer = 0.01;
@@ -31136,8 +31868,10 @@
       } else if (rocket.recoverTimer > 0) {
         rocket.recoverTimer -= dt;
         rocket.scanProgress = Math.max(0, rocket.scanProgress - dt * 1.1);
-        rocket.vx += -nx * 72 * dt + tangentX * 28 * dt;
-        rocket.vy += -ny * 72 * dt + tangentY * 28 * dt;
+        const recoverForce = bossChaseForce(rocket, 72);
+        const recoverStrafeForce = bossStrafeForce(rocket, 28);
+        rocket.vx += -nx * recoverForce * dt + tangentX * recoverStrafeForce * dt;
+        rocket.vy += -ny * recoverForce * dt + tangentY * recoverStrafeForce * dt;
         rocket.vx *= Math.pow(0.52, dt);
         rocket.vy *= Math.pow(0.52, dt);
       } else {
@@ -31147,8 +31881,8 @@
         const previousScanProgress = rocket.scanProgress || 0;
         rocket.scanProgress = clamp(rocket.scanProgress + (scanning ? dt * 0.86 : -dt * 1.05), 0, 1);
 
-        const rangeForce = dist > 760 ? 132 : dist < 540 ? -128 : 12;
-        const strafeForce = 76 + rocket.scanProgress * 36;
+        const rangeForce = bossChaseForce(rocket, dist > 760 ? 132 : dist < 540 ? -128 : 12);
+        const strafeForce = bossStrafeForce(rocket, 76 + rocket.scanProgress * 36);
         rocket.vx += nx * rangeForce * dt + tangentX * strafeForce * dt;
         rocket.vy += ny * rangeForce * dt + tangentY * strafeForce * dt;
 
@@ -31215,9 +31949,6 @@
       if (isMobSummoning(fighter)) {
         continue;
       }
-      if (isPlayerTeamMob(fighter) && updateFamiliarMob(fighter, dt)) {
-        continue;
-      }
       updateBossSpawnPressure(fighter, dt);
       if (isMobDisabled(fighter)) {
         fighter.shieldActive = 0;
@@ -31227,7 +31958,11 @@
         continue;
       }
 
-      const target = nearestCombatPlayerTarget(fighter.x, fighter.y);
+      const target = combatTargetForMob(fighter);
+      if (!target) {
+        updateFamiliarMob(fighter, dt);
+        continue;
+      }
       const targetPlayer = target.player;
       const toPlayerX = targetPlayer.x - fighter.x;
       const toPlayerY = targetPlayer.y - fighter.y;
@@ -31248,8 +31983,10 @@
       const tangentX = -ny * fighter.strafeSign;
       const tangentY = nx * fighter.strafeSign;
 
-      fighter.vx += nx * (dist > 560 ? 110 : -62) * dt + tangentX * (dist < 1050 ? 78 : 24) * dt;
-      fighter.vy += ny * (dist > 560 ? 110 : -62) * dt + tangentY * (dist < 1050 ? 78 : 24) * dt;
+      const chaseForce = bossChaseForce(fighter, dist > 560 ? 110 : -62);
+      const strafeForce = bossStrafeForce(fighter, dist < 1050 ? 78 : 24);
+      fighter.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
+      fighter.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
 
       const bossAltReady = tickBossAltAttackCooldown(fighter, dt);
       const clearShot = hasClearShotAtCombatTarget(fighter, target);
@@ -35411,6 +36148,108 @@
     ctx.stroke();
   }
 
+  function drawRemoteEmpRemoteControl(remotePlayer, time) {
+    const active = remotePlayer.toolMode === "fire" || finiteOr(remotePlayer.toolFireCooldown, 0) > 0;
+
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(6, 15);
+    ctx.lineTo(37, 22);
+    ctx.stroke();
+    ctx.strokeStyle = "#f8fbff";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#20283d";
+    roundRectPath(26, 10, 24, 29, 7);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(56, -5);
+    ctx.rotate(-0.12);
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(12, -31);
+    ctx.lineTo(29, -57);
+    ctx.stroke();
+    ctx.strokeStyle = "#dffcff";
+    ctx.lineWidth = 2.8;
+    ctx.stroke();
+    ctx.fillStyle = active ? "#7ee8ff" : "#8e9aae";
+    ctx.beginPath();
+    ctx.arc(31, -60, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    const bodyGradient = ctx.createLinearGradient(-24, -38, 25, 43);
+    bodyGradient.addColorStop(0, "#f8fbff");
+    bodyGradient.addColorStop(0.46, "#7ee8ff");
+    bodyGradient.addColorStop(1, "#29324c");
+    ctx.fillStyle = bodyGradient;
+    roundRectPath(-25, -37, 50, 76, 10);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#101829";
+    roundRectPath(-16, -25, 32, 18, 5);
+    ctx.fill();
+    ctx.strokeStyle = active ? "#9dff7a" : "rgba(223, 252, 255, 0.72)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.strokeStyle = active ? "#9dff7a" : "rgba(223, 252, 255, 0.58)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i += 1) {
+      const y = -20 + i * 5;
+      const wave = active ? Math.sin(time * 0.022 + i) * 2 : 0;
+      ctx.beginPath();
+      ctx.moveTo(-10, y);
+      ctx.quadraticCurveTo(-2, y - 3 + wave, 6, y);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = active ? "#9dff7a" : "#dffcff";
+    ctx.beginPath();
+    ctx.arc(0, 6, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.fillStyle = "#20283d";
+    for (let row = 0; row < 2; row += 1) {
+      for (let col = 0; col < 3; col += 1) {
+        ctx.beginPath();
+        ctx.arc(-12 + col * 12, 23 + row * 10, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (active) {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "rgba(126, 232, 255, 0.58)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 2; i += 1) {
+        ctx.beginPath();
+        ctx.arc(31, -60, 14 + i * 12 + Math.sin(time * 0.018 + i) * 2, -0.88, 0.88);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    ctx.restore();
+  }
+
   function drawRemoteTool(remotePlayer, aimAngle, bob, time) {
     if (!remotePlayer.equippedTool) {
       return;
@@ -35424,6 +36263,8 @@
       drawRemoteLaserPistol(remotePlayer.toolMode === "fire", remotePlayer.equippedTool);
     } else if (remotePlayer.equippedTool === pistonPunchToolId) {
       drawRemotePistonPunch(remotePlayer);
+    } else if (remotePlayer.equippedTool === empToolId) {
+      drawRemoteEmpRemoteControl(remotePlayer, time);
     } else {
       drawRemoteSuctionGadget(remotePlayer, time);
     }
@@ -35483,16 +36324,22 @@
 
       if (gameSettings.playerEnergyBar !== false && (energyPct < 0.995 || toolsDisabled)) {
         const energyColors = playerEnergyStatusBarColors(toolsDisabled, energyPct);
-        ctx.fillStyle = "rgba(3, 8, 24, 0.62)";
-        roundRectPath(screen.x - 37, screen.y + 72, 74, 8, 4);
-        ctx.fill();
-        ctx.strokeStyle = toolsDisabled ? energyColors.strokeColor : "rgba(255, 255, 255, 0.16)";
-        ctx.lineWidth = 1;
-        roundRectPath(screen.x - 37, screen.y + 72, 74, 8, 4);
-        ctx.stroke();
-        ctx.fillStyle = energyColors.fillStart;
-        roundRectPath(screen.x - 37, screen.y + 72, 74 * energyPct, 8, 4);
-        ctx.fill();
+        drawPlayerStatusBar({
+          x: screen.x - 37,
+          y: screen.y + 72,
+          width: 74,
+          height: 8,
+          pct: energyPct,
+          alpha: 1,
+          icon: "\u26a1",
+          iconX: screen.x - 49,
+          iconColor: energyColors.iconColor,
+          glowColor: energyColors.glowColor,
+          strokeColor: energyColors.strokeColor,
+          fillStart: energyColors.fillStart,
+          fillEnd: energyColors.fillEnd,
+          blocked: toolsDisabled
+        });
       }
 
       if (quality >= 0.64) {
@@ -36352,7 +37199,7 @@
   function drawPistonPunch(aim, time) {
     const centerX = width / 2;
     const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
-    const active = !areToolsDisabled() && mouse.left && toolFireCooldown > pistonPunchCooldown * 0.45;
+    const active = !areToolsDisabled() && toolFireCooldown > pistonPunchCooldown * 0.45;
     const extension = active ? clamp((toolFireCooldown - pistonPunchCooldown * 0.45) / (pistonPunchCooldown * 0.55), 0, 1) : 0;
     const reach = 54 + extension * 58;
 
@@ -36433,6 +37280,115 @@
     ctx.restore();
   }
 
+  function drawEmpRemoteControl(aim, time) {
+    const centerX = width / 2;
+    const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
+    const active = !areToolsDisabled() && toolFireCooldown > empPulseCooldown * 0.82;
+    const pulse = active ? clamp(toolFireCooldown / empPulseCooldown, 0, 1) : 0;
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(aim.angle - 0.06);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(6, 15);
+    ctx.lineTo(37, 22);
+    ctx.stroke();
+    ctx.strokeStyle = "#f8fbff";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#20283d";
+    roundRectPath(26, 10, 24, 29, 7);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(56, -5);
+    ctx.rotate(-0.12);
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(12, -31);
+    ctx.lineTo(29, -57);
+    ctx.stroke();
+    ctx.strokeStyle = "#dffcff";
+    ctx.lineWidth = 2.8;
+    ctx.stroke();
+    ctx.fillStyle = active ? "#7ee8ff" : "#8e9aae";
+    ctx.beginPath();
+    ctx.arc(31, -60, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    const bodyGradient = ctx.createLinearGradient(-24, -38, 25, 43);
+    bodyGradient.addColorStop(0, "#f8fbff");
+    bodyGradient.addColorStop(0.46, "#7ee8ff");
+    bodyGradient.addColorStop(1, "#29324c");
+    ctx.fillStyle = bodyGradient;
+    roundRectPath(-25, -37, 50, 76, 10);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#101829";
+    roundRectPath(-16, -25, 32, 18, 5);
+    ctx.fill();
+    ctx.strokeStyle = active ? "#9dff7a" : "rgba(223, 252, 255, 0.72)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.strokeStyle = active ? "#9dff7a" : "rgba(223, 252, 255, 0.58)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i += 1) {
+      const y = -20 + i * 5;
+      const wave = active ? Math.sin(time * 0.022 + i) * 2 : 0;
+      ctx.beginPath();
+      ctx.moveTo(-10, y);
+      ctx.quadraticCurveTo(-2, y - 3 + wave, 6, y);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = active ? "#9dff7a" : "#dffcff";
+    ctx.beginPath();
+    ctx.arc(0, 6, 10 + pulse * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.fillStyle = "#20283d";
+    for (let row = 0; row < 2; row += 1) {
+      for (let col = 0; col < 3; col += 1) {
+        ctx.beginPath();
+        ctx.arc(-12 + col * 12, 23 + row * 10, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (active) {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "rgba(126, 232, 255, 0.62)";
+      ctx.lineWidth = 2.2;
+      for (let i = 0; i < 3; i += 1) {
+        ctx.beginPath();
+        ctx.arc(31, -60, 14 + i * 11 + Math.sin(time * 0.018 + i) * 2, -0.88, 0.88);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    ctx.restore();
+    ctx.restore();
+  }
+
   function drawGadget(aim, time) {
     if (!equippedToolId) {
       return;
@@ -36456,6 +37412,10 @@
     }
     if (equippedToolId === pistonPunchToolId) {
       drawPistonPunch(aim, time);
+      return;
+    }
+    if (equippedToolId === empToolId) {
+      drawEmpRemoteControl(aim, time);
       return;
     }
 
@@ -36659,6 +37619,7 @@
   function drawPlayerStatusBar(options) {
     const pct = clamp(options.pct, 0, 1);
     const fillWidth = options.width * pct;
+    const iconY = options.y + options.height * 0.5;
 
     ctx.save();
     ctx.globalAlpha *= clamp(options.alpha, 0, 1);
@@ -36668,7 +37629,20 @@
     ctx.shadowColor = options.glowColor;
     ctx.shadowBlur = 8;
     ctx.fillStyle = options.iconColor;
-    ctx.fillText(options.icon, options.iconX, options.y + options.height * 0.5);
+    ctx.fillText(options.icon, options.iconX, iconY);
+
+    if (options.blocked) {
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255, 31, 47, 0.98)";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(options.iconX, iconY, 6.8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(options.iconX - 4.6, iconY + 4.6);
+      ctx.lineTo(options.iconX + 4.6, iconY - 4.6);
+      ctx.stroke();
+    }
 
     ctx.shadowBlur = 0;
     ctx.fillStyle = "rgba(2, 5, 14, 0.62)";
@@ -36758,7 +37732,8 @@
         glowColor: energyColors.glowColor,
         strokeColor: energyColors.strokeColor,
         fillStart: energyColors.fillStart,
-        fillEnd: energyColors.fillEnd
+        fillEnd: energyColors.fillEnd,
+        blocked: energyDisabled
       });
     }
   }
@@ -36910,7 +37885,7 @@
       const alpha = clamp(transform.alpha, 0, 1);
       let remoteMapBodies = 0;
       for (const body of snapshot.world.particles) {
-        if (!isMappedBody(body)) {
+        if (!isBodyVisibleOnMap(body)) {
           continue;
         }
         contacts.bodies.push({
@@ -37096,7 +38071,7 @@
 
     mapBodyCache.frameId = frameId;
     mapBodyCache.sourceCount = particles.length;
-    mapBodyCache.bodies = particles.filter(isMappedBody).sort((a, b) => a.mass - b.mass);
+    mapBodyCache.bodies = particles.filter(isBodyVisibleOnMap).sort((a, b) => a.mass - b.mass);
     return mapBodyCache.bodies;
   }
 
@@ -37344,6 +38319,7 @@
     const playerSpeed = Math.hypot(finiteOr(player.vx, 0), finiteOr(player.vy, 0));
     const deviceMemory = Number(navigator.deviceMemory);
     const deviceMemoryText = Number.isFinite(deviceMemory) ? deviceMemory + " GB" : "n/a";
+    const v2Perf = multiplayer.v2 && multiplayer.v2.perf ? multiplayer.v2.perf : {};
 
     return [
       "Runtime",
@@ -37377,6 +38353,9 @@
       "  socket: " + developerSocketState() + " | connected " + multiplayer.connected + " | room players " + multiplayer.roomPlayerCount + "/" + multiplayer.roomMaxPlayers,
       "  remote universes: " + multiplayer.remoteUniverses.size + " | party snapshots " + multiplayer.partyPlayerSnapshots.size + " | online " + multiplayer.onlineCount,
       "  v2 active: " + Boolean(multiplayer.v2 && multiplayer.v2.active) + " | tick " + (multiplayer.v2 ? multiplayer.v2.clientTick : 0) + " | entities " + developerV2EntityCount(),
+      "  v2 perf: step " + formatDeveloperNumber(v2Perf.clientStepMs, 1) + "ms | reconcile " + formatDeveloperNumber(v2Perf.reconcileMs, 1) + "ms | sync " + formatDeveloperNumber(v2Perf.syncMs, 1) + "ms",
+      "  v2 queue: pending " + formatDeveloperNumber(v2Perf.pendingInputs) + " | replay " + formatDeveloperNumber(v2Perf.replayInputs) + " | snapshots dropped " + formatDeveloperNumber(v2Perf.droppedSnapshots) + " stale " + formatDeveloperNumber(v2Perf.skippedSnapshots),
+      "  v2 server: step " + formatDeveloperNumber(v2Perf.serverStepMs, 1) + "ms | snapshot " + formatDeveloperBytes(v2Perf.serverSnapshotBytes) + " | input q " + formatDeveloperNumber(v2Perf.serverMaxInputQueue) + " | ack misses " + formatDeveloperNumber(v2Perf.ackMissing),
       "",
       "Device",
       "  " + developerMemorySummary(),
@@ -37562,6 +38541,7 @@
 
   function updateHud() {
     updateDeveloperOverlay(false);
+    syncMapMinimumBodyControlVisibility();
 
     if (gameSettings.hudEnabled === false) {
       return;
@@ -37833,6 +38813,7 @@
 
     updateLifeStats();
 
+    const playerEnergyDisabled = typeof isLocalPlayerEnergyDisabled === "function" ? isLocalPlayerEnergyDisabled() : toolDisabledTimer > 0;
     return {
       active: runState.active,
       difficulty: runState.difficultyId,
@@ -37860,9 +38841,10 @@
       },
       renderStatus: {
         playerEnergyBar: {
-          disabled: typeof isLocalPlayerEnergyDisabled === "function" ? isLocalPlayerEnergyDisabled() : toolDisabledTimer > 0,
+          disabled: playerEnergyDisabled,
+          blockedIcon: playerEnergyDisabled,
           colors: typeof playerEnergyStatusBarColors === "function"
-            ? playerEnergyStatusBarColors(typeof isLocalPlayerEnergyDisabled === "function" ? isLocalPlayerEnergyDisabled() : toolDisabledTimer > 0, playerEnergyPct())
+            ? playerEnergyStatusBarColors(playerEnergyDisabled, playerEnergyPct())
             : null
         }
       },
@@ -38940,6 +39922,12 @@
     });
   }
 
+  if (mapMinimumBodyFilter) {
+    mapMinimumBodyFilter.addEventListener("change", function () {
+      setMapMinimumBodyTier(mapMinimumBodyFilter.value);
+    });
+  }
+
   if (techLedgerTitle) {
     techLedgerTitle.addEventListener("pointerdown", beginTechLedgerDrag);
   }
@@ -39669,6 +40657,7 @@
     updateTouchScreenUi();
     updateHudEnabledUi();
     updatePlayerBarSettingsUi();
+    syncMapMinimumBodyFilter();
     renderControlBindings();
     initializeTechUi();
     updateSoundToggle();

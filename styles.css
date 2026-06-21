@@ -46,6 +46,7 @@ body.hud-hidden .tech-ledger,
 body.hud-hidden .objective-tree,
 body.hud-hidden .online-toggle,
 body.hud-hidden .settings-toggle,
+body.hud-hidden .map-filter,
 body.hud-hidden .social-panel,
 body.hud-hidden .signal-panel,
 body.hud-hidden .command-panel,
@@ -64,6 +65,7 @@ canvas,
 .tool-hotbar,
 .tech-ledger,
 .objective-tree,
+.map-filter,
 .build-menu,
 .social-panel,
 .signal-panel,
@@ -671,6 +673,70 @@ select {
   background: rgba(255, 220, 122, 0.14);
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.3), 0 0 22px rgba(255, 220, 122, 0.28);
   animation: objective-unclaimed-pulse 1.25s ease-in-out infinite;
+}
+
+.map-filter {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + clamp(190px, 31vmin, 292px) + 8px);
+  z-index: 12;
+  zoom: var(--ui-scale);
+  display: none;
+  grid-template-columns: auto minmax(112px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 184px;
+  height: 34px;
+  padding: 5px 7px 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.72);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+  color: #f8fbff;
+  pointer-events: auto;
+}
+
+.map-filter.is-open {
+  display: grid;
+}
+
+.map-filter span {
+  color: rgba(232, 241, 255, 0.72);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.map-filter select {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 24px 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fbff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.map-filter select:focus-visible {
+  outline: 2px solid rgba(88, 226, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.map-filter select option {
+  background: #071025;
+  color: #f8fbff;
+}
+
+.map-filter select option:checked {
+  background: #1d5c99;
+  color: #ffffff;
 }
 
 .touch-joystick {
@@ -3921,6 +3987,17 @@ select {
     display: grid;
   }
 
+  .map-filter {
+    right: 10px;
+    bottom: calc(10px + 58px + clamp(160px, 34vmin, 228px) + 8px);
+    display: none;
+    min-width: min(184px, calc(100vw - 20px));
+  }
+
+  .map-filter.is-open {
+    display: grid;
+  }
+
   .touch-joystick.is-enabled {
     display: block;
   }
@@ -4050,6 +4127,12 @@ select {
   .compact-hud-toggle {
     width: 42px;
     height: 42px;
+  }
+
+  .map-filter {
+    grid-template-columns: auto minmax(92px, 1fr);
+    height: 32px;
+    min-width: min(176px, calc(100vw - 20px));
   }
 
   .hud__score {
