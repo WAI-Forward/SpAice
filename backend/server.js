@@ -2419,17 +2419,12 @@ async function listVisiblePlayers(playerId, query, friendsOnly, relayOnly) {
   const friendSet = new Set(ownProfile ? ownProfile.friends : []);
   const profiles = await listProfiles();
   const onlineIds = new Set(Array.from(clientsByPlayerId.keys()));
-  const ownHasRelay = playerHasCommunicationRelay(playerId);
-
-  if (relayOnly && !ownHasRelay) {
-    return [];
-  }
 
   return profiles
     .filter((profile) => profile.playerId !== playerId)
     .filter((profile) => !friendsOnly || friendSet.has(profile.playerId))
     .filter((profile) => !cleanQuery || profile.publicName.toLowerCase().includes(cleanQuery))
-    .filter((profile) => !relayOnly || (onlineIds.has(profile.playerId) && playerHasCommunicationRelay(profile.playerId)))
+    .filter((profile) => !relayOnly || onlineIds.has(profile.playerId))
     .slice(0, 80)
     .map((profile) => ({
       playerId: profile.playerId,
@@ -2475,13 +2470,7 @@ function snapshotHasCommunicationRelay(snapshot) {
 }
 
 function canRelayLinkPlayers(playerId, targetPlayerId) {
-  const playerClient = firstOnlineClient(playerId);
-  const targetClient = firstOnlineClient(targetPlayerId);
-  if (playerClient && targetClient && playerClient.relayBypass && targetClient.relayBypass) {
-    return true;
-  }
-
-  return playerHasCommunicationRelay(playerId) && playerHasCommunicationRelay(targetPlayerId);
+  return Boolean(playerId && targetPlayerId && playerId !== targetPlayerId);
 }
 
 async function addFriendship(playerId, targetPlayerId) {
@@ -2906,6 +2895,8 @@ function normalizeParticle(source) {
     radius: clampNumber(source.radius, 1, 5000),
     energy: clampNumber(source.energy, 0, 1000000),
     maxEnergy: clampNumber(source.maxEnergy, 0, 1000000),
+    rotation: clampNumber(source.rotation, -Math.PI * 16, Math.PI * 16),
+    angularVelocity: clampNumber(source.angularVelocity, -16, 16),
     color: normalizeColor(source.color),
     textureSeed: clampNumber(source.textureSeed, -1000000, 1000000),
     wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16),
@@ -5178,6 +5169,12 @@ function handlePartyV2Action(client, message) {
       sanitizePartyV2Placement(message.placement),
       sanitizePartyV2Placement(message.linkedPlacement)
     );
+  } else if (action === "statusEffect") {
+    changed = mpV2Sim.applyPlayerStatusEffect(
+      room.state.players && room.state.players[client.playerId],
+      sanitizeText(message.status, 32).toLowerCase(),
+      Math.max(0, Math.min(300, Number(message.duration) || 0))
+    );
   }
 
   if (!changed) {
@@ -5703,6 +5700,7 @@ function sanitizePartyEntityState(source) {
     "life",
     "maxLife",
     "rotation",
+    "angularVelocity",
     "health",
     "maxHealth",
     "flash",

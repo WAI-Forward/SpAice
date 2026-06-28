@@ -18,6 +18,7 @@
   const nextMilestoneLabel = document.getElementById("nextMilestoneLabel");
   const nextMilestoneValue = document.getElementById("nextMilestoneValue");
   const milestoneFill = document.getElementById("milestoneFill");
+  const playerStatusEffectsHud = document.getElementById("playerStatusEffects");
   const leaderboardToggle = document.getElementById("leaderboardToggle");
   const leaderboardPanel = document.getElementById("leaderboardPanel");
   const leaderboardList = document.getElementById("leaderboardList");
@@ -753,7 +754,7 @@
   const spacecrafts = [];
   const healthPickups = [];
   const techPickups = [];
-  const targetParticles = 78;
+  const targetParticles = 94;
   const playerFootOffset = 101;
   const rivalFootOffset = 32;
   const projectileDamageSpeed = 155;
@@ -883,6 +884,11 @@
     rocket: 14 * 60,
     fighter: 16 * 60
   };
+  const mobWaveInterval = mobSpawnIntervals.alienoid;
+  const mobWaveStartingMobsPerPlayer = 3;
+  const mobWaveGrowthWaves = 4;
+  const mobWaveClumpMinRadius = 38;
+  const mobWaveClumpMaxRadius = 175;
   const difficultyDefinitions = {
     easy: {
       id: "easy",
@@ -965,11 +971,14 @@
   const mobTierUnlockBaseDefeats = 3;
   const mobBossDefeatsToUnlock = 30;
   const mobBossWarningDuration = 60;
-  const mobBossSpawnChance = 0.18;
-  const mobBossSpawnChancePerDefeat = 0.006;
   const mobBossHealthMultiplier = 6;
   const mobBossRadiusMultiplier = 1.78;
   const mobBossDamageMultiplier = 1.65;
+  const mobBossStarHealthMultiplier = 0.32;
+  const mobBossStarDamageMultiplier = 0.12;
+  const mobBossStarForceMultiplier = 0.08;
+  const mobBossStarSpeedMultiplier = 0.07;
+  const mobBossStarCooldownReduction = 0.05;
   const mobBossDropCount = 10;
   const mobBossMinionCooldownMin = 8;
   const mobBossMinionCooldownMax = 14;
@@ -1131,12 +1140,17 @@
   const shieldGeneratorMobCost = 8;
   const shieldGeneratorMobCooldown = 0.16;
   const shieldGeneratorMobMinBounceSpeed = 155;
-  const tetherGiveRadiusScale = 0.85;
-  const tetherMinGive = 32;
-  const tetherMaxGive = 220;
+  const tetherGiveRadiusScale = 0.45;
+  const tetherMinGive = 18;
+  const tetherMaxGive = 96;
+  const tetherRestLengthRadiusScale = 2.75;
+  const tetherMinRestLength = 340;
+  const tetherMaxRestLength = 920;
+  const tetherConstraintIterations = 6;
+  const tetherPositionSlop = 0.25;
   const tetherSpring = 34;
   const tetherDamping = 9.5;
-  const tetherMaxAcceleration = 760;
+  const tetherMaxAcceleration = 1800;
   const bridgeHalfWidth = 18;
   const bridgeWalkTransferAngle = 0.11;
   const bridgeWalkExitAnglePadding = 0.045;
@@ -1145,6 +1159,10 @@
   const bridgeMaxCurveLength = 138;
   const bridgeMaxAngularSpeed = 2.7;
   const bridgeAngularDamping = 0.74;
+  const bodyMaxAngularSpeed = 3.2;
+  const bodyAngularVelocityDamping = 0.82;
+  const bodyTorqueResponse = 0.34;
+  const bodyConstraintTorqueResponse = 0.18;
   const jetEnergyDrain = 9;
   const jetThrust = 620;
   const defaultToolId = "suction-gadget";
@@ -1355,15 +1373,6 @@
       icon: "assets/shield-generator.svg"
     },
     {
-      id: "communication-relay",
-      name: "Communication relay",
-      category: "structures",
-      description: "A paired relay that can form permanent friend links with other relay owners.",
-      cost: { plating: 3, communication: 3 },
-      structureType: "communication-relay",
-      icon: "assets/communication-relay.svg"
-    },
-    {
       id: "jet",
       name: "Jet",
       category: "structures",
@@ -1377,7 +1386,7 @@
       name: "Tether",
       category: "structures",
       description: "A telescoping pole that links two bodies with a little springy give.",
-      cost: { plating: 5, suction: 2, propulsion: 2 },
+      cost: { suction: 2, plating: 1 },
       structureType: "tether",
       icon: "assets/tether.svg"
     },
@@ -1534,6 +1543,7 @@
   const multiplayerV2ReplayInputLimit = 72;
   const multiplayerV2QueuedSnapshotEventLimit = 120;
   const multiplayerV2StaleSnapshotTickTolerance = 2;
+  const multiplayerV2RespawnAckGraceMs = 5000;
   const multiplayerV2LocalCorrectionBlendPerFrame = 0.42;
   const multiplayerV2RemoteSnapshotRenderDelay = 0.07;
   const multiplayerV2RemoteSnapshotExtrapolateLimit = 0.16;
@@ -1625,6 +1635,9 @@
       lastServerTick: 0,
       lastAckInputSeq: 0,
       ignoreDeathEventsBeforeTick: 0,
+      respawnAckPending: false,
+      respawnRequestedAt: 0,
+      respawnRequestTick: 0,
       visualBlend: null,
       pendingMergeVisuals: [],
       eventKeys: new Map(),
@@ -1906,6 +1919,12 @@
   let toolUpgradeLevels = createDefaultToolUpgradeLevels();
   let toolFireCooldown = 0;
   let toolDisabledTimer = 0;
+  const playerStatusEffects = {
+    disabled: 0
+  };
+  const playerStatusEffectMaxDurations = {
+    disabled: 0
+  };
   let playerContinuousEnergyLocked = false;
   let familiarNetCapture = null;
   let familiarNetSwingTimer = 0;
@@ -1914,7 +1933,7 @@
     activeMissile: null
   };
   const playerStatusBarState = {
-    health: { value: null, variant: "", changedAt: 0 },
+    health: { value: null, variant: "", changedAt: 0, fullAt: 0 },
     energy: { value: null, variant: "", changedAt: 0 }
   };
 
@@ -1922,6 +1941,7 @@
     playerStatusBarState.health.value = null;
     playerStatusBarState.health.variant = "";
     playerStatusBarState.health.changedAt = 0;
+    playerStatusBarState.health.fullAt = 0;
     playerStatusBarState.energy.value = null;
     playerStatusBarState.energy.variant = "";
     playerStatusBarState.energy.changedAt = 0;
@@ -1937,6 +1957,8 @@
     rocket: mobSpawnIntervals.rocket,
     fighter: mobSpawnIntervals.fighter
   };
+  let mobWaveTimer = mobWaveInterval;
+  let mobWaveCount = 0;
   let mobSpawnRestTimer = 0;
   let mobSpawnRestDrainTimer = 0;
   let mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
@@ -1951,6 +1973,16 @@
     fighter: 0
   };
   const mobBossDefeatsByKind = {
+    alienoid: 0,
+    ufo: 0,
+    rambot: 0,
+    tesla: 0,
+    engineer: 0,
+    satellite: 0,
+    rocket: 0,
+    fighter: 0
+  };
+  const mobBossProgressByKind = {
     alienoid: 0,
     ufo: 0,
     rambot: 0,
@@ -5579,8 +5611,96 @@
     return toolById(equippedToolId);
   }
 
+  function normalizeStatusEffectDuration(value) {
+    return Math.max(0, finiteOr(value, 0));
+  }
+
+  function syncLegacyToolDisabledTimer() {
+    toolDisabledTimer = normalizeStatusEffectDuration(playerStatusEffects.disabled);
+  }
+
+  function hasPlayerStatusEffect(status) {
+    if (status === "disabled") {
+      return Math.max(
+        normalizeStatusEffectDuration(playerStatusEffects.disabled),
+        normalizeStatusEffectDuration(toolDisabledTimer)
+      ) > 0;
+    }
+    return normalizeStatusEffectDuration(playerStatusEffects[status]) > 0;
+  }
+
+  function applyPlayerStatusEffect(status, duration) {
+    const effect = String(status || "").trim().toLowerCase();
+    const amount = normalizeStatusEffectDuration(duration);
+    if (effect !== "disabled") {
+      return false;
+    }
+
+    if (amount <= 0) {
+      playerStatusEffects.disabled = 0;
+      playerStatusEffectMaxDurations.disabled = 0;
+      syncLegacyToolDisabledTimer();
+      return true;
+    }
+
+    const current = normalizeStatusEffectDuration(playerStatusEffects.disabled);
+    if (amount >= current) {
+      playerStatusEffectMaxDurations.disabled = amount;
+    }
+    playerStatusEffects.disabled = Math.max(current, amount);
+    syncLegacyToolDisabledTimer();
+    if (amount > 0) {
+      toolFireCooldown = Math.max(toolFireCooldown, Math.min(amount, 1.2));
+      resetMouseButtons();
+    }
+    return true;
+  }
+
+  function clearPlayerStatusEffects() {
+    for (const key of Object.keys(playerStatusEffects)) {
+      playerStatusEffects[key] = 0;
+      playerStatusEffectMaxDurations[key] = 0;
+    }
+    syncLegacyToolDisabledTimer();
+  }
+
+  function updatePlayerStatusEffects(dt) {
+    const elapsed = Math.max(0, finiteOr(dt, 0));
+    for (const key of Object.keys(playerStatusEffects)) {
+      playerStatusEffects[key] = Math.max(0, normalizeStatusEffectDuration(playerStatusEffects[key]) - elapsed);
+      if (playerStatusEffects[key] <= 0) {
+        playerStatusEffectMaxDurations[key] = 0;
+      }
+    }
+    syncLegacyToolDisabledTimer();
+  }
+
+  function serializePlayerStatusEffects() {
+    return {
+      disabled: normalizeStatusEffectDuration(playerStatusEffects.disabled),
+      disabledMax: normalizeStatusEffectDuration(playerStatusEffectMaxDurations.disabled)
+    };
+  }
+
+  function applySerializedPlayerStatusEffects(source) {
+    const effects = source && typeof source === "object" ? source : {};
+    const disabled = Math.max(
+      normalizeStatusEffectDuration(effects.disabled),
+      normalizeStatusEffectDuration(effects.toolDisabledTimer)
+    );
+    playerStatusEffects.disabled = disabled;
+    playerStatusEffectMaxDurations.disabled = disabled > 0
+      ? Math.max(
+        disabled,
+        normalizeStatusEffectDuration(effects.disabledMax),
+        normalizeStatusEffectDuration(playerStatusEffectMaxDurations.disabled)
+      )
+      : 0;
+    syncLegacyToolDisabledTimer();
+  }
+
   function areToolsDisabled() {
-    return toolDisabledTimer > 0;
+    return hasPlayerStatusEffect("disabled");
   }
 
   function isSuctionEquipped() {
@@ -5604,7 +5724,7 @@
   }
 
   function isSpannerEquipped() {
-    return equippedToolId === "spanner" && !areToolsDisabled() && canUseContinuousPlayerEnergy(spannerRepairEnergyDrain);
+    return equippedToolId === "spanner" && !areToolsDisabled();
   }
 
   function weaponByToolId(toolId) {
@@ -6594,6 +6714,10 @@
     return Math.max(0.5, interval * activeDifficulty().mobIntervalScale);
   }
 
+  function difficultyMobWaveInterval() {
+    return Math.max(0.5, mobWaveInterval * activeDifficulty().mobIntervalScale);
+  }
+
   function difficultyMobDamage(damage) {
     return Math.max(0, finiteOr(damage, 0) * finiteOr(activeDifficulty().mobDamageMultiplier, 1));
   }
@@ -6606,6 +6730,8 @@
     for (const kind of Object.keys(mobSpawnIntervals)) {
       mobSpawnTimers[kind] = difficultyMobSpawnInterval(kind);
     }
+    mobWaveTimer = difficultyMobWaveInterval();
+    mobWaveCount = 0;
     mobSpawnRestTimer = 0;
     mobSpawnRestDrainTimer = 0;
     mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
@@ -6625,12 +6751,14 @@
   }
 
   function setGamePaused(paused) {
-    gamePaused = Boolean(paused) && runState.active && !deathState.active;
+    const wasPaused = gamePaused;
+    const pauseAllowed = !isPartySessionActive();
+    gamePaused = Boolean(paused) && runState.active && !deathState.active && pauseAllowed;
     keys.clear();
     jumpQueued = false;
     resetMouseButtons();
 
-    if (!gamePaused) {
+    if (wasPaused && !gamePaused) {
       resetFrameClock();
     }
     updateTouchScreenUi();
@@ -7623,6 +7751,9 @@
     multiplayer.v2.lastServerTick = 0;
     multiplayer.v2.lastAckInputSeq = 0;
     multiplayer.v2.ignoreDeathEventsBeforeTick = 0;
+    multiplayer.v2.respawnAckPending = false;
+    multiplayer.v2.respawnRequestedAt = 0;
+    multiplayer.v2.respawnRequestTick = 0;
     multiplayer.v2.visualBlend = null;
     multiplayer.v2.pendingMergeVisuals = [];
     multiplayer.v2.eventKeys = new Map();
@@ -7807,6 +7938,14 @@
     }
     if (event && event.isBoss && mobBossDefeatsByKind[kind] !== undefined) {
       mobBossDefeatsByKind[kind] += 1;
+      if (mobBossProgressByKind[kind] !== undefined) {
+        mobBossProgressByKind[kind] = 0;
+      }
+    } else if (mobBossProgressByKind[kind] !== undefined) {
+      mobBossProgressByKind[kind] = Math.min(
+        mobBossDefeatsToUnlock,
+        Math.max(0, Math.floor(finiteOr(mobBossProgressByKind[kind], 0))) + 1
+      );
     }
   }
 
@@ -8038,7 +8177,8 @@
         push: toolMode === "push",
         hold: toolMode === "hold",
         fire: toolMode === "fire",
-        release: toolMode === "release"
+        release: toolMode === "release",
+        dismantle: toolMode === "dismantle"
       }
     };
   }
@@ -8099,6 +8239,8 @@
       changed = mpV2Sim.setEquippedTools(multiplayer.v2.state, player.id, action.equippedTool, action.equippedTools);
     } else if (action.action === "placeStructure") {
       changed = mpV2Sim.placeStructure(multiplayer.v2.state, player.id, action.recipeId, action.placement, action.linkedPlacement);
+    } else if (action.action === "statusEffect") {
+      changed = mpV2Sim.applyPlayerStatusEffect(multiplayer.v2.state.players[player.id], String(action.status || ""), finiteOr(action.duration, 0));
     }
 
     if (changed) {
@@ -8181,6 +8323,57 @@
     };
   }
 
+  function multiplayerV2LocalPlayerFromState(state) {
+    const players = state && state.players && typeof state.players === "object" ? state.players : null;
+    if (!players || !player.id) {
+      return null;
+    }
+    return players[player.id] || null;
+  }
+
+  function clearMultiplayerV2RespawnAckPending() {
+    multiplayer.v2.respawnAckPending = false;
+    multiplayer.v2.respawnRequestedAt = 0;
+    multiplayer.v2.respawnRequestTick = 0;
+  }
+
+  function markMultiplayerV2RespawnAckPending() {
+    multiplayer.v2.respawnAckPending = true;
+    multiplayer.v2.respawnRequestedAt = performance.now();
+    multiplayer.v2.respawnRequestTick = Math.max(
+      Math.floor(finiteOr(multiplayer.v2.lastServerTick, 0)),
+      Math.floor(finiteOr(multiplayer.v2.state && multiplayer.v2.state.tick, 0))
+    );
+    multiplayer.v2.pendingSnapshot = null;
+    updateMultiplayerV2Perf({
+      pendingSnapshotEvents: 0
+    });
+  }
+
+  function shouldSkipMultiplayerV2RespawnSnapshot(message) {
+    if (!multiplayer.v2.respawnAckPending) {
+      return false;
+    }
+
+    const local = multiplayerV2LocalPlayerFromState(message && message.state);
+    if (!local) {
+      return false;
+    }
+
+    if (finiteOr(local.health, 0) > 0) {
+      clearMultiplayerV2RespawnAckPending();
+      return false;
+    }
+
+    const requestedAt = finiteOr(multiplayer.v2.respawnRequestedAt, 0);
+    if (performance.now() - requestedAt <= multiplayerV2RespawnAckGraceMs) {
+      return true;
+    }
+
+    clearMultiplayerV2RespawnAckPending();
+    return false;
+  }
+
   function queueMultiplayerV2Snapshot(message) {
     if (!mpV2Sim || !message || !message.state) {
       return;
@@ -8240,6 +8433,13 @@
       multiplayer.v2.lastServerTick > 0 &&
       serverTick + multiplayerV2StaleSnapshotTickTolerance < multiplayer.v2.lastServerTick
     ) {
+      updateMultiplayerV2Perf({
+        skippedSnapshots: finiteOr(multiplayer.v2.perf && multiplayer.v2.perf.skippedSnapshots, 0) + 1
+      });
+      return;
+    }
+
+    if (shouldSkipMultiplayerV2RespawnSnapshot(message)) {
       updateMultiplayerV2Perf({
         skippedSnapshots: finiteOr(multiplayer.v2.perf && multiplayer.v2.perf.skippedSnapshots, 0) + 1
       });
@@ -8313,6 +8513,10 @@
       player.health = clamp(finiteOr(local.health, player.health), 0, player.maxHealth);
       player.maxEnergy = clamp(finiteOr(local.maxEnergy, player.maxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
       player.energy = clamp(finiteOr(local.energy, player.energy), 0, player.maxEnergy);
+      applySerializedPlayerStatusEffects({
+        ...(local.statusEffects && typeof local.statusEffects === "object" ? local.statusEffects : {}),
+        toolDisabledTimer: local.toolDisabledTimer
+      });
       player.hitCooldown = Math.max(0, finiteOr(local.hitCooldown, player.hitCooldown || 0));
       player.landed = localLanding;
       player.spacecraftInterior = normalizeSpacecraftInteriorSnapshot(local.spacecraftInterior);
@@ -9396,7 +9600,7 @@
       return;
     }
     const relayMode = multiplayer.socialMode === "relay";
-    publicNameValue.textContent = relayMode ? "Communication relay" : publicPlayerAccountLabel();
+    publicNameValue.textContent = relayMode ? "Friends" : publicPlayerAccountLabel();
     publicNameValue.classList.toggle("is-account-origin", !relayMode && Boolean(currentAccountOriginLabel()));
   }
 
@@ -11758,7 +11962,7 @@
     cameraRoll = 0;
     gadgetAngle = -0.32;
     toolFireCooldown = 0;
-    toolDisabledTimer = 0;
+    clearPlayerStatusEffects();
     playerContinuousEnergyLocked = false;
     familiarNetCapture = null;
     familiarNetSwingTimer = 0;
@@ -12647,9 +12851,7 @@
       return;
     }
 
-    toolDisabledTimer = Math.max(toolDisabledTimer, amount);
-    toolFireCooldown = Math.max(toolFireCooldown, Math.min(amount, 1.2));
-    resetMouseButtons();
+    applyPlayerStatusEffect("disabled", amount);
     playSound("jam");
     maybeNotifyText("Tools disabled by electrical surge.");
   }
@@ -12989,6 +13191,9 @@
       );
       multiplayer.v2.pendingInputs = [];
       multiplayer.v2.fixedAccumulator = 0;
+      if (typeof markMultiplayerV2RespawnAckPending === "function") {
+        markMultiplayerV2RespawnAckPending();
+      }
       syncMultiplayerV2StateToGame({ snapLocal: true });
     }
     sendMultiplayer({
@@ -13061,11 +13266,6 @@
   }
 
   function openRelayContacts() {
-    if (!isCrazyGamesRuntime() && !hasCommunicationRelay()) {
-      maybeNotifyText("Build a communication relay first.");
-      return;
-    }
-
     setSocialPanelOpen(true, "relay");
   }
 
@@ -13077,7 +13277,7 @@
     ensureOnlinePresence();
     const query = playerSearch ? playerSearch.value : "";
     const friendsOnly = friendsOnlyFilter && friendsOnlyFilter.checked;
-    const relayOnly = multiplayer.socialMode === "relay" && !isCrazyGamesRuntime();
+    const relayOnly = false;
 
     try {
       const url =
@@ -13121,7 +13321,7 @@
       const name = document.createElement("strong");
       const status = document.createElement("span");
       const action = document.createElement("button");
-      const hasRelay = isCrazyGamesRuntime() || Boolean(candidate.hasCommunicationRelay);
+      const hasRelay = true;
 
       row.className = "social-row";
       main.className = "social-row__main";
@@ -13132,16 +13332,12 @@
         status.textContent = !multiplayer.friendJoinsEnabled
           ? "Multiplayer Off"
           : candidate.friend
-          ? "Friend relay online"
-          : "Relay online";
+          ? "Friend online"
+          : "Online";
       } else {
         status.textContent = candidate.online
           ? candidate.friend
-            ? hasRelay
-              ? "Friend online, relay ready"
-              : "Friend online"
-            : hasRelay
-            ? "Online, relay ready"
+            ? "Friend online"
             : "Online"
           : candidate.friend
           ? "Friend offline"
@@ -13154,7 +13350,7 @@
         action.dataset.action = "invite";
         action.textContent = candidate.friend ? "Invite" : "Link";
         action.title = candidate.friend ? "Invite friend" : "Link as friends";
-        action.disabled = !multiplayer.friendJoinsEnabled || !candidate.online || !hasRelay || (!isCrazyGamesRuntime() && !hasCommunicationRelay());
+        action.disabled = !multiplayer.friendJoinsEnabled || !candidate.online || !hasRelay;
       }
 
       main.append(name, status);
@@ -13651,7 +13847,7 @@
 
     const value = commandInput.value.trim();
     if (!value) {
-      commandHint.textContent = "Available: /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>, /spawn event meteor-shower, /spawn npc trader";
+      commandHint.textContent = "Available: /status disabled <seconds>, /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>, /spawn event meteor-shower";
       return;
     }
 
@@ -13670,8 +13866,13 @@
       return;
     }
 
+    if (/^\/status(\s|$)/i.test(value)) {
+      commandHint.textContent = "Status: /status disabled <seconds>";
+      return;
+    }
+
     if (!/^\/tp(\s|$)/i.test(value)) {
-      commandHint.textContent = "Available: /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>, /spawn event meteor-shower, /spawn npc trader";
+      commandHint.textContent = "Available: /status disabled <seconds>, /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>, /spawn event meteor-shower";
       return;
     }
 
@@ -13780,8 +13981,14 @@
       return;
     }
 
+    if (/^\/status(\s|$)/i.test(command)) {
+      executeStatusCommand(command);
+      setCommandOpen(false);
+      return;
+    }
+
     if (!/^\/tp(\s|$)/i.test(command)) {
-      maybeNotifyText("Unknown command. Try /spawn boss alienoid, /spawn event meteor-shower, /spawn npc trader, /tech <type> <amount>, or /reset all.");
+      maybeNotifyText("Unknown command. Try /status disabled 5, /spawn boss alienoid, /spawn event meteor-shower, /tech <type> <amount>, or /reset all.");
       setCommandOpen(false);
       return;
     }
@@ -14045,6 +14252,47 @@
     }
 
     addTechFromCommand(tech, amount, all);
+  }
+
+  function executeStatusCommand(command) {
+    const match = command.match(/^\/status\s+([^\s]+)(?:\s+([^\s]+))?$/i);
+    const status = match && match[1] ? String(match[1]).toLowerCase() : "";
+    const seconds = match && match[2] ? Number(match[2]) : NaN;
+
+    if (status !== "disabled" || !Number.isFinite(seconds) || seconds < 0) {
+      maybeNotifyText("Use /status disabled <seconds>.");
+      updateCommandHint();
+      return;
+    }
+
+    const duration = clamp(seconds, 0, 300);
+    if (duration <= 0) {
+      applyPlayerStatusEffect("disabled", 0);
+      resetMouseButtons();
+      if (isMultiplayerV2Active() && multiplayer.v2.state && multiplayer.v2.state.players && multiplayer.v2.state.players[player.id]) {
+        sendMultiplayerV2BuildAction({
+          action: "statusEffect",
+          status: "disabled",
+          duration: 0
+        });
+      }
+      maybeNotifyText("Disabled status cleared.");
+      return;
+    }
+
+    if (isMultiplayerV2Active() && multiplayer.v2.state && multiplayer.v2.state.players && multiplayer.v2.state.players[player.id]) {
+      const sent = sendMultiplayerV2BuildAction({
+        action: "statusEffect",
+        status: "disabled",
+        duration
+      });
+      if (!sent) {
+        applyPlayerStatusEffect("disabled", duration);
+      }
+    } else {
+      applyPlayerStatusEffect("disabled", duration);
+    }
+    maybeNotifyText("Disabled for " + duration.toFixed(duration % 1 ? 1 : 0) + "s.");
   }
 
   function handlePartyCommand(message) {
@@ -16229,7 +16477,8 @@
     const maxEnergy = clamp(finiteOr(snapshot.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
     const energy = clamp(finiteOr(snapshot.energy, maxEnergy), 0, maxEnergy);
     const equippedTool = toolCatalog.some((tool) => tool.id === snapshot.equippedTool) ? snapshot.equippedTool : null;
-    const toolDisabledTimer = Math.max(0, finiteOr(snapshot.toolDisabledTimer, 0));
+    const statusEffects = normalizeRemotePlayerStatusEffects(snapshot.statusEffects, snapshot.toolDisabledTimer);
+    const toolDisabledTimer = statusEffects.disabled;
     const toolMode = ["pull", "push", "hold", "fire", "release", "idle"].includes(snapshot.toolMode) ? snapshot.toolMode : "idle";
     const activeToolMode = equippedTool && actorCanAffordMultiplayerToolMode({ energy, toolDisabledTimer }, equippedTool, toolMode) ? toolMode : "idle";
     const camera = finiteOr(snapshot.cameraRoll, 0);
@@ -16250,6 +16499,7 @@
       maxHealth,
       energy,
       maxEnergy,
+      statusEffects,
       toolDisabledTimer,
       landed: normalizeLandingSnapshot(snapshot.landed),
       walkCycle: finiteOr(snapshot.walkCycle, snapshot.landed && snapshot.landed.walkCycle),
@@ -16460,7 +16710,15 @@
     return {
       ...entity,
       color: entity.color ? { ...entity.color } : entity.color,
+      statusEffects: entity.statusEffects ? { ...entity.statusEffects } : entity.statusEffects,
       landed: entity.landed ? { ...entity.landed } : null
+    };
+  }
+
+  function normalizeRemotePlayerStatusEffects(source, legacyDisabledTimer) {
+    const effects = source && typeof source === "object" ? source : {};
+    return {
+      disabled: Math.max(0, finiteOr(effects.disabled, legacyDisabledTimer))
     };
   }
 
@@ -17022,6 +17280,7 @@
         maxHealth: player.maxHealth,
         energy: player.energy,
         maxEnergy: player.maxEnergy,
+        statusEffects: serializePlayerStatusEffects(),
         toolDisabledTimer,
         score: Math.max(1, Math.round(lifeStats.bestScore || lifeStats.currentScore || 1)),
         difficulty: runState.difficultyId,
@@ -17077,11 +17336,14 @@
         nextHealthPickupId,
         difficulty: runState.difficultyId,
         mobSpawnTimers: { ...mobSpawnTimers },
+        mobWaveTimer,
+        mobWaveCount,
         mobSpawnRestTimer,
         mobSpawnRestDrainTimer,
         mobSpawnRestCooldownTimer,
         mobDefeatsByKind: { ...mobDefeatsByKind },
         mobBossDefeatsByKind: { ...mobBossDefeatsByKind },
+        mobBossProgressByKind: { ...mobBossProgressByKind },
         mobBossWarnings: serializeMobBossWarnings(),
         objectives: serializeObjectiveState(),
         randomEvents: serializeRandomEventState()
@@ -17297,9 +17559,11 @@
     );
 
     applyMobSpawnTimers(snapshot.mobSpawnTimers);
+    applyMobWaveState(snapshot);
     applyMobSpawnRestState(snapshot);
     applyMobDefeatsByKind(snapshot.mobDefeatsByKind);
     applyMobBossDefeatsByKind(snapshot.mobBossDefeatsByKind);
+    applyMobBossProgressByKind(snapshot.mobBossProgressByKind, snapshot.mobDefeatsByKind, snapshot.mobBossDefeatsByKind);
     applyMobBossWarnings(snapshot.mobBossWarnings);
     if (snapshot.objectives) {
       applyObjectiveState(snapshot.objectives);
@@ -17324,6 +17588,10 @@
     player.health = clamp(finiteOr(snapshot.health, player.health), 0, player.maxHealth);
     player.maxEnergy = clamp(finiteOr(snapshot.maxEnergy, player.maxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
     player.energy = clamp(finiteOr(snapshot.energy, player.maxEnergy), 0, player.maxEnergy);
+    applySerializedPlayerStatusEffects({
+      ...(snapshot.statusEffects && typeof snapshot.statusEffects === "object" ? snapshot.statusEffects : {}),
+      toolDisabledTimer: snapshot.toolDisabledTimer
+    });
     if (snapshot.difficulty && difficultyDefinitions[snapshot.difficulty]) {
       applyDifficulty(snapshot.difficulty);
     }
@@ -17350,6 +17618,8 @@
       radius: particle.radius,
       energy: particle.energy,
       maxEnergy: particle.maxEnergy,
+      rotation: particle.rotation,
+      angularVelocity: particle.angularVelocity,
       color: particle.color,
       textureSeed: particle.textureSeed,
       wobble: particle.wobble,
@@ -17392,11 +17662,15 @@
         const displayY = existing.y;
         const displayVx = existing.vx;
         const displayVy = existing.vy;
+        const displayRotation = finiteOr(existing.rotation, 0);
+        const displayAngularVelocity = finiteOr(existing.angularVelocity, 0);
         Object.assign(existing, incoming);
         existing.x = displayX;
         existing.y = displayY;
         existing.vx = displayVx;
         existing.vy = displayVy;
+        existing.rotation = displayRotation;
+        existing.angularVelocity = displayAngularVelocity;
         markParticleSmoothingTarget(existing, incoming, now);
         nextParticles.push(existing);
         continue;
@@ -17515,6 +17789,8 @@
     particle._partyTargetY = finiteOr(target.y, particle.y);
     particle._partyTargetVx = finiteOr(target.vx, particle.vx);
     particle._partyTargetVy = finiteOr(target.vy, particle.vy);
+    particle._partyTargetRotation = finiteOr(target.rotation, particle.rotation);
+    particle._partyTargetAngularVelocity = finiteOr(target.angularVelocity, particle.angularVelocity);
     particle._partyTargetReceivedAt = receivedAt;
   }
 
@@ -17554,8 +17830,10 @@
       const age = Math.max(0, Math.min(0.18, (now - finiteOr(particle._partyTargetReceivedAt, now)) / 1000));
       const targetVx = finiteOr(particle._partyTargetVx, particle.vx);
       const targetVy = finiteOr(particle._partyTargetVy, particle.vy);
+      const targetAngularVelocity = finiteOr(particle._partyTargetAngularVelocity, particle.angularVelocity);
       const targetX = finiteOr(particle._partyTargetX, particle.x) + targetVx * age;
       const targetY = finiteOr(particle._partyTargetY, particle.y) + targetVy * age;
+      const targetRotation = finiteOr(particle._partyTargetRotation, particle.rotation) + targetAngularVelocity * age;
       const error = Math.hypot(targetX - particle.x, targetY - particle.y);
 
       if (error > Math.max(900, particle.radius * 5)) {
@@ -17563,6 +17841,8 @@
         particle.y = targetY;
         particle.vx = targetVx;
         particle.vy = targetVy;
+        particle.rotation = targetRotation;
+        particle.angularVelocity = targetAngularVelocity;
         particle._partyPredictedUntil = 0;
         continue;
       }
@@ -17571,10 +17851,13 @@
       const correctionScale = predictedLocally ? 0.42 : 1;
       particle.vx += (targetVx - particle.vx) * velocityBlend * correctionScale;
       particle.vy += (targetVy - particle.vy) * velocityBlend * correctionScale;
+      particle.angularVelocity = finiteOr(particle.angularVelocity, 0) + (targetAngularVelocity - finiteOr(particle.angularVelocity, 0)) * velocityBlend * correctionScale;
       particle.x += particle.vx * dt;
       particle.y += particle.vy * dt;
+      particle.rotation = finiteOr(particle.rotation, 0) + finiteOr(particle.angularVelocity, 0) * dt;
       particle.x += (targetX - particle.x) * positionBlend * correctionScale;
       particle.y += (targetY - particle.y) * positionBlend * correctionScale;
+      particle.rotation += shortestAngleDelta(particle.rotation, targetRotation) * positionBlend * correctionScale;
     }
 
     updateSmoothedEntityCollection(rivals, dt, { positionBlend, velocityBlend, entityType: "alienoid" });
@@ -17614,7 +17897,7 @@
       const body = bodyById(state.landedBodyId);
       const direction = state.left ? 1 : -1;
       const strengthFactor = state.left ? state.suckFactor : state.blowFactor;
-      if (applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor)) {
+      if (applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor, state.actor ? { x: state.actor.x, y: state.actor.y } : null)) {
         integrateFollowerPredictedEntity(body, dt);
         controlledBodyIds.add(body.id);
         markFollowerPredictedParticle(body, now);
@@ -17719,13 +18002,13 @@
         const relativeVelocity = (body.vx - other.vx) * nx + (body.vy - other.vy) * ny;
         if (relativeVelocity < 0) {
           const impulse = -relativeVelocity * 0.92;
-          body.vx += nx * impulse;
-          body.vy += ny * impulse;
+          const pointX = body.x - nx * bodyAngularInertiaRadius(body);
+          const pointY = body.y - ny * bodyAngularInertiaRadius(body);
+          applyBodyVelocityChangeAtPoint(body, nx * impulse, ny * impulse, pointX, pointY, bodyConstraintTorqueResponse);
           const tangentX = -ny;
           const tangentY = nx;
           const tangentVelocity = body.vx * tangentX + body.vy * tangentY;
-          body.vx -= tangentX * tangentVelocity * 0.12;
-          body.vy -= tangentY * tangentVelocity * 0.12;
+          applyBodyVelocityChangeAtPoint(body, -tangentX * tangentVelocity * 0.12, -tangentY * tangentVelocity * 0.12, pointX, pointY, bodyConstraintTorqueResponse);
         }
       }
     }
@@ -17807,6 +18090,9 @@
 
     entity.x += finiteOr(entity.vx, 0) * dt;
     entity.y += finiteOr(entity.vy, 0) * dt;
+    if (entity.tier) {
+      integrateBodyAngularMotion(entity, dt);
+    }
     return true;
   }
 
@@ -17817,6 +18103,7 @@
     return {
       isBoss: true,
       bossBaseKind: mob.bossBaseKind || mob.kind,
+      bossStars: bossStarRank(mob),
       minionCooldown: finiteOr(mob.minionCooldown, randomRange(mobBossMinionCooldownMin, mobBossMinionCooldownMax)),
       altAttackCooldown: finiteOr(mob.altAttackCooldown, randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax)),
       bossBodyEvadeTimer: Math.max(0, finiteOr(mob.bossBodyEvadeTimer, 0)),
@@ -18172,6 +18459,8 @@
       tier,
       energy: finiteOr(snapshot.energy, Number.NaN),
       maxEnergy: finiteOr(snapshot.maxEnergy, Number.NaN),
+      rotation: finiteOr(snapshot.rotation, 0),
+      angularVelocity: clamp(finiteOr(snapshot.angularVelocity, 0), -bodyMaxAngularSpeed, bodyMaxAngularSpeed),
       textureSeed: finiteOr(snapshot.textureSeed, Math.random() * 1000),
       color: normalizeColorSnapshot(snapshot.color, randomParticleColor()),
       wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
@@ -18193,9 +18482,11 @@
 
   function normalizeMobBossSnapshotFields(snapshot, kind, baseHealth, baseRadius) {
     const isBoss = Boolean(snapshot && snapshot.isBoss);
+    const bossStars = isBoss ? bossStarRankValue(snapshot.bossStars) : 0;
     return {
       isBoss,
       bossBaseKind: isBoss && snapshot.bossBaseKind && mobTierOrder.includes(snapshot.bossBaseKind) ? snapshot.bossBaseKind : (isBoss ? kind : ""),
+      bossStars,
       minionCooldown: isBoss
         ? clamp(finiteOr(snapshot.minionCooldown, randomRange(mobBossMinionCooldownMin, mobBossMinionCooldownMax)), 0, mobBossMinionCooldownMax)
         : 0,
@@ -18204,7 +18495,7 @@
         : 0,
       bossBodyEvadeTimer: clamp(finiteOr(snapshot.bossBodyEvadeTimer, 0), 0, bossBodyEvadeDuration),
       bossBodyEvadeSpeedCap: clamp(finiteOr(snapshot.bossBodyEvadeSpeedCap, 0), 0, bossBodyEvadeMaxSpeed),
-      maxHealthCap: isBoss ? Math.max(baseHealth, baseHealth * mobBossHealthMultiplier) : baseHealth,
+      maxHealthCap: isBoss ? Math.max(baseHealth, baseHealth * mobBossHealthMultiplier * bossHealthScaleForStars(bossStars)) : baseHealth,
       fallbackRadius: isBoss ? baseRadius * mobBossRadiusMultiplier : baseRadius
     };
   }
@@ -18255,6 +18546,7 @@
       ...mobTeam,
       isBoss: boss.isBoss,
       bossBaseKind: boss.bossBaseKind,
+      bossStars: boss.bossStars,
       minionCooldown: boss.minionCooldown,
       altAttackCooldown: boss.altAttackCooldown,
       bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
@@ -18295,6 +18587,7 @@
       ...mobTeam,
       isBoss: boss.isBoss,
       bossBaseKind: boss.bossBaseKind,
+      bossStars: boss.bossStars,
       minionCooldown: boss.minionCooldown,
       altAttackCooldown: boss.altAttackCooldown,
       bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
@@ -18340,6 +18633,7 @@
       ...mobTeam,
       isBoss: boss.isBoss,
       bossBaseKind: boss.bossBaseKind,
+      bossStars: boss.bossStars,
       minionCooldown: boss.minionCooldown,
       altAttackCooldown: boss.altAttackCooldown,
       bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
@@ -18380,6 +18674,7 @@
       ...mobTeam,
       isBoss: boss.isBoss,
       bossBaseKind: boss.bossBaseKind,
+      bossStars: boss.bossStars,
       minionCooldown: boss.minionCooldown,
       altAttackCooldown: boss.altAttackCooldown,
       bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
@@ -18419,6 +18714,7 @@
       ...mobTeam,
       isBoss: boss.isBoss,
       bossBaseKind: boss.bossBaseKind,
+      bossStars: boss.bossStars,
       minionCooldown: boss.minionCooldown,
       altAttackCooldown: boss.altAttackCooldown,
       bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
@@ -18475,6 +18771,7 @@
       ...mobTeam,
       isBoss: boss.isBoss,
       bossBaseKind: boss.bossBaseKind,
+      bossStars: boss.bossStars,
       minionCooldown: boss.minionCooldown,
       altAttackCooldown: boss.altAttackCooldown,
       bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
@@ -18516,6 +18813,7 @@
       ...mobTeam,
       isBoss: boss.isBoss,
       bossBaseKind: boss.bossBaseKind,
+      bossStars: boss.bossStars,
       minionCooldown: boss.minionCooldown,
       altAttackCooldown: boss.altAttackCooldown,
       bossBodyEvadeTimer: boss.bossBodyEvadeTimer,
@@ -18582,6 +18880,15 @@
     }
   }
 
+  function applyMobWaveState(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return;
+    }
+
+    mobWaveTimer = clamp(finiteOr(snapshot.mobWaveTimer, mobWaveTimer), 0, difficultyMobWaveInterval());
+    mobWaveCount = Math.max(0, Math.floor(finiteOr(snapshot.mobWaveCount, mobWaveCount)));
+  }
+
   function applyMobSpawnRestState(snapshot) {
     if (!snapshot || typeof snapshot !== "object") {
       return;
@@ -18609,6 +18916,34 @@
 
     for (const kind of mobTierOrder) {
       mobBossDefeatsByKind[kind] = Math.max(0, Math.floor(finiteOr(snapshot[kind], mobBossDefeatsByKind[kind])));
+    }
+  }
+
+  function estimateMobBossProgress(kind, defeatSnapshot, bossDefeatSnapshot) {
+    const totalDefeats = Math.max(0, Math.floor(finiteOr(
+      defeatSnapshot && typeof defeatSnapshot === "object" ? defeatSnapshot[kind] : mobDefeatsByKind[kind],
+      mobDefeatsByKind[kind]
+    )));
+    const bossDefeats = Math.max(0, Math.floor(finiteOr(
+      bossDefeatSnapshot && typeof bossDefeatSnapshot === "object" ? bossDefeatSnapshot[kind] : mobBossDefeatsByKind[kind],
+      mobBossDefeatsByKind[kind]
+    )));
+    const regularDefeats = Math.max(0, totalDefeats - bossDefeats);
+    const completedRegularDefeats = bossDefeats * mobBossDefeatsToUnlock;
+    return clamp(regularDefeats - completedRegularDefeats, 0, mobBossDefeatsToUnlock);
+  }
+
+  function applyMobBossProgressByKind(snapshot, defeatSnapshot, bossDefeatSnapshot) {
+    for (const kind of mobTierOrder) {
+      if (snapshot && typeof snapshot === "object" && Object.prototype.hasOwnProperty.call(snapshot, kind)) {
+        mobBossProgressByKind[kind] = clamp(
+          Math.floor(finiteOr(snapshot[kind], mobBossProgressByKind[kind])),
+          0,
+          mobBossDefeatsToUnlock
+        );
+      } else {
+        mobBossProgressByKind[kind] = estimateMobBossProgress(kind, defeatSnapshot, bossDefeatSnapshot);
+      }
     }
   }
 
@@ -18642,7 +18977,9 @@
     for (const kind of mobTierOrder) {
       mobDefeatsByKind[kind] = 0;
       mobBossDefeatsByKind[kind] = 0;
+      mobBossProgressByKind[kind] = 0;
     }
+    mobWaveCount = 0;
   }
 
   function resetMobBossWarnings() {
@@ -18803,6 +19140,8 @@
       mass,
       radius: radiusFromMass(mass),
       tier,
+      rotation: finiteOr(settings.rotation, 0),
+      angularVelocity: finiteOr(settings.angularVelocity, 0),
       textureSeed,
       color: settings.color || randomParticleColor(),
       wobble: finiteOr(settings.wobble, randomRange(0, Math.PI * 2)),
@@ -18836,14 +19175,37 @@
     return nextRivalId++;
   }
 
+  function bossStarRankValue(value) {
+    return Math.max(0, Math.floor(finiteOr(value, 0)));
+  }
+
+  function bossStarRank(mob) {
+    return mob && mob.isBoss ? bossStarRankValue(mob.bossStars) : 0;
+  }
+
+  function bossHealthScaleForStars(stars) {
+    return 1 + bossStarRankValue(stars) * mobBossStarHealthMultiplier;
+  }
+
+  function bossStatScaleForStars(stars, perStar) {
+    return 1 + bossStarRankValue(stars) * Math.max(0, finiteOr(perStar, 0));
+  }
+
+  function bossCooldownScaleForStars(stars) {
+    return clamp(1 - bossStarRankValue(stars) * mobBossStarCooldownReduction, 0.42, 1);
+  }
+
   function createMobFromBlueprint(kind, x, y, overrides) {
     const blueprint = mobEntityBlueprints[kind] || mobEntityBlueprints.alienoid;
     const settings = overrides || {};
     const color = blueprint.color ? { ...blueprint.color } : randomAlienColor();
     const speedJitter = Math.max(0, finiteOr(blueprint.speedJitter, 16));
     const isBoss = Boolean(settings.isBoss);
+    const bossStars = isBoss ? Math.max(0, Math.floor(finiteOr(settings.bossStars, 0))) : 0;
     const radius = isBoss ? blueprint.radius * mobBossRadiusMultiplier : blueprint.radius;
-    const maxHealth = isBoss ? blueprint.health * mobBossHealthMultiplier : blueprint.health;
+    const maxHealth = isBoss
+      ? blueprint.health * mobBossHealthMultiplier * bossHealthScaleForStars(bossStars)
+      : blueprint.health;
     return Object.assign({
       kind,
       id: nextMobId(kind),
@@ -18861,20 +19223,23 @@
       strafeSign: Math.random() < 0.5 ? -1 : 1,
       rotation: 0,
       wobble: randomRange(0, Math.PI * 2),
+      bossStars,
       team: settings.team === "player" ? "player" : "",
       summonAge: Math.max(0, finiteOr(settings.summonAge, 0)),
       summonDuration: Math.max(0, finiteOr(settings.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(settings.summonBaseRadius, radius)),
       summonSpinSpeed: finiteOr(settings.summonSpinSpeed, 0)
-    }, settings);
+    }, settings, { bossStars });
   }
 
   function createBossMob(kind, x, y) {
+    const bossStars = Math.max(0, Math.floor(finiteOr(mobBossDefeatsByKind[kind], 0)));
     const boss = createMobByKind(kind, x, y, {
       isBoss: true,
       bossBaseKind: kind,
+      bossStars,
       minionCooldown: randomRange(mobBossMinionCooldownMin, mobBossMinionCooldownMax),
-      altAttackCooldown: randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax),
+      altAttackCooldown: randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax) * bossCooldownScaleForStars(bossStars),
       bossBodyEvadeTimer: 0,
       bossBodyEvadeSpeedCap: 0
     });
@@ -18922,13 +19287,16 @@
 
   function randomAmbientParticleMass() {
     const roll = Math.random();
-    if (roll < 0.7) {
+    if (roll < 0.58) {
       return 1;
     }
-    if (roll < 0.92) {
+    if (roll < 0.84) {
       return 2;
     }
-    return 3;
+    if (roll < 0.96) {
+      return 3;
+    }
+    return 4;
   }
 
   function ambientSpawnSizeScale(id, textureSeed) {
@@ -19197,8 +19565,8 @@
   }
 
   function manageableMobRestThreshold(anchors) {
-    const effectiveCount = Math.min(crazyGamesRoomMaxPlayers, effectiveMobAnchorCount(anchors));
-    return Math.max(1, Math.ceil(mobSpawnRestManageableMobsPerPlayer * effectiveCount));
+    const playerCount = Math.min(crazyGamesRoomMaxPlayers, Array.isArray(anchors) && anchors.length ? anchors.length : 1);
+    return Math.max(1, Math.ceil(mobSpawnRestManageableMobsPerPlayer * playerCount));
   }
 
   let liveMobSpawnCache = null;
@@ -19268,17 +19636,11 @@
   }
 
   function particleDensityRadius() {
-    const spawnWidth = Math.max(640, finiteOr(width, 0));
-    const spawnHeight = Math.max(360, finiteOr(height, 0));
-    return Math.hypot(spawnWidth, spawnHeight) * 0.62 + 260;
+    return 1040;
   }
 
   function particlePlayfieldRadius() {
-    const zoom = Math.max(cameraZoomMin, finiteOr(cameraZoom, 1));
-    const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
-    const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
-    const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
-    return Math.max(1420, Math.min(particleDensityRadius() + 320, viewportRadius + 760));
+    return 1720;
   }
 
   function useParticlePlayfieldFill() {
@@ -19374,10 +19736,9 @@
 
   function localParticleTargetPerAnchor(anchorCount) {
     if (!useParticlePlayfieldFill()) {
-      const count = Math.max(1, Math.floor(finiteOr(anchorCount, 1)));
-      return Math.round(targetParticles * (isPartyHost() ? clamp(0.54 + 0.08 / count, 0.52, 0.62) : 0.62));
+      return 24;
     }
-    return Math.round(targetParticles * (isPartyHost() ? 0.32 : 0.38));
+    return isPartyHost() ? 24 : 36;
   }
 
   function mostUnderdenseParticleAnchor(anchors) {
@@ -19457,32 +19818,28 @@
     const playfieldFill = Boolean(options && options.playfieldFill);
     const source = anchor || randomPartySpawnAnchor();
     const anchors = activePartyPlayerAnchors();
-    const zoom = Math.max(cameraZoomMin, finiteOr(cameraZoom, 1));
-    const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
-    const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
-    const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
-    const minPlayerDistance = viewportRadius + 140;
-    const preferredParticleSpacing = 170;
+    const minPlayerDistance = 760;
+    const maxPlayerDistance = 1760;
+    const preferredParticleSpacing = 155;
     const localFillRadius = particlePlayfieldRadius();
     const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
     const moving = speed > 45;
     const travel = moving ? normalize(source.vx, source.vy) : { x: 0, y: 0 };
     let best = null;
 
-    for (let attempt = 0; attempt < 22; attempt += 1) {
+    for (let attempt = 0; attempt < 24; attempt += 1) {
       const aheadBias = moving && Math.random() < 0.58;
       const angle = aheadBias
         ? Math.atan2(travel.y, travel.x) + randomRange(-1.05, 1.05)
         : randomRange(0, Math.PI * 2);
-      const baseMinDist = minPlayerDistance * randomRange(1, 1.16);
-      const playfieldMinDist = Math.max(viewportRadius * 0.86, localFillRadius * 0.48);
+      const baseMinDist = minPlayerDistance * randomRange(1, 1.12);
       const minDist = localFill
-        ? Math.min(baseMinDist, Math.max(playfieldFill ? playfieldMinDist : 120, localFillRadius * (playfieldFill ? 0.48 : 0.74)))
+        ? Math.min(baseMinDist, Math.max(120, particleDensityRadius() * 0.74))
         : baseMinDist;
-      const broadMaxDist = viewportRadius * 1.85 + clamp(speed * 1.15, 0, 760);
+      const broadMaxDist = maxPlayerDistance + clamp(speed * 0.82, 0, 620);
       const maxDist = localFill ? Math.max(minDist + 60, Math.min(broadMaxDist, localFillRadius * 0.92)) : broadMaxDist;
       const dist = randomRange(minDist, maxDist);
-      const ahead = moving ? clamp(speed * randomRange(0.18, 1.35), 0, 920) : 0;
+      const ahead = moving ? clamp(speed * randomRange(0.18, 1.2), 0, 820) : 0;
       const driftRange = localFill ? 110 : 220;
       const drift = rotatePoint(randomRange(-driftRange, driftRange), randomRange(-driftRange, driftRange), angle + Math.PI / 2);
       let x = source.x + travel.x * ahead + Math.cos(angle) * dist + drift.x;
@@ -19830,7 +20187,13 @@
         lifeStats.mobScore += scoreMobKill(mob.kind);
         if (mobDefeatsByKind[mob.kind] !== undefined) {
           mobDefeatsByKind[mob.kind] += 1;
-          if (mobDefeatsByKind[mob.kind] === mobBossDefeatsToUnlock) {
+          if (!mob.isBoss && mobBossProgressByKind[mob.kind] !== undefined) {
+            mobBossProgressByKind[mob.kind] = Math.min(
+              mobBossDefeatsToUnlock,
+              Math.max(0, Math.floor(finiteOr(mobBossProgressByKind[mob.kind], 0))) + 1
+            );
+          }
+          if (!mob.isBoss && mobBossProgressByKind[mob.kind] === mobBossDefeatsToUnlock) {
             maybeNotifyText(mobBossLabel(mob.kind) + " sightings unlocked.", {
               groupKey: "mob-boss-unlocked:" + mob.kind,
               lifetime: 4200
@@ -19839,6 +20202,9 @@
         }
         if (mob.isBoss && mobBossDefeatsByKind[mob.kind] !== undefined) {
           mobBossDefeatsByKind[mob.kind] += 1;
+          if (mobBossProgressByKind[mob.kind] !== undefined) {
+            mobBossProgressByKind[mob.kind] = 0;
+          }
         }
         dropHealthPickups(mob);
         dropMobTech(mob);
@@ -20008,13 +20374,17 @@
     return Math.sqrt(nearestSq);
   }
 
+  function mobSpawnMaxZoomedOutViewRadius() {
+    const fixedZoom = Math.max(0.001, finiteOr(cameraZoomMin, 0.08));
+    const spawnWidth = Math.max(640, finiteOr(width, 0));
+    const spawnHeight = Math.max(360, finiteOr(height, 0));
+    return Math.hypot(spawnWidth, spawnHeight) / (2 * fixedZoom);
+  }
+
   function chooseMobSpawnPoint(kind, margin, spread, anchor, spawnAnchors) {
     const source = anchor || leastPopulatedMobSpawnAnchor(activeMobSpawnAnchors());
     const anchors = Array.isArray(spawnAnchors) && spawnAnchors.length ? spawnAnchors : activeMobSpawnAnchors();
-    const zoom = Math.max(cameraZoomMin, finiteOr(cameraZoom, 1));
-    const spawnWidth = Math.max(640, finiteOr(width, 0) / zoom);
-    const spawnHeight = Math.max(360, finiteOr(height, 0) / zoom);
-    const viewportRadius = Math.hypot(spawnWidth, spawnHeight) * 0.5;
+    const viewportRadius = mobSpawnMaxZoomedOutViewRadius();
     const spawnMargin = Math.max(120, margin) + mobSpawnEdgePaddingBonus;
     const spawnSpread = Math.max(420, spread) * mobSpawnSpreadMultiplier;
     const minPlayerDistance = viewportRadius + spawnMargin;
@@ -20023,8 +20393,9 @@
     const moving = speed > 50;
     const travel = moving ? normalize(source.vx, source.vy) : { x: 0, y: 0 };
     let best = null;
+    let bestValid = null;
 
-    const attemptLimit = liveMobsForSpawnPlacement().length > 24 ? 14 : 20;
+    const attemptLimit = liveMobsForSpawnPlacement().length > 24 ? 24 : 36;
     for (let attempt = 0; attempt < attemptLimit; attempt += 1) {
       const aheadBias = moving && Math.random() < 0.5;
       const angle = aheadBias
@@ -20047,9 +20418,12 @@
       if (!best || score > best.score) {
         best = { x, y, score };
       }
+      if (nearestPlayer >= minPlayerDistance && (!bestValid || score > bestValid.score)) {
+        bestValid = { x, y, score };
+      }
     }
 
-    return best || randomOffscreenPoint(spawnMargin, spawnSpread, source);
+    return bestValid || best || randomOffscreenPoint(spawnMargin, spawnSpread, source, cameraZoomMin);
   }
 
   function spawnAlienoidNearPlayer(anchor, anchors) {
@@ -20097,7 +20471,7 @@
   }
 
   function isMobBossUnlocked(kind) {
-    return Math.max(0, mobDefeatsByKind[kind] || 0) >= mobBossDefeatsToUnlock;
+    return Math.max(0, mobBossProgressByKind[kind] || 0) >= mobBossDefeatsToUnlock;
   }
 
   function hasLiveMobBoss(kind) {
@@ -20116,18 +20490,9 @@
     return mobBossWarnings[kind] || null;
   }
 
-  function mobBossSpawnRollChance(kind) {
-    const defeats = Math.max(0, mobDefeatsByKind[kind] || 0);
-    const overUnlock = Math.max(0, defeats - mobBossDefeatsToUnlock);
-    return clamp(mobBossSpawnChance + overUnlock * mobBossSpawnChancePerDefeat, mobBossSpawnChance, 0.55);
-  }
-
   function maybeScheduleMobBoss(kind) {
     const warning = mobBossWarningFor(kind);
     if (!warning || warning.active || !isMobBossUnlocked(kind) || hasLiveMobBoss(kind)) {
-      return;
-    }
-    if (Math.random() >= mobBossSpawnRollChance(kind)) {
       return;
     }
 
@@ -20297,6 +20662,10 @@
     spawnAlienoidNearPlayer(anchor, anchors);
   }
 
+  function spawnMobByKindAt(kind, x, y) {
+    mobCollectionByKind(kind).push(createMobByKind(kind, x, y));
+  }
+
   function isMobTierUnlocked(kind) {
     const index = mobTierOrder.indexOf(kind);
     if (index <= 0) {
@@ -20305,6 +20674,10 @@
 
     const previousKind = mobTierOrder[index - 1];
     return mobDefeatsByKind[previousKind] >= previousMobTierDefeatsTarget(previousKind);
+  }
+
+  function unlockedMobKinds() {
+    return mobTierOrder.filter((kind) => isMobTierUnlocked(kind));
   }
 
   function currentLifeSeconds() {
@@ -20338,8 +20711,8 @@
   function maxLiveMobCount(kind, anchors) {
     const interval = difficultyMobSpawnInterval(kind) || 120;
     const growth = Math.min(5, Math.floor(currentLifeSeconds() / Math.max(45, interval * 3.5)));
-    const effectiveCount = Math.min(crazyGamesRoomMaxPlayers, effectiveMobAnchorCount(anchors));
-    const playerScale = 1 + Math.max(0, effectiveCount - 1) * 0.3;
+    const playerCount = Math.min(crazyGamesRoomMaxPlayers, Array.isArray(anchors) && anchors.length ? anchors.length : 1);
+    const playerScale = 1 + Math.max(0, playerCount - 1) * 0.3;
     const bossPressureCap = mobBossSpawnPressure(kind) * mobBossLiveCapBonus;
     return Math.max(1, Math.round((baseLiveMobCap(kind) + growth) * playerScale * activeDifficulty().mobBatchScale) + bossPressureCap);
   }
@@ -20403,6 +20776,136 @@
     return interval * (mobBossSpawnPressure(kind) > 0 ? mobBossSpawnIntervalScale : 1);
   }
 
+  function mobWaveBossPressure() {
+    let count = 0;
+    for (const kind of mobTierOrder) {
+      count += liveMobBossCount(kind);
+    }
+    return Math.min(3, count);
+  }
+
+  function mobWaveIntervalWithBossPressure() {
+    const interval = difficultyMobWaveInterval();
+    return interval * (mobWaveBossPressure() > 0 ? mobBossSpawnIntervalScale : 1);
+  }
+
+  function mobWaveSizeDifficultyScale() {
+    const mediumScale = finiteOr(difficultyDefinitions.medium && difficultyDefinitions.medium.mobBatchScale, 1.24);
+    return clamp(finiteOr(activeDifficulty().mobBatchScale, mediumScale) / mediumScale, 0.8, 1.2);
+  }
+
+  function rollMobWaveSize(anchors) {
+    const playerCount = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Array.isArray(anchors) && anchors.length ? anchors.length : 1));
+    const wavesCompleted = Math.max(0, finiteOr(mobWaveCount, 0));
+    const mobsPerPlayer = mobWaveStartingMobsPerPlayer + wavesCompleted / Math.max(1, mobWaveGrowthWaves);
+    const ideal = mobsPerPlayer * playerCount * mobWaveSizeDifficultyScale() + mobWaveBossPressure() * mobBossSpawnBatchBonus;
+    const whole = Math.floor(ideal);
+    const rounded = whole + (Math.random() < ideal - whole ? 1 : 0);
+    return Math.max(playerCount, rounded);
+  }
+
+  function chooseMobWaveKind(eligibleKinds, anchors, reservedCounts) {
+    let leastReserved = Infinity;
+    const candidates = [];
+
+    for (const kind of eligibleKinds) {
+      const reserved = Math.max(0, reservedCounts[kind] || 0);
+      const remainingSlots = maxLiveMobCount(kind, anchors) - liveMobCount(kind) - reserved;
+      if (remainingSlots <= 0) {
+        continue;
+      }
+      if (reserved < leastReserved) {
+        candidates.length = 0;
+        leastReserved = reserved;
+      }
+      if (reserved === leastReserved) {
+        candidates.push(kind);
+      }
+    }
+
+    if (!candidates.length) {
+      return "";
+    }
+    return candidates[Math.floor(Math.random() * candidates.length)] || "";
+  }
+
+  function buildMobWaveSlots(targetCount, anchors) {
+    const eligibleKinds = unlockedMobKinds();
+    const reservedCounts = {};
+    const slots = [];
+
+    for (let i = 0; i < targetCount; i += 1) {
+      const kind = chooseMobWaveKind(eligibleKinds, anchors, reservedCounts);
+      if (!kind) {
+        break;
+      }
+      reservedCounts[kind] = Math.max(0, reservedCounts[kind] || 0) + 1;
+      slots.push(kind);
+    }
+
+    return slots;
+  }
+
+  function chooseMobWaveClumpCenter(anchor, anchors) {
+    return chooseMobSpawnPoint("alienoid", 190, 620, anchor, anchors);
+  }
+
+  function clumpOffset(index, count) {
+    const angle = randomRange(0, Math.PI * 2) + index * 2.399963229728653;
+    const progress = count > 1 ? index / Math.max(1, count - 1) : 0;
+    const radius = randomRange(mobWaveClumpMinRadius, mobWaveClumpMaxRadius) * (0.72 + progress * 0.34);
+    return {
+      x: Math.cos(angle) * radius + randomRange(-22, 22),
+      y: Math.sin(angle) * radius + randomRange(-22, 22)
+    };
+  }
+
+  function splitMobWaveSlotsByAnchor(slots, anchors) {
+    const groups = anchors.map(() => []);
+    if (!groups.length) {
+      return groups;
+    }
+
+    for (const kind of slots) {
+      let leastCount = Infinity;
+      const candidates = [];
+      for (let i = 0; i < groups.length; i += 1) {
+        if (groups[i].length < leastCount) {
+          candidates.length = 0;
+          leastCount = groups[i].length;
+        }
+        if (groups[i].length === leastCount) {
+          candidates.push(i);
+        }
+      }
+      const groupIndex = candidates[Math.floor(Math.random() * candidates.length)] || 0;
+      groups[groupIndex].push(kind);
+    }
+
+    return groups;
+  }
+
+  function spawnMobWave(slots, anchors) {
+    const sourceAnchors = (Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors()).slice(0, crazyGamesRoomMaxPlayers);
+    const groups = splitMobWaveSlotsByAnchor(slots, sourceAnchors);
+    const spawnedKinds = new Set();
+
+    for (let anchorIndex = 0; anchorIndex < groups.length; anchorIndex += 1) {
+      const kinds = groups[anchorIndex];
+      if (!kinds.length) {
+        continue;
+      }
+      const center = chooseMobWaveClumpCenter(sourceAnchors[anchorIndex], sourceAnchors);
+      for (let i = 0; i < kinds.length; i += 1) {
+        const offset = clumpOffset(i, kinds.length);
+        spawnMobByKindAt(kinds[i], center.x + offset.x, center.y + offset.y);
+        spawnedKinds.add(kinds[i]);
+      }
+    }
+
+    return spawnedKinds;
+  }
+
   function startMobSpawnGracePeriod() {
     mobSpawnRestTimer = mobSpawnRestDuration;
     mobSpawnRestDrainTimer = 0;
@@ -20445,23 +20948,15 @@
       return;
     }
 
-    const playerCount = effectiveMobAnchorCount(anchors);
-    for (const kind of Object.keys(mobSpawnIntervals)) {
-      if (!isMobTierUnlocked(kind)) {
-        mobSpawnTimers[kind] = Math.max(0, mobSpawnTimers[kind] - dt);
-        continue;
-      }
-
-      mobSpawnTimers[kind] -= dt;
-      while (mobSpawnTimers[kind] <= 0) {
-        const remainingSlots = maxLiveMobCount(kind, anchors) - liveMobCount(kind);
-        const batchSize = Math.max(0, Math.min(remainingSlots, mobSpawnBatchSize(kind, playerCount)));
-        for (let i = 0; i < batchSize; i += 1) {
-          spawnMobByKind(kind, leastPopulatedMobSpawnAnchor(anchors), anchors);
-        }
+    mobWaveTimer -= dt;
+    while (mobWaveTimer <= 0) {
+      const slots = buildMobWaveSlots(rollMobWaveSize(anchors), anchors);
+      const spawnedKinds = spawnMobWave(slots, anchors);
+      for (const kind of spawnedKinds) {
         maybeScheduleMobBoss(kind);
-        mobSpawnTimers[kind] += mobSpawnIntervalWithBossPressure(kind);
       }
+      mobWaveCount += 1;
+      mobWaveTimer += mobWaveIntervalWithBossPressure();
     }
   }
 
@@ -20509,11 +21004,12 @@
     };
   }
 
-  function randomOffscreenPoint(margin, spread, anchor) {
+  function randomOffscreenPoint(margin, spread, anchor, zoomOverride) {
     const source = anchor || player;
     const side = Math.floor(Math.random() * 4);
-    const halfW = width / (2 * cameraZoom);
-    const halfH = height / (2 * cameraZoom);
+    const offscreenZoom = Math.max(0.001, finiteOr(zoomOverride, cameraZoom));
+    const halfW = width / (2 * offscreenZoom);
+    const halfH = height / (2 * offscreenZoom);
     let localX = randomRange(-halfW - spread, halfW + spread);
     let localY = randomRange(-halfH - spread, halfH + spread);
 
@@ -20616,10 +21112,15 @@
   }
 
   function decayGadgetPullContactIntent(target, dt) {
-    if (!target || target.gadgetPullContactTimer === undefined) {
+    if (!target) {
       return;
     }
-    target.gadgetPullContactTimer = Math.max(0, finiteOr(target.gadgetPullContactTimer, 0) - dt);
+    if (target.gadgetPullContactTimer !== undefined) {
+      target.gadgetPullContactTimer = Math.max(0, finiteOr(target.gadgetPullContactTimer, 0) - dt);
+    }
+    if (target.directGadgetForceTimer !== undefined) {
+      target.directGadgetForceTimer = Math.max(0, finiteOr(target.directGadgetForceTimer, 0) - dt);
+    }
   }
 
   function markGadgetPullContactIntent(target, actor, aimWorld, pullTowardActor) {
@@ -20631,6 +21132,30 @@
     target.gadgetPullAimX = finiteOr(aimWorld.x, 1);
     target.gadgetPullAimY = finiteOr(aimWorld.y, 0);
     target.gadgetPullTowardActor = pullTowardActor === true;
+  }
+
+  function markDirectGadgetBodyForceIntent(target, actor) {
+    if (!target || !target.tier || !target.tier.solid || !actor || !actor.landed || actor.landed.bridgeId) {
+      return;
+    }
+    const landedBodyId = Math.max(0, Math.floor(finiteOr(actor.landed.bodyId, 0)));
+    if (!landedBodyId || landedBodyId === target.id) {
+      return;
+    }
+    target.directGadgetForceTimer = 0.12;
+    target.directGadgetForceActorId = actor.id || "";
+    target.directGadgetForceLandedBodyId = landedBodyId;
+  }
+
+  function isDirectGadgetForcedFromLandedBody(target, landedBody) {
+    return Boolean(
+      target &&
+      landedBody &&
+      target.tier &&
+      target.tier.solid &&
+      finiteOr(target.directGadgetForceTimer, 0) > 0 &&
+      Math.max(0, Math.floor(finiteOr(target.directGadgetForceLandedBodyId, 0))) === landedBody.id
+    );
   }
 
   function isSelfVacuumPulledBodyContact(targetPlayer, body, nx, ny) {
@@ -20662,8 +21187,9 @@
       (finiteOr(body.vy, 0) - finiteOr(targetPlayer.vy, 0)) * ny;
     if (closingSpeed > 0) {
       const impulse = closingSpeed * finiteOr(damping, 0.86);
-      body.vx -= nx * impulse;
-      body.vy -= ny * impulse;
+      const pointX = finiteOr(body.x, 0) + nx * bodyAngularInertiaRadius(body);
+      const pointY = finiteOr(body.y, 0) + ny * bodyAngularInertiaRadius(body);
+      applyBodyVelocityChangeAtPoint(body, -nx * impulse, -ny * impulse, pointX, pointY, bodyConstraintTorqueResponse);
     }
   }
 
@@ -20688,6 +21214,54 @@
 
   function isLinkedStructureType(type) {
     return type === "tether" || type === "bridge";
+  }
+
+  function isActiveLinkedBodyStructure(structure) {
+    return Boolean(
+      structure &&
+      isLinkedStructureType(structure.type) &&
+      structure.health > 0 &&
+      !isStructureDisabled(structure) &&
+      structure.bodyId &&
+      structure.linkedBodyId
+    );
+  }
+
+  function isBodyAttachedToBodyByLinkedStructures(targetBody, rootBodyId) {
+    const targetBodyId = targetBody && targetBody.id;
+    const cleanRootBodyId = Math.max(0, Math.floor(finiteOr(rootBodyId, 0)));
+    if (!targetBodyId || !cleanRootBodyId || targetBodyId === cleanRootBodyId) {
+      return false;
+    }
+
+    const visited = new Set([cleanRootBodyId]);
+    const queue = [cleanRootBodyId];
+    for (let i = 0; i < queue.length; i += 1) {
+      const bodyId = queue[i];
+      for (const structure of structures) {
+        if (!isActiveLinkedBodyStructure(structure)) {
+          continue;
+        }
+
+        let nextBodyId = 0;
+        if (structure.bodyId === bodyId) {
+          nextBodyId = structure.linkedBodyId;
+        } else if (structure.linkedBodyId === bodyId) {
+          nextBodyId = structure.bodyId;
+        }
+
+        if (!nextBodyId || visited.has(nextBodyId)) {
+          continue;
+        }
+        if (nextBodyId === targetBodyId) {
+          return true;
+        }
+        visited.add(nextBodyId);
+        queue.push(nextBodyId);
+      }
+    }
+
+    return false;
   }
 
   function isActiveBridge(structure) {
@@ -20823,6 +21397,52 @@
     }
 
     return surfaceOffset + structureSurfaceOffset;
+  }
+
+  function tetherBodyRadius(body) {
+    return Math.max(1, finiteOr(body && body.radius, body ? radiusFromMass(body.mass) : 1));
+  }
+
+  function tetherGiveForBodies(firstBody, secondBody) {
+    const averageRadius = (tetherBodyRadius(firstBody) + tetherBodyRadius(secondBody)) * 0.5;
+    return clamp(averageRadius * tetherGiveRadiusScale, tetherMinGive, tetherMaxGive);
+  }
+
+  function tetherMaxRestLengthForBodies(firstBody, secondBody) {
+    const combinedRadius = tetherBodyRadius(firstBody) + tetherBodyRadius(secondBody);
+    return clamp(combinedRadius * tetherRestLengthRadiusScale, tetherMinRestLength, tetherMaxRestLength);
+  }
+
+  function normalizedTetherRestLength(structure, firstBody, secondBody, fallbackLength) {
+    const savedRestLength = finiteOr(structure && structure.restLength, 0);
+    const requestedLength = savedRestLength > 0 ? savedRestLength : fallbackLength;
+    return clamp(requestedLength, 80, tetherMaxRestLengthForBodies(firstBody, secondBody));
+  }
+
+  function tetherPlacementLength(firstPlacement, secondPlacement) {
+    return Math.hypot(
+      finiteOr(secondPlacement && secondPlacement.x, 0) - finiteOr(firstPlacement && firstPlacement.x, 0),
+      finiteOr(secondPlacement && secondPlacement.y, 0) - finiteOr(firstPlacement && firstPlacement.y, 0)
+    );
+  }
+
+  function isTetherPlacementLengthValid(firstPlacement, secondPlacement) {
+    return Boolean(
+      firstPlacement &&
+      secondPlacement &&
+      firstPlacement.body &&
+      secondPlacement.body &&
+      tetherPlacementLength(firstPlacement, secondPlacement) <=
+        tetherMaxRestLengthForBodies(firstPlacement.body, secondPlacement.body) + tetherPositionSlop
+    );
+  }
+
+  function linkedStructureRestLength(type, placement, linkedPlacement) {
+    const length = tetherPlacementLength(placement, linkedPlacement);
+    if (type === "tether") {
+      return Math.min(length, tetherMaxRestLengthForBodies(placement.body, linkedPlacement.body));
+    }
+    return length;
   }
 
   function maxEnergyForBody(body) {
@@ -21199,7 +21819,7 @@
       y: placement.y,
       x2: linkedPlacement ? linkedPlacement.x : placement.x,
       y2: linkedPlacement ? linkedPlacement.y : placement.y,
-      restLength: linkedPlacement ? Math.hypot(linkedPlacement.x - placement.x, linkedPlacement.y - placement.y) : 0,
+      restLength: linkedPlacement ? linkedStructureRestLength(recipe.structureType, placement, linkedPlacement) : 0,
       restCenterDx: linkedPlacement ? linkedPlacement.body.x - placement.body.x : 0,
       restCenterDy: linkedPlacement ? linkedPlacement.body.y - placement.body.y : 0,
       aimAngle: placement.angle,
@@ -21238,7 +21858,10 @@
     structure.y = firstBody.y + Math.sin(structure.angle) * (firstBody.radius + firstOffset);
     structure.x2 = secondBody.x + Math.cos(structure.linkedAngle) * (secondBody.radius + secondOffset);
     structure.y2 = secondBody.y + Math.sin(structure.linkedAngle) * (secondBody.radius + secondOffset);
-    structure.restLength = Math.max(80, finiteOr(structure.restLength, Math.hypot(structure.x2 - structure.x, structure.y2 - structure.y)));
+    const currentLength = Math.hypot(structure.x2 - structure.x, structure.y2 - structure.y);
+    structure.restLength = structure.type === "tether"
+      ? normalizedTetherRestLength(structure, firstBody, secondBody, currentLength)
+      : Math.max(80, finiteOr(structure.restLength, currentLength));
     if (structure.type === "bridge") {
       structure.restCenterDx = finiteOr(structure.restCenterDx, secondBody.x - firstBody.x);
       structure.restCenterDy = finiteOr(structure.restCenterDy, secondBody.y - firstBody.y);
@@ -21261,6 +21884,14 @@
     structure.x = body.x + Math.cos(structure.angle) * (body.radius + centerOffset);
     structure.y = body.y + Math.sin(structure.angle) * (body.radius + centerOffset);
     return true;
+  }
+
+  function syncStructuresToSurfaces(removeInvalid) {
+    for (let i = structures.length - 1; i >= 0; i -= 1) {
+      if (!applyStructureSurfaceConstraint(structures[i]) && removeInvalid) {
+        structures.splice(i, 1);
+      }
+    }
   }
 
   function rotateBodyMountedFrame(bodyId, angleStep) {
@@ -21286,6 +21917,91 @@
         rival.landed.angle += angleStep;
       }
     }
+  }
+
+  function bodyAngularInertiaRadius(body) {
+    return Math.max(8, finiteOr(body && body.radius, body ? radiusFromMass(body.mass) : 8));
+  }
+
+  function bodySurfaceVelocityAtPoint(body, pointX, pointY) {
+    const angularVelocity = finiteOr(body && body.angularVelocity, 0);
+    const rx = finiteOr(pointX, finiteOr(body && body.x, 0)) - finiteOr(body && body.x, 0);
+    const ry = finiteOr(pointY, finiteOr(body && body.y, 0)) - finiteOr(body && body.y, 0);
+    return {
+      x: finiteOr(body && body.vx, 0) - angularVelocity * ry,
+      y: finiteOr(body && body.vy, 0) + angularVelocity * rx
+    };
+  }
+
+  function bodySurfaceVelocityAtAngle(body, angle, offset) {
+    const radius = bodyAngularInertiaRadius(body) + Math.max(0, finiteOr(offset, 0));
+    const pointX = finiteOr(body && body.x, 0) + Math.cos(angle) * radius;
+    const pointY = finiteOr(body && body.y, 0) + Math.sin(angle) * radius;
+    return bodySurfaceVelocityAtPoint(body, pointX, pointY);
+  }
+
+  function applyBodyTorqueFromVelocityChange(body, deltaVx, deltaVy, pointX, pointY, response) {
+    if (!body || !body.tier || !Number.isFinite(Number(deltaVx)) || !Number.isFinite(Number(deltaVy))) {
+      return;
+    }
+
+    const rx = finiteOr(pointX, body.x) - finiteOr(body.x, 0);
+    const ry = finiteOr(pointY, body.y) - finiteOr(body.y, 0);
+    const radius = bodyAngularInertiaRadius(body);
+    const radiusSq = Math.max(64, radius * radius);
+    const torque = rx * deltaVy - ry * deltaVx;
+    if (Math.abs(torque) <= 0.000001) {
+      return;
+    }
+
+    const torqueScale = body.tier.solid ? bodyTorqueResponse : bodyTorqueResponse * 0.42;
+    body.angularVelocity = clamp(
+      finiteOr(body.angularVelocity, 0) + (torque / radiusSq) * 2 * torqueScale * Math.max(0, finiteOr(response, 1)),
+      -bodyMaxAngularSpeed,
+      bodyMaxAngularSpeed
+    );
+  }
+
+  function bodySurfacePointForForce(body, sourceX, sourceY) {
+    const dx = finiteOr(sourceX, body && body.x) - finiteOr(body && body.x, 0);
+    const dy = finiteOr(sourceY, body && body.y) - finiteOr(body && body.y, 0);
+    const dist = Math.hypot(dx, dy) || 1;
+    const radius = bodyAngularInertiaRadius(body);
+    return {
+      x: finiteOr(body && body.x, 0) + (dx / dist) * radius,
+      y: finiteOr(body && body.y, 0) + (dy / dist) * radius
+    };
+  }
+
+  function applyBodyVelocityChangeAtPoint(body, deltaVx, deltaVy, pointX, pointY, response) {
+    if (!body || !Number.isFinite(Number(deltaVx)) || !Number.isFinite(Number(deltaVy))) {
+      return;
+    }
+    body.vx = finiteOr(body.vx, 0) + deltaVx;
+    body.vy = finiteOr(body.vy, 0) + deltaVy;
+    applyBodyTorqueFromVelocityChange(body, deltaVx, deltaVy, pointX, pointY, response);
+  }
+
+  function integrateBodyAngularMotion(body, dt) {
+    if (!body || !body.tier) {
+      return;
+    }
+
+    body.rotation = finiteOr(body.rotation, 0);
+    body.angularVelocity = clamp(finiteOr(body.angularVelocity, 0), -bodyMaxAngularSpeed, bodyMaxAngularSpeed);
+    if (Math.abs(body.angularVelocity) <= 0.000001) {
+      body.angularVelocity = 0;
+      return;
+    }
+
+    body.angularVelocity *= Math.pow(bodyAngularVelocityDamping, dt);
+    const angleStep = body.angularVelocity * dt;
+    if (Math.abs(angleStep) <= 0.000001) {
+      return;
+    }
+
+    body.rotation += angleStep;
+    rotateBodyMountedFrame(body.id, angleStep);
   }
 
   function activeBridgeById(id) {
@@ -21611,9 +22327,11 @@
 
     const placement = currentStructurePlacement();
     if (!placement.valid) {
-      maybeNotifyText(isLinkedStructureType(recipe.structureType)
-        ? recipe.name + "s need boulder-sized or larger bodies."
-        : "Structures need a dwarf moon, moon, planet, or plate surface.");
+      maybeNotifyText(recipe.structureType === "tether"
+        ? "Tethers can anchor to boulders, asteroids, or larger bodies."
+        : isLinkedStructureType(recipe.structureType)
+          ? recipe.name + "s need boulder-sized or larger bodies."
+          : "Structures need a dwarf moon, moon, planet, or plate surface.");
       return false;
     }
 
@@ -21634,6 +22352,11 @@
 
       if (placement.bodyId === firstPlacement.bodyId) {
         maybeNotifyText("The " + recipe.name.toLowerCase() + " needs two different bodies.");
+        return false;
+      }
+
+      if (recipe.structureType === "tether" && !isTetherPlacementLengthValid(firstPlacement, placement)) {
+        maybeNotifyText("Tether anchors are too far apart.");
         return false;
       }
 
@@ -21815,11 +22538,12 @@
     const walkSpeed = rival.landed.walkSpeed || 0;
     const surfaceOffset = surfaceExtensionAtAngle(body, rival.landed.angle);
     const distanceFromCenter = body.radius + surfaceOffset + rivalFootOffset;
+    const surfaceVelocity = bodySurfaceVelocityAtAngle(body, rival.landed.angle, surfaceOffset);
 
     rival.x = body.x + normal.x * distanceFromCenter;
     rival.y = body.y + normal.y * distanceFromCenter;
-    rival.vx = body.vx + tangent.x * walkSpeed;
-    rival.vy = body.vy + tangent.y * walkSpeed;
+    rival.vx = surfaceVelocity.x + tangent.x * walkSpeed;
+    rival.vy = surfaceVelocity.y + tangent.y * walkSpeed;
     rival.rotation = rival.landed.angle + Math.PI / 2;
     return true;
   }
@@ -21972,11 +22696,12 @@
     const surfaceOffset = surfaceExtensionAtAngle(body, player.landed.angle);
     const distanceFromCenter = body.radius + surfaceOffset + playerFootOffset;
     const walkSpeed = player.landed.walkSpeed || 0;
+    const surfaceVelocity = bodySurfaceVelocityAtAngle(body, player.landed.angle, surfaceOffset);
 
     player.x = body.x + normal.x * distanceFromCenter;
     player.y = body.y + normal.y * distanceFromCenter;
-    player.vx = body.vx + tangent.x * walkSpeed;
-    player.vy = body.vy + tangent.y * walkSpeed;
+    player.vx = surfaceVelocity.x + tangent.x * walkSpeed;
+    player.vy = surfaceVelocity.y + tangent.y * walkSpeed;
     return true;
   }
 
@@ -22130,10 +22855,10 @@
 
     const direction = mouse.left ? 1 : -1;
     const strengthFactor = mouse.left ? currentGadgetSuckFactor() : currentGadgetBlowFactor();
-    applyGadgetThrustToBody(body, getAim().world, direction, dt, strengthFactor);
+    applyGadgetThrustToBody(body, getAim().world, direction, dt, strengthFactor, { x: player.x, y: player.y });
   }
 
-  function applyGadgetThrustToBody(body, aimWorld, direction, dt, strengthFactor = 1) {
+  function applyGadgetThrustToBody(body, aimWorld, direction, dt, strengthFactor = 1, forcePoint) {
     if (!body || !isLandableBody(body)) {
       return false;
     }
@@ -22154,8 +22879,10 @@
       : 0;
     const maxSpeed = Math.max(baseMaxSpeed, previousSpeed + progradeGain);
 
-    body.vx = previousVx + accelerationX;
-    body.vy = previousVy + accelerationY;
+    const point = forcePoint
+      ? bodySurfacePointForForce(body, forcePoint.x, forcePoint.y)
+      : bodySurfacePointForForce(body, body.x - aim.x, body.y - aim.y);
+    applyBodyVelocityChangeAtPoint(body, accelerationX, accelerationY, point.x, point.y, 1);
 
     const speed = Math.hypot(body.vx, body.vy);
     if (speed > maxSpeed) {
@@ -22174,7 +22901,8 @@
       const body = bodyById(state.landedBodyId);
       const direction = state.left ? 1 : -1;
       const strengthFactor = state.left ? state.suckFactor : state.blowFactor;
-      applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor);
+      const forcePoint = state.actor ? { x: state.actor.x, y: state.actor.y } : null;
+      applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor, forcePoint);
     }
   }
 
@@ -22397,10 +23125,10 @@
     }
     if (equippedTool === "spanner") {
       if (mode === "fire") {
-        return multiplayerContinuousEnergyActivationCost(spannerRepairEnergyDrain, dt);
+        return multiplayerContinuousEnergyCost(spannerRepairEnergyDrain, dt);
       }
       if (mode === "dismantle") {
-        return multiplayerContinuousEnergyActivationCost(spannerDismantleEnergyDrain, dt);
+        return multiplayerContinuousEnergyCost(spannerDismantleEnergyDrain, dt);
       }
     }
     if (isSuctionTool(equippedTool) && isPartyGadgetActiveMode(mode)) {
@@ -22423,7 +23151,10 @@
   }
 
   function actorCanAffordMultiplayerToolMode(actor, equippedTool, mode, dt) {
-    if (finiteOr(actor && actor.toolDisabledTimer, 0) > 0) {
+    if (Math.max(
+      finiteOr(actor && actor.toolDisabledTimer, 0),
+      finiteOr(actor && actor.statusEffects && actor.statusEffects.disabled, 0)
+    ) > 0) {
       return false;
     }
     const cost = multiplayerToolModeEnergyCost(equippedTool, mode, dt);
@@ -22512,7 +23243,8 @@
       radius: finiteOr(snapshot.radius, player.radius),
       energy: finiteOr(snapshot.energy, player.energy),
       maxEnergy: finiteOr(snapshot.maxEnergy, player.maxEnergy),
-      toolDisabledTimer: Math.max(0, finiteOr(snapshot.toolDisabledTimer, 0)),
+      statusEffects: normalizeRemotePlayerStatusEffects(snapshot.statusEffects, snapshot.toolDisabledTimer),
+      toolDisabledTimer: normalizeRemotePlayerStatusEffects(snapshot.statusEffects, snapshot.toolDisabledTimer).disabled,
       equippedTool: typeof snapshot.equippedTool === "string" ? snapshot.equippedTool : equippedToolId,
       toolMode: normalizePartyGadgetMode(snapshot.toolMode),
       landed: normalizeLandingSnapshot(snapshot.landed),
@@ -22722,6 +23454,7 @@
     const pushResponse = bodyPushResponse(target);
     const captureInFunnel = options.captureInFunnel !== false;
     const pullTowardActor = options.pullTowardActor === true;
+    const torquePoint = target.tier ? bodySurfacePointForForce(target, actor.x, actor.y) : null;
 
     const middleGatherRange = middleActive && partyGadgetMiddleGatherRange(forward, side, target.radius, 0);
 
@@ -22741,9 +23474,16 @@
       const desiredVx = hold.x * desiredSpeed;
       const desiredVy = hold.y * desiredSpeed;
       const steer = clamp((4.8 + response * 8.6) * coneStrength * dt, 0, 1);
+      const deltaVx = (desiredVx - target.vx) * steer;
+      const deltaVy = (desiredVy - target.vy) * steer;
 
-      target.vx += (desiredVx - target.vx) * steer;
-      target.vy += (desiredVy - target.vy) * steer;
+      if (torquePoint) {
+        applyBodyVelocityChangeAtPoint(target, deltaVx, deltaVy, torquePoint.x, torquePoint.y, response);
+      } else {
+        target.vx += deltaVx;
+        target.vy += deltaVy;
+      }
+      markDirectGadgetBodyForceIntent(target, actor);
       target.vx *= Math.pow(0.16 + (1 - response) * 0.42, dt);
       target.vy *= Math.pow(0.16 + (1 - response) * 0.42, dt);
 
@@ -22773,16 +23513,29 @@
       const distanceStrength = clamp(1 - pullDistance / 620, pullTowardActor ? 0.28 : 0.16, 1);
       const baseForce = pullTowardActor ? 1660 : 1180;
       const force = baseForce * finiteOr(state.suckFactor, 1) * coneStrength * distanceStrength * pushResponse;
-      target.vx += pull.x * force * dt;
-      target.vy += pull.y * force * dt;
+      const deltaVx = pull.x * force * dt;
+      const deltaVy = pull.y * force * dt;
+      if (torquePoint) {
+        applyBodyVelocityChangeAtPoint(target, deltaVx, deltaVy, torquePoint.x, torquePoint.y, pushResponse);
+      } else {
+        target.vx += deltaVx;
+        target.vy += deltaVy;
+      }
+      markDirectGadgetBodyForceIntent(target, actor);
 
       if (!pullTowardActor && captureInFunnel && mouthDist < funnel.radius + target.radius * 2.2) {
         const cup = normalize(toMouthX, toMouthY);
         const ringTarget = Math.max(0, funnel.radius * 0.42 - target.radius * 0.22);
         const current = mouthDist || 1;
         const settle = (current - ringTarget) * 22 * pushResponse;
-        target.vx += cup.x * settle * dt;
-        target.vy += cup.y * settle * dt;
+        const settleVx = cup.x * settle * dt;
+        const settleVy = cup.y * settle * dt;
+        if (torquePoint) {
+          applyBodyVelocityChangeAtPoint(target, settleVx, settleVy, torquePoint.x, torquePoint.y, pushResponse);
+        } else {
+          target.vx += settleVx;
+          target.vy += settleVy;
+        }
         target.vx *= Math.pow(0.035 + (1 - pushResponse) * 0.7, dt);
         target.vy *= Math.pow(0.035 + (1 - pushResponse) * 0.7, dt);
       }
@@ -22792,8 +23545,15 @@
       const blastFalloff = clamp(1 - Math.max(0, forward) / 520, 0.22, 1);
       const sidePush = normalize(sideX, sideY);
       const force = 1450 * finiteOr(state.blowFactor, 1) * blastFalloff * pushResponse;
-      target.vx += (aimWorld.x * force + sidePush.x * 120 * pushResponse) * dt;
-      target.vy += (aimWorld.y * force + sidePush.y * 120 * pushResponse) * dt;
+      const deltaVx = (aimWorld.x * force + sidePush.x * 120 * pushResponse) * dt;
+      const deltaVy = (aimWorld.y * force + sidePush.y * 120 * pushResponse) * dt;
+      if (torquePoint) {
+        applyBodyVelocityChangeAtPoint(target, deltaVx, deltaVy, torquePoint.x, torquePoint.y, pushResponse);
+      } else {
+        target.vx += deltaVx;
+        target.vy += deltaVy;
+      }
+      markDirectGadgetBodyForceIntent(target, actor);
     }
 
     return leftActive || rightActive;
@@ -23227,7 +23987,8 @@
     return Boolean(
       state &&
       particle &&
-      particle.id !== state.landedBodyId
+      particle.id !== state.landedBodyId &&
+      !isBodyAttachedToBodyByLinkedStructures(particle, state.landedBodyId)
     );
   }
 
@@ -23350,7 +24111,7 @@
 
       if (
         suctionActive &&
-        !isLandedBody &&
+        partyGadgetCanAffectParticle(localGadgetState, particle) &&
         gadgetStateMayReachTarget(localGadgetState, particle, 0)
       ) {
         applyActorGadgetForces(particle, localGadgetState, dt);
@@ -23382,9 +24143,10 @@
       }
       particle.x += particle.vx * dt;
       particle.y += particle.vy * dt;
+      integrateBodyAngularMotion(particle, dt);
       if (
         vacuumBucketActive &&
-        !isLandedBody &&
+        partyGadgetCanAffectParticle(localGadgetState, particle) &&
         gadgetStateMayReachTarget(localGadgetState, particle, 0)
       ) {
         resolveActorFunnelBucket(particle, localGadgetState, dt);
@@ -23494,21 +24256,51 @@
     return isFreshUfoSapSourcePair(a, b);
   }
 
-  function areBodiesDirectlyTethered(a, b) {
+  function isMergeBlockingTether(structure) {
+    return Boolean(
+      structure &&
+      structure.type === "tether" &&
+      finiteOr(structure.health, structureMaxHealth(structure.type)) > 0 &&
+      !isStructureDisabled(structure) &&
+      structure.bodyId &&
+      structure.linkedBodyId &&
+      structure.bodyId !== structure.linkedBodyId
+    );
+  }
+
+  function areBodiesTetherConnected(a, b) {
     if (!a || !b || a.id === b.id) {
       return false;
     }
 
-    for (const structure of structures) {
-      if (
-        isLinkedStructureType(structure.type) &&
-        structure.health > 0 &&
-        (
-          (structure.bodyId === a.id && structure.linkedBodyId === b.id) ||
-          (structure.bodyId === b.id && structure.linkedBodyId === a.id)
-        )
-      ) {
-        return true;
+    const targetId = b.id;
+    const pending = [a.id];
+    const visited = new Set(pending);
+
+    while (pending.length) {
+      const bodyId = pending.pop();
+
+      for (const structure of structures) {
+        if (!isMergeBlockingTether(structure)) {
+          continue;
+        }
+
+        let nextBodyId = 0;
+        if (structure.bodyId === bodyId) {
+          nextBodyId = structure.linkedBodyId;
+        } else if (structure.linkedBodyId === bodyId) {
+          nextBodyId = structure.bodyId;
+        }
+
+        if (!nextBodyId || visited.has(nextBodyId)) {
+          continue;
+        }
+        if (nextBodyId === targetId) {
+          return true;
+        }
+
+        visited.add(nextBodyId);
+        pending.push(nextBodyId);
       }
     }
 
@@ -23520,19 +24312,11 @@
       return false;
     }
 
-    if (isGrowthMatter(absorbed)) {
-      return true;
-    }
-
-    if (absorbed.tier.name === "asteroid" || absorbed.tier.name === "dwarf moon") {
-      return tierIndex(absorber.tier) > tierIndex(absorbed.tier) || absorber.mass >= absorbed.mass * 1.75;
-    }
-
-    return false;
+    return isGrowthMatter(absorbed) || absorbed.tier.name === "asteroid";
   }
 
   function absorbingCollisionPair(a, b) {
-    if (areBodiesDirectlyTethered(a, b)) {
+    if (areBodiesTetherConnected(a, b)) {
       return null;
     }
 
@@ -23568,10 +24352,10 @@
       a.gadgetStabilized = false;
       b.gadgetStabilized = false;
       const impulse = -relativeVelocity * 0.86;
-      a.vx -= nx * impulse * aShare;
-      a.vy -= ny * impulse * aShare;
-      b.vx += nx * impulse * bShare;
-      b.vy += ny * impulse * bShare;
+      const contactX = (a.x + b.x) * 0.5;
+      const contactY = (a.y + b.y) * 0.5;
+      applyBodyVelocityChangeAtPoint(a, -nx * impulse * aShare, -ny * impulse * aShare, contactX, contactY, bodyConstraintTorqueResponse);
+      applyBodyVelocityChangeAtPoint(b, nx * impulse * bShare, ny * impulse * bShare, contactX, contactY, bodyConstraintTorqueResponse);
     }
   }
 
@@ -23652,6 +24436,14 @@
             mass,
             radius: radiusFromMass(mass),
             tier,
+            rotation: graduated
+              ? (finiteOr(a.rotation, 0) * a.mass + finiteOr(b.rotation, 0) * b.mass) / mass
+              : finiteOr(visualSource.rotation, 0),
+            angularVelocity: clamp(
+              (finiteOr(a.angularVelocity, 0) * a.mass + finiteOr(b.angularVelocity, 0) * b.mass) / mass,
+              -bodyMaxAngularSpeed,
+              bodyMaxAngularSpeed
+            ),
             textureSeed: graduated
               ? (a.textureSeed * a.mass + b.textureSeed * b.mass) / mass + mass * 0.73
               : visualSource.textureSeed,
@@ -24080,10 +24872,11 @@
       const relativeVelocity = (player.vx - particle.vx) * nx + (player.vy - particle.vy) * ny;
       if (relativeVelocity < 0) {
         const impulse = -relativeVelocity * 0.92;
+        const pointX = particle.x + nx * bodyAngularInertiaRadius(particle);
+        const pointY = particle.y + ny * bodyAngularInertiaRadius(particle);
         player.vx += nx * impulse * 0.72;
         player.vy += ny * impulse * 0.72;
-        particle.vx -= nx * impulse * bodyShare;
-        particle.vy -= ny * impulse * bodyShare;
+        applyBodyVelocityChangeAtPoint(particle, -nx * impulse * bodyShare, -ny * impulse * bodyShare, pointX, pointY, bodyConstraintTorqueResponse);
       }
     }
   }
@@ -24552,26 +25345,44 @@
     return true;
   }
 
+  function structureNeedsSpannerRepair(structure) {
+    if (!structure) {
+      return false;
+    }
+    const maxHealth = Math.max(1, finiteOr(structure.maxHealth, structureMaxHealth(structure.type)));
+    const health = clamp(finiteOr(structure.health, maxHealth), 0, maxHealth);
+    return health < maxHealth || finiteOr(structure.disabledTimer, 0) > 0;
+  }
+
   function findSpannerRepairTarget() {
     const cursor = screenToWorld(mouse.x, mouse.y);
+    const aim = getAim();
+    const ax = player.x + aim.world.x * 18;
+    const ay = player.y + aim.world.y * 18;
+    const bx = player.x + aim.world.x * (spannerRepairRange + 86);
+    const by = player.y + aim.world.y * (spannerRepairRange + 86);
     let best = null;
     let bestScore = Infinity;
 
     for (const structure of structures) {
-      const maxHealth = Math.max(1, finiteOr(structure.maxHealth, structureMaxHealth(structure.type)));
-      const health = clamp(finiteOr(structure.health, maxHealth), 0, maxHealth);
-      if (health >= maxHealth) {
+      if (!structureNeedsSpannerRepair(structure)) {
         continue;
       }
 
-      const cursorDistance = Math.hypot(structure.x - cursor.x, structure.y - cursor.y);
-      const playerDistance = Math.hypot(structure.x - player.x, structure.y - player.y);
+      const targetPoint = structureTargetPoint(structure, cursor);
+      const playerDistance = Math.hypot(targetPoint.x - player.x, targetPoint.y - player.y);
       const hitRadius = structureHitRadius(structure);
-      if (cursorDistance > hitRadius + 38 || playerDistance > spannerRepairRange + hitRadius) {
+      if (playerDistance > spannerRepairRange + hitRadius) {
         continue;
       }
 
-      const score = cursorDistance + playerDistance * 0.18;
+      const cursorDistance = targetPoint.distance;
+      const segmentDistance = distanceToSegment(targetPoint.x, targetPoint.y, ax, ay, bx, by);
+      if (cursorDistance > hitRadius + 44 && segmentDistance > hitRadius + 44) {
+        continue;
+      }
+
+      const score = Math.min(cursorDistance, segmentDistance) + playerDistance * 0.18;
       if (score < bestScore) {
         best = structure;
         bestScore = score;
@@ -24586,18 +25397,12 @@
       return false;
     }
 
-    if (!canUseContinuousPlayerEnergy(spannerRepairEnergyDrain, dt)) {
-      playerContinuousEnergyLocked = true;
-      notifyEnergyDepleted();
-      return false;
-    }
-
     const target = findSpannerRepairTarget();
     if (!target) {
       return false;
     }
 
-    if (!drainContinuousPlayerEnergy(spannerRepairEnergyDrain, dt)) {
+    if (!drainPlayerEnergy(spannerRepairEnergyDrain, dt)) {
       notifyEnergyDepleted();
       return false;
     }
@@ -24681,18 +25486,12 @@
       return false;
     }
 
-    if (!canUseContinuousPlayerEnergy(spannerDismantleEnergyDrain, dt)) {
-      playerContinuousEnergyLocked = true;
-      notifyEnergyDepleted();
-      return false;
-    }
-
     const target = findSpannerDismantleTarget();
     if (!target) {
       return false;
     }
 
-    if (!drainContinuousPlayerEnergy(spannerDismantleEnergyDrain, dt)) {
+    if (!drainPlayerEnergy(spannerDismantleEnergyDrain, dt)) {
       notifyEnergyDepleted();
       return false;
     }
@@ -25301,11 +26100,11 @@
   }
 
   function updateToolDisable(dt) {
-    if (toolDisabledTimer <= 0) {
+    updatePlayerStatusEffects(dt);
+    if (!areToolsDisabled()) {
       return;
     }
 
-    toolDisabledTimer = Math.max(0, toolDisabledTimer - dt);
     resetMouseButtons();
   }
 
@@ -27553,10 +28352,11 @@
 
         if (relativeVelocity < 0) {
           const impulse = -relativeVelocity * 0.96;
+          const pointX = particle.x + nx * bodyAngularInertiaRadius(particle);
+          const pointY = particle.y + ny * bodyAngularInertiaRadius(particle);
           mob.vx += nx * impulse * 0.86;
           mob.vy += ny * impulse * 0.86;
-          particle.vx -= nx * impulse * bodyShare;
-          particle.vy -= ny * impulse * bodyShare;
+          applyBodyVelocityChangeAtPoint(particle, -nx * impulse * bodyShare, -ny * impulse * bodyShare, pointX, pointY, bodyConstraintTorqueResponse);
         }
 
         if (
@@ -28264,8 +29064,10 @@
           mob.vy += ny * boost;
         }
 
-        body.vx -= nx * clamp((speed + shieldGeneratorMobMinBounceSpeed) / Math.max(80, body.mass), 0.4, 10);
-        body.vy -= ny * clamp((speed + shieldGeneratorMobMinBounceSpeed) / Math.max(80, body.mass), 0.4, 10);
+        const bodyImpulse = clamp((speed + shieldGeneratorMobMinBounceSpeed) / Math.max(80, body.mass), 0.4, 10);
+        const pointX = body.x + nx * bodyAngularInertiaRadius(body);
+        const pointY = body.y + ny * bodyAngularInertiaRadius(body);
+        applyBodyVelocityChangeAtPoint(body, -nx * bodyImpulse, -ny * bodyImpulse, pointX, pointY, bodyConstraintTorqueResponse);
         knockMob(mob, nx, ny, 70 + speed * 0.14);
         break;
       }
@@ -28273,19 +29075,25 @@
   }
 
   function bossScaledDamage(mob, damage) {
-    return mob && mob.isBoss ? damage * mobBossDamageMultiplier : damage;
+    return mob && mob.isBoss
+      ? damage * mobBossDamageMultiplier * bossStatScaleForStars(bossStarRank(mob), mobBossStarDamageMultiplier)
+      : damage;
   }
 
   function bossCooldownScale(mob) {
-    return mob && mob.isBoss ? 0.68 : 1;
+    return mob && mob.isBoss ? 0.68 * bossCooldownScaleForStars(bossStarRank(mob)) : 1;
   }
 
   function bossChaseForce(mob, baseForce) {
-    return mob && mob.isBoss ? baseForce * 1.18 : baseForce;
+    return mob && mob.isBoss
+      ? baseForce * 1.18 * bossStatScaleForStars(bossStarRank(mob), mobBossStarForceMultiplier)
+      : baseForce;
   }
 
   function bossStrafeForce(mob, baseForce) {
-    return mob && mob.isBoss ? baseForce * 1.35 : baseForce;
+    return mob && mob.isBoss
+      ? baseForce * 1.35 * bossStatScaleForStars(bossStarRank(mob), mobBossStarForceMultiplier)
+      : baseForce;
   }
 
   function isMobDisabled(mob) {
@@ -28433,13 +29241,16 @@
     if (!mob || !mob.isBoss) {
       return false;
     }
-    mob.altAttackCooldown = finiteOr(mob.altAttackCooldown, randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax)) - dt;
+    mob.altAttackCooldown = finiteOr(
+      mob.altAttackCooldown,
+      randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax) * bossCooldownScale(mob)
+    ) - dt;
     return mob.altAttackCooldown <= 0;
   }
 
   function resetBossAltAttackCooldown(mob) {
     if (mob && mob.isBoss) {
-      mob.altAttackCooldown = randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax);
+      mob.altAttackCooldown = randomRange(mobBossAltAttackCooldownMin, mobBossAltAttackCooldownMax) * bossCooldownScale(mob);
     }
   }
 
@@ -28455,7 +29266,9 @@
         ? clamp((mob.vx / speed) * (desiredX / desiredLength) + (mob.vy / speed) * (desiredY / desiredLength), 0, 1)
         : 0;
       const sustainedMotion = clamp((speed - baseMaxSpeed * 0.45) / Math.max(1, baseMaxSpeed * 0.9), 0, 1);
-      chaseMaxSpeed = baseMaxSpeed * (mobBossMaxSpeedMultiplier + mobBossDirectionalSpeedBonus * alignment * sustainedMotion);
+      chaseMaxSpeed = baseMaxSpeed *
+        (mobBossMaxSpeedMultiplier + mobBossDirectionalSpeedBonus * alignment * sustainedMotion) *
+        bossStatScaleForStars(bossStarRank(mob), mobBossStarSpeedMultiplier);
     }
     if (finiteOr(mob.bossBodyEvadeTimer, 0) > 0) {
       return Math.max(chaseMaxSpeed, clamp(finiteOr(mob.bossBodyEvadeSpeedCap, 0), chaseMaxSpeed, bossBodyEvadeMaxSpeed));
@@ -28474,12 +29287,8 @@
     if (isMobSpawnRestActive()) {
       return;
     }
-    const kind = mob.bossBaseKind || mob.kind;
-    if (!mobSpawnTimers || !Object.prototype.hasOwnProperty.call(mobSpawnTimers, kind)) {
-      return;
-    }
-    const interval = difficultyMobSpawnInterval(kind);
-    mobSpawnTimers[kind] = Math.min(finiteOr(mobSpawnTimers[kind], interval), interval * mobBossSpawnTimerCeilingScale);
+    const interval = difficultyMobWaveInterval();
+    mobWaveTimer = Math.min(finiteOr(mobWaveTimer, interval), interval * mobBossSpawnTimerCeilingScale);
   }
 
   function hasClearShotAtCombatTarget(rival, target) {
@@ -28993,14 +29802,18 @@
 
     const maxHealth = Math.max(1, finiteOr(structure.maxHealth, structureMaxHealth(structure.type)));
     const current = clamp(finiteOr(structure.health, maxHealth), 0, maxHealth);
-    if (current >= maxHealth) {
+    const disabledTimer = Math.max(0, finiteOr(structure.disabledTimer, 0));
+    if (current >= maxHealth && disabledTimer <= 0) {
       return false;
     }
 
+    const repairAmount = Math.max(0, amount);
     structure.maxHealth = maxHealth;
-    structure.health = Math.min(maxHealth, current + Math.max(0, amount));
+    structure.health = Math.min(maxHealth, current + repairAmount);
     structure.flash = Math.max(structure.flash || 0, 0.12);
-    if (structure.health > 0) {
+    if (structure.health > 0 && disabledTimer > 0) {
+      structure.disabledTimer = 0;
+    } else if (structure.health > 0) {
       structure.disabledTimer = Math.min(structure.disabledTimer || 0, 0.4);
     }
     return true;
@@ -29133,16 +29946,24 @@
     }
   }
 
-  function tetherGiveForBodies(firstBody, secondBody) {
-    const averageRadius = (Math.max(1, finiteOr(firstBody && firstBody.radius, 1)) + Math.max(1, finiteOr(secondBody && secondBody.radius, 1))) * 0.5;
-    return clamp(averageRadius * tetherGiveRadiusScale, tetherMinGive, tetherMaxGive);
+  function updateTether(structure, dt) {
+    structure.deploy = clamp((structure.deploy || 0) + dt * 2.2, 0, 1);
   }
 
-  function updateTether(structure, dt) {
+  function isActiveTetherStructure(structure) {
+    return Boolean(
+      structure &&
+      structure.type === "tether" &&
+      structure.health > 0 &&
+      !isStructureDisabled(structure)
+    );
+  }
+
+  function applyTetherDistanceConstraint(structure, dt) {
     const firstBody = bodyById(structure.bodyId);
     const secondBody = bodyById(structure.linkedBodyId);
-    if (!firstBody || !secondBody || firstBody.id === secondBody.id) {
-      return;
+    if (!firstBody || !secondBody || firstBody.id === secondBody.id || !applyLinkedStructureSurfaceConstraint(structure)) {
+      return false;
     }
 
     const dx = structure.x2 - structure.x;
@@ -29150,42 +29971,125 @@
     const currentLength = Math.hypot(dx, dy) || 1;
     const nx = dx / currentLength;
     const ny = dy / currentLength;
-    const restLength = Math.max(80, finiteOr(structure.restLength, currentLength));
-    const stretch = currentLength - restLength;
+    const restLength = normalizedTetherRestLength(structure, firstBody, secondBody, currentLength);
+    structure.restLength = restLength;
     const give = tetherGiveForBodies(firstBody, secondBody);
-    const giveError = Math.abs(stretch) > give ? stretch - Math.sign(stretch) * give : 0;
-    const relativeVelocity = (secondBody.vx - firstBody.vx) * nx + (secondBody.vy - firstBody.vy) * ny;
-    const totalMass = Math.max(1, firstBody.mass + secondBody.mass);
-    const firstShare = clamp(secondBody.mass / totalMass, 0.1, 0.9);
-    const secondShare = clamp(firstBody.mass / totalMass, 0.1, 0.9);
-
-    structure.deploy = clamp((structure.deploy || 0) + dt * 2.2, 0, 1);
-
-    if (!giveError) {
-      return;
+    const minLength = Math.max(40, restLength - give);
+    const maxLength = restLength + give;
+    let lengthError = 0;
+    if (currentLength > maxLength) {
+      lengthError = currentLength - maxLength;
+    } else if (currentLength < minLength) {
+      lengthError = currentLength - minLength;
     }
 
-    const acceleration = clamp(giveError * tetherSpring + relativeVelocity * tetherDamping, -tetherMaxAcceleration, tetherMaxAcceleration);
-    firstBody.vx += nx * acceleration * firstShare * dt;
-    firstBody.vy += ny * acceleration * firstShare * dt;
-    secondBody.vx -= nx * acceleration * secondShare * dt;
-    secondBody.vy -= ny * acceleration * secondShare * dt;
+    if (Math.abs(lengthError) <= tetherPositionSlop) {
+      return false;
+    }
 
-    const correction = clamp(giveError * 0.015, -2.6, 2.6);
+    const firstMass = Math.max(1, finiteOr(firstBody.mass, 1));
+    const secondMass = Math.max(1, finiteOr(secondBody.mass, 1));
+    const totalMass = firstMass + secondMass;
+    const anchorFirstAgainstDirectGadget = isDirectGadgetForcedFromLandedBody(secondBody, firstBody);
+    const anchorSecondAgainstDirectGadget = isDirectGadgetForcedFromLandedBody(firstBody, secondBody);
+    let firstShare = clamp(secondMass / totalMass, 0.08, 0.92);
+    let secondShare = clamp(firstMass / totalMass, 0.08, 0.92);
+    if (anchorFirstAgainstDirectGadget && !anchorSecondAgainstDirectGadget) {
+      firstShare = 0;
+      secondShare = 1;
+    } else if (anchorSecondAgainstDirectGadget && !anchorFirstAgainstDirectGadget) {
+      firstShare = 1;
+      secondShare = 0;
+    }
+    const correction = lengthError - Math.sign(lengthError) * tetherPositionSlop;
+
     firstBody.x += nx * correction * firstShare;
     firstBody.y += ny * correction * firstShare;
     secondBody.x -= nx * correction * secondShare;
     secondBody.y -= ny * correction * secondShare;
 
-    if (Math.random() < dt * clamp(Math.abs(giveError) / 140, 0.08, 0.9)) {
+    const relativeVelocity = (finiteOr(secondBody.vx, 0) - finiteOr(firstBody.vx, 0)) * nx +
+      (finiteOr(secondBody.vy, 0) - finiteOr(firstBody.vy, 0)) * ny;
+    const signedRelativeVelocity = relativeVelocity * Math.sign(correction);
+    const velocityCorrection = clamp(
+      (Math.abs(correction) * tetherSpring + Math.max(0, signedRelativeVelocity) * tetherDamping) * dt * Math.sign(correction),
+      -tetherMaxAcceleration * dt,
+      tetherMaxAcceleration * dt
+    );
+
+    applyBodyVelocityChangeAtPoint(
+      firstBody,
+      nx * velocityCorrection * firstShare,
+      ny * velocityCorrection * firstShare,
+      structure.x,
+      structure.y,
+      bodyConstraintTorqueResponse
+    );
+    applyBodyVelocityChangeAtPoint(
+      secondBody,
+      -nx * velocityCorrection * secondShare,
+      -ny * velocityCorrection * secondShare,
+      structure.x2,
+      structure.y2,
+      bodyConstraintTorqueResponse
+    );
+
+    applyLinkedStructureSurfaceConstraint(structure);
+
+    if (Math.random() < dt * clamp(Math.abs(correction) / 180, 0.03, 0.35)) {
       sparks.push({
         x: (structure.x + structure.x2) / 2 + randomRange(-8, 8),
         y: (structure.y + structure.y2) / 2 + randomRange(-8, 8),
-        radius: 18 + clamp(Math.abs(giveError) * 0.12, 0, 22),
+        radius: 18 + clamp(Math.abs(correction) * 0.08, 0, 22),
         color: { r: 169, g: 133, b: 255 },
         life: 0.16,
         maxLife: 0.16
       });
+    }
+
+    return true;
+  }
+
+  function resolveTetheredBodyCollision(structure) {
+    const firstBody = bodyById(structure.bodyId);
+    const secondBody = bodyById(structure.linkedBodyId);
+    if (!firstBody || !secondBody || firstBody.id === secondBody.id) {
+      return false;
+    }
+
+    const dx = secondBody.x - firstBody.x;
+    const dy = secondBody.y - firstBody.y;
+    const minDist = Math.max(1, finiteOr(firstBody.radius, radiusFromMass(firstBody.mass))) +
+      Math.max(1, finiteOr(secondBody.radius, radiusFromMass(secondBody.mass)));
+    if (dx * dx + dy * dy >= minDist * minDist) {
+      return false;
+    }
+
+    resolveBodyBounce(firstBody, secondBody, dx, dy, minDist);
+    applyLinkedStructureSurfaceConstraint(structure);
+    return true;
+  }
+
+  function solveTetherConstraints(dt) {
+    let movedAny = false;
+    for (let iteration = 0; iteration < tetherConstraintIterations; iteration += 1) {
+      let movedThisPass = false;
+      for (const structure of structures) {
+        if (isActiveTetherStructure(structure) && applyTetherDistanceConstraint(structure, dt)) {
+          movedThisPass = true;
+        }
+        if (isActiveTetherStructure(structure) && resolveTetheredBodyCollision(structure)) {
+          movedThisPass = true;
+        }
+      }
+      movedAny = movedAny || movedThisPass;
+      if (!movedThisPass) {
+        break;
+      }
+    }
+
+    if (movedAny) {
+      syncStructuresToSurfaces(false);
     }
   }
 
@@ -29253,10 +30157,32 @@
     const secondTargetVx = averageVx - angularVelocity * secondRadiusY;
     const secondTargetVy = averageVy + angularVelocity * secondRadiusX;
     const velocityBlend = 1 - Math.pow(0.0001, dt);
-    firstBody.vx += (firstTargetVx - firstBody.vx) * velocityBlend;
-    firstBody.vy += (firstTargetVy - firstBody.vy) * velocityBlend;
-    secondBody.vx += (secondTargetVx - secondBody.vx) * velocityBlend;
-    secondBody.vy += (secondTargetVy - secondBody.vy) * velocityBlend;
+    applyBodyVelocityChangeAtPoint(
+      firstBody,
+      (firstTargetVx - firstBody.vx) * velocityBlend,
+      (firstTargetVy - firstBody.vy) * velocityBlend,
+      structure.x,
+      structure.y,
+      bodyConstraintTorqueResponse
+    );
+    applyBodyVelocityChangeAtPoint(
+      secondBody,
+      (secondTargetVx - secondBody.vx) * velocityBlend,
+      (secondTargetVy - secondBody.vy) * velocityBlend,
+      structure.x2,
+      structure.y2,
+      bodyConstraintTorqueResponse
+    );
+    firstBody.angularVelocity = clamp(
+      finiteOr(firstBody.angularVelocity, 0) + (angularVelocity - finiteOr(firstBody.angularVelocity, 0)) * velocityBlend * 0.35,
+      -bodyMaxAngularSpeed,
+      bodyMaxAngularSpeed
+    );
+    secondBody.angularVelocity = clamp(
+      finiteOr(secondBody.angularVelocity, 0) + (angularVelocity - finiteOr(secondBody.angularVelocity, 0)) * velocityBlend * 0.35,
+      -bodyMaxAngularSpeed,
+      bodyMaxAngularSpeed
+    );
 
     applyLinkedStructureSurfaceConstraint(structure);
 
@@ -29302,8 +30228,14 @@
     const massDamping = clamp(1 / Math.pow(Math.max(1, body.mass / 150), 0.42), 0.08, 1.1);
     const thrust = jetThrust * massDamping * clamp(structure.deploy || 0, 0.2, 1);
 
-    body.vx += nx * direction * thrust * dt;
-    body.vy += ny * direction * thrust * dt;
+    applyBodyVelocityChangeAtPoint(
+      body,
+      nx * direction * thrust * dt,
+      ny * direction * thrust * dt,
+      structure.x,
+      structure.y,
+      1
+    );
 
     const maxSpeed = 150 + massDamping * 210;
     const speed = Math.hypot(body.vx, body.vy);
@@ -29439,6 +30371,8 @@
         structure.deploy = clamp(structure.deploy - dt * 1.6, 0, 1);
       }
     }
+
+    solveTetherConstraints(dt);
   }
 
   function updateRivalProjectiles(dt) {
@@ -30232,8 +31166,8 @@
     rambot.chargeTimer = 0;
     rambot.vx += nx * 250;
     rambot.vy += ny * 250;
-    body.vx -= nx * clamp(lost / Math.max(1, body.mass), 0.015, 0.16) * 95;
-    body.vy -= ny * clamp(lost / Math.max(1, body.mass), 0.015, 0.16) * 95;
+    const recoil = clamp(lost / Math.max(1, body.mass), 0.015, 0.16) * 95;
+    applyBodyVelocityChangeAtPoint(body, -nx * recoil, -ny * recoil, originX, originY, bodyConstraintTorqueResponse);
     playSound("mobHit", { throttleKey: "rambotBodyImpact" });
   }
 
@@ -32105,7 +33039,7 @@
 
       ctx.save();
       ctx.translate(particle.x, particle.y);
-      ctx.rotate(particle.textureSeed);
+      ctx.rotate(particle.textureSeed + finiteOr(particle.rotation, 0));
 
       const gradient = ctx.createRadialGradient(
         -radius * 0.32,
@@ -32204,7 +33138,7 @@
 
     ctx.save();
     ctx.translate(particle.x, particle.y);
-    ctx.rotate(particle.textureSeed);
+    ctx.rotate(particle.textureSeed + finiteOr(particle.rotation, 0));
 
     const gradient = ctx.createRadialGradient(-radius * 0.35, -radius * 0.4, radius * 0.08, 0, 0, radius);
     gradient.addColorStop(0, colorString(light, 0.95));
@@ -32243,7 +33177,7 @@
 
     ctx.save();
     ctx.translate(particle.x, particle.y);
-    ctx.rotate(particle.textureSeed * 0.18);
+    ctx.rotate(particle.textureSeed * 0.18 + finiteOr(particle.rotation, 0));
 
     const gradient = ctx.createRadialGradient(-radius * 0.35, -radius * 0.35, radius * 0.04, 0, 0, radius);
     gradient.addColorStop(0, colorString(light, 0.96));
@@ -32275,7 +33209,7 @@
 
     ctx.save();
     ctx.translate(particle.x, particle.y);
-    ctx.rotate(particle.textureSeed * 0.12);
+    ctx.rotate(particle.textureSeed * 0.12 + finiteOr(particle.rotation, 0));
 
     if (consumeBodyGlowBudget()) {
       ctx.globalCompositeOperation = "lighter";
@@ -32541,6 +33475,79 @@
     ctx.restore();
   }
 
+  function drawBossNameplateStar(x, y, radius, color) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i += 1) {
+      const angle = -Math.PI / 2 + i * Math.PI / 5;
+      const pointRadius = i % 2 === 0 ? radius : radius * 0.46;
+      const px = x + Math.cos(angle) * pointRadius;
+      const py = y + Math.sin(angle) * pointRadius;
+      if (i === 0) {
+        ctx.moveTo(px, py);
+      } else {
+        ctx.lineTo(px, py);
+      }
+    }
+    ctx.closePath();
+    ctx.fillStyle = colorString(shadeColor(color, 82), 0.96);
+    ctx.strokeStyle = "rgba(7, 12, 26, 0.82)";
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function drawBossNameplate(mob, time) {
+    if (!mob || !mob.isBoss || mob.health <= 0) {
+      return;
+    }
+
+    const stars = bossStarRank(mob);
+    const visibleStars = Math.min(5, stars);
+    const extraStars = Math.max(0, stars - visibleStars);
+    const color = mob.color || { r: 255, g: 115, b: 173 };
+    const label = mobBossLabel(mob.kind);
+    const baseY = mob.y - Math.max(82, finiteOr(mob.radius, 34) * 1.65);
+
+    ctx.save();
+    ctx.font = "900 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const labelWidth = ctx.measureText(label).width;
+    const starWidth = visibleStars > 0 ? visibleStars * 14 + Math.max(0, visibleStars - 1) * 3 + (extraStars > 0 ? 26 : 0) : 0;
+    const boxWidth = Math.max(labelWidth, starWidth) + 20;
+    const boxHeight = visibleStars > 0 ? 36 : 22;
+    const boxX = mob.x - boxWidth / 2;
+    const boxY = baseY - boxHeight / 2 + Math.sin(time * 0.004 + finiteOr(mob.wobble, 0)) * 1.5;
+
+    ctx.fillStyle = "rgba(4, 9, 22, 0.72)";
+    ctx.strokeStyle = colorString(shadeColor(color, 70), 0.76);
+    ctx.lineWidth = 2;
+    roundRectPath(boxX, boxY, boxWidth, boxHeight, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    if (visibleStars > 0) {
+      const totalStarWidth = visibleStars * 14 + Math.max(0, visibleStars - 1) * 3;
+      let starX = mob.x - totalStarWidth / 2 + 7;
+      if (extraStars > 0) {
+        starX -= 13;
+      }
+      for (let i = 0; i < visibleStars; i += 1) {
+        drawBossNameplateStar(starX + i * 17, boxY + 11, 6, color);
+      }
+      if (extraStars > 0) {
+        ctx.fillStyle = "rgba(248, 251, 255, 0.94)";
+        ctx.font = "900 10px sans-serif";
+        ctx.fillText("+" + extraStars, starX + totalStarWidth + 11, boxY + 11);
+        ctx.font = "900 13px sans-serif";
+      }
+    }
+
+    ctx.fillStyle = "rgba(248, 251, 255, 0.94)";
+    ctx.fillText(label, mob.x, boxY + boxHeight - 10);
+    ctx.restore();
+  }
+
   function drawRival(rival, time) {
     if (rival.health <= 0) {
       return;
@@ -32690,6 +33697,7 @@
     }
 
     ctx.restore();
+    drawBossNameplate(rival, time);
   }
 
   function drawUfoTractorBeam(ufo, time) {
@@ -32742,6 +33750,7 @@
     }
 
     ctx.restore();
+    drawBossNameplate(ufo, time);
   }
 
   function drawUfo(ufo, time) {
@@ -32970,6 +33979,7 @@
       drawBossMobEmbellishments(rambot, time);
       drawRambotBoss(rambot, time, metal, chargeGlow);
       ctx.restore();
+      drawBossNameplate(rambot, time);
       return;
     }
     ctx.lineJoin = "round";
@@ -33063,6 +34073,7 @@
     }
 
     ctx.restore();
+    drawBossNameplate(rambot, time);
   }
 
   function drawTesla(tesla, time) {
@@ -33130,6 +34141,7 @@
     }
 
     ctx.restore();
+    drawBossNameplate(tesla, time);
   }
 
   function drawEngineer(engineer, time) {
@@ -33209,6 +34221,7 @@
       ctx.fill();
       ctx.restore();
     }
+    drawBossNameplate(engineer, time);
   }
 
   function drawRocket(rocket, time) {
@@ -33326,6 +34339,7 @@
     }
 
     ctx.restore();
+    drawBossNameplate(rocket, time);
   }
 
   function drawSatellite(rocket, time) {
@@ -33456,6 +34470,7 @@
     }
 
     ctx.restore();
+    drawBossNameplate(rocket, time);
     return;
 
     ctx.globalCompositeOperation = "lighter";
@@ -33535,6 +34550,7 @@
     }
 
     ctx.restore();
+    drawBossNameplate(fighter, time);
   }
 
   function drawFighter(fighter, time) {
@@ -34501,10 +35517,15 @@
     const firstTetherPlacement = isLinkedStructureType(recipe.structureType) && pendingTetherAnchor
       ? refreshPlacementAnchor(pendingTetherAnchor)
       : null;
+    const tetherPlacementInRange = Boolean(
+      !firstTetherPlacement ||
+      recipe.structureType !== "tether" ||
+      isTetherPlacementLengthValid(firstTetherPlacement, placement)
+    );
     const tetherSecondValid = Boolean(
       !isLinkedStructureType(recipe.structureType) ||
       !firstTetherPlacement ||
-      (firstTetherPlacement.valid && placement.valid && firstTetherPlacement.bodyId !== placement.bodyId)
+      (firstTetherPlacement.valid && placement.valid && firstTetherPlacement.bodyId !== placement.bodyId && tetherPlacementInRange)
     );
     const preview = {
       type: recipe.structureType,
@@ -34518,7 +35539,7 @@
       y: firstTetherPlacement ? firstTetherPlacement.y : placement.y,
       x2: firstTetherPlacement ? placement.x : placement.x,
       y2: firstTetherPlacement ? placement.y : placement.y,
-      restLength: firstTetherPlacement ? Math.hypot(placement.x - firstTetherPlacement.x, placement.y - firstTetherPlacement.y) : 0,
+      restLength: firstTetherPlacement ? linkedStructureRestLength(recipe.structureType, firstTetherPlacement, placement) : 0,
       aimAngle: firstTetherPlacement ? firstTetherPlacement.angle : placement.angle,
       deploy: placement.valid && tetherSecondValid ? 0.72 : 0.2,
       wobble: 0
@@ -35213,13 +36234,19 @@
     }
   }
 
+  function isJetpackBoostFlameActive(dt = 1 / 60) {
+    return !playerIsOnFoot() && isMoving() && canUseJetpackBoost(dt);
+  }
+
   function drawPlayerDynamicLight(time) {
-    if (player.landed || !isMoving()) {
+    if (!isJetpackBoostFlameActive(renderPerformance.lastFrameDt || 1 / 60)) {
+      dynamicLightingPlayerBoost = 1;
+      dynamicLightingPlayerBoostTime = time;
       return;
     }
 
     const exhaust = smoothedLocalJetpackExhaust(time);
-    const boostTarget = canUseJetpackBoost() ? 1.36 : 1;
+    const boostTarget = 1.36;
     const boostDt = dynamicLightingPlayerBoostTime > 0
       ? clamp((time - dynamicLightingPlayerBoostTime) / 1000, 0, 0.08)
       : 1 / 60;
@@ -36603,12 +37630,11 @@
   }
 
   function drawJetFlames(time) {
-    const moving = isMoving();
-    if (!moving || playerIsOnFoot()) {
+    if (!isJetpackBoostFlameActive(renderPerformance.lastFrameDt || 1 / 60)) {
       return;
     }
 
-    drawJetpackFlamePlumes(time, smoothedLocalJetpackExhaust(time), canUseJetpackBoost() ? 1 : 0);
+    drawJetpackFlamePlumes(time, smoothedLocalJetpackExhaust(time), 1);
   }
 
   function playerSurfaceRotation() {
@@ -37594,7 +38620,7 @@
   }
 
   function isLocalPlayerEnergyDisabled() {
-    return areToolsDisabled();
+    return hasPlayerStatusEffect("disabled");
   }
 
   function playerEnergyStatusBarColors(disabled, pct) {
@@ -37692,9 +38718,25 @@
     const healthY = height / 2 - healthOffset;
     const iconX = barX - 12;
     const drawTime = Number.isFinite(Number(time)) ? time : performance.now();
-    const healthAlpha = playerStatusBarAlpha(playerStatusBarState.health, pct, "health", drawTime);
+    const healthFullThreshold = 0.995;
+    const healthFullHideDelay = 1100;
+    const healthWasFull = playerStatusBarState.health.value === null ||
+      finiteOr(playerStatusBarState.health.value, 1) >= healthFullThreshold;
+    const healthIsFull = pct >= healthFullThreshold;
 
-    if (showHealthBar) {
+    if (healthIsFull) {
+      if (!healthWasFull && playerStatusBarState.health.fullAt <= 0) {
+        playerStatusBarState.health.fullAt = drawTime;
+      }
+    } else {
+      playerStatusBarState.health.fullAt = 0;
+    }
+
+    const showFilledHealthBar = healthIsFull &&
+      playerStatusBarState.health.fullAt > 0 &&
+      drawTime - playerStatusBarState.health.fullAt < healthFullHideDelay;
+    if (showHealthBar && (!healthIsFull || showFilledHealthBar)) {
+      const healthAlpha = playerStatusBarAlpha(playerStatusBarState.health, pct, "health", drawTime);
       const healthLow = pct <= 0.28;
       const healthMid = pct > 0.28 && pct <= 0.55;
       drawPlayerStatusBar({
@@ -38085,6 +39127,72 @@
     if (element && element.style.width !== value) {
       element.style.width = value;
     }
+  }
+
+  function setStylePropertyIfChanged(element, property, value) {
+    if (!element) {
+      return;
+    }
+    const current = typeof element.style.getPropertyValue === "function"
+      ? element.style.getPropertyValue(property)
+      : element.style[property];
+    if (current !== value) {
+      element.style.setProperty(property, value);
+    }
+  }
+
+  function activePlayerStatusEffectEntries() {
+    const disabled = normalizeStatusEffectDuration(playerStatusEffects.disabled);
+    if (disabled <= 0) {
+      return [];
+    }
+    const maxDuration = Math.max(disabled, normalizeStatusEffectDuration(playerStatusEffectMaxDurations.disabled));
+    return [{
+      id: "disabled",
+      label: "Disabled",
+      icon: "\u26a1",
+      remaining: disabled,
+      maxDuration,
+      seconds: Math.max(0, Math.ceil(disabled))
+    }];
+  }
+
+  function updatePlayerStatusEffectsHud() {
+    if (!playerStatusEffectsHud) {
+      return;
+    }
+
+    const effects = activePlayerStatusEffectEntries();
+    playerStatusEffectsHud.classList.toggle("is-visible", effects.length > 0);
+    playerStatusEffectsHud.setAttribute("aria-hidden", effects.length ? "false" : "true");
+
+    while (playerStatusEffectsHud.children.length > effects.length) {
+      if (typeof playerStatusEffectsHud.removeChild === "function") {
+        const lastChild = playerStatusEffectsHud.lastElementChild || playerStatusEffectsHud.children[playerStatusEffectsHud.children.length - 1];
+        playerStatusEffectsHud.removeChild(lastChild);
+      } else {
+        playerStatusEffectsHud.children.pop();
+      }
+    }
+
+    effects.forEach((effect, index) => {
+      let item = playerStatusEffectsHud.children[index];
+      if (!item) {
+        item = document.createElement("div");
+        item.className = "hud-status-effect";
+        item.innerHTML = '<span class="hud-status-effect__icon"></span><span class="hud-status-effect__hand" aria-hidden="true"></span><span class="hud-status-effect__wipe" aria-hidden="true"></span><span class="hud-status-effect__time"></span>';
+        playerStatusEffectsHud.appendChild(item);
+      }
+
+      item.dataset.status = effect.id;
+      item.title = effect.label + " " + effect.seconds + "s";
+      item.setAttribute("aria-label", item.title);
+      setTextIfChanged(item.querySelector(".hud-status-effect__icon"), effect.icon);
+      setTextIfChanged(item.querySelector(".hud-status-effect__time"), effect.seconds + "s");
+      const progress = clamp(effect.remaining / Math.max(0.001, effect.maxDuration), 0, 1);
+      setStylePropertyIfChanged(item, "--status-progress", progress.toFixed(4));
+      setStylePropertyIfChanged(item, "--status-angle", ((1 - progress) * 360).toFixed(1) + "deg");
+    });
   }
 
   function setDeveloperOverlayOpen(open) {
@@ -38560,6 +39668,7 @@
     if (scoreValue) {
       setTextIfChanged(scoreValue, Math.max(0, Math.round(lifeStats.bestScore || lifeStats.currentScore || 0)) + " pts");
     }
+    updatePlayerStatusEffectsHud();
     updateObjectiveState();
     updateTouchLandButton();
 
@@ -38827,6 +39936,7 @@
         maxHealth: player.maxHealth,
         energy: player.energy,
         maxEnergy: player.maxEnergy,
+        statusEffects: serializePlayerStatusEffects(),
         toolDisabledTimer,
         aimAngle: Math.atan2(getAim().world.y, getAim().world.x),
         aimLocalAngle: getAim().angle,
@@ -38840,12 +39950,28 @@
         respawnInvulnerable: multiplayer.partyRespawnInvulnerableTimer
       },
       renderStatus: {
+        statusEffects: typeof activePlayerStatusEffectEntries === "function"
+          ? activePlayerStatusEffectEntries().map(function (effect) {
+            return {
+              id: effect.id,
+              remaining: effect.remaining,
+              maxDuration: effect.maxDuration,
+              seconds: effect.seconds,
+              progress: clamp(effect.remaining / Math.max(0.001, effect.maxDuration), 0, 1)
+            };
+          })
+          : [],
         playerEnergyBar: {
           disabled: playerEnergyDisabled,
           blockedIcon: playerEnergyDisabled,
           colors: typeof playerEnergyStatusBarColors === "function"
             ? playerEnergyStatusBarColors(playerEnergyDisabled, playerEnergyPct())
             : null
+        },
+        jetpackBoostFlame: {
+          active: typeof isJetpackBoostFlameActive === "function"
+            ? isJetpackBoostFlameActive(1 / 60)
+            : false
         }
       },
       particles: {
@@ -39010,7 +40136,12 @@
       player.energy = clamp(Number(config.energy), 0, player.maxEnergy);
     }
     if (Number.isFinite(Number(config.toolDisabledTimer))) {
-      toolDisabledTimer = Math.max(0, Number(config.toolDisabledTimer));
+      playerStatusEffects.disabled = Math.max(0, Number(config.toolDisabledTimer));
+      playerStatusEffectMaxDurations.disabled = playerStatusEffects.disabled;
+      syncLegacyToolDisabledTimer();
+    }
+    if (config.statusEffects && typeof config.statusEffects === "object") {
+      applySerializedPlayerStatusEffects(config.statusEffects);
     }
     if (Number.isFinite(Number(config.respawnInvulnerable))) {
       multiplayer.partyRespawnInvulnerableTimer = Math.max(0, Number(config.respawnInvulnerable));
@@ -39167,6 +40298,18 @@
       setInput: function (input) {
         configureClusternautsTestInput(input);
       },
+      setSettingsOpen: function (open) {
+        setSettingsOpen(Boolean(open));
+        return {
+          settingsOpen,
+          gamePaused
+        };
+      },
+      runCommand: function (command) {
+        multiplayer.commandUnlocked = true;
+        void executeCommand(String(command || ""));
+        return createClusternautsFrameRateSnapshot();
+      },
       requestLandingToggle: function () {
         return requestLandingToggle();
       },
@@ -39255,6 +40398,10 @@
         processMultiplayerV2Events(events, options || {});
         return createClusternautsFrameRateSnapshot();
       },
+      respawnMultiplayerPlayer: function () {
+        respawnMultiplayerPlayer();
+        return createClusternautsFrameRateSnapshot();
+      },
       setPlayerState: function (options) {
         configureClusternautsTestPlayerState(options);
         return createClusternautsFrameRateSnapshot();
@@ -39285,6 +40432,24 @@
       setParticles: setClusternautsTestParticles,
       getParticles: function () {
         return particles.map(serializeParticle);
+      },
+      setStructures: function (items) {
+        structures.length = 0;
+        if (Array.isArray(items)) {
+          for (const structure of items) {
+            structures.push(Object.assign({}, structure));
+          }
+        }
+        return {
+          structures: structures.map(function (structure) {
+            return Object.assign({}, structure);
+          })
+        };
+      },
+      getStructures: function () {
+        return structures.map(function (structure) {
+          return Object.assign({}, structure);
+        });
       },
       setTechPickups: setClusternautsTestTechPickups,
       getTechPickups: function () {
