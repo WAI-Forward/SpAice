@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Clusternauts Particle Collector</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=766be566bf1e">
   </head>
   <body>
     <canvas id="game" aria-label="Clusternauts particle collector game"></canvas>
@@ -38,9 +38,12 @@
         <div class="hud__body-meter">
           <div class="hud__progress-track" aria-hidden="true">
             <div class="hud__progress-fill" id="milestoneFill"></div>
+            <div class="hud__progress-fill hud__progress-fill--stellar" id="milestoneStellarFill"></div>
+            <div class="hud__progress-split" id="milestoneSplit"></div>
           </div>
           <strong id="nextMilestoneValue">1 / 10</strong>
         </div>
+        <span class="hud__body-rate" id="stellarRateLabel" hidden>Rate 0/s -> White Dwarf</span>
         <span class="hud__body-label hud__body-label--next" id="nextMilestoneLabel">ROCK</span>
       </div>
       <div class="hud__status-effects" id="playerStatusEffects" aria-label="Player status effects"></div>
@@ -73,10 +76,14 @@
     </div>
 
     <section class="developer-overlay" id="developerOverlay" aria-label="Developer metrics" aria-hidden="true">
-      <div class="developer-overlay__header">
-        <strong>Developer Metrics</strong>
-        <span>F10</span>
-      </div>
+        <div class="developer-overlay__header">
+          <strong>Developer Metrics</strong>
+          <div class="developer-overlay__actions">
+            <button class="developer-overlay__copy" id="developerMetricsCopy" type="button">Copy</button>
+            <span class="developer-overlay__shortcut">Ctrl+`</span>
+          </div>
+        </div>
+      <div class="developer-overlay__copy-status" id="developerMetricsCopyStatus" aria-live="polite"></div>
       <pre class="developer-overlay__metrics" id="developerMetricsText">Metrics paused</pre>
     </section>
 
@@ -117,6 +124,7 @@
         <option value="dwarf moon">Dwarf Moon</option>
         <option value="moon">Moon</option>
         <option value="planet">Planet</option>
+        <option value="star">Star</option>
       </select>
     </label>
     <div class="touch-joystick touch-joystick--move" id="touchJoystick" aria-hidden="true">
@@ -133,6 +141,7 @@
       <div class="tech-ledger__title">Tech</div>
       <div class="tech-ledger__list" id="techLedgerList"></div>
     </aside>
+
     <section class="objective-tree" id="objectiveTree" aria-label="Objective tree" aria-hidden="true">
       <div class="objective-tree__panel">
         <div class="objective-tree__header">
@@ -316,6 +325,7 @@
         </div>
       </div>
     </section>
+
     <section class="social-panel" id="socialPanel" aria-label="Online players" aria-hidden="true">
       <div class="social-panel__header">
         <strong id="publicNameValue">Player</strong>
@@ -367,13 +377,70 @@
       </div>
       <p class="trade-panel__status" id="tradeStatus">Choose resources to trade.</p>
     </section>
+    <section class="container-panel" id="containerPanel" aria-label="Container technology storage" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="containerName">Container</strong>
+        <button class="trade-panel__close" id="containerClose" type="button" aria-label="Close container">x</button>
+      </div>
+      <div class="trade-panel__columns">
+        <div>
+          <span class="trade-panel__column-title">Backpack</span>
+          <div class="trade-panel__list" id="containerPlayerList"></div>
+        </div>
+        <div>
+          <span class="trade-panel__column-title">Container</span>
+          <div class="trade-panel__list" id="containerStoredList"></div>
+        </div>
+      </div>
+      <p class="trade-panel__status" id="containerStatus">Move tech in or out.</p>
+    </section>
+    <section class="trade-port-panel" id="tradePortPanel" aria-label="Trading port" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="tradePortName">Trading Port</strong>
+        <button class="trade-panel__close" id="tradePortClose" type="button" aria-label="Close trading port">x</button>
+      </div>
+      <div class="trade-port-panel__main">
+        <div>
+          <div class="trade-port-panel__section-header">
+            <span class="trade-panel__column-title">Posted Trades</span>
+            <button id="tradePortAddOffer" type="button">New</button>
+          </div>
+          <div class="trade-panel__list trade-port-panel__offers" id="tradePortOfferList"></div>
+        </div>
+        <div class="trade-port-panel__editor">
+          <div>
+            <div class="trade-port-panel__section-header">
+              <span class="trade-panel__column-title">Will Buy</span>
+              <button id="tradePortRemoveOffer" type="button">Remove</button>
+            </div>
+            <div class="trade-panel__list" id="tradePortBuyList"></div>
+          </div>
+          <div>
+            <span class="trade-panel__column-title">Will Pay</span>
+            <div class="trade-panel__list" id="tradePortPayList"></div>
+          </div>
+        </div>
+        <div class="trade-port-panel__storage">
+          <div>
+            <span class="trade-panel__column-title">Backpack</span>
+            <div class="trade-panel__list" id="tradePortPlayerList"></div>
+          </div>
+          <div>
+            <span class="trade-panel__column-title">Port Stock</span>
+            <div class="trade-panel__list" id="tradePortStoredList"></div>
+          </div>
+        </div>
+      </div>
+      <p class="trade-panel__status" id="tradePortStatus">Post trades and stock the port.</p>
+    </section>
+
     <section class="difficulty-screen is-open" id="difficultyScreen" aria-label="Clusternauts menu">
       <div class="difficulty-screen__panel start-menu">
         <div class="start-menu__top">
           <button class="start-menu__back" id="startMenuBack" type="button" data-menu-action="back">Back</button>
           <h1 id="startMenuTitle">Clusternauts</h1>
           <div class="start-menu__account is-loading" id="startMenuAccount">
-            <span id="startMenuAccountLabel">WAi Forward account</span>
+            <span id="startMenuAccountLabel">Login</span>
             <strong id="startMenuAccountName">Checking session...</strong>
             <button class="start-menu__account-logout" id="startMenuAccountLogoutButton" type="button" hidden>Log out</button>
           </div>
@@ -383,12 +450,20 @@
           <div class="start-menu__actions">
             <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single">Single Player</button>
             <button class="start-menu__button" type="button" data-menu-action="multiplayer">Multiplayer</button>
+            <button class="start-menu__button" type="button" data-menu-action="store">Store</button>
             <button class="start-menu__button" type="button" data-menu-action="leaderboard">Leaderboard</button>
             <button class="start-menu__button" type="button" data-menu-action="settings">Settings</button>
           </div>
         </div>
 
         <div class="start-menu__view" data-menu-view="single">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single-horde">Horde Mode</button>
+            <button class="start-menu__button" type="button" data-menu-action="single-survival">Survival</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="single-options">
           <div class="start-menu__actions">
             <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="new-game">New Game</button>
             <button class="start-menu__button" type="button" data-menu-action="load-game">Load Existing Save</button>
@@ -397,6 +472,25 @@
 
         <div class="start-menu__view" data-menu-view="load">
           <div class="start-menu__list" id="startSavedGameList" aria-label="Saved games"></div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="store">
+          <div class="start-store">
+            <div class="start-store__status" id="startStoreStatus" aria-live="polite"></div>
+            <div class="start-store__filters" id="startStoreFilters" aria-label="Store categories">
+              <button class="start-store__filter" type="button" data-store-filter="suit" aria-pressed="true">Colours</button>
+              <button class="start-store__filter" type="button" data-store-filter="costume" aria-pressed="true">Costumes</button>
+              <button class="start-store__filter" type="button" data-store-filter="trail" aria-pressed="true">Trails</button>
+            </div>
+            <div class="start-store__content">
+              <aside class="start-store__preview" aria-label="Skin preview">
+                <canvas class="start-store__preview-canvas" id="startStorePreviewCanvas" width="180" height="220"></canvas>
+                <strong class="start-store__preview-name" id="startStorePreviewName">Classic Suit</strong>
+                <span class="start-store__preview-meta" id="startStorePreviewMeta">White suit recolour</span>
+              </aside>
+              <div class="start-store__grid" id="startStoreList" aria-label="Store skins"></div>
+            </div>
+          </div>
         </div>
 
         <div class="start-menu__view" data-menu-view="difficulty">
@@ -421,12 +515,27 @@
 
         <div class="start-menu__view" data-menu-view="multiplayer">
           <div class="start-menu__actions start-menu__actions--split">
-            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="create-lobby">New Lobby</button>
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="multiplayer-horde">Horde Mode</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer-survival">Survival</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer-horde">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="create-lobby">New Horde Lobby</button>
             <button class="start-menu__button" type="button" data-menu-action="multiplayer-load-game">Load Existing Save</button>
             <div class="start-menu__join">
               <input id="lobbyCodeInput" type="text" autocomplete="off" maxlength="12" placeholder="Lobby code">
               <button class="start-menu__button" id="joinLobbyButton" type="button" data-menu-action="join-lobby">Join Lobby</button>
             </div>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer-survival">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="join-shared-world">Join Shared World</button>
+            <div class="shared-world-stats" id="sharedWorldStats" aria-live="polite"></div>
+            <p class="settings-panel__save-status" id="sharedWorldStatus" aria-live="polite"></p>
           </div>
         </div>
 
@@ -542,12 +651,14 @@
             </div>
             <div class="settings-panel__group">
               <div class="settings-panel__section-title">Controls</div>
+              <div class="settings-panel__controls" id="menuControlBindingsList"></div>
               <button class="settings-panel__reset" id="menuResetControlsButton" type="button">Reset controls</button>
             </div>
           </div>
         </div>
       </div>
     </section>
+
     <section class="death-screen" id="deathScreen" aria-label="You died" aria-hidden="true">
       <div class="death-screen__panel">
         <p class="death-screen__eyebrow">Life support offline</p>
@@ -566,9 +677,9 @@
     <div class="notifications" id="notifications" aria-live="polite"></div>
 
     <script>
-      window.CLUSTERNAUTS_CLIENT_BUILD = "f7ea952d205a";
+      window.CLUSTERNAUTS_CLIENT_BUILD = "766be566bf1e";
     </script>
-    <script src="src/mp-v2-sim.js?v=f7ea952d205a" defer></script>
-    <script src="src/game.js?v=f7ea952d205a" defer></script>
+    <script src="src/mp-v2-sim.js?v=766be566bf1e" defer></script>
+    <script src="src/game.js?v=766be566bf1e" defer></script>
   </body>
 </html>

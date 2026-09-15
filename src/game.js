@@ -13,11 +13,16 @@
   const gameVitalsHud = document.getElementById("gameVitalsHud");
   const developerOverlay = document.getElementById("developerOverlay");
   const developerMetricsText = document.getElementById("developerMetricsText");
+  const developerMetricsCopy = document.getElementById("developerMetricsCopy");
+  const developerMetricsCopyStatus = document.getElementById("developerMetricsCopyStatus");
   const touchLandButton = document.getElementById("touchLandButton");
   const currentBodyLabel = document.getElementById("currentBodyLabel");
   const nextMilestoneLabel = document.getElementById("nextMilestoneLabel");
   const nextMilestoneValue = document.getElementById("nextMilestoneValue");
   const milestoneFill = document.getElementById("milestoneFill");
+  const milestoneStellarFill = document.getElementById("milestoneStellarFill");
+  const milestoneSplit = document.getElementById("milestoneSplit");
+  const stellarRateLabel = document.getElementById("stellarRateLabel");
   const playerStatusEffectsHud = document.getElementById("playerStatusEffects");
   const leaderboardToggle = document.getElementById("leaderboardToggle");
   const leaderboardPanel = document.getElementById("leaderboardPanel");
@@ -124,8 +129,16 @@
   const menuLeaderboardModeFilter = document.getElementById("menuLeaderboardModeFilter");
   const menuLeaderboardDifficultyFilter = document.getElementById("menuLeaderboardDifficultyFilter");
   const startSavedGameList = document.getElementById("startSavedGameList");
+  const startStoreStatus = document.getElementById("startStoreStatus");
+  const startStoreFilters = document.getElementById("startStoreFilters");
+  const startStoreList = document.getElementById("startStoreList");
+  const startStorePreviewCanvas = document.getElementById("startStorePreviewCanvas");
+  const startStorePreviewName = document.getElementById("startStorePreviewName");
+  const startStorePreviewMeta = document.getElementById("startStorePreviewMeta");
   const lobbyCodeInput = document.getElementById("lobbyCodeInput");
   const joinLobbyButton = document.getElementById("joinLobbyButton");
+  const sharedWorldStats = document.getElementById("sharedWorldStats");
+  const sharedWorldStatus = document.getElementById("sharedWorldStatus");
   const lobbyCodeValue = document.getElementById("lobbyCodeValue");
   const copyLobbyCodeButton = document.getElementById("copyLobbyCodeButton");
   const lobbyDifficultySelect = document.getElementById("lobbyDifficultySelect");
@@ -147,6 +160,7 @@
   const menuTouchScreenInput = document.getElementById("menuTouchScreenInput");
   const menuPlayerHealthBarInput = document.getElementById("menuPlayerHealthBarInput");
   const menuPlayerEnergyBarInput = document.getElementById("menuPlayerEnergyBarInput");
+  const menuControlBindingsList = document.getElementById("menuControlBindingsList");
   const menuResetControlsButton = document.getElementById("menuResetControlsButton");
   const commandPanel = document.getElementById("commandPanel");
   const commandInput = document.getElementById("commandInput");
@@ -162,6 +176,23 @@
   const tradeSendOffer = document.getElementById("tradeSendOffer");
   const tradeAccept = document.getElementById("tradeAccept");
   const tradeStatus = document.getElementById("tradeStatus");
+  const containerPanel = document.getElementById("containerPanel");
+  const containerName = document.getElementById("containerName");
+  const containerClose = document.getElementById("containerClose");
+  const containerPlayerList = document.getElementById("containerPlayerList");
+  const containerStoredList = document.getElementById("containerStoredList");
+  const containerStatus = document.getElementById("containerStatus");
+  const tradePortPanel = document.getElementById("tradePortPanel");
+  const tradePortName = document.getElementById("tradePortName");
+  const tradePortClose = document.getElementById("tradePortClose");
+  const tradePortOfferList = document.getElementById("tradePortOfferList");
+  const tradePortBuyList = document.getElementById("tradePortBuyList");
+  const tradePortPayList = document.getElementById("tradePortPayList");
+  const tradePortPlayerList = document.getElementById("tradePortPlayerList");
+  const tradePortStoredList = document.getElementById("tradePortStoredList");
+  const tradePortAddOffer = document.getElementById("tradePortAddOffer");
+  const tradePortRemoveOffer = document.getElementById("tradePortRemoveOffer");
+  const tradePortStatus = document.getElementById("tradePortStatus");
   const deathScreen = document.getElementById("deathScreen");
   const deathStatsList = document.getElementById("deathStatsList");
   const deathLeaderboardForm = document.getElementById("deathLeaderboardForm");
@@ -319,7 +350,8 @@
   const developerMetricsState = {
     open: false,
     lastUpdateAt: -Infinity,
-    lastText: ""
+    lastText: "",
+    copyStatusClearAt: 0
   };
   const objectiveState = {
     completed: Object.create(null),
@@ -340,26 +372,27 @@
     create_dwarf_moon: { x: 170, y: 450 },
     create_moon: { x: 170, y: 570 },
     create_planet: { x: 170, y: 690 },
+    create_star: { x: 170, y: 810 },
     kill_3_alienoids: { x: 520, y: 90 },
     kill_3_ufos: { x: 520, y: 270 },
     kill_3_rambots: { x: 520, y: 450 },
-    kill_3_teslas: { x: 520, y: 630 },
-    kill_3_engineers: { x: 520, y: 810 },
+    kill_3_engineers: { x: 520, y: 630 },
+    kill_3_teslas: { x: 520, y: 810 },
     kill_3_satellites: { x: 520, y: 990 },
     kill_3_rockets: { x: 520, y: 1170 },
     kill_3_fighters: { x: 520, y: 1350 },
     kill_alienoid_boss: { x: 950, y: 90 },
     kill_ufo_boss: { x: 950, y: 270 },
     kill_rambot_boss: { x: 950, y: 450 },
-    kill_tesla_boss: { x: 950, y: 630 },
-    kill_engineer_boss: { x: 950, y: 810 },
+    kill_engineer_boss: { x: 950, y: 630 },
+    kill_tesla_boss: { x: 950, y: 810 },
     kill_satellite_boss: { x: 950, y: 990 },
     kill_rocket_boss: { x: 950, y: 1170 },
     kill_fighter_boss: { x: 950, y: 1350 },
     make_laser_pistol: { x: 1280, y: 300 },
-    create_turret: { x: 1280, y: 480 },
-    create_accumulator: { x: 1280, y: 780 },
-    create_spanner: { x: 1280, y: 960 },
+    create_spanner: { x: 1280, y: 480 },
+    create_turret: { x: 1280, y: 780 },
+    create_accumulator: { x: 1280, y: 960 },
     create_rifle: { x: 1280, y: 1140 }
   });
   const objectiveGraphPadding = 90;
@@ -382,6 +415,7 @@
     token: "",
     username: "",
     displayName: "",
+    waiBirthdayMonthDay: "",
     saves: [],
     currentSaveId: "",
     currentSaveName: "",
@@ -663,7 +697,7 @@
     right: false,
     seen: false
   };
-  const gameplayPointerBlockSelector = ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .leaderboard-panel, .hud__leaderboard-toggle, .hud__land-action, .compact-hud-toggles, .map-filter, .touch-joystick, .tech-ledger, .notifications";
+  const gameplayPointerBlockSelector = ".build-menu, .tool-hotbar, .online-toggle, .sound-toggle, .settings-toggle, .settings-panel, .social-panel, .signal-panel, .command-panel, .player-interaction, .trade-panel, .container-panel, .trade-port-panel, .leaderboard-panel, .hud__leaderboard-toggle, .hud__land-action, .compact-hud-toggles, .map-filter, .touch-joystick, .tech-ledger, .notifications";
   const touchControlState = {
     active: false,
     pointerId: null,
@@ -747,6 +781,7 @@
   const teslas = [];
   const rockets = [];
   const fighters = [];
+  const mobBeacons = [];
   const rivalProjectiles = [];
   const playerLasers = [];
   const launcherMissiles = [];
@@ -769,8 +804,8 @@
   const solidBodyPlayerDamageSpeed = 520;
   const weaponSlowDecay = 0.18;
   const weaponSlowMax = 0.58;
-  const rivalProjectileSpeed = 360;
-  const rivalShootRange = 980;
+  const rivalProjectileSpeed = 430;
+  const rivalShootRange = 1080;
   const rivalProjectileDamage = 10;
   const rambotImpactDamage = 18;
   const rambotImpactSpeed = 260;
@@ -781,7 +816,7 @@
   const engineerHealRange = 620;
   const engineerHealRate = 18;
   const engineerHealCooldown = 0.55;
-  const teslaLightningRange = 760;
+  const teslaLightningRange = 830;
   const teslaLightningDamage = 8;
   const teslaToolDisableDuration = 3.2;
   const empToolId = "emp-tool";
@@ -790,6 +825,7 @@
   const guidedLauncherToolId = "guided-launcher";
   const machineGunToolId = "machine-gun";
   const rocketSuitToolId = "rocket-suit";
+  const personalTetherToolId = "personal-tether";
   const empPulseRange = 900;
   const empPulseDisableDuration = 4.8;
   const empPulseEnergyCost = 28;
@@ -813,28 +849,31 @@
   const rocketSuitMobDamage = 24;
   const rocketSuitMobDamageSpeedScale = 0.036;
   const rocketSuitMobKnockback = 330;
-  const satelliteMissileSpeed = 630;
+  const satelliteMissileSpeed = 730;
   const satelliteMissileDamage = 15;
   const satelliteLockDuration = 0.82;
   const satelliteVolleySpacing = 0.24;
   const satelliteVolleyCount = 3;
   const satelliteBossSeekingMissileCount = 3;
-  const satelliteBossSeekingMissileSpeed = 420;
+  const satelliteBossSeekingMissileSpeed = 500;
   const satelliteBossSeekingMissileTurnRate = 3.45;
-  const satelliteBossSeekingMissileLife = 4.6;
+  const satelliteBossSeekingMissileLife = 5.0;
   const rocketChargeDuration = 1.18;
   const rocketChargeCooldownMin = 1.25;
   const rocketChargeCooldownMax = 2.15;
   const rocketChargeMaxSpeed = 860;
-  const fighterShootRange = 980;
+  const fighterShootRange = 1080;
   const fighterShieldCycle = 10;
   const fighterShieldMaxCharge = 3;
   const structureMaxHealthByType = {
     "plating-block": 150,
+    container: 140,
+    "trading-port": 160,
     battery: 120,
     accumulator: 120,
     "shield-generator": 130,
     "communication-relay": 120,
+    medbay: 135,
     jet: 120,
     tether: 130,
     bridge: 170,
@@ -870,6 +909,8 @@
   const accumulatorBurstInterval = 2.4;
   const accumulatorBurstDuration = 0.62;
   const batteryEnergyRegenBonus = 4.2;
+  const medbayHealRate = 4.5;
+  const medbayEnergyDrain = 10;
   const healthPickupHeal = 8;
   const healthPickupLifetime = 18;
   const techPickupLifetime = 28;
@@ -878,8 +919,8 @@
     alienoid: 2 * 60,
     ufo: 3 * 60,
     rambot: 5 * 60,
-    tesla: 7 * 60,
-    engineer: 11 * 60,
+    engineer: 7 * 60,
+    tesla: 11 * 60,
     satellite: 13 * 60,
     rocket: 14 * 60,
     fighter: 16 * 60
@@ -889,6 +930,16 @@
   const mobWaveGrowthWaves = 4;
   const mobWaveClumpMinRadius = 38;
   const mobWaveClumpMaxRadius = 175;
+  const mobBeaconWarmupDuration = 60;
+  const mobBeaconRespawnDuration = 5 * 60;
+  const mobBeaconMinPlayerDistance = 2800;
+  const mobBeaconMaxPlayerDistance = 6200;
+
+  const mobBeaconPreferredSeparation = 1450;
+  const mobBeaconMaxSpeed = 108;
+  const mobBeaconDropCount = 4;
+  const mobBeaconRevealDistance = 1800;
+
   const difficultyDefinitions = {
     easy: {
       id: "easy",
@@ -896,11 +947,12 @@
       summary: "Relaxed growth",
       description: "Softer hits, more recovery drops, and smaller score rewards.",
       mobIntervalScale: 0.82,
+      mobFirstWaveDelay: 28,
       mobBatchScale: 1.12,
       mobBonusChanceScale: 1.1,
       mobStartingBatchBonusChances: [0, 0],
       mobDamageMultiplier: 0.62,
-      healthDropMultiplier: 1.45,
+      healthDropMultiplier: 1.1,
       techDropMultiplier: 1.45,
       bodyScoreMultiplier: 0.75,
       mobScoreMultiplier: 0.65
@@ -911,11 +963,12 @@
       summary: "Balanced pressure",
       description: "Regular attacks, fair damage, and the standard score target.",
       mobIntervalScale: 0.72,
+      mobFirstWaveDelay: 18,
       mobBatchScale: 1.24,
       mobBonusChanceScale: 1.22,
       mobStartingBatchBonusChances: [0.75, 0.2, 0.09],
       mobDamageMultiplier: 0.82,
-      healthDropMultiplier: 1.2,
+      healthDropMultiplier: 0.9,
       techDropMultiplier: 1.15,
       bodyScoreMultiplier: 1,
       mobScoreMultiplier: 1
@@ -926,17 +979,19 @@
       summary: "Hostile space",
       description: "More enemies, fewer safety drops, and stronger mob-point rewards.",
       mobIntervalScale: 0.62,
+      mobFirstWaveDelay: 9,
       mobBatchScale: 1.38,
       mobBonusChanceScale: 1.35,
       mobStartingBatchBonusChances: [0.9, 0.75, 0.34],
       mobDamageMultiplier: 1,
-      healthDropMultiplier: 1,
+      healthDropMultiplier: 0.7,
       techDropMultiplier: 1,
       bodyScoreMultiplier: 1.25,
       mobScoreMultiplier: 1.65
     }
   };
   const defaultDifficultyId = "medium";
+
   const mobScoreValues = {
     alienoid: 100,
     ufo: 175,
@@ -957,7 +1012,17 @@
     rocket: { label: "Rocket ship", radius: 34, health: 170, speedJitter: 44, color: { r: 169, g: 133, b: 255 } },
     fighter: { label: "Fighter ship", radius: 40, health: 230, speedJitter: 20, color: { r: 119, g: 167, b: 255 } }
   };
-  const mobTierOrder = ["alienoid", "ufo", "rambot", "tesla", "engineer", "satellite", "rocket", "fighter"];
+  const mobBeaconVisuals = {
+    alienoid: { color: { r: 255, g: 115, b: 173 }, accent: { r: 255, g: 214, b: 238 }, shape: "eye" },
+    ufo: { color: { r: 112, g: 226, b: 255 }, accent: { r: 224, g: 252, b: 255 }, shape: "saucer" },
+    rambot: { color: { r: 184, g: 196, b: 204 }, accent: { r: 255, g: 209, b: 102 }, shape: "gear" },
+    engineer: { color: { r: 102, g: 224, b: 184 }, accent: { r: 219, g: 255, b: 238 }, shape: "cross" },
+    tesla: { color: { r: 157, g: 255, b: 122 }, accent: { r: 247, g: 255, b: 154 }, shape: "bolt" },
+    satellite: { color: { r: 169, g: 133, b: 255 }, accent: { r: 232, g: 218, b: 255 }, shape: "dish" },
+    rocket: { color: { r: 244, g: 150, b: 92 }, accent: { r: 255, g: 231, b: 126 }, shape: "flame" },
+    fighter: { color: { r: 119, g: 167, b: 255 }, accent: { r: 222, g: 235, b: 255 }, shape: "chevron" }
+  };
+  const mobTierOrder = ["alienoid", "ufo", "rambot", "engineer", "tesla", "satellite", "rocket", "fighter"];
   const mobObjectivePluralLabels = {
     alienoid: "Alienoids",
     ufo: "UFOs",
@@ -968,6 +1033,7 @@
     rocket: "Rocket ships",
     fighter: "Fighter ships"
   };
+
   const mobTierUnlockBaseDefeats = 3;
   const mobBossDefeatsToUnlock = 30;
   const mobBossWarningDuration = 60;
@@ -980,6 +1046,14 @@
   const mobBossStarSpeedMultiplier = 0.07;
   const mobBossStarCooldownReduction = 0.05;
   const mobBossDropCount = 10;
+  const mobEliteCompressionSize = 4;
+  const mobEliteMaxStars = 3;
+  const mobEliteHealthMultiplier = 2.85;
+  const mobEliteRadiusMultiplier = 0.16;
+  const mobEliteDamageMultiplier = 0.16;
+  const mobEliteForceMultiplier = 0.08;
+  const mobEliteSpeedMultiplier = 0.05;
+  const mobEliteCooldownReduction = 0.04;
   const mobBossMinionCooldownMin = 8;
   const mobBossMinionCooldownMax = 14;
   const mobBossAltAttackCooldownMin = 6;
@@ -1009,6 +1083,41 @@
   const mobSpawnRestCooldown = 150;
   const mobSpawnRestDrainMaxDuration = 90;
   const mobSpawnRestManageableMobsPerPlayer = 3;
+  const survivalCampMinPlayerDistance = 5200;
+  const survivalCampMaxPlayerDistance = 9800;
+  const survivalCampPreferredSeparation = 3200;
+  const survivalCampLeashRadius = 2600;
+  const survivalCampReturnRadius = 1700;
+  const survivalCampWakeRadius = 2100;
+  const survivalCampAggroDuration = 90;
+  const survivalCampBodyWakeDistance = 320;
+  const survivalCampIdleRadius = 780;
+  const survivalCampBaseCap = 2;
+  const survivalCampMobsMin = 6;
+  const survivalCampMobsMax = 10;
+  const survivalCampBodyMin = 2;
+  const survivalCampBodyMax = 4;
+  const survivalCampCheckInterval = 8;
+  const survivalCampRadarBodyMinMass = 150;
+  const survivalCampSpawnMinDistance = 9000;
+  const survivalCampSpawnDistancePadding = 1200;
+  const survivalCampSpawnDistanceSpread = 9000;
+  const survivalCampAllowancePreferredSeparation = 4200;
+  const survivalHitSquadFirstGrace = 60;
+  const survivalHitSquadWarningLead = 30;
+  const survivalHitSquadCooldownMin = 180;
+  const survivalHitSquadCooldownMax = 300;
+  const survivalHitSquadBudgetBase = 50;
+  const survivalHitSquadBudgetScoreExponent = 0.82;
+  const survivalHitSquadBudgetScoreScale = 0.95;
+  const survivalHitSquadBudgetRampFloor = 0.45;
+  const survivalHitSquadBudgetFullRampTime = 20 * 60;
+  const survivalHitSquadBudgetMaxScoreScale = 0.75;
+  const survivalHitSquadBossScore = 1200;
+  const survivalHitSquadBossGrace = 12 * 60;
+  const survivalHitSquadSpawnMinDistance = 7000;
+  const survivalHitSquadSpawnDistancePadding = 600;
+  const survivalHitSquadSpawnDistanceSpread = 3500;
   const mobSpawnEdgePaddingBonus = 320;
   const mobSpawnSpreadMultiplier = 1.25;
   const mobRelocationEdgePaddingBonus = 560;
@@ -1043,13 +1152,14 @@
   const rambotBossHeadTurnLimit = Math.PI / 4;
   const rambotBossAltAttackCooldownMin = 4.2;
   const rambotBossAltAttackCooldownMax = 6.8;
+
   const playerWeaponDefaults = {
-    speed: 620,
+    speed: 720,
     damage: 28,
     cooldown: 0.9,
     knockback: 260,
     movementSlow: 0.15,
-    life: 0.62,
+    life: 0.68,
     length: 50,
     radius: 6,
     color: { r: 255, g: 115, b: 173 },
@@ -1058,12 +1168,12 @@
   const weaponDefinitions = {
     "laser-pistol": playerWeaponDefaults,
     "laser-rifle": {
-      speed: 740,
+      speed: 860,
       damage: 30,
       cooldown: 1.25,
       knockback: 260,
       movementSlow: 0.22,
-      life: 0.72,
+      life: 0.78,
       length: 76,
       radius: 5,
       color: { r: 255, g: 115, b: 173 },
@@ -1071,12 +1181,12 @@
       label: "laser rifle"
     },
     shotgun: {
-      speed: 710,
+      speed: 820,
       damage: 12,
       cooldown: 1.35,
       knockback: 180,
       movementSlow: 0.28,
-      life: 0.58,
+      life: 0.62,
       length: 38,
       radius: 5.4,
       pelletCount: 9,
@@ -1085,12 +1195,12 @@
       label: "shotgun"
     },
     [machineGunToolId]: {
-      speed: 820,
+      speed: 960,
       damage: 10,
       cooldown: 0.14,
       knockback: 95,
       movementSlow: 0.06,
-      life: 0.66,
+      life: 0.72,
       length: 36,
       radius: 4.2,
       spread: 0.055,
@@ -1102,26 +1212,27 @@
   weaponDefinitions["laser-rifle"].energyCost = 12;
   weaponDefinitions.shotgun.energyCost = 16;
   weaponDefinitions[machineGunToolId].energyCost = 3;
-  const turretLaserSpeed = 760;
+
+  const turretLaserSpeed = 880;
   const turretLaserDamage = 24;
   const turretLaserKnockback = 210;
   const turretShootCooldown = 2.2;
-  const turretRange = 560;
+  const turretRange = 625;
   const missileLauncherRange = 1120;
   const missileLauncherClusterRadius = 210;
   const missileLauncherMinClusterSize = 2;
   const missileLauncherProductionTime = 9.5;
   const missileLauncherLockDuration = 0.62;
   const missileLauncherEnergyCost = 22;
-  const launcherMissileSpeed = 520;
+  const launcherMissileSpeed = 610;
   const launcherMissileTurnRate = 3.8;
-  const launcherMissileLife = 5.8;
+  const launcherMissileLife = 6.35;
   const launcherMissileDamage = 68;
   const launcherMissileAoERadius = 220;
   const launcherMissileKnockback = 320;
   const guidedLauncherEnergyCost = 18;
   const guidedLauncherCooldown = 1.85;
-  const guidedLauncherMissileLife = 7.2;
+  const guidedLauncherMissileLife = 7.85;
   const guidedLauncherPathPointSpacing = 42;
   const guidedLauncherMaxPathPoints = 34;
   const structurePlacementTierThreshold = 500;
@@ -1129,6 +1240,7 @@
   const structurePlacementLeeway = 72;
   const platingBlockWidth = 74;
   const platingBlockHeight = 28;
+  const medbayInteriorWidth = 118;
   const accumulatorRange = 680;
   const accumulatorForce = 620;
   const shieldGeneratorFieldPadding = 148;
@@ -1151,6 +1263,13 @@
   const tetherSpring = 34;
   const tetherDamping = 9.5;
   const tetherMaxAcceleration = 1800;
+  const personalTetherMaxAttachDistance = 1600;
+  const personalTetherMaxRestLength = 1320;
+  const personalTetherGive = 24;
+  const personalTetherSpring = 7.4;
+  const personalTetherDamping = 3.1;
+  const personalTetherBodyMaxAcceleration = 980;
+  const personalTetherPlayerMaxAcceleration = 1550;
   const bridgeHalfWidth = 18;
   const bridgeWalkTransferAngle = 0.11;
   const bridgeWalkExitAnglePadding = 0.045;
@@ -1159,12 +1278,34 @@
   const bridgeMaxCurveLength = 138;
   const bridgeMaxAngularSpeed = 2.7;
   const bridgeAngularDamping = 0.74;
+
   const bodyMaxAngularSpeed = 3.2;
   const bodyAngularVelocityDamping = 0.82;
   const bodyTorqueResponse = 0.34;
   const bodyConstraintTorqueResponse = 0.18;
+  const orbitCaptureMinTierName = "planet";
+  const orbitRingBaseGapScale = 0.88;
+  const orbitRingSpacingScale = 0.92;
+  const orbitRingPlayerStandingClearance = 101;
+  const orbitRingVacuumGadgetClearance = 134;
+  const orbitRingClearanceMargin = 56;
+  const orbitRingMinGap = orbitRingPlayerStandingClearance + orbitRingVacuumGadgetClearance + orbitRingClearanceMargin;
+  const orbitCaptureBandScale = 0.15;
+  const orbitCaptureMinBand = 54;
+  const orbitCaptureMaxRelativeSpeed = 360;
+  const orbitCaptureStrongInwardSpeed = 230;
+  const orbitRadialSpring = 5.8;
+  const orbitRadialDamping = 2.7;
+  const orbitTangentialDamping = 2.2;
+  const orbitMaxAcceleration = 1380;
+  const orbitRetentionSeconds = 0.7;
+  const localBodyGravityRadius = 260;
+  const localBodyGravityForce = 42;
+  const localBodyGravityMaxAcceleration = 115;
+  const bodyPromotionEffectDuration = 0.92;
   const jetEnergyDrain = 9;
   const jetThrust = 620;
+
   const defaultToolId = "suction-gadget";
   const visciousVacuumToolId = "viscious-vacuum";
   const visciousVacuumMobDrainRate = 16;
@@ -1185,7 +1326,8 @@
   const buildFilters = [
     { key: "all", label: "All" },
     { key: "tools", label: "Tools" },
-    { key: "structures", label: "Structures" }
+    { key: "structures", label: "Structures" },
+    { key: "skins", label: "Cosmetics" }
   ];
   const toolCatalog = [
     { id: defaultToolId, name: "Vacuum gadget", shortName: "Vacuum", color: "#58e2ff" },
@@ -1199,8 +1341,438 @@
     { id: familiarNetToolId, name: "Familiar Net", shortName: "Net", color: "#66e0b8" },
     { id: pistonPunchToolId, name: "Piston Punch", shortName: "Punch", color: "#ffd166" },
     { id: guidedLauncherToolId, name: "Guided Launcher", shortName: "Guided", color: "#ffb858" },
-    { id: rocketSuitToolId, name: "Rocket Suit", shortName: "Rocket", color: "#a985ff" }
+    { id: rocketSuitToolId, name: "Rocket Suit", shortName: "Rocket", color: "#a985ff" },
+    { id: personalTetherToolId, name: "Personal Tether", shortName: "Tether", color: "#a985ff" }
   ];
+
+  const defaultSkinId = "classic-suit";
+  const defaultTrailId = "trail-classic-flame";
+  const defaultSuitSkinPalette = Object.freeze({
+    swatch: "#f4f2ea",
+    torso: "#f4f2ea",
+    limb: "#d9dee8",
+    arm: "#f8f5ec",
+    helmet: "#ffffff",
+    panel: "#cfd7e7",
+    accent: "#64e3ff"
+  });
+  const skinCatalog = [
+    {
+      id: defaultSkinId,
+      name: "Classic Suit",
+      category: "skins",
+      kind: "suit",
+      plainColor: "White",
+      description: "The standard Clusternauts EVA suit.",
+      priceLabel: "Included",
+      priceId: "",
+      productId: "",
+      colors: defaultSuitSkinPalette
+    },
+    {
+      id: defaultTrailId,
+      name: "Classic Flame",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Flame",
+      description: "The standard short jet flame boost trail.",
+      priceLabel: "Included",
+      priceId: "",
+      productId: "",
+      colors: { swatch: "#ff9b34", accent: "#ffe56f" }
+    },
+    {
+      id: "suit-mars-red",
+      name: "Mars Red",
+      category: "skins",
+      kind: "suit",
+      plainColor: "Red",
+      description: "A bold red recolour for your space suit.",
+      priceLabel: "\u00a32",
+      priceId: "price_1TpqIDHmsD7gK0nLGi5G02yw",
+      productId: "prod_UpVIhwLtcrbcLX",
+      colors: { swatch: "#e5484d", torso: "#d9363e", limb: "#b5242e", arm: "#f06f74", helmet: "#fff3f3", panel: "#ffb7bd", accent: "#ffd166" }
+    },
+    {
+      id: "suit-nebula-blue",
+      name: "Nebula Blue",
+      category: "skins",
+      kind: "suit",
+      plainColor: "Blue",
+      description: "A deep blue recolour for your space suit.",
+      priceLabel: "\u00a32",
+      priceId: "price_1TpqIvHmsD7gK0nLHwkuHLye",
+      productId: "prod_UpVJImzN2j9OCW",
+      colors: { swatch: "#3578ff", torso: "#2d6cdf", limb: "#1c4fb2", arm: "#75a6ff", helmet: "#eef5ff", panel: "#9fc3ff", accent: "#58e2ff" }
+    },
+    {
+      id: "suit-solar-yellow",
+      name: "Solar Yellow",
+      category: "skins",
+      kind: "suit",
+      plainColor: "Yellow",
+      description: "A bright yellow recolour for your space suit.",
+      priceLabel: "\u00a32",
+      priceId: "price_1TpqJXHmsD7gK0nLmmluSuPx",
+      productId: "prod_UpVK0wvBk7hNwi",
+      colors: { swatch: "#ffd84d", torso: "#f2c933", limb: "#cf9f19", arm: "#ffe783", helmet: "#fff9df", panel: "#ffe29a", accent: "#ff8f3d" }
+    },
+    {
+      id: "suit-toxic-green",
+      name: "Toxic Green",
+      category: "skins",
+      kind: "suit",
+      plainColor: "Green",
+      description: "A vivid green recolour for your space suit.",
+      priceLabel: "\u00a32",
+      priceId: "price_1TpqK4HmsD7gK0nLlzk0qOD0",
+      productId: "prod_UpVKSFCiD7glhv",
+      colors: { swatch: "#5cf06d", torso: "#38c957", limb: "#269945", arm: "#8cff9b", helmet: "#effff1", panel: "#9dffad", accent: "#dffcff" }
+    },
+    {
+      id: "suit-void-purple",
+      name: "Void Purple",
+      category: "skins",
+      kind: "suit",
+      plainColor: "Purple",
+      description: "A saturated purple recolour for your space suit.",
+      priceLabel: "\u00a32",
+      priceId: "price_1TpqKcHmsD7gK0nLzoihm1RW",
+      productId: "prod_UpVLEO9dUJB4g5",
+      colors: { swatch: "#a985ff", torso: "#8657e8", limb: "#6840bf", arm: "#bda0ff", helmet: "#f6f0ff", panel: "#c8b4ff", accent: "#ff73ad" }
+    },
+    {
+      id: "suit-hazard-orange",
+      name: "Hazard Orange",
+      category: "skins",
+      kind: "suit",
+      plainColor: "Orange",
+      description: "A high-visibility orange recolour for your space suit.",
+      priceLabel: "\u00a32",
+      priceId: "price_1TpqKxHmsD7gK0nLcWWIWE2C",
+      productId: "prod_UpVLumOKnxlkQK",
+      colors: { swatch: "#ff8a34", torso: "#ef7428", limb: "#b9541f", arm: "#ffad66", helmet: "#fff2e8", panel: "#ffc18c", accent: "#ffd166" }
+    },
+    {
+      id: "suit-cosmic-pink",
+      name: "Cosmic Pink",
+      category: "skins",
+      kind: "suit",
+      plainColor: "Pink",
+      description: "A luminous pink recolour for your space suit.",
+      priceLabel: "\u00a32",
+      priceId: "price_1TpqMUHmsD7gK0nLGLEuNwVH",
+      productId: "prod_UpVNQXqJJxgw40",
+      colors: { swatch: "#ff73ad", torso: "#ee5d9e", limb: "#bd3f7b", arm: "#ffa4ca", helmet: "#fff0f7", panel: "#ffbfd9", accent: "#64e3ff" }
+    },
+    {
+      id: "suit-deep-space-black",
+      name: "Deep Space Black",
+      category: "skins",
+      kind: "suit",
+      plainColor: "Black",
+      description: "A low-profile black recolour for your space suit.",
+      priceLabel: "\u00a32",
+      priceId: "price_1TpqN2HmsD7gK0nL57YnS6g5",
+      productId: "prod_UpVNBsf8zX01pX",
+      colors: { swatch: "#05070c", torso: "#111827", limb: "#273244", arm: "#384359", helmet: "#e8edf8", panel: "#636f84", accent: "#dffcff" }
+    },
+    {
+      id: "costume-medieval-knight",
+      name: "Medieval Knight",
+      category: "skins",
+      kind: "costume",
+      model: "medieval-knight",
+      plainColor: "Steel",
+      description: "A full medieval knight costume with plate armour, visor helm, and tabard.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpwkmHmsD7gK0nLwrApMz0J",
+      productId: "prod_UpbykcgnkcJwSM",
+      colors: { swatch: "#b7c0cc", torso: "#9aa6b6", limb: "#7d8998", arm: "#c9d1dc", helmet: "#d9dee8", panel: "#6b3f2a", accent: "#d94b4b" }
+    },
+    {
+      id: "costume-pirate",
+      name: "Pirate",
+      category: "skins",
+      kind: "costume",
+      model: "pirate",
+      plainColor: "Black",
+      description: "A swashbuckling pirate costume with tricorn hat, sash, and sea-worn coat.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpvXUHmsD7gK0nLCx9yxOSX",
+      productId: "prod_UpaivbIkPP1Coh",
+      colors: { swatch: "#23202a", torso: "#332842", limb: "#171827", arm: "#f2eadb", helmet: "#201726", panel: "#7b3e24", accent: "#d94b4b" }
+    },
+    {
+      id: "costume-wizard",
+      name: "Wizard",
+      category: "skins",
+      kind: "costume",
+      model: "wizard",
+      plainColor: "Indigo",
+      description: "A starry wizard robe and pointed hat for arcane drifting.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpvbWHmsD7gK0nLCRORBFNW",
+      productId: "prod_Upanwyix8W2oUV",
+      colors: { swatch: "#5b4bc4", torso: "#3d318f", limb: "#27205f", arm: "#d8d0ff", helmet: "#594ad0", panel: "#f0d275", accent: "#ffd166" }
+    },
+    {
+      id: "costume-cowboy",
+      name: "Cowboy",
+      category: "skins",
+      kind: "costume",
+      model: "cowboy",
+      plainColor: "Brown",
+      description: "A frontier outfit with hat, vest, boots, and bandana.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpvdQHmsD7gK0nLARH5jiK6",
+      productId: "prod_Upaps0nejQRQas",
+      colors: { swatch: "#a16335", torso: "#8b4e29", limb: "#4f3626", arm: "#f2d0a2", helmet: "#b6783d", panel: "#2f5c91", accent: "#d94b4b" }
+    },
+    {
+      id: "costume-ninja",
+      name: "Ninja",
+      category: "skins",
+      kind: "costume",
+      model: "ninja",
+      plainColor: "Black",
+      description: "A stealth ninja costume with hood, mask, and dark wraps.",
+      priceLabel: "\u00a35",
+      priceId: "price_1Tpvf3HmsD7gK0nLRIQah37C",
+      productId: "prod_UpaqYppQTFsNos",
+      colors: { swatch: "#07090f", torso: "#111827", limb: "#05070c", arm: "#1f2937", helmet: "#0b0f18", panel: "#3b4458", accent: "#66e0b8" }
+    },
+    {
+      id: "costume-viking",
+      name: "Viking",
+      category: "skins",
+      kind: "costume",
+      model: "viking",
+      plainColor: "Fur",
+      description: "A fur-lined viking outfit with horned helm and rugged tunic.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpvgIHmsD7gK0nLKKPGvBuz",
+      productId: "prod_UpascR0hqgOq2d",
+      colors: { swatch: "#8a5b3d", torso: "#6f442d", limb: "#4b2d20", arm: "#d1c1ad", helmet: "#c6ccd4", panel: "#f2eadb", accent: "#58e2ff" }
+    },
+    {
+      id: "costume-samurai",
+      name: "Samurai",
+      category: "skins",
+      kind: "costume",
+      model: "samurai",
+      plainColor: "Crimson",
+      description: "Layered samurai armour with crest helm and plated skirt.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpviGHmsD7gK0nLD7WXSVoy",
+      productId: "prod_UpaufRtxQHUhbF",
+      colors: { swatch: "#9b2634", torso: "#7f1d2d", limb: "#2f1f24", arm: "#b9a58c", helmet: "#2b2630", panel: "#d0a64f", accent: "#ff6262" }
+    },
+    {
+      id: "costume-diver",
+      name: "Diver",
+      category: "skins",
+      kind: "costume",
+      model: "diver",
+      plainColor: "Brass",
+      description: "An old deep-sea diving suit with brass helmet and porthole visor.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpvjzHmsD7gK0nLzdBIdZa0",
+      productId: "prod_UpavxAM0KGm8C6",
+      colors: { swatch: "#b98135", torso: "#7c4f2b", limb: "#4b3628", arm: "#b8894d", helmet: "#d0a64f", panel: "#2d6cdf", accent: "#58e2ff" }
+    },
+    {
+      id: "costume-firefighter",
+      name: "Firefighter",
+      category: "skins",
+      kind: "costume",
+      model: "firefighter",
+      plainColor: "Red",
+      description: "A firefighter uniform with helmet, coat, and reflective stripes.",
+      priceLabel: "\u00a35",
+      priceId: "price_1Tpvl9HmsD7gK0nLzfe6Jk7R",
+      productId: "prod_UpaxCnSYRhVofB",
+      colors: { swatch: "#d9363e", torso: "#9f1f2e", limb: "#5d1f24", arm: "#ef6b6f", helmet: "#e5484d", panel: "#222936", accent: "#ffd166" }
+    },
+    {
+      id: "costume-doctor",
+      name: "Doctor",
+      category: "skins",
+      kind: "costume",
+      model: "doctor",
+      plainColor: "White",
+      description: "A doctor costume with white coat, scrubs, and medical badge.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpvmnHmsD7gK0nLwOaEMmif",
+      productId: "prod_UpaytIlrxZMx5B",
+      colors: { swatch: "#f8fbff", torso: "#f1f5f9", limb: "#d8dee8", arm: "#f8fbff", helmet: "#dffcff", panel: "#58e2ff", accent: "#ef6262" }
+    },
+    {
+      id: "costume-clown",
+      name: "Clown",
+      category: "skins",
+      kind: "costume",
+      model: "clown",
+      plainColor: "Rainbow",
+      description: "A bright clown costume with oversized buttons, ruffle, and red nose.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpvnOHmsD7gK0nLxWFcHxrG",
+      productId: "prod_Upaz3a0k9cMuZP",
+      colors: { swatch: "#ff73ad", torso: "#f8fbff", limb: "#3578ff", arm: "#ffd84d", helmet: "#ffffff", panel: "#a985ff", accent: "#ef6262" }
+    },
+    {
+      id: "costume-santa",
+      name: "Santa",
+      category: "skins",
+      kind: "costume",
+      model: "santa",
+      plainColor: "Red",
+      description: "A festive Santa costume available during December.",
+      priceLabel: "\u00a35",
+      priceId: "price_1TpvzJHmsD7gK0nLv9RyyLZp",
+      productId: "prod_UpbBcT4VxpYQk0",
+      availability: { type: "month", month: 12, label: "Available in December" },
+      colors: { swatch: "#d9363e", torso: "#c52835", limb: "#6b1d22", arm: "#f8fbff", helmet: "#d9363e", panel: "#111827", accent: "#f8fbff" }
+    },
+    {
+      id: "costume-skeleton",
+      name: "Skeleton",
+      category: "skins",
+      kind: "costume",
+      model: "skeleton",
+      plainColor: "Bone",
+      description: "A spooky skeleton costume available on 31/10 and 01/11.",
+      priceLabel: "\u00a35",
+      priceId: "price_1Tpvq0HmsD7gK0nLynQlHhT8",
+      productId: "prod_Upb2FLniFOUZlU",
+      availability: { type: "dates", dates: ["10-31", "11-01"], label: "Available on 31/10 and 01/11" },
+      colors: { swatch: "#f1ead8", torso: "#111827", limb: "#0b0f18", arm: "#e8dcc4", helmet: "#efe7d4", panel: "#2b3446", accent: "#f1ead8" }
+    },
+    {
+      id: "costume-teddy",
+      name: "Teddy",
+      category: "skins",
+      kind: "costume",
+      model: "teddy",
+      plainColor: "Honey",
+      description: "A birthday teddy costume available on your birthday.",
+      priceLabel: "Free",
+      priceId: "price_1Tpw0RHmsD7gK0nLmwLsy9E7",
+      productId: "prod_UpbCRtUOQpec0E",
+      freeClaim: true,
+      availability: { type: "birthday", label: "Available on your birthday" },
+      colors: { swatch: "#b8793d", torso: "#a86b35", limb: "#7b4b2a", arm: "#c28a52", helmet: "#b8793d", panel: "#f2d0a2", accent: "#ffd166" }
+    },
+    {
+      id: "trail-smoke",
+      name: "Smoke Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Smoke",
+      description: "A longer smoky boost trail with drifting layered plumes.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHb2HmsD7gK0nLOjctcv4d",
+      productId: "prod_UpxWZVT2Mzv5th",
+      colors: { swatch: "#8d98a5", accent: "#d8e0ea" }
+    },
+    {
+      id: "trail-water",
+      name: "Water Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Water",
+      description: "A flowing water boost trail with bubbles and splashes.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHelHmsD7gK0nLiGu02lbg",
+      productId: "prod_UpxZyhCmnYPbNd",
+      colors: { swatch: "#35c7ff", accent: "#b9f5ff" }
+    },
+    {
+      id: "trail-magic",
+      name: "Magic Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Magic",
+      description: "A sparkling arcane boost trail with stars and motes.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHfLHmsD7gK0nLyXkhzOhy",
+      productId: "prod_UpxaqKDUsfPG8D",
+      colors: { swatch: "#a985ff", accent: "#ffe8ff" }
+    },
+    {
+      id: "trail-rainbow",
+      name: "Rainbow Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Rainbow",
+      description: "A colourful rainbow boost trail with shifting bands.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHgJHmsD7gK0nLI5a6yWzE",
+      productId: "prod_UpxbnIZ5SKOnC3",
+      colors: { swatch: "#ff73ad", accent: "#ffd84d" }
+    },
+    {
+      id: "trail-plasma",
+      name: "Plasma Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Plasma",
+      description: "An electric plasma boost trail with neon pulses.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHgnHmsD7gK0nLm6H6j7al",
+      productId: "prod_UpxczYYA1xPzXU",
+      colors: { swatch: "#64e3ff", accent: "#ff73ff" }
+    },
+    {
+      id: "trail-snow",
+      name: "Snow Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Snow",
+      description: "A frosty snow boost trail with flakes and mist.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHhJHmsD7gK0nLyi2lR5Sd",
+      productId: "prod_UpxcTAhPG1gePO",
+      colors: { swatch: "#dffcff", accent: "#ffffff" }
+    },
+    {
+      id: "trail-bats",
+      name: "Bat Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Bats",
+      description: "A spooky bat boost trail with fluttering silhouettes.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHiCHmsD7gK0nLBIjzEEOB",
+      productId: "prod_UpxdJmfhSpp3sU",
+      colors: { swatch: "#2b2630", accent: "#a985ff" }
+    },
+    {
+      id: "trail-hearts",
+      name: "Heart Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Hearts",
+      description: "A sweet heart boost trail with drifting hearts.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHjDHmsD7gK0nLM4NNrgk6",
+      productId: "prod_UpxejWrfVwaVr0",
+      colors: { swatch: "#ff73ad", accent: "#ffd1e5" }
+    },
+    {
+      id: "trail-flowers",
+      name: "Flower Trail",
+      category: "skins",
+      kind: "trail",
+      plainColor: "Flowers",
+      description: "A floral boost trail with petals and blossoms.",
+      priceLabel: "\u00a37",
+      priceId: "price_1TqHjVHmsD7gK0nLrURknwLD",
+      productId: "prod_Upxee4KIo3Sksn",
+      colors: { swatch: "#66e0b8", accent: "#ffd84d" }
+    }
+  ];
+
   const buildRecipes = [
     {
       id: defaultToolId,
@@ -1319,6 +1891,15 @@
       icon: "assets/missile-launcher.svg"
     },
     {
+      id: personalTetherToolId,
+      name: "Personal Tether",
+      category: "tools",
+      description: "A suit-mounted tether. Left click anchors it to a non-star body, then jetpack to tug the body around. Right click with this tool selected detaches it.",
+      cost: { suction: 6, plating: 3, propulsion: 2 },
+      unlockToolId: personalTetherToolId,
+      icon: "assets/tether.svg"
+    },
+    {
       id: "plating-block",
       name: "Plating block",
       category: "structures",
@@ -1335,6 +1916,33 @@
       cost: { energy: 5, plating: 3 },
       structureType: "battery",
       icon: "assets/battery.svg"
+    },
+    {
+      id: "container",
+      name: "Container",
+      category: "structures",
+      description: "A shared surface locker for storing tech resources. Anyone who can reach it can open it and move tech in or out.",
+      cost: { plating: 6, repair: 2 },
+      structureType: "container",
+      icon: "assets/container.svg"
+    },
+    {
+      id: "trading-port",
+      name: "Trading Port",
+      category: "structures",
+      description: "A dock for an automated courier vessel. Stock it with tech and post buy offers for nearby ports and passing players.",
+      cost: { plating: 8, propulsion: 5, communication: 3, repair: 2 },
+      structureType: "trading-port",
+      icon: "assets/trading-port.svg"
+    },
+    {
+      id: "medbay",
+      name: "Medbay",
+      category: "structures",
+      description: "A surface clinic that spends its host body's energy to slowly regenerate your health while you stand inside.",
+      cost: { repair: 5, energy: 4, plating: 3 },
+      structureType: "medbay",
+      icon: "assets/medbay.svg"
     },
     {
       id: "accumulator",
@@ -1400,40 +2008,42 @@
       icon: "assets/bridge.svg"
     }
   ];
+
   const toolUpgradeDefinitions = {
     "laser-pistol": [
-      { id: "damage", name: "Damage", techKey: "weapon", cost: 3, maxBonus: 0.9 },
-      { id: "range", name: "Range", techKey: "target", cost: 3, maxBonus: 0.9 }
+      { id: "damage", name: "Damage", techKey: "weapon", cost: 3, bonusScale: 0.9 },
+      { id: "range", name: "Range", techKey: "target", cost: 3, bonusScale: 0.9 }
     ],
     "laser-rifle": [
-      { id: "damage", name: "Damage", techKey: "weapon", cost: 5, maxBonus: 0.9 },
-      { id: "range", name: "Range", techKey: "target", cost: 5, maxBonus: 0.9 }
+      { id: "damage", name: "Damage", techKey: "weapon", cost: 5, bonusScale: 0.9 },
+      { id: "range", name: "Range", techKey: "target", cost: 5, bonusScale: 0.9 }
     ],
     shotgun: [
-      { id: "damage", name: "Damage", techKey: "weapon", cost: 5, maxBonus: 0.9 },
-      { id: "range", name: "Range", techKey: "propulsion", cost: 4, maxBonus: 0.9 }
+      { id: "damage", name: "Damage", techKey: "weapon", cost: 5, bonusScale: 0.9 },
+      { id: "range", name: "Range", techKey: "propulsion", cost: 4, bonusScale: 0.9 }
     ],
     [machineGunToolId]: [
-      { id: "damage", name: "Damage", techKey: "weapon", cost: 6, maxBonus: 0.9 },
-      { id: "range", name: "Range", techKey: "target", cost: 5, maxBonus: 0.9 }
+      { id: "damage", name: "Damage", techKey: "weapon", cost: 6, bonusScale: 0.9 },
+      { id: "range", name: "Range", techKey: "target", cost: 5, bonusScale: 0.9 }
     ],
     spanner: [
-      { id: "repair-speed", name: "Repair speed", techKey: "repair", cost: 3, maxBonus: 1.15 },
-      { id: "dismantle-speed", name: "Dismantle speed", techKey: "weapon", cost: 3, maxBonus: 1.15 }
+      { id: "repair-speed", name: "Repair speed", techKey: "repair", cost: 3, bonusScale: 1.15 },
+      { id: "dismantle-speed", name: "Dismantle speed", techKey: "weapon", cost: 3, bonusScale: 1.15 }
     ],
     [defaultToolId]: [
-      { id: "suck", name: "Suck strength", techKey: "suction", cost: 3, maxBonus: 1.2 },
-      { id: "blow", name: "Blow strength", techKey: "propulsion", cost: 3, maxBonus: 1.2 }
+      { id: "suck", name: "Suck strength", techKey: "suction", cost: 3, bonusScale: 1.2 },
+      { id: "blow", name: "Blow strength", techKey: "propulsion", cost: 3, bonusScale: 1.2 }
     ],
     [visciousVacuumToolId]: [
-      { id: "suck", name: "Suck strength", techKey: "suction", cost: 4, maxBonus: 1.2 },
-      { id: "blow", name: "Blow strength", techKey: "propulsion", cost: 4, maxBonus: 1.2 }
+      { id: "suck", name: "Suck strength", techKey: "suction", cost: 4, bonusScale: 1.2 },
+      { id: "blow", name: "Blow strength", techKey: "propulsion", cost: 4, bonusScale: 1.2 }
     ],
     [empToolId]: [
-      { id: "range", name: "Pulse range", techKey: "target", cost: 5, maxBonus: 0.8 },
-      { id: "duration", name: "Disable duration", techKey: "energy", cost: 5, maxBonus: 0.65 }
+      { id: "range", name: "Pulse range", techKey: "target", cost: 5, bonusScale: 0.8 },
+      { id: "duration", name: "Disable duration", techKey: "energy", cost: 5, bonusScale: 0.65 }
     ]
   };
+
   const techInventory = {};
   const persistenceSaveInterval = 5;
   const persistencePollInterval = 15;
@@ -1480,22 +2090,33 @@
   };
   const runState = {
     active: false,
-    difficultyId: defaultDifficultyId
+    difficultyId: defaultDifficultyId,
+    gameMode: "horde"
   };
   const startMenu = {
     view: "main",
     history: [],
+    selectedGameMode: "horde",
     titles: {
       main: ["Clusternauts", "Clusternauts"],
       single: ["Single Player", "Choose Mode"],
+      "single-options": ["Single Player", "Horde Mode"],
       load: ["Single Player", "Load Save"],
       difficulty: ["New Game", "Choose Difficulty"],
-      multiplayer: ["Multiplayer", "Party Setup"],
+      multiplayer: ["Multiplayer", "Choose Mode"],
+      "multiplayer-horde": ["Multiplayer", "Horde Mode"],
+      "multiplayer-survival": ["Multiplayer", "Survival"],
       lobby: ["Multiplayer", "Lobby"],
+      store: ["Store", "Store"],
       leaderboard: ["Leaderboard", "Top Runs"],
       settings: ["Settings", "Settings"]
     }
   };
+  const storeFilterDefinitions = [
+    { key: "suit", label: "Colours" },
+    { key: "costume", label: "Costumes" },
+    { key: "trail", label: "Trails" }
+  ];
   const deathState = {
     active: false,
     summaryReady: false,
@@ -1520,6 +2141,7 @@
       difficulty: "all"
     }
   };
+
   const multiplayerSnapshotInterval = 0.25;
   const partyInputInterval = 0.05;
   const partyActiveInputInterval = 1 / 30;
@@ -1540,19 +2162,25 @@
   const multiplayerV2MaxFrameDt = 0.16;
   const multiplayerV2MaxCatchUpSteps = 6;
   const multiplayerV2MaxAccumulator = multiplayerV2MaxFrameDt;
-  const multiplayerV2ReplayInputLimit = 72;
+  const multiplayerV2ReplayInputLimit = 24;
   const multiplayerV2QueuedSnapshotEventLimit = 120;
   const multiplayerV2StaleSnapshotTickTolerance = 2;
   const multiplayerV2RespawnAckGraceMs = 5000;
   const multiplayerV2LocalCorrectionBlendPerFrame = 0.42;
   const multiplayerV2RemoteSnapshotRenderDelay = 0.07;
   const multiplayerV2RemoteSnapshotExtrapolateLimit = 0.16;
+  const multiplayerMaxClientMessageBytes = 460000;
+  const multiplayerBackpressureWarnBytes = 1500000;
+  const multiplayerLargeMessageWarnIntervalMs = 5000;
+  let multiplayerLastLargeMessageWarnAt = 0;
   const remoteEffectInterval = 0.18;
   const remoteStaleMs = 16000;
   const remoteUniverseAlphaScale = 0.32;
   const playerInteractionRange = 250;
   const playerInteractionChoiceConfigs = {
     trade: { key: "trade", label: "Trade", icon: "$", speech: "Trade?", emote: "swap" },
+    team: { key: "team", label: "Team Up", icon: "+", speech: "Team up?", emote: "team" },
+    "leave-team": { key: "leave-team", label: "Leave Team", icon: "-", speech: "Leaving team", emote: "leave" },
     duel: { key: "duel", label: "Duel", icon: "!", speech: "Duel?", emote: "duel" },
     truce: { key: "truce", label: "Truce", icon: "=", speech: "Truce?", emote: "peace" }
   };
@@ -1580,6 +2208,13 @@
     lobbyJoinPending: "",
     lobbyRequestStartedAt: 0,
     lobbyInviteLink: "",
+    lobbyGameMode: "horde",
+    sharedWorldJoinPending: false,
+    sharedWorldStats: null,
+    sharedWorldStatsLoading: false,
+    sharedWorldStatsLoadedAt: 0,
+    sharedTeamId: "",
+    sharedTeamMemberIds: new Set(),
     partySession: null,
     partyJoinCode: "",
     partyMode: "solo",
@@ -1598,6 +2233,18 @@
     anomaly: null,
     friendJoinsEnabled: false,
     onlineCount: 0,
+    networkStats: {
+      sentMessages: 0,
+      sentBytes: 0,
+      droppedMessages: 0,
+      compactedMessages: 0,
+      backpressureWarnings: 0,
+      lastMessageType: "",
+      lastMessageBytes: 0,
+      largestMessageType: "",
+      largestMessageBytes: 0,
+      bufferedAmount: 0
+    },
     players: [],
     panelOpen: false,
     socialMode: "online",
@@ -1627,6 +2274,7 @@
       clientTick: 0,
       fixedAccumulator: 0,
       sendAccumulator: 0,
+      lastSentInput: null,
       pendingInputs: [],
       pendingSnapshot: null,
       landRequested: "",
@@ -1661,6 +2309,17 @@
       }
     }
   };
+
+  const stellarEvolutionEndThreshold = 60000;
+  const stellarGrowthAverageWindowSeconds = 8;
+  const stellarGrowthRateNeutronThreshold = 80;
+  const stellarGrowthRateBlackHoleThreshold = 220;
+  const stellarOutcomeTierNames = ["white dwarf", "neutron star", "black hole"];
+  const stellarBranchTiers = [
+    { name: "white dwarf", threshold: stellarEvolutionEndThreshold, article: "a", solid: true },
+    { name: "neutron star", threshold: stellarEvolutionEndThreshold, article: "a", solid: true },
+    { name: "black hole", threshold: stellarEvolutionEndThreshold, article: "a", solid: true }
+  ];
   const bodyTiers = [
     { name: "particle", threshold: 0, article: "a", solid: false },
     { name: "rock", threshold: 10, article: "a", solid: false },
@@ -1668,7 +2327,8 @@
     { name: "asteroid", threshold: 150, article: "an", solid: true },
     { name: "dwarf moon", threshold: 750, article: "a", solid: true },
     { name: "moon", threshold: 1500, article: "a", solid: true },
-    { name: "planet", threshold: 7500, article: "a", solid: true }
+    { name: "planet", threshold: 7500, article: "a", solid: true },
+    { name: "star", threshold: 30000, article: "a", solid: true }
   ];
   const celestialBodyRadii = {
     particle: 11,
@@ -1677,9 +2337,14 @@
     asteroid: 52,
     "dwarf moon": 78,
     moon: 110,
-    planet: 158
+    planet: 158,
+    star: 224,
+    "white dwarf": 188,
+    "neutron star": 176,
+    "black hole": 204
   };
-  const celestialBodyBlueprints = bodyTiers.reduce(function (blueprints, tier) {
+  const bodyTierEvolutionSizeScale = 1.2;
+  const celestialBodyBlueprints = bodyTiers.concat(stellarBranchTiers).reduce(function (blueprints, tier) {
     blueprints[tier.name] = {
       name: tier.name,
       threshold: tier.threshold,
@@ -1689,6 +2354,7 @@
     };
     return blueprints;
   }, Object.create(null));
+
   const progressionTree = {
     nodes: [
       { id: "create_rock", label: "Create a rock", category: "celestial_body", prerequisites: [] },
@@ -1697,22 +2363,23 @@
       { id: "create_dwarf_moon", label: "Create a dwarf moon", category: "celestial_body", prerequisites: ["create_asteroid"] },
       { id: "create_moon", label: "Create a moon", category: "celestial_body", prerequisites: ["create_dwarf_moon"] },
       { id: "create_planet", label: "Create a planet", category: "celestial_body", prerequisites: ["create_moon"] },
+      { id: "create_star", label: "Create a star", category: "celestial_body", prerequisites: ["create_planet"] },
       { id: "kill_3_alienoids", label: "Kill 3 alienoids", category: "mob", prerequisites: ["create_rock"] },
       { id: "kill_3_ufos", label: "Kill 4 UFOs", category: "mob", prerequisites: ["kill_3_alienoids"] },
       { id: "kill_3_rambots", label: "Kill 5 rambots", category: "mob", prerequisites: ["kill_3_ufos"] },
-      { id: "kill_3_teslas", label: "Kill 6 teslas", category: "mob", prerequisites: ["kill_3_rambots"] },
-      { id: "kill_3_engineers", label: "Kill 7 engineers", category: "mob", prerequisites: ["kill_3_teslas"] },
-      { id: "kill_3_satellites", label: "Kill 8 satellites", category: "mob", prerequisites: ["kill_3_engineers"] },
+      { id: "kill_3_engineers", label: "Kill 6 engineers", category: "mob", prerequisites: ["kill_3_rambots"] },
+      { id: "kill_3_teslas", label: "Kill 7 teslas", category: "mob", prerequisites: ["kill_3_engineers"] },
+      { id: "kill_3_satellites", label: "Kill 8 satellites", category: "mob", prerequisites: ["kill_3_teslas"] },
       { id: "kill_3_rockets", label: "Kill 9 rockets", category: "mob", prerequisites: ["kill_3_satellites"] },
       { id: "kill_3_fighters", label: "Kill 10 fighters", category: "mob", prerequisites: ["kill_3_rockets"] },
       { id: "kill_alienoid_boss", label: "Kill alienoid boss", category: "boss", prerequisites: ["kill_3_alienoids"] },
-      { id: "kill_ufo_boss", label: "Kill UFO boss", category: "boss", prerequisites: ["kill_3_ufos"] },
-      { id: "kill_rambot_boss", label: "Kill rambot boss", category: "boss", prerequisites: ["kill_3_rambots"] },
-      { id: "kill_tesla_boss", label: "Kill tesla boss", category: "boss", prerequisites: ["kill_3_teslas"] },
-      { id: "kill_engineer_boss", label: "Kill engineer boss", category: "boss", prerequisites: ["kill_3_engineers"] },
-      { id: "kill_satellite_boss", label: "Kill satellite boss", category: "boss", prerequisites: ["kill_3_satellites"] },
-      { id: "kill_rocket_boss", label: "Kill rocket boss", category: "boss", prerequisites: ["kill_3_rockets"] },
-      { id: "kill_fighter_boss", label: "Kill fighter boss", category: "boss", prerequisites: ["kill_3_fighters"] },
+      { id: "kill_ufo_boss", label: "Kill UFO boss", category: "boss", prerequisites: ["kill_3_ufos", "kill_alienoid_boss"] },
+      { id: "kill_rambot_boss", label: "Kill rambot boss", category: "boss", prerequisites: ["kill_3_rambots", "kill_ufo_boss"] },
+      { id: "kill_engineer_boss", label: "Kill engineer boss", category: "boss", prerequisites: ["kill_3_engineers", "kill_rambot_boss"] },
+      { id: "kill_tesla_boss", label: "Kill tesla boss", category: "boss", prerequisites: ["kill_3_teslas", "kill_engineer_boss"] },
+      { id: "kill_satellite_boss", label: "Kill satellite boss", category: "boss", prerequisites: ["kill_3_satellites", "kill_tesla_boss"] },
+      { id: "kill_rocket_boss", label: "Kill rocket boss", category: "boss", prerequisites: ["kill_3_rockets", "kill_satellite_boss"] },
+      { id: "kill_fighter_boss", label: "Kill fighter boss", category: "boss", prerequisites: ["kill_3_fighters", "kill_rocket_boss"] },
       { id: "make_laser_pistol", label: "Make a laser pistol", category: "tool", prerequisites: ["kill_3_rambots"] },
       { id: "create_spanner", label: "Create a spanner", category: "tool", prerequisites: ["kill_3_engineers"] },
       { id: "create_rifle", label: "Create a rifle", category: "tool", prerequisites: ["kill_3_satellites"] },
@@ -1720,6 +2387,7 @@
       { id: "create_accumulator", label: "Create an accumulator", category: "structure", prerequisites: ["kill_3_teslas"] }
     ]
   };
+
   const objectiveMetadataById = {
     create_rock: {
       icon: "R",
@@ -1761,6 +2429,13 @@
       hint: "Grow a body into a planet.",
       progress: function () {
         return objectiveMassProgress("planet");
+      }
+    },
+    create_star: {
+      icon: "S",
+      hint: "Collapse a planet into a star.",
+      progress: function () {
+        return objectiveMassProgress("star");
       }
     },
     kill_3_alienoids: objectiveMobMetadata("alienoid"),
@@ -1827,8 +2502,8 @@
     };
   });
   const randomEventDefinitions = [];
-  const randomEventDefaultCooldown = 180;
-  const randomEventMinimumCooldown = 150;
+  const randomEventDefaultCooldown = 300;
+  const randomEventMinimumCooldown = 240;
   const randomEventState = {
     enabled: true,
     cooldown: randomEventDefaultCooldown,
@@ -1841,22 +2516,29 @@
   const particleStormMapColor = { r: 88, g: 226, b: 255 };
   const meteorShowerMapColor = { r: 255, g: 166, b: 86 };
   const particleStormSettings = {
-    duration: 42,
-    radiusMin: 820,
-    radiusMax: 1180,
-    initialCount: 24,
-    maxActiveParticles: 62,
-    spawnInterval: 0.22
+    duration: 52,
+    radiusMin: 1350,
+    radiusMax: 1900,
+    initialCount: 12,
+    maxActiveParticles: 32,
+    spawnInterval: 0.58
   };
   const meteorShowerSettings = {
-    duration: 38,
-    radiusMin: 1380,
-    radiusMax: 1840,
-    initialCount: 8,
-    maxActiveParticles: 24,
-    spawnInterval: 0.48
+    duration: 46,
+    radiusMin: 2000,
+    radiusMax: 2800,
+    initialCount: 4,
+    maxActiveParticles: 12,
+    spawnInterval: 0.95
   };
   const particleSpawnTransitionDuration = 0.52;
+  const starBirthTransitionDuration = 1.35;
+  const starParticleEmissionBaseRate = 0.65;
+  const starParticleEmissionRadiusScale = 0.012;
+  const starParticleEmissionMaxPerFrame = 4;
+  const starContactDamagePerSecond = 34;
+  const starContactDamageCooldown = 0.55;
+  const starContactKnockback = 260;
   const funnelShape = {
     backX: 88,
     backHalf: 22,
@@ -1902,6 +2584,8 @@
   let nextTeslaId = 1;
   let nextRocketId = 1;
   let nextFighterId = 1;
+  let nextMobBeaconId = 1;
+  let nextSurvivalCampId = 1;
   let nextStructureId = 1;
   let nextSpacecraftId = 1;
   let nextRivalProjectileId = 1;
@@ -1913,6 +2597,16 @@
   let pendingTetherAnchor = null;
   let activeBuildFilter = "all";
   let selectedBuildRecipeId = buildRecipes[0] ? buildRecipes[0].id : null;
+  let ownedSkinIds = [];
+  let equippedSkinId = "";
+  let ownedTrailIds = [];
+  let equippedTrailId = "";
+  let storePreviewSkinId = "";
+  let activeStoreFilters = new Set(storeFilterDefinitions.map((filter) => filter.key));
+  let storePreviewAnimationFrameId = 0;
+  let skinPurchasePendingId = "";
+  let skinStatusMessage = "";
+  let skinRefreshInFlight = false;
   let unlockedToolIds = [defaultToolId];
   let hotbarToolIds = [defaultToolId];
   let equippedToolId = defaultToolId;
@@ -1931,6 +2625,14 @@
   let familiarNetSwingDirection = -1;
   const guidedLauncherState = {
     activeMissile: null
+  };
+  const personalTetherState = {
+    bodyId: 0,
+    angle: 0,
+    surfaceOffset: 0,
+    restLength: 0,
+    deploy: 0,
+    wobble: 0
   };
   const playerStatusBarState = {
     health: { value: null, variant: "", changedAt: 0, fullAt: 0 },
@@ -1962,6 +2664,12 @@
   let mobSpawnRestTimer = 0;
   let mobSpawnRestDrainTimer = 0;
   let mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
+  const survivalSpawnState = {
+    nextCampCheckTick: 0,
+    hitSquadCooldownsByPlayerId: {},
+    hitSquadWarningSentByPlayerId: {},
+    nextHitSquadId: 1
+  };
   const mobDefeatsByKind = {
     alienoid: 0,
     ufo: 0,
@@ -2367,30 +3075,33 @@
   }
 
   function renderControlBindings() {
-    if (!controlBindingsList) {
+    const bindingLists = [controlBindingsList, menuControlBindingsList].filter(Boolean);
+    if (!bindingLists.length) {
       return;
     }
 
-    controlBindingsList.textContent = "";
-    for (const binding of controlBindingLabels) {
-      const row = document.createElement("div");
-      const label = document.createElement("span");
-      const button = document.createElement("button");
-      const code = controlCodeFor(binding.action);
+    bindingLists.forEach(function (bindingList) {
+      bindingList.textContent = "";
+      for (const binding of controlBindingLabels) {
+        const row = document.createElement("div");
+        const label = document.createElement("span");
+        const button = document.createElement("button");
+        const code = controlCodeFor(binding.action);
 
-      row.className = "settings-row";
-      label.className = "settings-row__label";
-      label.textContent = binding.label;
-      button.className = "settings-row__key";
-      button.type = "button";
-      button.dataset.controlAction = binding.action;
-      button.textContent = pendingControlRemap === binding.action ? "Press input" : formatControlCode(code);
-      button.classList.toggle("is-listening", pendingControlRemap === binding.action);
-      button.setAttribute("aria-label", "Remap " + binding.label);
+        row.className = "settings-row";
+        label.className = "settings-row__label";
+        label.textContent = binding.label;
+        button.className = "settings-row__key";
+        button.type = "button";
+        button.dataset.controlAction = binding.action;
+        button.textContent = pendingControlRemap === binding.action ? "Press input" : formatControlCode(code);
+        button.classList.toggle("is-listening", pendingControlRemap === binding.action);
+        button.setAttribute("aria-label", "Remap " + binding.label);
 
-      row.append(label, button);
-      controlBindingsList.append(row);
-    }
+        row.append(label, button);
+        bindingList.append(row);
+      }
+    });
   }
 
   function updateZoomUi() {
@@ -2466,7 +3177,14 @@
   function updateHudEnabledUi() {
     const hudEnabled = gameSettings.hudEnabled !== false;
     document.body.classList.toggle("hud-hidden", !hudEnabled);
-    document.body.classList.toggle("hud-menu-open", settingsOpen || buildMenuOpen || objectivesOpen);
+    document.body.classList.toggle(
+      "hud-menu-open",
+      settingsOpen ||
+        buildMenuOpen ||
+        objectivesOpen ||
+        Boolean(containerPanel && containerPanel.classList.contains("is-open")) ||
+        Boolean(tradePortPanel && tradePortPanel.classList.contains("is-open"))
+    );
     if (hudEnabledInput) {
       hudEnabledInput.checked = hudEnabled;
     }
@@ -3026,6 +3744,16 @@
 
     if (activePlacementRecipeId) {
       confirmStructurePlacement();
+      return true;
+    }
+
+    if (handleTradePortClick()) {
+      resetMouseButtons();
+      return true;
+    }
+
+    if (handleContainerClick()) {
+      resetMouseButtons();
       return true;
     }
 
@@ -3802,13 +4530,47 @@
     return tier;
   }
 
+  function normalizedStellarOutcomeName(name) {
+    const normalized = String(name || "").trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
+    return stellarOutcomeTierNames.includes(normalized) ? normalized : "";
+  }
+
+  function stellarOutcomeForGrowthRate(rate) {
+    const growthRate = Math.max(0, finiteOr(rate, 0));
+    if (growthRate >= stellarGrowthRateBlackHoleThreshold) {
+      return "black hole";
+    }
+    if (growthRate >= stellarGrowthRateNeutronThreshold) {
+      return "neutron star";
+    }
+    return "white dwarf";
+  }
+
+  function tierForStellarOutcome(outcome) {
+    const normalized = normalizedStellarOutcomeName(outcome) || "white dwarf";
+    return stellarBranchTiers.find((candidate) => candidate.name === normalized) || stellarBranchTiers[0];
+  }
+
+  function tierForMassAndStellarOutcome(mass, outcome) {
+    if (mass >= stellarEvolutionEndThreshold) {
+      return tierForStellarOutcome(outcome);
+    }
+    return tierForMass(mass);
+  }
+
   function nextTierAfter(tier) {
     const index = bodyTiers.indexOf(tier);
+    if (index < 0 && tier && tier.name) {
+      const nameIndex = bodyTiers.findIndex((candidate) => candidate.name === tier.name);
+      return bodyTiers[nameIndex + 1] || null;
+    }
     return bodyTiers[index + 1] || null;
   }
 
   function thresholdForTierName(name) {
-    const tier = bodyTiers.find((candidate) => candidate.name === name);
+    const normalized = String(name || "").trim().toLowerCase();
+    const tier = bodyTiers.find((candidate) => candidate.name === normalized) ||
+      stellarBranchTiers.find((candidate) => candidate.name === normalized);
     return tier ? tier.threshold : 0;
   }
 
@@ -3818,11 +4580,227 @@
       .toLowerCase()
       .replace(/[-_]+/g, " ")
       .replace(/\s+/g, " ");
-    return bodyTiers.find((candidate) => candidate.name === normalized) || null;
+    return bodyTiers.find((candidate) => candidate.name === normalized) ||
+      stellarBranchTiers.find((candidate) => candidate.name === normalized) ||
+      null;
   }
 
   function isAsteroidOrLarger(particle) {
     return particle && particle.tier && particle.tier.threshold >= thresholdForTierName("asteroid");
+  }
+
+  function isStarBody(body) {
+    return Boolean(body && body.tier && (body.tier.name === "star" || stellarOutcomeTierNames.includes(body.tier.name)));
+  }
+
+  function orbitRingCountForBody(body) {
+    if (!body || !body.tier) {
+      return 0;
+    }
+    if (body.tier.name === "white dwarf") {
+      return 5;
+    }
+    if (body.tier.name === "star") {
+      return 3;
+    }
+    if (body.tier.name === orbitCaptureMinTierName) {
+      return 1;
+    }
+    return 0;
+  }
+
+  function orbitRingRadius(body, ringIndex) {
+    const radius = Math.max(1, finiteOr(body && body.radius, body ? radiusFromMass(body.mass) : 1));
+    const contactRadius = solidBodyContactRadius(body);
+    const baseGap = Math.max(orbitRingMinGap, radius * orbitRingBaseGapScale);
+    return contactRadius + baseGap * (1 + Math.max(0, finiteOr(ringIndex, 0)) * orbitRingSpacingScale);
+  }
+
+  function orbitCaptureBandForRing(body, orbiter, ringRadius) {
+    return Math.max(
+      orbitCaptureMinBand,
+      finiteOr(ringRadius, orbitRingRadius(body, 0)) * orbitCaptureBandScale +
+        Math.max(0, finiteOr(orbiter && orbiter.radius, 0)) * 0.72
+    );
+  }
+
+  function orbitRingsForBody(body) {
+    const count = orbitRingCountForBody(body);
+    const rings = [];
+    for (let i = 0; i < count; i += 1) {
+      rings.push(orbitRingRadius(body, i));
+    }
+    return rings;
+  }
+
+  function canBodyOrbitHost(orbiter, host) {
+    if (!orbiter || !host || orbiter === host || !orbiter.tier || !host.tier) {
+      return false;
+    }
+    if (orbitRingCountForBody(host) <= 0) {
+      return false;
+    }
+    if (finiteOr(orbiter.mass, 0) >= finiteOr(host.mass, 0)) {
+      return false;
+    }
+    return orbiter.tier.threshold < host.tier.threshold || finiteOr(orbiter.mass, 0) < finiteOr(host.mass, 0) * 0.72;
+  }
+
+  function bestOrbitRingForBody(orbiter, host) {
+    if (!canBodyOrbitHost(orbiter, host)) {
+      return null;
+    }
+    const dx = finiteOr(orbiter.x, 0) - finiteOr(host.x, 0);
+    const dy = finiteOr(orbiter.y, 0) - finiteOr(host.y, 0);
+    const distance = Math.hypot(dx, dy) || 1;
+    let best = null;
+    for (let i = 0; i < orbitRingCountForBody(host); i += 1) {
+      const radius = orbitRingRadius(host, i);
+      const band = orbitCaptureBandForRing(host, orbiter, radius);
+      const delta = distance - radius;
+      const score = Math.abs(delta) / band + i * 0.035;
+      if (Math.abs(delta) <= band * 2.35 && (!best || score < best.score)) {
+        best = { host, ringIndex: i, radius, band, distance, dx, dy, delta, score };
+      }
+    }
+    return best;
+  }
+
+  function orbitDirectionForBody(orbiter, host, nx, ny, relVx, relVy) {
+    const tangentVelocity = relVx * -ny + relVy * nx;
+    if (Math.abs(tangentVelocity) > 8) {
+      return tangentVelocity >= 0 ? 1 : -1;
+    }
+    const stored = finiteOr(orbiter && orbiter.orbitDirection, 0);
+    if (stored < 0 || stored > 0) {
+      return stored < 0 ? -1 : 1;
+    }
+    return ((Math.floor(finiteOr(orbiter && orbiter.id, 0)) + Math.floor(finiteOr(host && host.id, 0))) % 2) ? -1 : 1;
+  }
+
+  function orbitalSpeedForRing(host, ringIndex, radius) {
+    const hostRadius = Math.max(1, finiteOr(host && host.radius, host ? radiusFromMass(host.mass) : 1));
+    const tierBoost = isStarBody(host) ? 78 : 34;
+    return clamp(122 + Math.sqrt(hostRadius) * 7.5 + tierBoost + Math.max(0, finiteOr(ringIndex, 0)) * 18 - Math.max(0, finiteOr(radius, 1) - hostRadius) * 0.055, 128, 345);
+  }
+
+  function findOrbitCapture(body, bodies) {
+    if (!body || !Array.isArray(bodies)) {
+      return null;
+    }
+    let best = null;
+    const preferredHostId = Math.max(0, Math.floor(finiteOr(body.orbitHostId, 0)));
+    for (const host of bodies) {
+      const candidate = bestOrbitRingForBody(body, host);
+      if (!candidate) {
+        continue;
+      }
+      const hostBias = preferredHostId && host.id === preferredHostId ? -0.24 : 0;
+      const score = candidate.score + hostBias;
+      if (!best || score < best.score) {
+        best = Object.assign(candidate, { score });
+      }
+    }
+    return best;
+  }
+
+  function clearOrbitState(body) {
+    if (!body) {
+      return;
+    }
+    body.orbitHostId = 0;
+    body.orbitRingIndex = 0;
+    body.orbitStrength = 0;
+    body.orbitGrace = 0;
+  }
+
+  function applyOrbitCaptureForces(body, bodies, dt) {
+    if (!body || !Array.isArray(bodies) || dt <= 0) {
+      return false;
+    }
+    const capture = findOrbitCapture(body, bodies);
+    if (!capture) {
+      if (finiteOr(body.orbitGrace, 0) > 0) {
+        body.orbitGrace = Math.max(0, finiteOr(body.orbitGrace, 0) - dt);
+      } else if (finiteOr(body.orbitStrength, 0) > 0) {
+        clearOrbitState(body);
+      }
+      return false;
+    }
+
+    const host = capture.host;
+    const distance = capture.distance || 1;
+    const nx = capture.dx / distance;
+    const ny = capture.dy / distance;
+    const tangentX = -ny;
+    const tangentY = nx;
+    const relVx = finiteOr(body.vx, 0) - finiteOr(host.vx, 0);
+    const relVy = finiteOr(body.vy, 0) - finiteOr(host.vy, 0);
+    const radialSpeed = relVx * nx + relVy * ny;
+    const tangentVelocity = relVx * tangentX + relVy * tangentY;
+    const relativeSpeed = Math.hypot(relVx, relVy);
+    const inwardSpeed = Math.max(0, -radialSpeed);
+    const retainedByHost = Math.max(0, Math.floor(finiteOr(body.orbitHostId, 0))) === host.id;
+    const breachSpeed = orbitCaptureStrongInwardSpeed + (retainedByHost ? 92 : 0);
+    if (capture.delta < 0 && inwardSpeed > breachSpeed) {
+      clearOrbitState(body);
+      return false;
+    }
+    const radialCloseness = clamp(1 - Math.abs(capture.delta) / Math.max(1, capture.band * 2.35), 0, 1);
+    const speedFactor = clamp(1 - Math.max(0, relativeSpeed - 90) / orbitCaptureMaxRelativeSpeed, 0.16, 1);
+    const breachFactor = clamp(1 - Math.max(0, inwardSpeed - orbitCaptureStrongInwardSpeed) / 260, 0, 1);
+    const massResponse = clamp(Math.pow(Math.max(1, finiteOr(host.mass, 1)) / Math.max(1, finiteOr(body.mass, 1)), 0.18), 0.28, 1.85);
+    const strength = radialCloseness * speedFactor * (0.22 + breachFactor * 0.78);
+    if (strength <= 0.012) {
+      return false;
+    }
+
+    const direction = orbitDirectionForBody(body, host, nx, ny, relVx, relVy);
+    const desiredTangential = orbitalSpeedForRing(host, capture.ringIndex, capture.radius) * direction;
+    const radialAccel = clamp(
+      -capture.delta * orbitRadialSpring - radialSpeed * orbitRadialDamping,
+      -orbitMaxAcceleration,
+      orbitMaxAcceleration
+    );
+    const tangentAccel = clamp(
+      (desiredTangential - tangentVelocity) * orbitTangentialDamping,
+      -orbitMaxAcceleration,
+      orbitMaxAcceleration
+    );
+    const accelScale = strength * massResponse;
+    body.vx += (nx * radialAccel + tangentX * tangentAccel) * accelScale * dt;
+    body.vy += (ny * radialAccel + tangentY * tangentAccel) * accelScale * dt;
+    body.gadgetStabilized = false;
+    body.orbitHostId = host.id;
+    body.orbitRingIndex = capture.ringIndex;
+    body.orbitDirection = direction;
+    body.orbitStrength = clamp(finiteOr(body.orbitStrength, 0) + strength * dt * 4.4, 0, 1);
+    body.orbitGrace = orbitRetentionSeconds;
+    return true;
+  }
+
+  function shouldOrbitPreventMerge(a, b) {
+    const first = bestOrbitRingForBody(a, b);
+    const second = bestOrbitRingForBody(b, a);
+    const capture = first && (!second || first.score <= second.score) ? first : second;
+    if (!capture) {
+      return false;
+    }
+    const orbiter = capture.host === a ? b : a;
+    const host = capture.host;
+    const distance = capture.distance || 1;
+    const nx = capture.dx / distance;
+    const ny = capture.dy / distance;
+    const relVx = finiteOr(orbiter.vx, 0) - finiteOr(host.vx, 0);
+    const relVy = finiteOr(orbiter.vy, 0) - finiteOr(host.vy, 0);
+    const inwardSpeed = Math.max(0, -(relVx * nx + relVy * ny));
+    const orbitingHost = Math.max(0, Math.floor(finiteOr(orbiter.orbitHostId, 0))) === host.id;
+    const threshold = orbitCaptureStrongInwardSpeed + (orbitingHost ? 92 : 0);
+    return inwardSpeed < threshold;
+  }
+
+  function starParticleEmissionRate(body) {
+    return starParticleEmissionBaseRate + Math.max(0, finiteOr(body && body.radius, 0)) * starParticleEmissionRadiusScale;
   }
 
   function formatTierName(name) {
@@ -3840,6 +4818,10 @@
 
   function radiusFromMass(mass) {
     const tier = tierForMass(mass);
+    return radiusFromMassForTier(mass, tier);
+  }
+
+  function radiusFromMassForTier(mass, tier) {
     const nextTier = nextTierAfter(tier);
 
     if (!nextTier) {
@@ -3857,6 +4839,10 @@
     const radius = Math.max(0, finiteOr(body && body.radius, 0));
     if (!body || !body.tier || !body.tier.solid) {
       return radius;
+    }
+
+    if (body.tier.name === "star") {
+      return radius * 1.06;
     }
 
     if (body.tier.name === "planet") {
@@ -4880,7 +5866,20 @@
     randomEventState.enabled = source.enabled !== false;
     randomEventState.cooldown = Math.max(randomEventMinimumCooldown, finiteOr(source.cooldown, randomEventDefaultCooldown));
     randomEventState.timer = Math.max(0, finiteOr(source.timer, randomEventState.cooldown));
-    randomEventState.active = source.active && typeof source.active === "object" ? { ...source.active } : null;
+    if (source.active && typeof source.active === "object") {
+      const duration = Math.max(1, finiteOr(source.active.duration, 30));
+      const elapsed = Math.max(0, finiteOr(source.active.elapsed, 0));
+      randomEventState.active = elapsed < duration
+        ? {
+          ...source.active,
+          duration,
+          elapsed,
+          timer: Math.max(0, finiteOr(source.active.timer, duration - elapsed))
+        }
+        : null;
+    } else {
+      randomEventState.active = null;
+    }
     randomEventState.history = Array.isArray(source.history) ? source.history.slice(-12).map((entry) => String(entry || "")).filter(Boolean) : [];
   }
 
@@ -5454,6 +6453,22 @@
     return event.code === "ArrowUp" || event.code === "ArrowDown" || event.code === "Space";
   }
 
+  function isScrollableWheelEventTarget(event) {
+    let node = event.target instanceof Element ? event.target : null;
+    while (node && node !== document.body) {
+      if (node instanceof HTMLElement) {
+        const style = window.getComputedStyle(node);
+        const scrollsY = (style.overflowY === "auto" || style.overflowY === "scroll") && node.scrollHeight > node.clientHeight + 1;
+        const scrollsX = (style.overflowX === "auto" || style.overflowX === "scroll") && node.scrollWidth > node.clientWidth + 1;
+        if (scrollsY || scrollsX) {
+          return true;
+        }
+      }
+      node = node.parentElement;
+    }
+    return false;
+  }
+
   function isKeyboardControlEventTarget(event) {
     const target = event.target;
     return target instanceof HTMLElement && Boolean(target.closest("button, a[href], [role='button'], [role='link'], [role='menuitem'], [role='tab']"));
@@ -5468,11 +6483,370 @@
   }
 
   function recipeById(id) {
-    return buildRecipes.find((recipe) => recipe.id === id) || null;
+    return buildRecipes.find((recipe) => recipe.id === id) || skinLockerRecipeById(id);
   }
 
   function recipeByStructureType(type) {
     return buildRecipes.find((recipe) => recipe.structureType === type) || null;
+  }
+
+  function skinById(id) {
+    return skinCatalog.find((skin) => skin.id === id) || null;
+  }
+
+  function isTrailSkin(skin) {
+    return Boolean(skin && skin.kind === "trail");
+  }
+
+  function storeFilterKeyForSkin(skin) {
+    if (isTrailSkin(skin)) {
+      return "trail";
+    }
+    return skin && skin.kind === "costume" ? "costume" : "suit";
+  }
+
+  function isDefaultSkinItem(skin) {
+    return Boolean(skin && (skin.id === defaultSkinId || skin.id === defaultTrailId));
+  }
+
+  function defaultSkinIdForItem(skin) {
+    return isTrailSkin(skin) ? defaultTrailId : defaultSkinId;
+  }
+
+  function normalizeSkinId(id) {
+    const skin = skinById(String(id || ""));
+    return skin ? skin.id : "";
+  }
+
+  function normalizeCharacterSkinId(id) {
+    const skin = skinById(normalizeSkinId(id));
+    return skin && !isTrailSkin(skin) ? skin.id : "";
+  }
+
+  function normalizeTrailId(id) {
+    const skin = skinById(normalizeSkinId(id));
+    return isTrailSkin(skin) ? skin.id : "";
+  }
+
+  function skinSwatchColors(skin) {
+    const colors = skin && skin.colors ? skin.colors : defaultSuitSkinPalette;
+    return {
+      color: colors.swatch || colors.torso || "#f4f2ea",
+      accent: colors.accent || "#64e3ff"
+    };
+  }
+
+  function padMonthDayPart(value) {
+    const number = Math.floor(Number(value));
+    return number >= 1 && number <= 99 ? String(number).padStart(2, "0") : "";
+  }
+
+  function sanitizeMonthDay(value) {
+    const raw = String(value || "").trim();
+    let match = raw.match(/^(\d{1,2})-(\d{1,2})$/);
+    if (!match) {
+      match = raw.match(/^\d{4}-(\d{1,2})-(\d{1,2})/);
+    }
+    if (!match) {
+      return "";
+    }
+    const month = padMonthDayPart(match[1]);
+    const day = padMonthDayPart(match[2]);
+    return month && day ? month + "-" + day : "";
+  }
+
+  function currentMonthDay() {
+    const now = new Date();
+    return String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+  }
+
+  function paidSkinCount() {
+    return skinCatalog.filter((skin) => skin && !isDefaultSkinItem(skin) && skin.priceId).length;
+  }
+
+  function ownedStoreItemCount() {
+    return ownedSkinIds.length + ownedTrailIds.length;
+  }
+
+  function normalizeOwnedSkinIds(source) {
+    const seen = new Set();
+    const result = [];
+    const list = Array.isArray(source) ? source : [];
+    for (const id of list) {
+      const cleanId = normalizeCharacterSkinId(id);
+      if (!cleanId || cleanId === defaultSkinId || seen.has(cleanId)) {
+        continue;
+      }
+      seen.add(cleanId);
+      result.push(cleanId);
+    }
+    return result;
+  }
+
+  function normalizeOwnedTrailIds(source) {
+    const seen = new Set();
+    const result = [];
+    const list = Array.isArray(source) ? source : [];
+    for (const id of list) {
+      const cleanId = normalizeTrailId(id);
+      if (!cleanId || cleanId === defaultTrailId || seen.has(cleanId)) {
+        continue;
+      }
+      seen.add(cleanId);
+      result.push(cleanId);
+    }
+    return result;
+  }
+
+  function setOwnedSkinIds(source) {
+    ownedSkinIds = normalizeOwnedSkinIds(source);
+    if (equippedSkinId && !hasSkin(equippedSkinId)) {
+      equippedSkinId = "";
+    }
+  }
+
+  function setOwnedTrailIds(source) {
+    ownedTrailIds = normalizeOwnedTrailIds(source);
+    if (equippedTrailId && !hasSkin(equippedTrailId)) {
+      equippedTrailId = "";
+    }
+  }
+
+  function applySkinAccountState(account) {
+    const source = account && typeof account === "object" ? account : {};
+    setOwnedSkinIds(source.ownedSkinIds);
+    setOwnedTrailIds(source.ownedTrailIds);
+    equippedSkinId = normalizeCharacterSkinId(source.equippedSkinId);
+    if (equippedSkinId === defaultSkinId || !hasSkin(equippedSkinId)) {
+      equippedSkinId = "";
+    }
+    equippedTrailId = normalizeTrailId(source.equippedTrailId);
+    if (equippedTrailId === defaultTrailId || !hasSkin(equippedTrailId)) {
+      equippedTrailId = "";
+    }
+    renderBuildMenu();
+    renderSkinStore();
+  }
+
+  function activeSkinId() {
+    return normalizeCharacterSkinId(equippedSkinId) || defaultSkinId;
+  }
+
+  function activeTrailId() {
+    return normalizeTrailId(equippedTrailId) || defaultTrailId;
+  }
+
+  function hasSkin(id) {
+    const cleanId = normalizeSkinId(id);
+    const skin = skinById(cleanId);
+    if (!skin) {
+      return false;
+    }
+    if (isTrailSkin(skin)) {
+      return cleanId === defaultTrailId || ownedTrailIds.includes(cleanId);
+    }
+    return cleanId === defaultSkinId || ownedSkinIds.includes(cleanId);
+  }
+
+  function isSkinEquipped(id) {
+    const cleanId = normalizeSkinId(id) || defaultSkinId;
+    const skin = skinById(cleanId);
+    return isTrailSkin(skin) ? cleanId === activeTrailId() : cleanId === activeSkinId();
+  }
+
+  function isSkinRecipe(recipe) {
+    return Boolean(recipe && recipe.category === "skins" && skinById(recipe.id));
+  }
+
+  function skinPaletteForId(id) {
+    const skin = skinById(normalizeCharacterSkinId(id) || defaultSkinId);
+    return skin && skin.colors ? skin.colors : defaultSuitSkinPalette;
+  }
+
+  function skinModelForId(id) {
+    const skin = skinById(normalizeCharacterSkinId(id) || defaultSkinId);
+    return skin && skin.model ? skin.model : "astronaut";
+  }
+
+  function activeSkinPalette() {
+    return skinPaletteForId(activeSkinId());
+  }
+
+  function activeSkinModel() {
+    return skinModelForId(activeSkinId());
+  }
+
+  function skinAvailabilityStatus(skin) {
+    const availability = skin && skin.availability;
+    if (!availability || typeof availability !== "object") {
+      return { available: true, message: "" };
+    }
+
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const today = currentMonthDay();
+    if (availability.type === "month") {
+      const available = month === Math.floor(Number(availability.month));
+      return {
+        available,
+        message: available ? "" : availability.label || "Seasonal costume"
+      };
+    }
+    if (availability.type === "dates") {
+      const dates = Array.isArray(availability.dates) ? availability.dates.map(sanitizeMonthDay) : [];
+      const available = dates.includes(today);
+      return {
+        available,
+        message: available ? "" : availability.label || "Seasonal costume"
+      };
+    }
+    if (availability.type === "birthday") {
+      const birthday = sanitizeMonthDay(accountState.waiBirthdayMonthDay);
+      const available = Boolean(birthday && birthday === today);
+      return {
+        available,
+        message: available ? "" : birthday ? "Available on your birthday" : "Birthday required"
+      };
+    }
+    return { available: true, message: "" };
+  }
+
+  function isSkinAvailableNow(skin) {
+    return skinAvailabilityStatus(skin).available;
+  }
+
+  function shouldShowSkinInStore(skin) {
+    return Boolean(skin && (hasSkin(skin.id) || isSkinAvailableNow(skin)));
+  }
+
+  function isSkinStoreRuntime() {
+    return !isCrazyGamesRuntime() && !isGamePixRuntime();
+    return false;
+  }
+
+  function skinLoginLabel() {
+    return "Login";
+    return "Account login";
+  }
+
+  function skinAccountRequiredLabel() {
+    return "Login required";
+    return "Account required";
+  }
+
+  function skinLoginPromptMessage() {
+    return "You must be logged in to use the store";
+    return "Log in to use the store.";
+  }
+
+  function availableBuildFilters() {
+    return buildFilters.filter((filter) => filter.key !== "skins" || isSkinStoreRuntime());
+  }
+
+  function skinLockerRecipes() {
+    if (!isSkinStoreRuntime()) {
+      return [];
+    }
+    const recipes = [];
+    const defaultSkin = skinById(defaultSkinId);
+    if (defaultSkin) {
+      recipes.push(defaultSkin);
+    }
+    const defaultTrail = skinById(defaultTrailId);
+    if (defaultTrail) {
+      recipes.push(defaultTrail);
+    }
+    for (const skinId of ownedSkinIds) {
+      const skin = skinById(skinId);
+      if (skin && skin.id !== defaultSkinId && !recipes.some((recipe) => recipe.id === skin.id)) {
+        recipes.push(skin);
+      }
+    }
+    for (const trailId of ownedTrailIds) {
+      const trail = skinById(trailId);
+      if (trail && trail.id !== defaultTrailId && !recipes.some((recipe) => recipe.id === trail.id)) {
+        recipes.push(trail);
+      }
+    }
+    return recipes;
+  }
+
+  function skinLockerRecipeById(id) {
+    return skinLockerRecipes().find((skin) => skin.id === id) || null;
+  }
+
+  function allBuildMenuRecipes() {
+    const recipes = buildRecipes.slice();
+    recipes.push(...skinLockerRecipes());
+    return recipes;
+  }
+
+  function skinRecipeActionText(recipe) {
+    if (!isSkinStoreRuntime()) {
+      return "Unavailable";
+    }
+    if (skinPurchasePendingId === recipe.id) {
+      return "Opening...";
+    }
+    if (hasSkin(recipe.id)) {
+      return isSkinEquipped(recipe.id) ? "Equipped" : "Equip";
+    }
+    if (!isAccountSignedIn() || accountState.waiLinked !== true) {
+      return "Log in";
+    }
+    if (!isSkinAvailableNow(recipe)) {
+      return skinAvailabilityStatus(recipe).message || "Unavailable";
+    }
+    if (recipe.freeClaim) {
+      return "Claim";
+    }
+    return "Buy " + (recipe.priceLabel || "skin");
+  }
+
+  function skinLockerActionText(recipe) {
+    if (!isSkinStoreRuntime()) {
+      return "Unavailable";
+    }
+    const defaultItemId = defaultSkinIdForItem(recipe);
+    if (skinPurchasePendingId === recipe.id || (recipe.id === defaultItemId && skinPurchasePendingId)) {
+      return "Updating...";
+    }
+    if (isSkinEquipped(recipe.id)) {
+      return recipe.id === defaultItemId ? "Equipped" : "Unequip";
+    }
+    return "Equip";
+  }
+
+  function isSkinRecipeActionAvailable(recipe) {
+    if (!isSkinStoreRuntime()) {
+      return false;
+    }
+    if (skinPurchasePendingId) {
+      return false;
+    }
+    if (hasSkin(recipe.id)) {
+      return !isSkinEquipped(recipe.id);
+    }
+    if (!isAccountSignedIn() || accountState.waiLinked !== true) {
+      return true;
+    }
+    if (!isSkinAvailableNow(recipe)) {
+      return false;
+    }
+    if (recipe.freeClaim) {
+      return true;
+    }
+    return Boolean(recipe.priceId);
+  }
+
+  function isSkinLockerActionAvailable(recipe) {
+    if (!isSkinStoreRuntime() || !hasSkin(recipe && recipe.id) || skinPurchasePendingId) {
+      return false;
+    }
+    if (isSkinEquipped(recipe.id)) {
+      return recipe.id !== defaultSkinIdForItem(recipe);
+    }
+    return true;
   }
 
   function createDefaultToolUpgradeLevels() {
@@ -5544,13 +6918,15 @@
     return Math.max(0, finiteOr(toolLevels[upgradeId], 0));
   }
 
-  function upgradeBonus(level, maxBonus) {
-    return Math.max(0, finiteOr(maxBonus, 0)) * (1 - Math.pow(0.72, Math.max(0, level)));
+  function upgradeBonus(level, bonusScale) {
+    const cleanLevel = Math.max(0, finiteOr(level, 0));
+    const cleanScale = Math.max(0, finiteOr(bonusScale, 0));
+    return cleanScale * (0.28 / Math.log1p(0.5)) * Math.log1p(cleanLevel * 0.5);
   }
 
   function toolUpgradeBonus(toolId, upgradeId) {
     const upgrade = toolUpgradeById(toolId, upgradeId);
-    return upgrade ? upgradeBonus(toolUpgradeLevel(toolId, upgrade.id), upgrade.maxBonus) : 0;
+    return upgrade ? upgradeBonus(toolUpgradeLevel(toolId, upgrade.id), upgrade.bonusScale) : 0;
   }
 
   function toolUpgradeFactor(toolId, upgradeId) {
@@ -5809,12 +7185,16 @@
     return toolUpgradeFactor(isSuctionTool(equippedToolId) ? equippedToolId : defaultToolId, "suck");
   }
 
+  function currentGadgetRangeFactor() {
+    return currentGadgetSuckFactor();
+  }
+
   function currentGadgetBlowFactor() {
     return toolUpgradeFactor(isSuctionTool(equippedToolId) ? equippedToolId : defaultToolId, "blow");
   }
 
   function filteredBuildRecipes() {
-    const visibleRecipes = buildRecipes.filter(isBuildRecipeVisible);
+    const visibleRecipes = allBuildMenuRecipes().filter(isBuildRecipeVisible);
     if (activeBuildFilter === "all") {
       return visibleRecipes;
     }
@@ -5828,8 +7208,13 @@
     return Boolean(objectiveState.completed[recipe.blueprintObjectiveId] && objectiveState.claimed[recipe.blueprintObjectiveId]);
   }
 
+  function recipeCostEntries(recipe) {
+    return recipe && recipe.cost && typeof recipe.cost === "object" ? Object.entries(recipe.cost) : [];
+  }
+
   function canAffordRecipe(recipe) {
-    return Object.entries(recipe.cost).every(([techKey, amount]) => Math.floor(techInventory[techKey] || 0) >= amount);
+    const costEntries = recipeCostEntries(recipe);
+    return costEntries.length > 0 && costEntries.every(([techKey, amount]) => Math.floor(techInventory[techKey] || 0) >= amount);
   }
 
   function isRecipeUnlocked(recipe) {
@@ -5841,6 +7226,10 @@
   }
 
   function buildRecipeActionText(recipe) {
+    if (isSkinRecipe(recipe)) {
+      return skinLockerActionText(recipe);
+    }
+
     if (isRecipeUnlocked(recipe)) {
       return isToolEquipped(recipe.unlockToolId) ? "Unequip" : "Equip";
     }
@@ -5853,6 +7242,9 @@
   }
 
   function isBuildRecipeActionAvailable(recipe) {
+    if (isSkinRecipe(recipe)) {
+      return isSkinLockerActionAvailable(recipe);
+    }
     return isRecipeUnlocked(recipe) || canAffordRecipe(recipe);
   }
 
@@ -5880,6 +7272,369 @@
     return row;
   }
 
+  function createBuildInfoRow(labelText, valueText, color) {
+    const row = document.createElement("div");
+    const label = document.createElement("dt");
+    const value = document.createElement("dd");
+
+    row.className = "build-detail__cost-row build-detail__cost-row--info";
+    row.style.setProperty("--tech-color", color || "#58e2ff");
+    label.textContent = labelText;
+    value.textContent = valueText;
+    row.append(label, value);
+    return row;
+  }
+
+  function renderBuildMenuTechResources() {
+    if (!buildMenuTech) {
+      return;
+    }
+    buildMenuTech.textContent = "";
+    for (const tech of techTypes) {
+      const row = createTechRow(tech, "build-row");
+      const count = row.querySelector(".build-row__count");
+      if (count) {
+        count.textContent = Math.floor(techInventory[tech.key] || 0).toString();
+      }
+      buildMenuTech.append(row);
+    }
+  }
+
+  function renderSkinLockerResources() {
+    if (!buildMenuTech) {
+      return;
+    }
+    buildMenuTech.textContent = "";
+    buildMenuTech.append(
+      createBuildInfoRow(
+        "Account",
+        isAccountSignedIn() && accountState.waiLinked === true ? accountState.displayName || accountState.username : skinLoginLabel(),
+        "#58e2ff"
+      ),
+      createBuildInfoRow("Owned", ownedStoreItemCount() + "/" + paidSkinCount(), "#66e0b8")
+    );
+
+    if (skinStatusMessage) {
+      const status = document.createElement("div");
+      status.className = "build-detail__status build-detail__status--skin";
+      status.textContent = skinStatusMessage;
+      buildMenuTech.append(status);
+    }
+  }
+
+  function skinStoreStatusText() {
+    if (!isSkinStoreRuntime()) {
+      return "Store purchases are not available on this build.";
+    }
+    if (skinStatusMessage) {
+      return skinStatusMessage;
+    }
+    if (!isAccountSignedIn() || accountState.waiLinked !== true) {
+      return skinLoginPromptMessage();
+    }
+    return (accountState.displayName || accountState.username || skinLoginLabel()) + " - " + ownedStoreItemCount() + "/" + paidSkinCount() + " store items owned";
+  }
+
+  function skinStoreMetaText(skin) {
+    if (isTrailSkin(skin)) {
+      return skin && skin.id === defaultTrailId ? "Default boost trail" : "Boost trail effect";
+    }
+    if (skin && skin.kind === "costume") {
+      return "Full character costume";
+    }
+    return ((skin && skin.plainColor) || "Custom") + " suit recolour";
+  }
+
+  function skinStoreTypeText(skin) {
+    if (isTrailSkin(skin)) {
+      return "Trail";
+    }
+    return skin && skin.kind === "costume" ? "Costume" : "Suit skin";
+  }
+
+  function storePreviewSkin() {
+    return skinById(storePreviewSkinId) || skinById(activeSkinId()) || skinById(defaultSkinId);
+  }
+
+  function stopStorePreviewAnimation() {
+    if (!storePreviewAnimationFrameId || typeof window === "undefined" || typeof window.cancelAnimationFrame !== "function") {
+      storePreviewAnimationFrameId = 0;
+      return;
+    }
+    window.cancelAnimationFrame(storePreviewAnimationFrameId);
+    storePreviewAnimationFrameId = 0;
+  }
+
+  function shouldAnimateStorePreview() {
+    const skin = storePreviewSkin();
+    return Boolean(startMenu.view === "store" && startStorePreviewCanvas && isTrailSkin(skin));
+  }
+
+  function scheduleStorePreviewAnimation() {
+    if (!shouldAnimateStorePreview()) {
+      stopStorePreviewAnimation();
+      return;
+    }
+    if (storePreviewAnimationFrameId || typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      return;
+    }
+    storePreviewAnimationFrameId = window.requestAnimationFrame(function animateStorePreview() {
+      storePreviewAnimationFrameId = 0;
+      if (!shouldAnimateStorePreview()) {
+        return;
+      }
+      drawStorePreviewCharacter(storePreviewSkin());
+      scheduleStorePreviewAnimation();
+    });
+  }
+
+  function drawStorePreviewCharacter(skin) {
+    if (!startStorePreviewCanvas) {
+      return;
+    }
+
+    const previewCtx = startStorePreviewCanvas.getContext("2d");
+    if (!previewCtx) {
+      return;
+    }
+
+    const width = startStorePreviewCanvas.width || 180;
+    const height = startStorePreviewCanvas.height || 220;
+    const isTrailPreview = isTrailSkin(skin);
+    const renderWidth = isTrailPreview ? Math.round(width * 2) : width;
+    const renderHeight = isTrailPreview ? Math.round(height * 1.55) : height;
+    const renderCanvas = isTrailPreview && typeof document !== "undefined" && typeof document.createElement === "function"
+      ? document.createElement("canvas")
+      : startStorePreviewCanvas;
+    const renderCtx = renderCanvas === startStorePreviewCanvas ? previewCtx : renderCanvas.getContext("2d");
+    if (!renderCtx) {
+      return;
+    }
+    renderCanvas.width = renderWidth;
+    renderCanvas.height = renderHeight;
+    const centerX = renderWidth * 0.5;
+    const swatchColors = skinSwatchColors(skin);
+
+    renderCtx.clearRect(0, 0, renderWidth, renderHeight);
+
+    const glow = renderCtx.createRadialGradient(centerX, renderHeight * 0.5, 8, centerX, renderHeight * 0.5, isTrailPreview ? 122 : 88);
+    glow.addColorStop(0, previewColorWithAlpha(swatchColors.accent, 0.22));
+    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    renderCtx.fillStyle = glow;
+    renderCtx.fillRect(0, 0, renderWidth, renderHeight);
+
+    renderCtx.save();
+    if (isTrailPreview) {
+      drawSkinPreviewAstronaut(renderCtx, renderWidth, renderHeight, activeSkinId(), {
+        trailId: skin.id,
+        onFoot: false,
+        bodyRotation: 0,
+        exhaust: { x: -0.48, y: 0.88 },
+        centerX: centerX + renderWidth * 0.14,
+        centerY: renderHeight * 0.35
+      });
+    } else {
+      drawSkinPreviewAstronaut(renderCtx, width, height, skin && skin.id);
+    }
+    renderCtx.restore();
+
+    if (renderCanvas !== startStorePreviewCanvas) {
+      previewCtx.clearRect(0, 0, width, height);
+      const sourceX = Math.round(renderWidth * 0.05);
+      const sourceY = Math.round(renderHeight * 0.01);
+      const sourceWidth = Math.round(renderWidth * 0.82);
+      const sourceHeight = Math.round(renderHeight * 0.94);
+      previewCtx.drawImage(renderCanvas, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+    }
+  }
+
+  function previewColorWithAlpha(color, alpha) {
+    if (typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)) {
+      return "rgba(100, 227, 255, " + alpha + ")";
+    }
+    const value = parseInt(color.slice(1), 16);
+    return "rgba(" + ((value >> 16) & 255) + ", " + ((value >> 8) & 255) + ", " + (value & 255) + ", " + alpha + ")";
+  }
+
+  function renderSkinStorePreview() {
+    const skin = storePreviewSkin();
+    if (!skin) {
+      return;
+    }
+    drawStorePreviewCharacter(skin);
+    scheduleStorePreviewAnimation();
+    if (startStorePreviewName) {
+      startStorePreviewName.textContent = skin.name || "Classic Suit";
+    }
+    if (startStorePreviewMeta) {
+      startStorePreviewMeta.textContent = skinStoreMetaText(skin);
+    }
+  }
+
+  function setStorePreviewSkin(id) {
+    const skin = skinById(id);
+    if (!skin) {
+      return;
+    }
+    storePreviewSkinId = skin.id;
+    renderSkinStorePreview();
+    if (startStoreList) {
+      startStoreList.querySelectorAll("[data-store-skin-id]").forEach((card) => {
+        card.classList.toggle("is-previewed", card.dataset.storeSkinId === storePreviewSkinId);
+      });
+    }
+  }
+
+  function isValidStoreFilterKey(filterKey) {
+    return storeFilterDefinitions.some((filter) => filter.key === filterKey);
+  }
+
+  function isStoreFilterActive(filterKey) {
+    return activeStoreFilters.has(filterKey);
+  }
+
+  function toggleStoreFilter(filterKey) {
+    if (!isValidStoreFilterKey(filterKey)) {
+      return;
+    }
+    if (activeStoreFilters.has(filterKey)) {
+      activeStoreFilters.delete(filterKey);
+    } else {
+      activeStoreFilters.add(filterKey);
+    }
+    renderSkinStore();
+  }
+
+  function shouldShowSkinForActiveStoreFilters(skin) {
+    return isStoreFilterActive(storeFilterKeyForSkin(skin));
+  }
+
+  function visibleStoreSkins() {
+    return skinCatalog.filter((skin) => (
+      skin &&
+      (!isDefaultSkinItem(skin) && !skin.priceId ? false : shouldShowSkinInStore(skin)) &&
+      shouldShowSkinForActiveStoreFilters(skin)
+    ));
+  }
+
+  function renderStoreFilterControls() {
+    if (!startStoreFilters) {
+      return;
+    }
+
+    startStoreFilters.querySelectorAll("[data-store-filter]").forEach((button) => {
+      const filterKey = button.dataset.storeFilter || "";
+      const active = isStoreFilterActive(filterKey);
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function createSkinStoreCard(skin) {
+    const card = document.createElement("article");
+    const swatch = document.createElement("span");
+    const summary = document.createElement("div");
+    const name = document.createElement("strong");
+    const meta = document.createElement("span");
+    const status = document.createElement("span");
+    const action = document.createElement("button");
+    const swatchColors = skinSwatchColors(skin);
+    const owned = hasSkin(skin.id);
+    const equipped = isSkinEquipped(skin.id);
+
+    card.className = "start-store__card";
+    card.tabIndex = 0;
+    card.dataset.storeSkinId = skin.id;
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-label", "Preview " + skin.name);
+    card.classList.toggle("is-owned", owned);
+    card.classList.toggle("is-equipped", equipped);
+    card.classList.toggle("is-locked", !owned);
+    card.classList.toggle("is-previewed", skin.id === (storePreviewSkin() && storePreviewSkin().id));
+
+    swatch.className = "start-store__swatch";
+    swatch.style.setProperty("--skin-color", swatchColors.color);
+    swatch.style.setProperty("--skin-accent", swatchColors.accent);
+    swatch.setAttribute("aria-hidden", "true");
+
+    summary.className = "start-store__summary";
+    name.className = "start-store__name";
+    meta.className = "start-store__meta";
+    status.className = "start-store__status-pill";
+    action.className = "settings-panel__save-action start-store__action";
+
+    name.textContent = skin.name;
+    meta.textContent = skinStoreMetaText(skin);
+    status.textContent = equipped ? "Equipped" : owned ? "Owned" : skin.priceLabel || "Included";
+
+    action.type = "button";
+    action.dataset.menuAction = owned ? "equip-skin" : "buy-skin";
+    action.dataset.skinId = skin.id;
+    action.textContent = skinRecipeActionText(skin);
+    action.disabled = !isSkinRecipeActionAvailable(skin);
+
+    summary.append(name, meta, status);
+    card.append(swatch, summary, action);
+    return card;
+  }
+
+  function renderSkinStore() {
+    if (!startStoreList || !startStoreStatus) {
+      return;
+    }
+
+    startStoreStatus.textContent = skinStoreStatusText();
+    startStoreStatus.classList.toggle("is-error", !isSkinStoreRuntime());
+    startStoreList.textContent = "";
+    renderStoreFilterControls();
+
+    if (!isSkinStoreRuntime()) {
+      const empty = document.createElement("p");
+      empty.className = "start-menu__empty";
+      empty.textContent = "Store purchases are not available on this build.";
+      startStoreList.append(empty);
+      return;
+    }
+
+    if (!skinById(storePreviewSkinId)) {
+      storePreviewSkinId = activeSkinId();
+    }
+    renderSkinStorePreview();
+
+    const storeSkins = visibleStoreSkins();
+    if (!storeSkins.length) {
+      const empty = document.createElement("p");
+      empty.className = "start-menu__empty";
+      empty.textContent = activeStoreFilters.size ? "No store items match these filters." : "Choose a category to show store items.";
+      startStoreList.append(empty);
+      return;
+    }
+
+    for (const skin of storeSkins) {
+      startStoreList.append(createSkinStoreCard(skin));
+    }
+  }
+
+  function renderBuildMenuResources() {
+    if (!buildMenuTech) {
+      return;
+    }
+
+    const title = buildMenu ? buildMenu.querySelector(".build-menu__resources-title") : null;
+    if (activeBuildFilter === "skins" && isSkinStoreRuntime()) {
+      if (title) {
+        title.textContent = "Cosmetic Locker";
+      }
+      renderSkinLockerResources();
+      return;
+    }
+
+    if (title) {
+      title.textContent = "Tech Stores";
+    }
+    renderBuildMenuTechResources();
+  }
+
   function createToolUpgradeSection(recipe) {
     const toolId = recipe && recipe.unlockToolId;
     const upgrades = toolId ? toolUpgradeOptions(toolId) : [];
@@ -5897,8 +7652,8 @@
 
     for (const upgrade of upgrades) {
       const level = toolUpgradeLevel(toolId, upgrade.id);
-      const currentBonus = upgradeBonus(level, upgrade.maxBonus);
-      const nextBonus = upgradeBonus(level + 1, upgrade.maxBonus);
+      const currentBonus = upgradeBonus(level, upgrade.bonusScale);
+      const nextBonus = upgradeBonus(level + 1, upgrade.bonusScale);
       const row = document.createElement("div");
       const summary = document.createElement("div");
       const name = document.createElement("strong");
@@ -5951,6 +7706,54 @@
     return recipeById(selectedBuildRecipeId);
   }
 
+  function renderSkinBuildDetail(recipe) {
+    const category = document.createElement("span");
+    const swatch = document.createElement("span");
+    const title = document.createElement("strong");
+    const description = document.createElement("p");
+    const costTitle = document.createElement("span");
+    const costList = document.createElement("dl");
+    const action = document.createElement("button");
+    const swatchColors = skinSwatchColors(recipe);
+    const owned = hasSkin(recipe.id);
+    const equipped = isSkinEquipped(recipe.id);
+
+    category.className = "build-detail__category";
+    swatch.className = "build-detail__skin-swatch";
+    title.className = "build-detail__title";
+    description.className = "build-detail__description";
+    costTitle.className = "build-detail__section-title";
+    costList.className = "build-detail__cost";
+    action.className = "build-detail__action";
+
+    swatch.style.setProperty("--skin-color", swatchColors.color);
+    swatch.style.setProperty("--skin-accent", swatchColors.accent);
+    category.textContent = skinStoreTypeText(recipe);
+    title.textContent = recipe.name;
+    description.textContent = recipe.description;
+    costTitle.textContent = "Locker";
+    action.type = "button";
+    action.dataset.recipeId = recipe.id;
+    action.textContent = skinLockerActionText(recipe);
+    action.disabled = !isSkinLockerActionAvailable(recipe);
+
+    costList.append(createBuildInfoRow(isTrailSkin(recipe) ? "Effect" : recipe.kind === "costume" ? "Style" : "Colour", recipe.plainColor || "Custom", swatchColors.color));
+    costList.append(createBuildInfoRow("Price", owned ? "Owned" : recipe.priceLabel || "Included", owned ? "#66e0b8" : "#ffd166"));
+    if (!isAccountSignedIn() || accountState.waiLinked !== true) {
+      costList.append(createBuildInfoRow("Account", skinAccountRequiredLabel(), "#ff73ad"));
+    } else if (equipped) {
+      costList.append(createBuildInfoRow("Status", "Equipped", "#66e0b8"));
+    } else if (owned) {
+      costList.append(createBuildInfoRow("Status", "Ready to equip", "#66e0b8"));
+    } else if (!isSkinAvailableNow(recipe)) {
+      costList.append(createBuildInfoRow("Status", skinAvailabilityStatus(recipe).message || "Unavailable", "#ff73ad"));
+    } else {
+      costList.append(createBuildInfoRow("Status", "Buy from Store", "#58e2ff"));
+    }
+
+    buildMenuDetail.append(category, swatch, title, description, costTitle, costList, action);
+  }
+
   function renderBuildDetail(recipe) {
     if (!buildMenuDetail) {
       return;
@@ -5963,6 +7766,11 @@
       empty.className = "build-detail__empty";
       empty.textContent = "Select a blueprint";
       buildMenuDetail.append(empty);
+      return;
+    }
+
+    if (isSkinRecipe(recipe)) {
+      renderSkinBuildDetail(recipe);
       return;
     }
 
@@ -6014,7 +7822,7 @@
     }
 
     buildMenuTabs.textContent = "";
-    for (const filter of buildFilters) {
+    for (const filter of availableBuildFilters()) {
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = "build-menu__tab";
@@ -6043,7 +7851,11 @@
     }
 
     clusternautsTestCounters.buildMenuRenders += 1;
+    if (!availableBuildFilters().some((filter) => filter.key === activeBuildFilter)) {
+      activeBuildFilter = "all";
+    }
     updateBuildFilterTabs();
+    renderBuildMenuResources();
     buildMenuList.textContent = "";
 
     const recipes = filteredBuildRecipes();
@@ -6051,39 +7863,54 @@
     if (!recipes.length) {
       const empty = document.createElement("div");
       empty.className = "build-menu__empty";
-      empty.textContent = activeBuildFilter === "structures" ? "No structures available yet." : "No blueprints available yet.";
+      empty.textContent = activeBuildFilter === "skins" ? "No purchased cosmetics yet." : activeBuildFilter === "structures" ? "No structures available yet." : "No blueprints available yet.";
       buildMenuList.append(empty);
     }
 
     for (const recipe of recipes) {
       const card = document.createElement("button");
       const iconFrame = document.createElement("span");
-      const icon = document.createElement("img");
       const title = document.createElement("strong");
+      const skinRecipe = isSkinRecipe(recipe);
       const unlocked = isRecipeUnlocked(recipe);
       const ownedTool = Boolean(recipe.unlockToolId && hasTool(recipe.unlockToolId));
-      const affordable = canAffordRecipe(recipe);
+      const ownedSkin = skinRecipe && hasSkin(recipe.id);
+      const equippedSkin = skinRecipe && isSkinEquipped(recipe.id);
+      const affordable = skinRecipe ? false : canAffordRecipe(recipe);
 
       card.type = "button";
       card.className = "build-card";
       card.dataset.recipeId = recipe.id;
       card.setAttribute("aria-pressed", recipe.id === selectedBuildRecipeId ? "true" : "false");
-      card.setAttribute("aria-label", recipe.name + " " + (recipe.category === "tools" ? "tool" : "structure"));
+      card.setAttribute("aria-label", recipe.name + " " + (skinRecipe ? skinStoreTypeText(recipe).toLowerCase() : recipe.category === "tools" ? "tool" : "structure"));
       card.title = recipe.name;
       card.classList.toggle("is-unlocked", unlocked);
       card.classList.toggle("is-owned-tool", ownedTool);
-      card.classList.toggle("is-locked", !ownedTool && !affordable);
+      card.classList.toggle("is-owned-skin", ownedSkin);
+      card.classList.toggle("is-equipped-skin", equippedSkin);
+      card.classList.toggle("is-locked", skinRecipe ? !ownedSkin && !isSkinRecipeActionAvailable(recipe) : !ownedTool && !affordable);
       card.classList.toggle("is-selected", recipe.id === selectedBuildRecipeId);
 
       iconFrame.className = "build-card__icon";
       title.className = "build-card__title";
 
-      icon.src = recipe.icon || "";
-      icon.alt = "";
-      icon.setAttribute("aria-hidden", "true");
+      if (skinRecipe) {
+        const swatch = document.createElement("span");
+        const swatchColors = skinSwatchColors(recipe);
+        swatch.className = "build-card__skin-swatch";
+        swatch.style.setProperty("--skin-color", swatchColors.color);
+        swatch.style.setProperty("--skin-accent", swatchColors.accent);
+        swatch.setAttribute("aria-hidden", "true");
+        iconFrame.append(swatch);
+      } else {
+        const icon = document.createElement("img");
+        icon.src = recipe.icon || "";
+        icon.alt = "";
+        icon.setAttribute("aria-hidden", "true");
+        iconFrame.append(icon);
+      }
       title.textContent = recipe.name;
 
-      iconFrame.append(icon);
       card.append(iconFrame, title);
       buildMenuList.append(card);
     }
@@ -6092,8 +7919,11 @@
 
     if (buildMenuStatus) {
       const shown = recipes.length;
-      const visibleTotal = buildRecipes.filter(isBuildRecipeVisible).length;
-      buildMenuStatus.textContent = shown + "/" + visibleTotal + " Blueprints";
+      const visibleRecipes = allBuildMenuRecipes().filter(isBuildRecipeVisible);
+      const visibleTotal = activeBuildFilter === "skins"
+        ? visibleRecipes.filter(isSkinRecipe).length
+        : visibleRecipes.filter((recipe) => !isSkinRecipe(recipe)).length;
+      buildMenuStatus.textContent = shown + "/" + visibleTotal + (activeBuildFilter === "skins" ? " Cosmetics" : " Blueprints");
     }
   }
 
@@ -6229,14 +8059,14 @@
   }
 
   function spendRecipeCost(recipe) {
-    for (const [techKey, amount] of Object.entries(recipe.cost)) {
+    for (const [techKey, amount] of recipeCostEntries(recipe)) {
       techInventory[techKey] = Math.max(0, Math.floor(techInventory[techKey] || 0) - amount);
     }
   }
 
   function refundRecipeCost(recipe, factor) {
     let refunded = 0;
-    for (const [techKey, amount] of Object.entries(recipe.cost)) {
+    for (const [techKey, amount] of recipeCostEntries(recipe)) {
       if (amount <= 0) {
         continue;
       }
@@ -6259,7 +8089,7 @@
     setBuildMenuOpen(false);
     resetMouseButtons();
     if (isLinkedStructureType(recipe.structureType)) {
-      maybeNotifyText("Choose a boulder or larger body for the first " + recipe.name.toLowerCase() + " anchor.");
+      maybeNotifyText("Choose a non-star boulder-sized or larger body for the first " + recipe.name.toLowerCase() + " anchor.");
     } else {
       maybeNotifyText("Choose a dwarf moon, moon, planet, or plate surface for the " + recipe.name.toLowerCase() + ".");
     }
@@ -6276,8 +8106,13 @@
   }
 
   function craftRecipe(recipeId) {
-    const recipe = buildRecipes.find((candidate) => candidate.id === recipeId);
+    const recipe = recipeById(recipeId);
     if (!recipe) {
+      return;
+    }
+
+    if (isSkinRecipe(recipe)) {
+      activateSkinRecipe(recipe);
       return;
     }
 
@@ -6317,6 +8152,266 @@
     maybeNotifyText(recipe.name + " crafted.");
   }
 
+  function activateSkinRecipe(recipe) {
+    if (!isSkinRecipe(recipe) || !isSkinStoreRuntime()) {
+      return;
+    }
+
+    if (hasSkin(recipe.id)) {
+      const defaultItemId = defaultSkinIdForItem(recipe);
+      const targetSkinId = isSkinEquipped(recipe.id) && recipe.id !== defaultItemId ? defaultItemId : recipe.id;
+      if (!isAccountSignedIn() || accountState.waiLinked !== true) {
+        if (targetSkinId === defaultSkinId) {
+          equippedSkinId = "";
+          renderBuildMenu();
+          renderSkinStore();
+        } else if (targetSkinId === defaultTrailId) {
+          equippedTrailId = "";
+          renderBuildMenu();
+          renderSkinStore();
+        } else {
+          skinStatusMessage = skinLoginPromptMessage();
+          renderBuildMenu();
+          renderSkinStore();
+          openWaiLogin();
+        }
+        return;
+      }
+
+      void equipSkin(targetSkinId);
+      return;
+    }
+
+    if (!isAccountSignedIn() || accountState.waiLinked !== true) {
+      skinStatusMessage = skinLoginPromptMessage();
+      renderBuildMenu();
+      renderSkinStore();
+      openWaiLogin();
+      return;
+    }
+
+    if (!isSkinAvailableNow(recipe)) {
+      skinStatusMessage = skinAvailabilityStatus(recipe).message || "This costume is not available right now.";
+      renderBuildMenu();
+      renderSkinStore();
+      return;
+    }
+
+    if (recipe.freeClaim) {
+      void claimFreeSkin(recipe.id);
+    } else {
+      void beginSkinCheckout(recipe.id);
+    }
+  }
+
+  function refreshSkinEntitlements() {
+    return refreshSkinEntitlementsFromServer();
+    return Promise.resolve(null);
+  }
+
+  async function refreshSkinEntitlementsFromServer() {
+    if (!isSkinStoreRuntime() || !isAccountSignedIn() || skinRefreshInFlight) {
+      return null;
+    }
+
+    skinRefreshInFlight = true;
+    try {
+      const data = await fetchPersistentJson("/api/skins", {
+        headers: accountAuthHeaders(),
+        timeoutMs: 8000
+      });
+      if (data && data.account) {
+        applySkinAccountState(data.account);
+      }
+      return data;
+    } catch (error) {
+      console.warn("Clusternauts skin entitlements unavailable.", error);
+      skinStatusMessage = backendErrorMessage(error, "Store unavailable.");
+      renderBuildMenu();
+      renderSkinStore();
+      return null;
+    } finally {
+      skinRefreshInFlight = false;
+    }
+  }
+
+  async function equipSkin(skinId) {
+    const cleanSkinId = normalizeSkinId(skinId);
+    const skin = skinById(cleanSkinId);
+    if (!cleanSkinId || !hasSkin(cleanSkinId) || isSkinEquipped(cleanSkinId) || skinPurchasePendingId) {
+      return;
+    }
+
+    skinPurchasePendingId = cleanSkinId;
+    skinStatusMessage = isTrailSkin(skin) ? "Equipping trail..." : "Equipping skin...";
+    renderBuildMenu();
+    renderSkinStore();
+    try {
+      const data = await fetchPersistentJson("/api/skins/equip", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, accountAuthHeaders()),
+        body: JSON.stringify({ skinId: cleanSkinId }),
+        timeoutMs: 8000
+      });
+      if (data && data.account) {
+        applySkinAccountState(data.account);
+      }
+      skinStatusMessage = isTrailSkin(skin) ? "Trail equipped." : "Skin equipped.";
+      maybeNotifyText((skin && skin.name ? skin.name : isTrailSkin(skin) ? "Trail" : "Skin") + " equipped.");
+    } catch (error) {
+      console.warn("Clusternauts skin equip failed.", error);
+      skinStatusMessage = backendErrorMessage(error, isTrailSkin(skin) ? "Could not equip this trail." : "Could not equip this skin.");
+      renderBuildMenu();
+      renderSkinStore();
+    } finally {
+      skinPurchasePendingId = "";
+      renderBuildMenu();
+      renderSkinStore();
+    }
+  }
+
+  async function beginSkinCheckout(skinId) {
+    const cleanSkinId = normalizeSkinId(skinId);
+    const skin = skinById(cleanSkinId);
+    if (!skin || !skin.priceId || skinPurchasePendingId) {
+      return;
+    }
+
+    skinPurchasePendingId = cleanSkinId;
+    skinStatusMessage = "Opening secure checkout...";
+    renderBuildMenu();
+    renderSkinStore();
+    try {
+      const data = await fetchPersistentJson("/api/skins/checkout", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, accountAuthHeaders()),
+        body: JSON.stringify({ skinId: cleanSkinId }),
+        timeoutMs: 12000
+      });
+      if (data && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error("Checkout URL missing.");
+    } catch (error) {
+      console.warn("Clusternauts skin checkout failed.", error);
+      skinStatusMessage = backendErrorMessage(error, "Could not open checkout.");
+      skinPurchasePendingId = "";
+      renderBuildMenu();
+      renderSkinStore();
+    }
+  }
+
+  async function claimFreeSkin(skinId) {
+    const cleanSkinId = normalizeSkinId(skinId);
+    const skin = skinById(cleanSkinId);
+    if (!skin || !skin.freeClaim || skinPurchasePendingId) {
+      return;
+    }
+
+    skinPurchasePendingId = cleanSkinId;
+    skinStatusMessage = "Claiming costume...";
+    renderBuildMenu();
+    renderSkinStore();
+    try {
+      const data = await fetchPersistentJson("/api/skins/claim", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, accountAuthHeaders()),
+        body: JSON.stringify({ skinId: cleanSkinId }),
+        timeoutMs: 8000
+      });
+      if (data && data.account) {
+        applySkinAccountState(data.account);
+      }
+      skinStatusMessage = "Costume claimed.";
+      maybeNotifyText((skin.name || "Costume") + " unlocked.");
+    } catch (error) {
+      console.warn("Clusternauts skin claim failed.", error);
+      skinStatusMessage = backendErrorMessage(error, "Could not claim this costume.");
+      renderBuildMenu();
+      renderSkinStore();
+    } finally {
+      skinPurchasePendingId = "";
+      renderBuildMenu();
+      renderSkinStore();
+    }
+  }
+
+  function clearSkinCheckoutReturnParams() {
+    if (!window.history || typeof window.history.replaceState !== "function") {
+      return;
+    }
+
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("skin_checkout");
+      url.searchParams.delete("skin");
+      url.searchParams.delete("session_id");
+      window.history.replaceState(window.history.state, document.title, url.pathname + url.search + url.hash);
+    } catch {
+      // URL cleanup is cosmetic; keeping the query string is harmless.
+    }
+  }
+
+  async function handleSkinCheckoutReturn() {
+    if (!isSkinStoreRuntime()) {
+      return;
+    }
+
+    const outcome = readSearchParam("skin_checkout");
+    if (!outcome) {
+      return;
+    }
+
+    const skinId = normalizeSkinId(readSearchParam("skin"));
+    const sessionId = String(readSearchParam("session_id") || "").trim();
+    clearSkinCheckoutReturnParams();
+    setDifficultyScreenOpen(true);
+    setStartMenuView("store", { push: false });
+
+    if (outcome === "cancel") {
+      skinStatusMessage = "Checkout cancelled.";
+      maybeNotifyText("Checkout cancelled.");
+      renderBuildMenu();
+      renderSkinStore();
+      return;
+    }
+
+    if (outcome !== "success" || !sessionId || !isAccountSignedIn()) {
+      skinStatusMessage = "Refresh store items after logging in.";
+      renderBuildMenu();
+      renderSkinStore();
+      return;
+    }
+
+    skinPurchasePendingId = skinId;
+    skinStatusMessage = "Confirming purchase...";
+    renderBuildMenu();
+    renderSkinStore();
+    try {
+      const data = await fetchPersistentJson("/api/skins/checkout/confirm", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, accountAuthHeaders()),
+        body: JSON.stringify({ sessionId }),
+        timeoutMs: 12000
+      });
+      if (data && data.account) {
+        applySkinAccountState(data.account);
+      }
+      const confirmedSkin = data && data.skin ? data.skin : skinById(skinId);
+      skinStatusMessage = "Purchase confirmed.";
+      maybeNotifyText((confirmedSkin && confirmedSkin.name ? confirmedSkin.name : "Item") + " unlocked.");
+    } catch (error) {
+      console.warn("Clusternauts skin purchase confirmation failed.", error);
+      skinStatusMessage = backendErrorMessage(error, "Purchase confirmation pending.");
+      void refreshSkinEntitlements();
+    } finally {
+      skinPurchasePendingId = "";
+      renderBuildMenu();
+      renderSkinStore();
+    }
+  }
+
   function initializeTechUi() {
     if (!techLedgerList || !buildMenuList) {
       return;
@@ -6329,12 +8424,10 @@
 
     for (const tech of techTypes) {
       techLedgerList.append(createTechRow(tech, "tech-row"));
-      if (buildMenuTech) {
-        buildMenuTech.append(createTechRow(tech, "build-row"));
-      }
     }
 
     createBuildFilterTabs();
+    renderBuildMenuResources();
     updateTechUi();
     updateToolHotbar();
   }
@@ -6612,6 +8705,8 @@
       setObjectivesOpen(false);
       cancelStructurePlacement();
       resetMouseButtons();
+      renderBuildMenu();
+      void refreshSkinEntitlements();
     }
     if (!buildMenu) {
       return;
@@ -6709,6 +8804,30 @@
     return difficultyDefinition(id).label;
   }
 
+  function normalizeGameMode(mode) {
+    return String(mode || "").toLowerCase() === "survival" ? "survival" : "horde";
+  }
+
+  function gameModeLabel(mode) {
+    return normalizeGameMode(mode) === "survival" ? "Survival" : "Horde Mode";
+  }
+
+  function isHordeModeActive() {
+    return normalizeGameMode(runState.gameMode) === "horde";
+  }
+
+  function applyGameMode(mode) {
+    runState.gameMode = normalizeGameMode(mode);
+    updateDifficultyUi();
+  }
+
+  function setSelectedGameMode(mode) {
+    startMenu.selectedGameMode = normalizeGameMode(mode);
+    if (!runState.active) {
+      applyGameMode(startMenu.selectedGameMode);
+    }
+  }
+
   function difficultyMobSpawnInterval(kind) {
     const interval = mobSpawnIntervals[kind] || 1;
     return Math.max(0.5, interval * activeDifficulty().mobIntervalScale);
@@ -6716,6 +8835,10 @@
 
   function difficultyMobWaveInterval() {
     return Math.max(0.5, mobWaveInterval * activeDifficulty().mobIntervalScale);
+  }
+
+  function difficultyMobFirstWaveDelay() {
+    return Math.max(0.5, finiteOr(activeDifficulty().mobFirstWaveDelay, difficultyMobWaveInterval()));
   }
 
   function difficultyMobDamage(damage) {
@@ -6730,11 +8853,15 @@
     for (const kind of Object.keys(mobSpawnIntervals)) {
       mobSpawnTimers[kind] = difficultyMobSpawnInterval(kind);
     }
-    mobWaveTimer = difficultyMobWaveInterval();
+    mobWaveTimer = difficultyMobFirstWaveDelay();
     mobWaveCount = 0;
     mobSpawnRestTimer = 0;
     mobSpawnRestDrainTimer = 0;
     mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
+    survivalSpawnState.nextCampCheckTick = 0;
+    survivalSpawnState.hitSquadCooldownsByPlayerId = {};
+    survivalSpawnState.hitSquadWarningSentByPlayerId = {};
+    survivalSpawnState.nextHitSquadId = 1;
   }
 
   function setDifficultyScreenOpen(open) {
@@ -6773,7 +8900,7 @@
 
   function updateDifficultyUi() {
     if (difficultyValue) {
-      const label = activeDifficulty().label;
+      const label = gameModeLabel(runState.gameMode) + " - " + activeDifficulty().label;
       if (difficultyValue.textContent !== label) {
         difficultyValue.textContent = label;
       }
@@ -6800,9 +8927,17 @@
       renderLobby();
       void refreshLobbyPlayerSearch();
     }
+    if (nextView === "multiplayer-survival") {
+      renderSharedWorldStats();
+      void refreshSharedWorldStats(false);
+    }
     if (nextView === "leaderboard") {
       renderLeaderboard();
       void refreshLeaderboard(false);
+    }
+    if (nextView === "store") {
+      renderSkinStore();
+      void refreshSkinEntitlements();
     }
   }
 
@@ -6821,9 +8956,12 @@
       return;
     }
 
-    const title = startMenu.view === "load" && isMultiplayerSaveLoadContext()
+    let title = startMenu.view === "load" && isMultiplayerSaveLoadContext()
       ? ["Multiplayer", "Load Save"]
       : startMenu.titles[startMenu.view] || startMenu.titles.main;
+    if (startMenu.view === "single-options") {
+      title = ["Single Player", gameModeLabel(startMenu.selectedGameMode)];
+    }
     if (startMenuEyebrow) {
       startMenuEyebrow.textContent = title[0];
     }
@@ -6845,8 +8983,12 @@
     syncMenuSettingsControls();
     renderStartSavedGames();
     renderLobby();
+    renderSharedWorldStats();
     if (startMenu.view === "leaderboard") {
       renderLeaderboard();
+    }
+    if (startMenu.view === "store") {
+      renderSkinStore();
     }
   }
 
@@ -6858,6 +9000,7 @@
     updateHudEnabledUi();
     updatePlayerBarSettingsUi();
     updateSoundToggle();
+    renderControlBindings();
   }
 
   function renderStartSavedGames() {
@@ -6942,7 +9085,12 @@
   }
 
   function isMultiplayerSaveLoadContext() {
-    return Boolean(startMenu.history.includes("multiplayer") || startMenu.history.includes("lobby") || multiplayer.lobby);
+    return Boolean(
+      startMenu.history.includes("multiplayer") ||
+      startMenu.history.includes("multiplayer-horde") ||
+      startMenu.history.includes("lobby") ||
+      multiplayer.lobby
+    );
   }
 
   function handleStartMenuAction(action, sourceElement) {
@@ -6952,6 +9100,16 @@
     }
     if (action === "single") {
       setStartMenuView("single");
+      return;
+    }
+    if (action === "single-horde") {
+      setSelectedGameMode("horde");
+      setStartMenuView("single-options");
+      return;
+    }
+    if (action === "single-survival") {
+      setSelectedGameMode("survival");
+      setStartMenuView("single-options");
       return;
     }
     if (action === "new-game") {
@@ -6986,6 +9144,30 @@
       setStartMenuView("multiplayer");
       return;
     }
+    if (action === "multiplayer-horde") {
+      setSelectedGameMode("horde");
+      setStartMenuView("multiplayer-horde");
+      return;
+    }
+    if (action === "multiplayer-survival") {
+      setSelectedGameMode("survival");
+      setStartMenuView("multiplayer-survival");
+      return;
+    }
+    if (action === "store") {
+      if (isSkinStoreRuntime()) {
+        setStartMenuView("store");
+      }
+      return;
+    }
+    if (action === "buy-skin" || action === "equip-skin") {
+      const skin = skinById(sourceElement && sourceElement.dataset.skinId);
+      if (skin) {
+        setStorePreviewSkin(skin.id);
+        activateSkinRecipe(skin);
+      }
+      return;
+    }
     if (action === "leaderboard") {
       setStartMenuView("leaderboard");
       return;
@@ -6994,7 +9176,13 @@
       setStartMenuView("load");
       return;
     }
+    if (action === "join-shared-world") {
+      setSelectedGameMode("survival");
+      joinSharedWorld();
+      return;
+    }
     if (action === "create-lobby") {
+      setSelectedGameMode("horde");
       createLobby();
       return;
     }
@@ -7169,6 +9357,166 @@
     lobbyStatus.classList.toggle("is-error", state === "error");
   }
 
+  function setSharedWorldStatus(message, state) {
+    if (!sharedWorldStatus) {
+      return;
+    }
+    sharedWorldStatus.textContent = message || "";
+    sharedWorldStatus.classList.toggle("is-success", state === "success");
+    sharedWorldStatus.classList.toggle("is-error", state === "error");
+  }
+
+  function formatSharedWorldStatNumber(value) {
+    const number = Math.max(0, finiteOr(value, 0));
+    if (number >= 1000000) {
+      return (number / 1000000).toFixed(number >= 10000000 ? 0 : 1) + "m";
+    }
+    if (number >= 10000) {
+      return Math.round(number / 1000) + "k";
+    }
+    return String(Math.round(number));
+  }
+
+  function formatSharedWorldDuration(seconds) {
+    const total = Math.max(0, Math.floor(finiteOr(seconds, 0)));
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (days > 0) {
+      return days + "d " + hours + "h";
+    }
+    if (hours > 0) {
+      return hours + "h " + minutes + "m";
+    }
+    return minutes + "m";
+  }
+
+  function normalizeSharedWorldStats(source) {
+    const stats = source && typeof source === "object" ? source : {};
+    const world = stats.world && typeof stats.world === "object" ? stats.world : {};
+    const bounds = world.bounds && typeof world.bounds === "object" ? world.bounds : {};
+    const topPlayer = stats.topPlayer && typeof stats.topPlayer === "object" ? stats.topPlayer : {};
+    return {
+      status: String(stats.status || "idle"),
+      runningSeconds: Math.max(0, finiteOr(stats.runningSeconds, 0)),
+      tick: Math.max(0, Math.floor(finiteOr(stats.tick, 0))),
+      observedAt: Math.max(0, finiteOr(stats.observedAt, 0)),
+      savedAt: Math.max(0, finiteOr(stats.savedAt, 0)),
+      onlinePlayers: Math.max(0, Math.floor(finiteOr(stats.onlinePlayers, 0))),
+      knownPlayers: Math.max(0, Math.floor(finiteOr(stats.knownPlayers, 0))),
+      maxPlayers: Math.max(1, Math.floor(finiteOr(stats.maxPlayers, 1))),
+      teamCount: Math.max(0, Math.floor(finiteOr(stats.teamCount, 0))),
+      topPlayer: {
+        playerId: String(topPlayer.playerId || ""),
+        publicName: String(topPlayer.publicName || "No players yet"),
+        score: Math.max(0, Math.round(finiteOr(topPlayer.score, 0))),
+        online: Boolean(topPlayer.online)
+      },
+      world: {
+        width: Math.max(0, finiteOr(bounds.width, 0)),
+        height: Math.max(0, finiteOr(bounds.height, 0)),
+        area: Math.max(0, finiteOr(bounds.area, 0)),
+        radiusFromOrigin: Math.max(0, finiteOr(bounds.radiusFromOrigin, 0)),
+        particles: Math.max(0, Math.floor(finiteOr(world.particles, 0))),
+        totalMass: Math.max(0, finiteOr(world.totalMass, 0)),
+        blackHoles: Math.max(0, Math.floor(finiteOr(world.blackHoles, 0))),
+        mobCount: Math.max(0, Math.floor(finiteOr(world.mobCount, 0))),
+        bosses: Math.max(0, Math.floor(finiteOr(world.bosses, 0))),
+        structures: Math.max(0, Math.floor(finiteOr(world.structures, 0))),
+        spacecrafts: Math.max(0, Math.floor(finiteOr(world.spacecrafts, 0))),
+        techPickups: Math.max(0, Math.floor(finiteOr(world.techPickups, 0))),
+        healthPickups: Math.max(0, Math.floor(finiteOr(world.healthPickups, 0))),
+        projectiles: Math.max(0, Math.floor(finiteOr(world.projectiles, 0))),
+        entityCount: Math.max(0, Math.floor(finiteOr(world.entityCount, 0))),
+        activeEvent: world.activeEvent && typeof world.activeEvent === "object" ? {
+          id: String(world.activeEvent.id || ""),
+          timer: Math.max(0, finiteOr(world.activeEvent.timer, 0))
+        } : null,
+        mobBreakdown: world.mobBreakdown && typeof world.mobBreakdown === "object" ? world.mobBreakdown : {}
+      }
+    };
+  }
+
+  function applySharedWorldStats(source) {
+    multiplayer.sharedWorldStats = normalizeSharedWorldStats(source);
+    multiplayer.sharedWorldStatsLoadedAt = performance.now();
+    renderSharedWorldStats();
+  }
+
+  function renderSharedWorldStat(label, value, options) {
+    const item = document.createElement("div");
+    const labelElement = document.createElement("span");
+    const valueElement = document.createElement("strong");
+    item.className = "shared-world-stat";
+    if (options && options.wide) {
+      item.classList.add("shared-world-stat--wide");
+    }
+    labelElement.textContent = label;
+    valueElement.textContent = value;
+    item.append(labelElement, valueElement);
+    return item;
+  }
+
+  function renderSharedWorldStats() {
+    if (!sharedWorldStats) {
+      return;
+    }
+
+    sharedWorldStats.textContent = "";
+    const stats = multiplayer.sharedWorldStats;
+    if (!stats) {
+      sharedWorldStats.append(
+        renderSharedWorldStat("World age", multiplayer.sharedWorldStatsLoading ? "Loading..." : "Unknown"),
+        renderSharedWorldStat("Leader", "Unknown"),
+        renderSharedWorldStat("Online", "0/" + crazyGamesRoomMaxPlayers),
+        renderSharedWorldStat("Mobs", "Unknown")
+      );
+      return;
+    }
+
+    const top = stats.topPlayer;
+    const leader = top.score > 0 ? top.publicName + " - " + formatSharedWorldStatNumber(top.score) + " pts" : "No scores yet";
+    const activeEvent = stats.world.activeEvent && stats.world.activeEvent.id
+      ? stats.world.activeEvent.id + " " + Math.ceil(stats.world.activeEvent.timer) + "s"
+      : stats.world.blackHoles > 0
+      ? stats.world.blackHoles + " black hole" + (stats.world.blackHoles === 1 ? "" : "s")
+      : "No major event";
+    sharedWorldStats.append(
+      renderSharedWorldStat("Active run time", formatSharedWorldDuration(stats.runningSeconds)),
+      renderSharedWorldStat("Leader", leader),
+      renderSharedWorldStat("Online", stats.onlinePlayers + "/" + stats.maxPlayers),
+      renderSharedWorldStat("Mobs", formatSharedWorldStatNumber(stats.world.mobCount) + " + " + formatSharedWorldStatNumber(stats.world.bosses) + " bosses"),
+      renderSharedWorldStat("World", formatSharedWorldStatNumber(stats.world.particles) + " bodies, " + formatSharedWorldStatNumber(stats.world.structures) + " structures", { wide: true }),
+      renderSharedWorldStat("Cycle", activeEvent, { wide: true })
+    );
+  }
+
+  async function refreshSharedWorldStats(force) {
+    if (!window.fetch || multiplayer.sharedWorldStatsLoading) {
+      renderSharedWorldStats();
+      return;
+    }
+    if (!force && multiplayer.sharedWorldStats && performance.now() - multiplayer.sharedWorldStatsLoadedAt < 10000) {
+      renderSharedWorldStats();
+      return;
+    }
+
+    multiplayer.sharedWorldStatsLoading = true;
+    renderSharedWorldStats();
+    try {
+      const data = await fetchPersistentJson("/api/world/shared");
+      if (data && data.ok && data.sharedWorld) {
+        applySharedWorldStats(data.sharedWorld);
+      }
+    } catch (error) {
+      console.warn("Clusternauts shared world stats failed.", error);
+      renderSharedWorldStats();
+    } finally {
+      multiplayer.sharedWorldStatsLoading = false;
+      renderSharedWorldStats();
+    }
+  }
+
   function lobbyPlayers() {
     return multiplayer.lobby && Array.isArray(multiplayer.lobby.players) ? multiplayer.lobby.players : [];
   }
@@ -7180,18 +9528,39 @@
   function createLobby(options) {
     const loadedSnapshot = options && options.loadedSnapshot && typeof options.loadedSnapshot === "object" ? options.loadedSnapshot : null;
     const loadedSaveName = loadedSnapshot ? String(options.loadedSaveName || "saved world") : "";
+    const gameMode = normalizeGameMode(options && options.gameMode || startMenu.selectedGameMode || "horde");
     clearCurrentAccountSave();
     setFriendJoinsEnabled(true, "lobby-create", { persist: true, notify: false, startRun: false });
     multiplayer.lobbyCreatePending = true;
     multiplayer.lobbyJoinPending = "";
+    multiplayer.sharedWorldJoinPending = false;
+    multiplayer.lobbyGameMode = gameMode;
     multiplayer.lobbyLoadedSnapshot = loadedSnapshot;
     multiplayer.lobbyLoadedSaveName = loadedSaveName;
     multiplayer.lobbyRequestStartedAt = performance.now();
-    setLobbyStatus(loadedSnapshot ? 'Creating lobby from "' + loadedSaveName + '"...' : "Creating lobby...", "");
+    setLobbyStatus(loadedSnapshot ? 'Creating ' + gameModeLabel(gameMode) + ' lobby from "' + loadedSaveName + '"...' : "Creating " + gameModeLabel(gameMode) + " lobby...", "");
+    setSharedWorldStatus("", "");
     setStartMenuView("lobby");
     setCrazyGamesLoadingActive(true, "lobby-create");
     connectMultiplayer();
     flushLobbyRequests("create-lobby");
+  }
+
+  function joinSharedWorld() {
+    prepareForLobbyJoin();
+    setSelectedGameMode("survival");
+    setFriendJoinsEnabled(true, "shared-world-join", { persist: true, notify: false, startRun: false });
+    clearCurrentAccountSave();
+    multiplayer.lobbyCreatePending = false;
+    multiplayer.lobbyJoinPending = "";
+    multiplayer.sharedWorldJoinPending = true;
+    multiplayer.lobbyGameMode = "survival";
+    multiplayer.lobbyLoadedSnapshot = null;
+    multiplayer.lobbyLoadedSaveName = "";
+    setSharedWorldStatus("Joining shared world...", "");
+    setCrazyGamesLoadingActive(true, "shared-world-join");
+    connectMultiplayer();
+    flushSharedWorldRequests("shared-world-join");
   }
 
   function prepareForLobbyJoin() {
@@ -7214,7 +9583,7 @@
     const cleanCode = sanitizeLobbyCode(code);
     if (!cleanCode) {
       setLobbyStatus("Enter a lobby code.", "error");
-      setStartMenuView("multiplayer", { push: false });
+      setStartMenuView("multiplayer-horde", { push: false });
       return;
     }
     prepareForLobbyJoin();
@@ -7222,6 +9591,8 @@
     clearCurrentAccountSave();
     multiplayer.lobbyCreatePending = false;
     multiplayer.lobbyJoinPending = cleanCode;
+    multiplayer.sharedWorldJoinPending = false;
+    multiplayer.lobbyGameMode = "horde";
     multiplayer.lobbyLoadedSnapshot = null;
     multiplayer.lobbyLoadedSaveName = "";
     multiplayer.lobbyRequestStartedAt = performance.now();
@@ -7330,11 +9701,14 @@
       setLobbyStatus("Only the host can start.", "error");
       return;
     }
+    const gameMode = normalizeGameMode(multiplayer.lobby.gameMode || multiplayer.lobbyGameMode || "horde");
     if (multiplayer.lobbyLoadedSnapshot) {
       applyPersistentPayload(Object.assign({ ok: true }, multiplayer.lobbyLoadedSnapshot), { includePlayer: true });
       applyRunSnapshot(multiplayer.lobbyLoadedSnapshot.run);
+      applyGameMode(gameMode);
     } else {
       applyDifficulty(selectedLobbyDifficulty());
+      applyGameMode(gameMode);
       resetLocalPlayerState();
       resetLocalWorldState();
       resetLifeStats();
@@ -7344,9 +9718,10 @@
       type: "lobby.start",
       netcodeVersion: 2,
       difficulty: selectedLobbyDifficulty(),
+      gameMode,
       snapshot: multiplayer.lobbyLoadedSnapshot || buildPersistentPayload(true)
     });
-    setLobbyStatus("Starting shared world...", "");
+    setLobbyStatus("Starting " + gameModeLabel(gameMode) + " lobby...", "");
   }
 
   function leaveLobby() {
@@ -7358,20 +9733,22 @@
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
     multiplayer.lobbyLoadedSaveName = "";
+    multiplayer.lobbyGameMode = "horde";
     setCrazyGamesLoadingActive(false, "lobby-leave");
     clearCrazyGamesRoomState("lobby-leave");
     setLobbyStatus("", "");
-    setStartMenuView("multiplayer", { push: false });
+    setStartMenuView("multiplayer-horde", { push: false });
   }
 
   function applyLobbyState(message) {
     multiplayer.lobby = normalizeLobbyState(message && message.lobby ? message.lobby : message);
+    multiplayer.lobbyGameMode = multiplayer.lobby.gameMode;
     multiplayer.lobbyCreatePending = false;
     multiplayer.lobbyJoinPending = "";
     multiplayer.lobbyRequestStartedAt = 0;
     setLobbyStatus(
       multiplayer.lobby.status === "started"
-        ? "Shared world starting."
+        ? gameModeLabel(multiplayer.lobby.gameMode) + " lobby starting."
         : multiplayer.lobbyLoadedSnapshot
         ? 'Using "' + (multiplayer.lobbyLoadedSaveName || "saved world") + '".'
         : "",
@@ -7391,6 +9768,7 @@
       hostPlayerId: String(lobby.hostPlayerId || ""),
       maxPlayers: Math.max(1, Math.floor(finiteOr(lobby.maxPlayers, crazyGamesRoomMaxPlayers))),
       difficulty: difficultyDefinitions[lobby.difficulty] ? lobby.difficulty : defaultDifficultyId,
+      gameMode: normalizeGameMode(lobby.gameMode),
       status: String(lobby.status || "open"),
       players: Array.isArray(lobby.players)
         ? lobby.players.map(normalizeLobbyPlayer).filter(Boolean)
@@ -7409,7 +9787,8 @@
     return {
       playerId,
       publicName: String(source.publicName || source.name || playerId),
-      online: source.online !== false
+      online: source.online !== false,
+      teamId: String(source.teamId || "")
     };
   }
 
@@ -7584,6 +9963,9 @@
   }
 
   function activePartyJoinCode() {
+    if (isSharedPublicWorldActive()) {
+      return "";
+    }
     if (multiplayer.partyJoinCode) {
       return multiplayer.partyJoinCode;
     }
@@ -7596,7 +9978,9 @@
   function updateSettingsJoinCodeUi() {
     const code = activePartyJoinCode();
     if (settingsJoinCodeValue) {
-      settingsJoinCodeValue.textContent = code || "----";
+      settingsJoinCodeValue.textContent = isSharedPublicWorldActive()
+        ? (multiplayer.sharedTeamId ? "Team " + multiplayer.sharedTeamId.slice(-6).toUpperCase() : "Shared World")
+        : code || "----";
     }
     if (copySettingsJoinCodeButton) {
       copySettingsJoinCodeButton.disabled = !code;
@@ -7607,12 +9991,22 @@
     return Boolean(multiplayer.partySession && multiplayer.partySession.id);
   }
 
+  function isSharedPublicWorldActive() {
+    return Boolean(isPartySessionActive() && multiplayer.partySession.worldMode === "shared-public");
+  }
+
   function isPartyHost() {
     return isPartySessionActive() && multiplayer.partyHostId === player.id;
   }
 
   function isSharedWorldFollower() {
     return isPartySessionActive() && !isPartyHost();
+  }
+
+  function leaveActiveSharedWorld(reason) {
+    if (isSharedPublicWorldActive()) {
+      sendMultiplayer({ type: "shared.world.leave", reason: reason || "client-reset" });
+    }
   }
 
   function queryValue(name) {
@@ -7743,6 +10137,7 @@
     multiplayer.v2.clientTick = 0;
     multiplayer.v2.fixedAccumulator = 0;
     multiplayer.v2.sendAccumulator = 0;
+    multiplayer.v2.lastSentInput = null;
     multiplayer.v2.pendingInputs = [];
     multiplayer.v2.pendingSnapshot = null;
     multiplayer.v2.landRequested = "";
@@ -7774,6 +10169,7 @@
   }
 
   function resetSoloMultiplayerSession() {
+    leaveActiveSharedWorld("reset-session");
     resetMultiplayerV2State();
     multiplayer.partySession = null;
     multiplayer.partyJoinCode = "";
@@ -7796,6 +10192,10 @@
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
     multiplayer.lobbyLoadedSaveName = "";
+    multiplayer.lobbyGameMode = "horde";
+    multiplayer.sharedWorldJoinPending = false;
+    multiplayer.sharedTeamId = "";
+    multiplayer.sharedTeamMemberIds.clear();
     clearCurrentAccountSave();
     updateSettingsJoinCodeUi();
   }
@@ -7820,7 +10220,9 @@
 
   function processMultiplayerV2BodyMergeEvent(event) {
     const mass = Math.max(1, finiteOr(event && event.mass, 1));
-    const tier = event && event.tier && typeof event.tier === "object" ? event.tier : tierForMass(mass);
+    const tier = event && event.tier && typeof event.tier === "object"
+      ? event.tier
+      : tierForMassAndStellarOutcome(mass, event && event.stellarOutcome);
     const previousTier = event && event.previousTier && typeof event.previousTier === "object"
       ? event.previousTier
       : tier;
@@ -7834,6 +10236,22 @@
       volume: clamp(0.45 + Math.log2(mass) * 0.08, 0.45, 1.1)
     });
     queueMultiplayerV2BodyMergeVisual(event, mass);
+    if (tier.name === "star" && (event.becameStar || previousTier.name !== "star")) {
+      emitStarFormationBurst({
+        x: finiteOr(event && event.x, player.x),
+        y: finiteOr(event && event.y, player.y),
+        radius: Math.max(1, finiteOr(event && event.radius, radiusFromMass(mass))),
+        color: normalizeColorSnapshot(event && event.color, { r: 255, g: 188, b: 82 })
+      }, Math.max(0, Math.floor(finiteOr(event && event.destroyedStructures, 0))));
+      maybeNotifyText(
+        finiteOr(event && event.destroyedStructures, 0) > 0
+          ? "Planet collapsed into a star. Structures burned away."
+          : "Planet collapsed into a star.",
+        { groupKey: "star-formed" }
+      );
+    } else if (stellarOutcomeTierNames.includes(tier.name) && !stellarOutcomeTierNames.includes(previousTier.name)) {
+      maybeNotifyText("Star collapsed into " + tier.article + " " + tier.name + ".", { groupKey: "stellar-branch-formed" });
+    }
     maybeNotifyTier(tier, previousTier);
   }
 
@@ -7886,6 +10304,24 @@
       (event && event.absorbedColor) || (removedBody && removedBody.color) || (event && event.color),
       fallbackColor
     );
+    if (event && event.graduated && keptBody) {
+      const promotionColor = shadeColor(normalizeColorSnapshot(event.color, fallbackColor), 88);
+      keptBody.promotionStartedAt = performance.now();
+      keptBody.promotionDuration = bodyPromotionEffectDuration;
+      keptBody.promotionColor = promotionColor;
+      keptBody.promotedFromTier = String(event.promotedFromTier || (event.previousTier && event.previousTier.name) || "");
+      keptBody.promotedToTier = String(event.promotedToTier || (event.tier && event.tier.name) || "");
+      sparks.push({
+        keptId,
+        x: mergeX,
+        y: mergeY,
+        radius: Math.max(mergedRadius * 2.65, 58),
+        color: promotionColor,
+        life: bodyPromotionEffectDuration,
+        maxLife: bodyPromotionEffectDuration,
+        promotionBurst: true
+      });
+    }
     const visual = {
       keptId,
       x: absorbedX,
@@ -7930,11 +10366,15 @@
   }
 
   function scoreMultiplayerV2MobDefeat(event) {
+    if (event && event.isBeacon) {
+      return;
+    }
     const kind = String(event && event.kind || "alienoid");
-    lifeStats.mobsDefeated += 1;
-    lifeStats.mobScore += scoreMobKill(kind);
+    const representedCount = Math.max(1, Math.floor(finiteOr(event && event.representedCount, 1)));
+    lifeStats.mobsDefeated += representedCount;
+    lifeStats.mobScore += scoreMobKill(kind) * representedCount;
     if (mobDefeatsByKind[kind] !== undefined) {
-      mobDefeatsByKind[kind] += 1;
+      mobDefeatsByKind[kind] += representedCount;
     }
     if (event && event.isBoss && mobBossDefeatsByKind[kind] !== undefined) {
       mobBossDefeatsByKind[kind] += 1;
@@ -7944,7 +10384,7 @@
     } else if (mobBossProgressByKind[kind] !== undefined) {
       mobBossProgressByKind[kind] = Math.min(
         mobBossDefeatsToUnlock,
-        Math.max(0, Math.floor(finiteOr(mobBossProgressByKind[kind], 0))) + 1
+        Math.max(0, Math.floor(finiteOr(mobBossProgressByKind[kind], 0))) + representedCount
       );
     }
   }
@@ -8005,10 +10445,25 @@
         scoreMultiplayerV2MobDefeat(event);
         playSound("mobDestroyed", { throttleKey: "mpV2MobDestroyed", throttle: 0.08 });
         pushMultiplayerV2EventSpark(event, { radius: 64, life: 0.36, fallbackColor: { r: 255, g: 236, b: 194 } });
+      } else if (event.type === "mob.beacon.destroyed") {
+        playSound("mobDestroyed", { throttleKey: "mpV2MobBeaconDestroyed", throttle: 0.08 });
+        pushMultiplayerV2EventSpark(event, { radius: 78, life: 0.42, fallbackColor: { r: 255, g: 236, b: 194 } });
+        notifyMobBeaconSuspended(String(event.kind || "alienoid"), finiteOr(event.suspendedSeconds, mobBeaconRespawnDuration));
       } else if (event.type === "mob.boss.warning") {
         const kind = String(event.kind || "alienoid");
         const seconds = Math.max(0, Math.ceil(finiteOr(event.seconds, 0)));
         updateGroupedNotificationText("mob-boss-warning:" + kind, mobBossLabel(kind) + " inbound in " + seconds + "s.", { lifetime: 1500 });
+      } else if (event.type === "mob.hitSquad.warning") {
+        const targetId = String(event.targetPlayerId || "");
+        if (!targetId || targetId === player.id) {
+          const seconds = Math.max(0, Math.ceil(finiteOr(event.seconds, 0)));
+          updateGroupedNotificationText("survival-hit-squad-warning:" + (targetId || "local"), "Hostiles inbound in " + seconds + "s.", { lifetime: 2400 });
+        }
+      } else if (event.type === "mob.hitSquad.spawned") {
+        const targetId = String(event.targetPlayerId || "");
+        if (!targetId || targetId === player.id) {
+          maybeNotifyText("Hostiles are closing in.", { groupKey: "survival-hit-squad-arrived:" + (targetId || "local"), lifetime: 3200 });
+        }
       } else if (event.type === "mob.boss.spawned") {
         maybeNotifyText(mobBossLabel(String(event.kind || "alienoid")) + " has arrived.", {
           groupKey: "mob-boss-arrival:" + String(event.kind || "alienoid"),
@@ -8084,6 +10539,12 @@
       } else if (event.type === "player.hitByMobProjectile" && String(event.playerId || "") === player.id) {
         playSound("hit", { throttleKey: "mpV2PlayerProjectileHit", throttle: 0.06 });
         pushMultiplayerV2EventSpark(event, { radius: 44, life: 0.34, fallbackColor: { r: 114, g: 244, b: 255 } });
+      } else if (event.type === "player.hitByStar") {
+        if (String(event.playerId || "") === player.id) {
+          playSound("hit", { throttleKey: "mpV2StarContact", throttle: 0.25 });
+          maybeNotifyText("Star plasma is burning your hull.", { groupKey: "star-contact" });
+        }
+        pushMultiplayerV2EventSpark(event, { radius: 58, life: 0.34, fallbackColor: { r: 255, g: 196, b: 76 } });
       } else if (event.type === "body.merged") {
         processMultiplayerV2BodyMergeEvent(event);
       } else if (event.type === "pickup.tech") {
@@ -8112,7 +10573,8 @@
     }
     const sessionPlayers = message && message.session && Array.isArray(message.session.players) ? message.session.players : lobbyPlayers();
     return mpV2Sim.createInitialState(snapshot || buildPersistentPayload(true), sessionPlayers, {
-      seed: message && (message.sessionId || message.id || message.roomId || "client-v2")
+      seed: message && (message.sessionId || message.id || message.roomId || "client-v2"),
+      maxPlayers: message && message.session ? message.session.maxPlayers : undefined
     });
   }
 
@@ -8198,6 +10660,19 @@
     return pairs;
   }
 
+  function multiplayerV2SimOptions(patch) {
+    const sharedPublic = isSharedPublicWorldActive();
+    return {
+      enableMobs: true,
+      emitMobDamageParticles: false,
+      duels: sharedPublic ? [] : multiplayerV2DuelPairsForPrediction(),
+      pvpMode: sharedPublic ? "shared-public" : String(multiplayer.partySession && multiplayer.partySession.pvpMode || "party"),
+      worldMode: sharedPublic ? "shared-public" : String(multiplayer.partySession && multiplayer.partySession.worldMode || "party"),
+      gameMode: normalizeGameMode(multiplayer.partySession && multiplayer.partySession.gameMode || runState.gameMode),
+      ...(patch || {})
+    };
+  }
+
   function frameRateIndependentBlend(perFrameBlend, dt) {
     const blend = clamp(finiteOr(perFrameBlend, 0), 0, 1);
     if (blend >= 1) {
@@ -8225,6 +10700,40 @@
     });
   }
 
+  function multiplayerV2ButtonChanged(previous, next) {
+    const before = previous && previous.buttons || {};
+    const after = next && next.buttons || {};
+    for (const key of ["up", "down", "left", "right", "land", "boost", "pull", "push", "hold", "fire", "release", "dismantle"]) {
+      if (Boolean(before[key]) !== Boolean(after[key])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function shouldSendMultiplayerV2Input(input) {
+    if (!input) {
+      return false;
+    }
+    const previous = multiplayer.v2.lastSentInput;
+    if (!previous) {
+      return true;
+    }
+    if (input.buttons && input.buttons.land) {
+      return true;
+    }
+    if (input.familiarCommand) {
+      return true;
+    }
+    if (input.equippedTool !== previous.equippedTool || input.toolMode !== previous.toolMode) {
+      return true;
+    }
+    if (multiplayerV2ButtonChanged(previous, input)) {
+      return true;
+    }
+    return Math.max(0, Math.floor(finiteOr(input.clientTick, 0))) % 2 === 0;
+  }
+
   function applyLocalMultiplayerV2BuildAction(action) {
     if (!mpV2Sim || !isMultiplayerV2Active() || !multiplayer.v2.state || !action || typeof action !== "object") {
       return false;
@@ -8239,6 +10748,45 @@
       changed = mpV2Sim.setEquippedTools(multiplayer.v2.state, player.id, action.equippedTool, action.equippedTools);
     } else if (action.action === "placeStructure") {
       changed = mpV2Sim.placeStructure(multiplayer.v2.state, player.id, action.recipeId, action.placement, action.linkedPlacement);
+    } else if (action.action === "transferContainerTech") {
+      changed = mpV2Sim.transferContainerTech(
+        multiplayer.v2.state,
+        player.id,
+        action.structureId,
+        action.techKey,
+        action.mode,
+        action.amount
+      );
+    } else if (action.action === "transferStructureTech") {
+      changed = mpV2Sim.transferStructureTech(
+        multiplayer.v2.state,
+        player.id,
+        action.structureId,
+        action.techKey,
+        action.mode,
+        action.amount
+      );
+    } else if (action.action === "setTradingPortOffer") {
+      changed = mpV2Sim.setTradingPortOffer(
+        multiplayer.v2.state,
+        player.id,
+        action.structureId,
+        action.offer
+      );
+    } else if (action.action === "removeTradingPortOffer") {
+      changed = mpV2Sim.removeTradingPortOffer(
+        multiplayer.v2.state,
+        player.id,
+        action.structureId,
+        action.offerId
+      );
+    } else if (action.action === "acceptTradingPortOffer") {
+      changed = mpV2Sim.acceptTradingPortOffer(
+        multiplayer.v2.state,
+        player.id,
+        action.structureId,
+        action.offerId
+      );
     } else if (action.action === "statusEffect") {
       changed = mpV2Sim.applyPlayerStatusEffect(multiplayer.v2.state.players[player.id], String(action.status || ""), finiteOr(action.duration, 0));
     }
@@ -8278,6 +10826,7 @@
       "teslas",
       "rockets",
       "fighters",
+      "mobBeacons",
       "rivalProjectiles",
       "structures"
     ].reduce((total, key) => total + (Array.isArray(source[key]) ? source[key].length : 0), 0);
@@ -8459,6 +11008,9 @@
         serverMaxInputQueue: finiteOr(message.perf.maxInputQueue, multiplayer.v2.perf && multiplayer.v2.perf.serverMaxInputQueue)
       });
     }
+    if (message.sharedWorldStats) {
+      applySharedWorldStats(message.sharedWorldStats);
+    }
     processMultiplayerV2Events(message.events, { authoritative: true });
 
     const oldX = player.x;
@@ -8469,12 +11021,10 @@
       multiplayer.v2.pendingInputs.splice(0, droppedReplayInputs);
     }
     const replayInputs = multiplayer.v2.pendingInputs.map((input) => Object.assign({}, input));
-    multiplayer.v2.state = mpV2Sim.replayFromSnapshot(multiplayer.v2.authoritativeState, replayInputs, {
-      dt: mpV2Sim.TICK_DT,
-      enableMobs: true,
-      emitMobDamageParticles: false,
-      duels: multiplayerV2DuelPairsForPrediction()
-    });
+    const replayOptions = multiplayerV2SimOptions({ dt: mpV2Sim.TICK_DT });
+    multiplayer.v2.state = typeof mpV2Sim.replayLocalPlayerFromSnapshot === "function"
+      ? mpV2Sim.replayLocalPlayerFromSnapshot(multiplayer.v2.authoritativeState, replayInputs, replayOptions)
+      : mpV2Sim.replayFromSnapshot(multiplayer.v2.authoritativeState, replayInputs, replayOptions);
     syncMultiplayerV2StateToGame({ previousLocalX: oldX, previousLocalY: oldY, blendDt: mpV2Sim.TICK_DT });
     updateMultiplayerV2Perf({
       reconcileMs: performance.now() - reconcileStart,
@@ -8526,6 +11076,7 @@
       applyToolInventory(local.tools, local.equippedTool, local.equippedTools);
       applyToolUpgrades(local.toolUpgrades);
       familiarNetCapture = normalizeMultiplayerV2FamiliarNetCapture(local.familiarNetCapture);
+      updateSharedTeamFromLocalSnapshot(local.teamId);
       if (!deathState.active && previousHealth > player.health && player.health > 0) {
         playSound("hit", { throttleKey: "mpV2LocalDamage", throttle: 0.08 });
       }
@@ -8671,6 +11222,11 @@
     syncMultiplayerV2EntityList(teslas, source.teslas, normalizeTeslaSnapshot, { authoritativeList: authoritativeWorld.teslas });
     syncMultiplayerV2EntityList(rockets, source.rockets, normalizeRocketSnapshot, { authoritativeList: authoritativeWorld.rockets });
     syncMultiplayerV2EntityList(fighters, source.fighters, normalizeFighterSnapshot, { authoritativeList: authoritativeWorld.fighters });
+    if (normalizeGameMode(source.gameMode || runState.gameMode) === "survival") {
+      mobBeacons.length = 0;
+    } else {
+      syncMultiplayerV2EntityList(mobBeacons, source.mobBeacons, normalizeMobBeaconSnapshot);
+    }
     syncMultiplayerV2EntityList(structures, source.structures, normalizeStructureSnapshot);
     if (Array.isArray(source.spacecrafts)) {
       syncMultiplayerV2EntityList(spacecrafts, source.spacecrafts, normalizeSpacecraftSnapshot);
@@ -8687,6 +11243,8 @@
     nextParticleId = Math.max(finiteOr(source.nextParticleId, nextParticleId), particles.reduce((largest, body) => Math.max(largest, body.id + 1), 1));
     nextTechPickupId = Math.max(finiteOr(source.nextTechPickupId, nextTechPickupId), techPickups.reduce((largest, pickup) => Math.max(largest, pickup.id + 1), 1));
     nextHealthPickupId = Math.max(finiteOr(source.nextHealthPickupId, nextHealthPickupId), healthPickups.reduce((largest, pickup) => Math.max(largest, pickup.id + 1), 1));
+    nextMobBeaconId = Math.max(finiteOr(source.nextMobBeaconId, nextMobBeaconId), mobBeacons.reduce((largest, beacon) => Math.max(largest, finiteOr(beacon.id, 0) + 1), 1));
+    nextSurvivalCampId = Math.max(1, finiteOr(source.nextSurvivalCampId, nextSurvivalCampId));
     nextSpacecraftId = Math.max(finiteOr(source.nextSpacecraftId, nextSpacecraftId), spacecrafts.reduce((largest, craft) => Math.max(largest, finiteOr(craft.id, 0) + 1), 1));
   }
 
@@ -8701,6 +11259,7 @@
       remote.playerId = remotePlayerId;
       remote.publicName = remotePlayer.name || remote.publicName || remotePlayerId;
       remote.partySessionId = multiplayer.partySession ? multiplayer.partySession.id : "";
+      remote.teamId = String(remotePlayer.teamId || "");
       remote.transform = createRemoteTransform(0, 0, 1, "overlap", "party");
       remote.displayTransform = remote.displayTransform || { ...remote.transform };
       remote.snapshot = normalizeRemoteSnapshot({
@@ -8719,6 +11278,7 @@
           teslas: [],
           rockets: [],
           fighters: [],
+          mobBeacons: [],
           structures: [],
           rivalProjectiles: [],
           techPickups: [],
@@ -8748,18 +11308,21 @@
       multiplayer.v2.clientTick += 1;
       const input = buildMultiplayerV2Input(multiplayer.v2.inputSeq + 1);
       multiplayer.v2.inputSeq = input.seq;
-      multiplayer.v2.pendingInputs.push(input);
-      while (multiplayer.v2.pendingInputs.length > multiplayerV2ReplayInputLimit * 2) {
-        multiplayer.v2.pendingInputs.shift();
-      }
-      mpV2Sim.step(multiplayer.v2.state, { [player.id]: input }, {
-        dt: mpV2Sim.TICK_DT,
-        enableMobs: true,
-        emitMobDamageParticles: false,
-        duels: multiplayerV2DuelPairsForPrediction()
-      });
+      mpV2Sim.step(
+        multiplayer.v2.state,
+        { [player.id]: input },
+        multiplayerV2SimOptions({ dt: mpV2Sim.TICK_DT })
+      );
       processMultiplayerV2Events(multiplayer.v2.state && multiplayer.v2.state.events);
-      sendMultiplayerV2Input(input);
+      if (shouldSendMultiplayerV2Input(input) && sendMultiplayerV2Input(input)) {
+        multiplayer.v2.pendingInputs.push(input);
+        multiplayer.v2.lastSentInput = Object.assign({}, input, {
+          buttons: input.buttons ? { ...input.buttons } : {}
+        });
+        while (multiplayer.v2.pendingInputs.length > multiplayerV2ReplayInputLimit * 2) {
+          multiplayer.v2.pendingInputs.shift();
+        }
+      }
       stepped += 1;
     }
     if (stepped >= multiplayerV2MaxCatchUpSteps) {
@@ -8797,7 +11360,11 @@
         maxPlayers: Math.max(1, Math.floor(finiteOr(session.maxPlayers, crazyGamesRoomMaxPlayers))),
         players: [],
         pvpMode: String(session.pvpMode || "party-off"),
-        netcodeVersion: Math.max(1, Math.floor(finiteOr(session.netcodeVersion, 1)))
+        netcodeVersion: Math.max(1, Math.floor(finiteOr(session.netcodeVersion, 1))),
+        worldMode: String(session.worldMode || "party"),
+        gameMode: normalizeGameMode(session.gameMode),
+        sharedWorld: Boolean(session.sharedWorld),
+        teams: []
       };
     }
     multiplayer.partySession.id = String(session.sessionId || session.id || multiplayer.partySession.id || "");
@@ -8810,9 +11377,17 @@
       : multiplayer.partySession.players || [];
     multiplayer.partySession.pvpMode = String(session.pvpMode || multiplayer.partySession.pvpMode || "party-off");
     multiplayer.partySession.netcodeVersion = Math.max(1, Math.floor(finiteOr(session.netcodeVersion, multiplayer.partySession.netcodeVersion || 1)));
+    multiplayer.partySession.worldMode = String(session.worldMode || multiplayer.partySession.worldMode || "party");
+    multiplayer.partySession.gameMode = normalizeGameMode(session.gameMode || multiplayer.partySession.gameMode || (multiplayer.partySession.worldMode === "shared-public" ? "survival" : "horde"));
+    multiplayer.partySession.sharedWorld = Boolean(session.sharedWorld || multiplayer.partySession.worldMode === "shared-public");
+    if (multiplayer.partySession.sharedWorld && session.sharedWorldStats) {
+      applySharedWorldStats(session.sharedWorldStats);
+    }
+    multiplayer.partySession.teams = Array.isArray(session.teams) ? session.teams : multiplayer.partySession.teams || [];
     multiplayer.partyJoinCode = multiplayer.partySession.joinCode;
     multiplayer.partyHostId = String(session.hostPlayerId || multiplayer.partyHostId || player.id);
     multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
+    updateSharedTeamFromSession(multiplayer.partySession, { notifyJoins: true });
     updateSettingsJoinCodeUi();
   }
 
@@ -8827,10 +11402,17 @@
       maxPlayers: Math.max(1, Math.floor(finiteOr(session.maxPlayers, crazyGamesRoomMaxPlayers))),
       players: Array.isArray(session.players) ? session.players.map(normalizeLobbyPlayer).filter(Boolean) : lobbyPlayers(),
       pvpMode: String(session.pvpMode || "party-off"),
-      netcodeVersion: Math.max(1, Math.floor(finiteOr(session.netcodeVersion, 1)))
+      netcodeVersion: Math.max(1, Math.floor(finiteOr(session.netcodeVersion, 1))),
+      worldMode: String(session.worldMode || "party"),
+      gameMode: normalizeGameMode(session.gameMode || (session.worldMode === "shared-public" ? "survival" : "horde")),
+      sharedWorld: Boolean(session.sharedWorld || session.worldMode === "shared-public"),
+      teams: Array.isArray(session.teams) ? session.teams : []
     };
+    if (multiplayer.partySession.sharedWorld && session.sharedWorldStats) {
+      applySharedWorldStats(session.sharedWorldStats);
+    }
     multiplayer.partyJoinCode = multiplayer.partySession.joinCode;
-    multiplayer.partyMode = "party";
+    multiplayer.partyMode = multiplayer.partySession.worldMode === "shared-public" ? "shared" : "party";
     multiplayer.partyHostId = String(session.hostPlayerId || message.hostPlayerId || player.id);
     multiplayer.partyHostUniverseId = "solo:" + multiplayer.partyHostId;
     multiplayer.partyPlayerSnapshots.clear();
@@ -8845,9 +11427,12 @@
     multiplayer.lobbyInviteLink = "";
     multiplayer.lobbyLoadedSnapshot = null;
     multiplayer.lobbyLoadedSaveName = "";
+    multiplayer.sharedWorldJoinPending = false;
+    updateSharedTeamFromSession(multiplayer.partySession, { notifyJoins: false });
     clearCurrentAccountSave();
 
     applyDifficulty(difficulty);
+    applyGameMode(multiplayer.partySession.gameMode || (multiplayer.partySession.worldMode === "shared-public" ? "survival" : "horde"));
     resetLocalPlayerState();
     resetLocalWorldState();
     resetLifeStats();
@@ -8864,7 +11449,9 @@
       updateHud();
       updateSettingsJoinCodeUi();
       connectMultiplayer();
-      maybeNotifyText("Joined server-authoritative shared world.");
+      setCrazyGamesLoadingActive(false, "shared-world-start");
+      setSharedWorldStatus(multiplayer.partySession.worldMode === "shared-public" ? "Joined shared world." : "", "success");
+      maybeNotifyText(multiplayer.partySession.worldMode === "shared-public" ? "Joined public shared world." : "Joined server-authoritative shared world.");
       clearCrazyGamesRoomState("party-start-v2");
       return;
     }
@@ -8892,6 +11479,63 @@
     connectMultiplayer();
     maybeNotifyText(isPartyHost() ? "Shared world started." : "Joined shared world.");
     clearCrazyGamesRoomState("party-start");
+  }
+
+  function updateSharedTeamFromLocalSnapshot(teamId) {
+    if (!isSharedPublicWorldActive()) {
+      if (multiplayer.sharedTeamId) {
+        multiplayer.sharedTeamId = "";
+        updateSettingsJoinCodeUi();
+      }
+      return;
+    }
+
+    const nextTeamId = String(teamId || "");
+    if (multiplayer.sharedTeamId !== nextTeamId) {
+      multiplayer.sharedTeamId = nextTeamId;
+      updateSettingsJoinCodeUi();
+      if (multiplayer.panelOpen) {
+        renderPlayerSearch();
+      }
+    }
+  }
+
+  function updateSharedTeamFromSession(session, options) {
+    const sharedPublic = session && String(session.worldMode || "") === "shared-public";
+    const previousTeamId = multiplayer.sharedTeamId || "";
+    const previousMembers = multiplayer.sharedTeamMemberIds instanceof Set ? multiplayer.sharedTeamMemberIds : new Set();
+    let teamId = "";
+    let members = [];
+
+    if (sharedPublic) {
+      const localEntry = Array.isArray(session.players)
+        ? session.players.find((entry) => entry && entry.playerId === player.id)
+        : null;
+      teamId = String(localEntry && localEntry.teamId || "");
+      if (teamId && Array.isArray(session.teams)) {
+        const team = session.teams.find((entry) => entry && String(entry.teamId || "") === teamId);
+        members = Array.isArray(team && team.members) ? team.members.map(String).filter(Boolean) : [player.id];
+      }
+    }
+
+    if (options && options.notifyJoins && sharedPublic && teamId && teamId === previousTeamId) {
+      for (const memberId of members) {
+        if (!memberId || memberId === player.id || previousMembers.has(memberId)) {
+          continue;
+        }
+        const teammate = Array.isArray(session.players)
+          ? session.players.find((entry) => entry && entry.playerId === memberId)
+          : null;
+        maybeNotifyText((teammate && teammate.publicName || "A player") + " joined your team.");
+      }
+    }
+
+    multiplayer.sharedTeamId = teamId;
+    multiplayer.sharedTeamMemberIds = new Set(members);
+    updateSettingsJoinCodeUi();
+    if (multiplayer.panelOpen) {
+      renderPlayerSearch();
+    }
   }
 
   function applyPartyHostChanged(message) {
@@ -8971,6 +11615,7 @@
         teslas: [],
         rockets: [],
         fighters: [],
+        mobBeacons: [],
         structures: [],
         rivalProjectiles: [],
         techPickups: [],
@@ -9008,6 +11653,7 @@
         teslas: [],
         rockets: [],
         fighters: [],
+        mobBeacons: [],
         structures: [],
         rivalProjectiles: [],
         techPickups: [],
@@ -9019,6 +11665,8 @@
       ...previousPlayer,
       id: incomingPlayer.id || previousPlayer.id || fromPlayerId,
       name: incomingPlayer.name || previousPlayer.name || remote.publicName,
+      skinId: incomingPlayer.skinId || previousPlayer.skinId || "",
+      trailId: incomingPlayer.trailId || previousPlayer.trailId || "",
       aimAngle: incomingPlayer.aimAngle,
       aimLocalAngle: incomingPlayer.aimLocalAngle,
       visualAimLocalAngle: incomingPlayer.visualAimLocalAngle,
@@ -9042,6 +11690,7 @@
         teslas: [],
         rockets: [],
         fighters: [],
+        mobBeacons: [],
         structures: [],
         rivalProjectiles: [],
         techPickups: [],
@@ -9141,7 +11790,8 @@
     if (!actor) {
       return { ok: false, reason: "missing-actor", type, id, owner, entity };
     }
-    const reach = gadgetForceReach + Math.max(300, finiteOr(entity.radius, 1) * 3.4);
+    const reach = gadgetForceReach * Math.max(0.1, finiteOr(message && message.rangeFactor, 1)) +
+      Math.max(300, finiteOr(entity.radius, 1) * 3.4);
     const hostDistance = Math.hypot(entity.x - actor.x, entity.y - actor.y);
     const incomingDistance = Math.hypot(incoming.x - actor.x, incoming.y - actor.y);
     if (Math.min(hostDistance, incomingDistance) > reach) {
@@ -9366,6 +12016,7 @@
       return;
     }
     resetSoloMultiplayerSession();
+    applyGameMode(startMenu.selectedGameMode);
     applyDifficulty(id);
     runState.active = true;
     resetLocalPlayerState();
@@ -9400,6 +12051,7 @@
     teslas.length = 0;
     rockets.length = 0;
     fighters.length = 0;
+    mobBeacons.length = 0;
     rivalProjectiles.length = 0;
     playerLasers.length = 0;
     launcherMissiles.length = 0;
@@ -9417,6 +12069,8 @@
     nextTeslaId = 1;
     nextRocketId = 1;
     nextFighterId = 1;
+    nextMobBeaconId = 1;
+    nextSurvivalCampId = 1;
     nextStructureId = 1;
     nextSpacecraftId = 1;
     nextRivalProjectileId = 1;
@@ -9580,7 +12234,7 @@
       return "CrazyGames";
     }
     if (accountState.waiLinked === true || isAccountSignedIn()) {
-      return "WAi Forward";
+      return "Login";
     }
     return "";
   }
@@ -9743,7 +12397,7 @@
   }
 
   function accountSessionLoadingLabel() {
-    return "WAi Forward account";
+    return "Login";
   }
 
   function renderStartMenuAccountName(signedIn) {
@@ -10200,9 +12854,24 @@
     }
 
     if (multiplayer.lobbyCreatePending) {
-      if (sendMultiplayer({ type: "lobby.create", difficulty: selectedLobbyDifficulty(), reason: reason || "lobby-create" })) {
+      if (sendMultiplayer({
+        type: "lobby.create",
+        difficulty: selectedLobbyDifficulty(),
+        gameMode: normalizeGameMode(multiplayer.lobbyGameMode || startMenu.selectedGameMode || "horde"),
+        reason: reason || "lobby-create"
+      })) {
         multiplayer.lobbyCreatePending = false;
       }
+    }
+  }
+
+  function flushSharedWorldRequests(reason) {
+    if (!multiplayer.connected || !multiplayer.sharedWorldJoinPending) {
+      return;
+    }
+
+    if (sendMultiplayer({ type: "shared.world.join", reason: reason || "shared-world-join" })) {
+      multiplayer.sharedWorldJoinPending = false;
     }
   }
 
@@ -10877,10 +13546,12 @@
       accountState.token = "";
       accountState.username = "";
       accountState.displayName = "";
+      accountState.waiBirthdayMonthDay = "";
       clearCurrentAccountSave();
       accountState.sessionLoading = false;
       accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
+      applySkinAccountState(null);
       updateAccountUi();
       await refreshCrazyGamesManualSaves();
       return;
@@ -10896,6 +13567,7 @@
       accountState.token = stored.token;
       accountState.username = stored.username;
       accountState.displayName = stored.displayName || "";
+      accountState.waiBirthdayMonthDay = "";
       accountState.waiLinked = stored.waiLinked === true;
       accountState.crazyGamesLinked = stored.crazyGamesLinked === true;
       updateAccountUi();
@@ -10916,11 +13588,13 @@
       accountState.token = "";
       accountState.username = "";
       accountState.displayName = "";
+      accountState.waiBirthdayMonthDay = "";
       accountState.saves = [];
       clearCurrentAccountSave();
       accountState.sessionLoading = false;
       accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
+      applySkinAccountState(null);
       writeStoredAccountSession();
       updateAccountUi();
       logAccountAuth("bootstrap failed", {
@@ -10939,9 +13613,11 @@
     accountState.token = typeof data.sessionToken === "string" ? data.sessionToken : accountState.token;
     accountState.username = sanitizeAccountUsername(account.username || accountState.username);
     accountState.displayName = sanitizePlayerName(account.waiDisplayName || account.crazyGamesUsername || account.username || accountState.username);
+    accountState.waiBirthdayMonthDay = sanitizeMonthDay(account.waiBirthdayMonthDay || "");
     accountState.sessionLoading = false;
     accountState.waiLinked = account.waiLinked === true;
     accountState.crazyGamesLinked = account.crazyGamesLinked === true;
+    applySkinAccountState(account);
     adoptLinkedPlayerId(account.linkedPlayerId);
     if (account.crazyGamesUsername) {
       player.name = sanitizePlayerName(account.crazyGamesUsername) || player.name;
@@ -11001,7 +13677,7 @@
     const popup = window.open(loginUrl, "clusternauts-wai-login", "popup,width=520,height=760");
     if (popup) {
       logAccountAuth("login popup opened");
-      setManualSaveStatus("Finish login in the WAi Forward window.", "success");
+      setManualSaveStatus("Finish login in the login window.", "success");
       return;
     }
 
@@ -11152,7 +13828,7 @@
       });
       applyAccountSession(data);
       await refreshAccountSaves();
-      setManualSaveStatus("Signed in with WAi Forward.", "success");
+      setManualSaveStatus("Signed in.", "success");
       logAccountAuth("portal transfer redeem success", {
         authDebugId: cleanAuthDebugId,
         username: accountState.username,
@@ -11202,11 +13878,13 @@
       accountState.token = "";
       accountState.username = "";
       accountState.displayName = "";
+      accountState.waiBirthdayMonthDay = "";
       accountState.saves = [];
       clearCurrentAccountSave();
       accountState.sessionLoading = false;
       accountState.waiLinked = false;
       accountState.crazyGamesLinked = false;
+      applySkinAccountState(null);
       writeStoredAccountSession();
       setManualSaveStatus("Logged out.", "success");
       setAccountBusy(false);
@@ -11274,6 +13952,7 @@
     return {
       active: runState.active,
       difficulty: runState.difficultyId,
+      gameMode: normalizeGameMode(runState.gameMode),
       lifeStats: {
         elapsed: Math.max(0, (performance.now() - lifeStats.startedAt) / 1000),
         maxMass: lifeStats.maxMass,
@@ -11303,6 +13982,7 @@
     if (source.difficulty && difficultyDefinitions[source.difficulty]) {
       applyDifficulty(source.difficulty);
     }
+    applyGameMode(source.gameMode || source.mode || runState.gameMode);
 
     lifeStats.startedAt = performance.now() - elapsed * 1000;
     lifeStats.maxMass = Math.max(1, finiteOr(stats.maxMass, lifeStats.maxMass));
@@ -11968,6 +14648,7 @@
     familiarNetSwingTimer = 0;
     familiarNetSwingDirection = -1;
     guidedLauncherState.activeMissile = null;
+    clearPersonalTether({ notify: false });
     resetPlayerStatusBarState();
 
     for (const tech of techTypes) {
@@ -12382,15 +15063,18 @@
 
   async function fetchPersistentJson(url, options) {
     const controller = new AbortController();
+    const requestOptions = Object.assign({}, options || {});
+    const timeoutMs = Math.max(500, finiteOr(requestOptions.timeoutMs, 2500));
+    delete requestOptions.timeoutMs;
     const timeout = window.setTimeout(function () {
       controller.abort();
-    }, 2500);
+    }, timeoutMs);
     const requestUrl = apiUrl(url);
 
     try {
       let response;
       try {
-        response = await fetch(requestUrl, Object.assign(withBackendRequestOptions(options), { signal: controller.signal }));
+        response = await fetch(requestUrl, Object.assign(withBackendRequestOptions(requestOptions), { signal: controller.signal }));
       } catch (error) {
         throw createServerMaintenanceError(error);
       }
@@ -12681,6 +15365,7 @@
     return {
       score: Math.round(lifeStats.bestScore),
       difficulty: runState.difficultyId,
+      gameMode: normalizeGameMode(runState.gameMode),
       survived: formatLifeDuration((performance.now() - lifeStats.startedAt) / 1000),
       maxMass: Math.round(lifeStats.maxMass),
       maxTier: lifeStats.maxTierName,
@@ -13320,7 +16005,7 @@
       const main = document.createElement("div");
       const name = document.createElement("strong");
       const status = document.createElement("span");
-      const action = document.createElement("button");
+      const actions = [];
       const hasRelay = true;
 
       row.className = "social-row";
@@ -13344,18 +16029,31 @@
           : "Offline";
       }
 
-      action.type = "button";
-      action.dataset.playerId = candidate.playerId;
       if (multiplayer.socialMode === "relay") {
+        const action = document.createElement("button");
+        action.type = "button";
+        action.dataset.playerId = candidate.playerId;
         action.dataset.action = "invite";
         action.textContent = candidate.friend ? "Invite" : "Link";
         action.title = candidate.friend ? "Invite friend" : "Link as friends";
         action.disabled = !multiplayer.friendJoinsEnabled || !candidate.online || !hasRelay;
+        actions.push(action);
+      }
+
+      if (isSharedPublicWorldActive() && (candidate.sharedWorld || candidate.worldMode === "shared-public") && candidate.online && candidate.playerId !== player.id) {
+        const teamAction = document.createElement("button");
+        teamAction.type = "button";
+        teamAction.dataset.playerId = candidate.playerId;
+        teamAction.dataset.action = "team";
+        teamAction.textContent = "Team Up";
+        teamAction.title = "Offer to team up";
+        teamAction.disabled = !multiplayer.connected;
+        actions.push(teamAction);
       }
 
       main.append(name, status);
       row.append(main);
-      if (multiplayer.socialMode === "relay") {
+      for (const action of actions) {
         row.append(action);
       }
       playerSearchList.append(row);
@@ -13708,7 +16406,7 @@
     return String(token || "").trim().replace(/_/g, " ").toLowerCase();
   }
 
-  const spawnBodyCommandNames = bodyTiers
+  const spawnBodyCommandNames = bodyTiers.concat(stellarBranchTiers)
     .filter((tier) => tier.threshold > 0)
     .map((tier) => tier.name.replace(/\s+/g, "-"));
   const spawnMobCommandNames = ["alienoid", "ufo", "rambot", "tesla", "engineer", "satellite", "rocket", "fighter"];
@@ -13847,7 +16545,12 @@
 
     const value = commandInput.value.trim();
     if (!value) {
-      commandHint.textContent = "Available: /status disabled <seconds>, /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>, /spawn event meteor-shower";
+      commandHint.textContent = "Available: /kill all, /status disabled <seconds>, /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>";
+      return;
+    }
+
+    if (/^\/kill(\s|$)/i.test(value)) {
+      commandHint.textContent = "Kill: /kill all";
       return;
     }
 
@@ -13872,7 +16575,7 @@
     }
 
     if (!/^\/tp(\s|$)/i.test(value)) {
-      commandHint.textContent = "Available: /status disabled <seconds>, /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>, /spawn event meteor-shower";
+      commandHint.textContent = "Available: /kill all, /status disabled <seconds>, /tp <player>, /spawn mob <type> <amount>, /spawn boss <type>";
       return;
     }
 
@@ -13975,6 +16678,12 @@
       return;
     }
 
+    if (/^\/kill(\s|$)/i.test(command)) {
+      executeKillCommand(command);
+      setCommandOpen(false);
+      return;
+    }
+
     if (/^\/tech(\s|$)/i.test(command)) {
       executeTechCommand(command);
       setCommandOpen(false);
@@ -13988,7 +16697,7 @@
     }
 
     if (!/^\/tp(\s|$)/i.test(command)) {
-      maybeNotifyText("Unknown command. Try /status disabled 5, /spawn boss alienoid, /spawn event meteor-shower, /tech <type> <amount>, or /reset all.");
+      maybeNotifyText("Unknown command. Try /kill all, /status disabled 5, /spawn boss alienoid, /tech <type> <amount>, or /reset all.");
       setCommandOpen(false);
       return;
     }
@@ -14028,7 +16737,7 @@
     const directionLength = Math.hypot(direction.x, direction.y) || 1;
     const dirX = direction.x / directionLength;
     const dirY = direction.y / directionLength;
-    const radius = radiusFromMass(mass);
+    const radius = radiusFromMassForTier(mass, tier);
     const originRadius = Math.max(1, finiteOr(source.radius, player.radius));
     const distance = Math.max(180, originRadius + radius + 120);
     const sideOffset = (((nextParticleId - 1) % 7) - 3) * Math.min(radius * 0.9 + 18, 160);
@@ -14040,6 +16749,17 @@
     );
     body.vx = 0;
     body.vy = 0;
+    if (stellarOutcomeTierNames.includes(tier.name)) {
+      body.stellarOutcome = tier.name;
+      body.stellarGrowthStarted = true;
+      body.stellarGrowthRate = tier.name === "black hole"
+        ? stellarGrowthRateBlackHoleThreshold
+        : tier.name === "neutron star"
+          ? stellarGrowthRateNeutronThreshold
+          : 0;
+      body.tier = tierForMassAndStellarOutcome(body.mass, body.stellarOutcome);
+      body.radius = radiusFromMassForTier(body.mass, body.tier);
+    }
     particles.push(body);
     return body;
   }
@@ -14178,7 +16898,7 @@
 
     const tier = bodyTierForCommandToken(parsed.target);
     if (!tier) {
-      maybeNotifyText("Unknown body type. Try rock, boulder, asteroid, dwarf-moon, moon, or planet.");
+      maybeNotifyText("Unknown body type. Try rock, boulder, asteroid, dwarf-moon, moon, planet, star, white-dwarf, neutron-star, or black-hole.");
       return;
     }
 
@@ -14197,6 +16917,52 @@
       spawnBodyFromCommand(tier, source);
     }
     maybeNotifyText("Spawned " + parsed.amount + " " + tier.name + (parsed.amount === 1 ? "." : "s."));
+    void savePersistentState({ includeWorld: true });
+  }
+
+  function killAllMobsFromCommand() {
+    let killed = 0;
+    for (const mob of hostileCombatMobs().slice()) {
+      if (!mob || mob.health <= 0) {
+        continue;
+      }
+      if (mob.kind === "fighter") {
+        mob.shieldActive = 0;
+        mob.shieldCharge = 0;
+      }
+      if (damageMob(mob, Math.max(1, finiteOr(mob.health, 0)), mob.color, "Killed mobs.", {
+        groupKey: "command-kill-all",
+        format: function (count) {
+          return "Killed " + count + " mob" + (count === 1 ? "." : "s.");
+        }
+      })) {
+        killed += 1;
+      }
+    }
+    return killed;
+  }
+
+  function executeKillCommand(command) {
+    const target = command.replace(/^\/kill\s*/i, "").trim().toLowerCase();
+    if (target !== "all") {
+      maybeNotifyText("Use /kill all.");
+      updateCommandHint();
+      return;
+    }
+
+    if (isMultiplayerV2Active() || isSharedWorldFollower()) {
+      const sent = sendPartyCommand({
+        command: "killAll"
+      });
+      maybeNotifyText(sent ? "Killed all mobs." : "Multiplayer command unavailable.");
+      return;
+    }
+
+    const killed = killAllMobsFromCommand();
+    if (killed <= 0) {
+      maybeNotifyText("No mobs to kill.");
+      return;
+    }
     void savePersistentState({ includeWorld: true });
   }
 
@@ -14300,11 +17066,19 @@
       return;
     }
     const command = String(message && message.command || "");
-    if (command !== "spawnBody" && command !== "spawnMob" && command !== "spawnBoss" && command !== "spawnEvent" && command !== "spawnNpc") {
+    if (command !== "spawnBody" && command !== "spawnMob" && command !== "spawnBoss" && command !== "spawnEvent" && command !== "spawnNpc" && command !== "killAll") {
       return;
     }
     const amount = clamp(Math.max(1, Math.floor(finiteOr(message.amount, 1))), 1, 100);
     const source = message.source && typeof message.source === "object" ? message.source : {};
+    if (command === "killAll") {
+      const killed = killAllMobsFromCommand();
+      maybeNotifyText(killed > 0 ? (message.publicName || "A player") + " killed " + killed + " mob" + (killed === 1 ? "." : "s.") : "No mobs to kill.");
+      if (killed > 0) {
+        void savePersistentState({ includeWorld: true });
+      }
+      return;
+    }
     if (command === "spawnMob") {
       const kind = mobKindForCommandToken(message.mob);
       if (!kind) {
@@ -14377,11 +17151,13 @@
         maybeNotifyText("World data reset.");
       } else if (target === "players") {
         resetLocalPlayerState();
+        resetDeathState();
         await savePersistentState({ includeWorld: false });
         maybeNotifyText("Player data reset.");
       } else {
         resetLocalPlayerState();
         resetLocalWorldState();
+        resetDeathState();
         await savePersistentState({ includeWorld: true });
         maybeNotifyText("World and player data reset.");
       }
@@ -14445,10 +17221,11 @@
         playerId: player.id,
         multiplayerOptIn: Boolean(multiplayer.friendJoinsEnabled),
         relayBypass: isCrazyGamesRuntime(),
-        snapshot: buildRealtimeSnapshot()
+        snapshot: buildMultiplayerPresenceSnapshot()
       });
       flushMultiplayerRoomRequests("socket-open");
       flushLobbyRequests("socket-open");
+      flushSharedWorldRequests("socket-open");
     });
 
     socket.addEventListener("message", function (event) {
@@ -14497,6 +17274,10 @@
       setLobbyStatus(serverMaintenanceMessage, "error");
       renderLobby();
     }
+    if (isSharedPublicWorldActive() || multiplayer.sharedWorldJoinPending) {
+      multiplayer.sharedWorldJoinPending = true;
+      setSharedWorldStatus(serverMaintenanceMessage, "error");
+    }
     if (multiplayer.lobby && multiplayer.lobby.code) {
       multiplayer.lobbyJoinPending = multiplayer.lobby.code;
     }
@@ -14513,7 +17294,27 @@
     }
 
     try {
-      socket.send(JSON.stringify(message));
+      let encoded = JSON.stringify(message);
+      let compactedMessage = message;
+      if (encoded.length > multiplayerMaxClientMessageBytes) {
+        const compacted = compactOversizedMultiplayerMessage(message);
+        if (compacted !== message) {
+          compactedMessage = compacted;
+          recordMultiplayerNetworkStat("compacted", message, encoded.length, socket);
+          encoded = JSON.stringify(compacted);
+        }
+      }
+      if (encoded.length > multiplayerMaxClientMessageBytes) {
+        recordMultiplayerNetworkStat("dropped", compactedMessage, encoded.length, socket);
+        warnLargeMultiplayerMessage(message, encoded.length, "dropped");
+        return false;
+      }
+      if (socket.bufferedAmount > multiplayerBackpressureWarnBytes) {
+        recordMultiplayerNetworkStat("backpressure", compactedMessage, socket.bufferedAmount, socket);
+        warnLargeMultiplayerMessage(message, socket.bufferedAmount, "backpressure");
+      }
+      socket.send(encoded);
+      recordMultiplayerNetworkStat("sent", compactedMessage, encoded.length, socket);
       return true;
     } catch {
       scheduleMultiplayerReconnect({ currentTarget: socket });
@@ -14523,6 +17324,67 @@
         // The socket is already unusable; reconnect scheduling above is the important part.
       }
       return false;
+    }
+  }
+
+  function recordMultiplayerNetworkStat(kind, message, bytes, socket) {
+    if (!multiplayer.networkStats) {
+      multiplayer.networkStats = {};
+    }
+    const stats = multiplayer.networkStats;
+    const size = Math.max(0, Math.round(finiteOr(bytes, 0)));
+    const type = String(message && message.type || "");
+    stats.bufferedAmount = Math.max(0, Math.round(finiteOr(socket && socket.bufferedAmount, 0)));
+    if (kind === "sent") {
+      stats.sentMessages = Math.max(0, finiteOr(stats.sentMessages, 0)) + 1;
+      stats.sentBytes = Math.max(0, finiteOr(stats.sentBytes, 0)) + size;
+      stats.lastMessageType = type;
+      stats.lastMessageBytes = size;
+      if (size > finiteOr(stats.largestMessageBytes, 0)) {
+        stats.largestMessageBytes = size;
+        stats.largestMessageType = type;
+      }
+    } else if (kind === "dropped") {
+      stats.droppedMessages = Math.max(0, finiteOr(stats.droppedMessages, 0)) + 1;
+      stats.lastMessageType = type;
+      stats.lastMessageBytes = size;
+    } else if (kind === "compacted") {
+      stats.compactedMessages = Math.max(0, finiteOr(stats.compactedMessages, 0)) + 1;
+    } else if (kind === "backpressure") {
+      stats.backpressureWarnings = Math.max(0, finiteOr(stats.backpressureWarnings, 0)) + 1;
+    }
+  }
+
+  function compactOversizedMultiplayerMessage(message) {
+    if (!message || typeof message !== "object") {
+      return message;
+    }
+    if ((message.type === "hello" || message.type === "input") && message.snapshot && message.snapshot.world) {
+      return {
+        ...message,
+        snapshot: buildMultiplayerPresenceSnapshot()
+      };
+    }
+    return message;
+  }
+
+  function warnLargeMultiplayerMessage(message, size, reason) {
+    const now = performance.now();
+    if (now - multiplayerLastLargeMessageWarnAt < multiplayerLargeMessageWarnIntervalMs) {
+      return;
+    }
+    multiplayerLastLargeMessageWarnAt = now;
+    if (typeof console !== "undefined" && console.warn) {
+      console.warn("[Clusternauts multiplayer] " + reason + " websocket message", {
+        type: message && message.type || "",
+        bytes: Math.round(finiteOr(size, 0))
+      });
+    }
+  }
+
+  function resetSharedWorldV2Boundary() {
+    if (isSharedPublicWorldActive() && isMultiplayerV2Active()) {
+      resetMultiplayerV2State();
     }
   }
 
@@ -14543,6 +17405,7 @@
       }
       flushMultiplayerRoomRequests("bootstrap");
       flushLobbyRequests("bootstrap");
+      flushSharedWorldRequests("bootstrap");
       return;
     }
 
@@ -14600,6 +17463,15 @@
       return;
     }
 
+    if (message.type === "shared.world.join.failed") {
+      multiplayer.sharedWorldJoinPending = false;
+      setCrazyGamesLoadingActive(false, "shared-world-join-failed");
+      setSharedWorldStatus(message.message || "Shared world unavailable.", "error");
+      maybeNotifyText(message.message || "Shared world unavailable.");
+      setStartMenuView("multiplayer", { push: false });
+      return;
+    }
+
     if (message.type === "lobby.invite") {
       multiplayer.pendingSignal = {
         kind: "lobby",
@@ -14641,6 +17513,17 @@
 
     if (message.type === "party.state") {
       applyPartyState(message);
+      return;
+    }
+
+    if (message.type === "shared.team.left") {
+      multiplayer.sharedTeamId = "";
+      multiplayer.sharedTeamMemberIds.clear();
+      updateSettingsJoinCodeUi();
+      maybeNotifyText(message.message || "Left team.");
+      if (multiplayer.panelOpen) {
+        renderPlayerSearch();
+      }
       return;
     }
 
@@ -14826,6 +17709,7 @@
     }
 
     if (message.type === "reset.world") {
+      resetSharedWorldV2Boundary();
       resetLocalWorldState();
       if (message.actorPlayerId !== player.id) {
         maybeNotifyText("World data reset.");
@@ -14834,7 +17718,9 @@
     }
 
     if (message.type === "reset.players") {
+      resetSharedWorldV2Boundary();
       resetLocalPlayerState();
+      resetDeathState();
       if (message.actorPlayerId !== player.id) {
         maybeNotifyText("Player data reset.");
       }
@@ -14842,8 +17728,10 @@
     }
 
     if (message.type === "reset.all") {
+      resetSharedWorldV2Boundary();
       resetLocalPlayerState();
       resetLocalWorldState();
+      resetDeathState();
       if (message.actorPlayerId !== player.id) {
         maybeNotifyText("World and player data reset.");
       }
@@ -14982,7 +17870,43 @@
     return Boolean(playerId && multiplayer.duels.has(playerId));
   }
 
+  function sharedTeamIdForPlayer(playerId) {
+    const id = String(playerId || "");
+    if (!id) {
+      return "";
+    }
+    if (id === player.id) {
+      return String(multiplayer.sharedTeamId || "");
+    }
+
+    const target = findRemoteInteractionTargetByPlayerId(id);
+    if (target && target.remote && target.remote.teamId) {
+      return String(target.remote.teamId || "");
+    }
+
+    const remote = multiplayer.remoteUniverses.get("solo:" + id);
+    if (remote && remote.teamId) {
+      return String(remote.teamId || "");
+    }
+
+    const entry = multiplayer.partySession && Array.isArray(multiplayer.partySession.players)
+      ? multiplayer.partySession.players.find((playerEntry) => playerEntry && playerEntry.playerId === id)
+      : null;
+    return String(entry && entry.teamId || "");
+  }
+
+  function isSharedWorldTeammate(playerId) {
+    const localTeamId = String(multiplayer.sharedTeamId || "");
+    return Boolean(isSharedPublicWorldActive() && localTeamId && sharedTeamIdForPlayer(playerId) === localTeamId);
+  }
+
   function interactionChoicesForPlayer(playerId) {
+    if (isSharedPublicWorldActive()) {
+      return [
+        playerInteractionChoiceConfigs.trade,
+        isSharedWorldTeammate(playerId) ? playerInteractionChoiceConfigs["leave-team"] : playerInteractionChoiceConfigs.team
+      ].filter(Boolean);
+    }
     return [
       playerInteractionChoiceConfigs.trade,
       isDuelingWith(playerId) ? playerInteractionChoiceConfigs.truce : playerInteractionChoiceConfigs.duel
@@ -15155,6 +18079,13 @@
       return;
     }
 
+    if (choice === "leave-team") {
+      sendMultiplayer({ type: "shared.team.leave" });
+      maybeNotifyText("Leaving team.");
+      setPlayerInteractionMenu(false);
+      return;
+    }
+
     sendMultiplayer({
       type: "interaction.choice",
       targetPlayerId: menu.targetPlayerId,
@@ -15250,6 +18181,23 @@
       return;
     }
 
+    if (choice === "team") {
+      if (message.accepted) {
+        multiplayer.sharedTeamId = String(message.teamId || multiplayer.sharedTeamId || "");
+        if (Array.isArray(message.members)) {
+          multiplayer.sharedTeamMemberIds = new Set(message.members.map(String).filter(Boolean));
+        }
+        updateSettingsJoinCodeUi();
+        if (multiplayer.panelOpen) {
+          renderPlayerSearch();
+        }
+        maybeNotifyText(message.message && message.message !== "Joined team." ? message.message : "Joined team with " + peerName + ".");
+      } else {
+        maybeNotifyText(message.message || "Team up failed.");
+      }
+      return;
+    }
+
     if (choice) {
       maybeNotifyText(peerName + " chose " + interactionChoiceByKey(choice).label + ".");
     }
@@ -15295,6 +18243,14 @@
         setPlayerInteractionMenu(false);
       }
     }
+
+    if (activeContainerStructureId && !activeContainerStructure()) {
+      closeContainerSession();
+    }
+
+    if (activeTradePortStructureId && !activeTradePortStructure()) {
+      closeTradePortSession();
+    }
   }
 
   function normalizeTradeOffer(offer) {
@@ -15304,6 +18260,1064 @@
       normalized[tech.key] = Math.max(0, Math.floor(finiteOr(source[tech.key], 0)));
     }
     return normalized;
+  }
+
+  const tradingPortMaxOffers = 4;
+  const tradingPortRange = 1900;
+  const tradingPortVesselSpeed = 860;
+  const tradingPortVesselMaxHealth = 48;
+  const tradingPortVesselRadius = 18;
+  const tradingPortVesselCooldown = 4.2;
+  const tradingPortAccessPadding = 118;
+  let activeTradePortStructureId = 0;
+  let selectedTradePortOfferId = "";
+
+  function normalizeTradingPortOffer(offer, index) {
+    const source = offer && typeof offer === "object" ? offer : {};
+    return {
+      id: String(source.id || ("offer-" + Math.max(1, Math.floor(finiteOr(index, 0) + 1)))),
+      receive: normalizeTradeOffer(source.receive),
+      pay: normalizeTradeOffer(source.pay),
+      enabled: source.enabled !== false
+    };
+  }
+
+  function normalizeTradingPortOffers(offers) {
+    return (Array.isArray(offers) ? offers : [])
+      .slice(0, tradingPortMaxOffers)
+      .map(normalizeTradingPortOffer)
+      .filter((offer) => offer.id);
+  }
+
+  function normalizeTradeVessel(vessel, structure) {
+    const dock = structure || {};
+    const source = vessel && typeof vessel === "object" ? vessel : {};
+    const state = source.state === "outbound" || source.state === "returning" ? source.state : "docked";
+    return {
+      state,
+      x: finiteOr(source.x, finiteOr(dock.x, 0)),
+      y: finiteOr(source.y, finiteOr(dock.y, 0)),
+      vx: finiteOr(source.vx, 0),
+      vy: finiteOr(source.vy, 0),
+      angle: finiteOr(source.angle, finiteOr(dock.angle, 0)),
+      health: clamp(finiteOr(source.health, tradingPortVesselMaxHealth), 0, tradingPortVesselMaxHealth),
+      cooldown: Math.max(0, finiteOr(source.cooldown, 0)),
+      sourceStructureId: Math.max(0, Math.floor(finiteOr(source.sourceStructureId, 0))),
+      targetStructureId: Math.max(0, Math.floor(finiteOr(source.targetStructureId, 0))),
+      sourceOfferId: String(source.sourceOfferId || ""),
+      targetOfferId: String(source.targetOfferId || ""),
+      cargo: normalizeTradeOffer(source.cargo)
+    };
+  }
+
+  function normalizeTradingPortState(structure) {
+    if (!structure || structure.type !== "trading-port") {
+      return null;
+    }
+    structure.tech = normalizeTradeOffer(structure.tech);
+    structure.tradeOffers = normalizeTradingPortOffers(structure.tradeOffers);
+    structure.tradeOfferSeq = Math.max(
+      1,
+      Math.floor(finiteOr(structure.tradeOfferSeq, structure.tradeOffers.length + 1)),
+      structure.tradeOffers.reduce((largest, offer) => {
+        const match = String(offer.id || "").match(/(\d+)$/);
+        return match ? Math.max(largest, Number(match[1]) + 1) : largest;
+      }, 1)
+    );
+    structure.tradeVessel = normalizeTradeVessel(structure.tradeVessel, structure);
+    return structure;
+  }
+
+  function isTradingPortOwner(structure) {
+    const ownerId = String(structure && structure.ownerPlayerId || "");
+    return !ownerId || ownerId === player.id || !isMultiplayerV2Active();
+  }
+
+  function describeTradeOffer(offer) {
+    return "Buy " + describeTradeSide(offer && offer.receive) + " for " + describeTradeSide(offer && offer.pay);
+  }
+
+  function tradeOffersEqual(first, second) {
+    return techTypes.every((tech) => {
+      return Math.max(0, Math.floor(first && first[tech.key] || 0)) === Math.max(0, Math.floor(second && second[tech.key] || 0));
+    });
+  }
+
+  function tradingPortOfferIsLive(structure, offer) {
+    return Boolean(
+      structure &&
+      offer &&
+      offer.enabled !== false &&
+      tradeOfferTotal(offer.receive) > 0 &&
+      tradeOfferTotal(offer.pay) > 0 &&
+      techTypes.every((tech) => Math.max(0, Math.floor(offer.pay[tech.key] || 0)) <= Math.max(0, Math.floor(structure.tech && structure.tech[tech.key] || 0)))
+    );
+  }
+
+  function tradingPortOffersCompatible(sourceOffer, targetOffer) {
+    return Boolean(
+      sourceOffer &&
+      targetOffer &&
+      tradeOffersEqual(sourceOffer.pay, targetOffer.receive) &&
+      tradeOffersEqual(sourceOffer.receive, targetOffer.pay)
+    );
+  }
+
+  function findTradingPortStructureById(id) {
+    const cleanId = Math.max(1, Math.floor(finiteOr(id, 0)));
+    for (const structure of structures) {
+      if (structure && structure.id === cleanId && structure.type === "trading-port") {
+        return structure;
+      }
+    }
+    return null;
+  }
+
+  function canAccessTradingPortStructure(structure) {
+    if (!structure || structure.type !== "trading-port" || structure.health <= 0 || isStructureDisabled(structure)) {
+      return false;
+    }
+    return Math.hypot(structure.x - player.x, structure.y - player.y) <= structureHitRadius(structure) + player.radius + tradingPortAccessPadding;
+  }
+
+  function tradingPortAtCursor() {
+    const cursor = screenToWorld(mouse.x, mouse.y);
+    let best = null;
+    let bestDistance = Infinity;
+    for (const structure of structures) {
+      if (!canAccessTradingPortStructure(structure)) {
+        continue;
+      }
+      const distance = Math.hypot(structure.x - cursor.x, structure.y - cursor.y);
+      if (distance > structureHitRadius(structure) + 22 || distance >= bestDistance) {
+        continue;
+      }
+      best = structure;
+      bestDistance = distance;
+    }
+    return best;
+  }
+
+  function activeTradePortStructure() {
+    const structure = findTradingPortStructureById(activeTradePortStructureId);
+    return canAccessTradingPortStructure(structure) ? structure : null;
+  }
+
+  function closeTradePortSession() {
+    activeTradePortStructureId = 0;
+    selectedTradePortOfferId = "";
+    if (tradePortPanel) {
+      tradePortPanel.classList.remove("is-open");
+      tradePortPanel.setAttribute("aria-hidden", "true");
+    }
+    syncCompactHudControls();
+    updateTouchScreenUi();
+  }
+
+  function openTradePortSession(structure) {
+    if (!canAccessTradingPortStructure(structure)) {
+      return false;
+    }
+    normalizeTradingPortState(structure);
+    activeTradePortStructureId = structure.id;
+    const offers = structure.tradeOffers || [];
+    if (!offers.some((offer) => offer.id === selectedTradePortOfferId)) {
+      selectedTradePortOfferId = offers[0] ? offers[0].id : "";
+    }
+    setPlayerInteractionMenu(false);
+    closeTradeSession();
+    closeContainerSession();
+    setBuildMenuOpen(false);
+    renderTradePortPanel();
+    playSound("select");
+    return true;
+  }
+
+  function handleTradePortClick() {
+    const structure = tradingPortAtCursor();
+    return structure ? openTradePortSession(structure) : false;
+  }
+
+  function selectedTradingPortOffer(structure) {
+    const offers = normalizeTradingPortState(structure).tradeOffers;
+    return offers.find((offer) => offer.id === selectedTradePortOfferId) || offers[0] || null;
+  }
+
+  function createTradePortResourceRow(tech, amount, options) {
+    const settings = options || {};
+    const row = document.createElement("div");
+    const dot = document.createElement("span");
+    const name = document.createElement("span");
+    const controls = document.createElement("span");
+    const value = document.createElement("strong");
+    const minus = document.createElement("button");
+    const plus = document.createElement("button");
+
+    row.className = "trade-row";
+    row.style.setProperty("--tech-color", tech.color);
+    dot.className = "trade-row__dot";
+    name.className = "trade-row__name";
+    name.textContent = settings.label || tech.label;
+    controls.className = "trade-row__controls";
+    value.className = "trade-row__amount";
+    value.textContent = Math.max(0, Math.floor(amount || 0)).toString();
+    minus.type = "button";
+    plus.type = "button";
+    minus.textContent = "-";
+    plus.textContent = "+";
+    minus.disabled = amount <= 0 || settings.disabled;
+    plus.disabled = Boolean(settings.disabled);
+
+    if (settings.storageMode) {
+      minus.textContent = settings.storageMode === "withdraw" ? "<" : ">";
+      plus.textContent = settings.storageMode === "withdraw" ? "<<" : ">>";
+      minus.dataset.tradePortStorageKey = tech.key;
+      minus.dataset.tradePortStorageMode = settings.storageMode;
+      minus.dataset.tradePortStorageAmount = "1";
+      plus.dataset.tradePortStorageKey = tech.key;
+      plus.dataset.tradePortStorageMode = settings.storageMode;
+      plus.dataset.tradePortStorageAmount = "5";
+      minus.disabled = amount <= 0 || settings.disabled;
+      plus.disabled = amount <= 0 || settings.disabled;
+    } else {
+      minus.dataset.tradePortKey = tech.key;
+      minus.dataset.tradePortSide = settings.side || "receive";
+      minus.dataset.tradePortDelta = "-1";
+      plus.dataset.tradePortKey = tech.key;
+      plus.dataset.tradePortSide = settings.side || "receive";
+      plus.dataset.tradePortDelta = "1";
+    }
+
+    controls.append(minus, value, plus);
+    row.append(dot, name, controls);
+    return row;
+  }
+
+  function renderTradePortOfferRow(structure, offer, selected, owner) {
+    const row = document.createElement("div");
+    const dot = document.createElement("span");
+    const stack = document.createElement("span");
+    const name = document.createElement("span");
+    const sub = document.createElement("span");
+    const button = document.createElement("button");
+    row.className = "trade-row";
+    if (selected) {
+      row.classList.add("is-selected");
+    }
+    row.style.setProperty("--tech-color", offer.enabled === false ? "#7f8ea3" : "#ffb86b");
+    dot.className = "trade-row__dot";
+    stack.className = "trade-row__stack";
+    name.className = "trade-row__name";
+    sub.className = "trade-row__sub";
+    name.textContent = describeTradeOffer(offer);
+    sub.textContent = owner
+      ? (offer.enabled === false ? "Paused" : tradingPortOfferIsLive(structure, offer) ? "Ready" : "Needs stock")
+      : (tradingPortOfferIsLive(structure, offer) && canAffordTradeOffer(offer.receive) ? "Available" : "Unavailable");
+    button.type = "button";
+    button.dataset.tradePortOffer = offer.id;
+    button.textContent = owner ? (selected ? "Open" : "Edit") : "Trade";
+    button.disabled = !owner && (!tradingPortOfferIsLive(structure, offer) || !canAffordTradeOffer(offer.receive));
+    stack.append(name, sub);
+    row.append(dot, stack, button);
+    return row;
+  }
+
+  function renderTradePortPanel() {
+    const structure = activeTradePortStructure();
+    if (!tradePortPanel || !tradePortOfferList || !tradePortBuyList || !tradePortPayList || !structure) {
+      closeTradePortSession();
+      return;
+    }
+
+    normalizeTradingPortState(structure);
+    const owner = isTradingPortOwner(structure);
+    const offers = structure.tradeOffers;
+    const selected = selectedTradingPortOffer(structure);
+    const storedTotal = tradeOfferTotal(structure.tech);
+    const vessel = normalizeTradeVessel(structure.tradeVessel, structure);
+
+    if (tradePortName) {
+      tradePortName.textContent = "Trading Port" + (storedTotal > 0 ? " (" + storedTotal + ")" : "");
+    }
+    if (tradePortAddOffer) {
+      tradePortAddOffer.hidden = !owner;
+      tradePortAddOffer.disabled = offers.length >= tradingPortMaxOffers;
+    }
+    if (tradePortRemoveOffer) {
+      tradePortRemoveOffer.hidden = !owner;
+      tradePortRemoveOffer.disabled = !selected;
+    }
+
+    tradePortOfferList.textContent = "";
+    if (offers.length) {
+      for (const offer of offers) {
+        tradePortOfferList.append(renderTradePortOfferRow(structure, offer, selected && offer.id === selected.id, owner));
+      }
+    } else {
+      const empty = document.createElement("div");
+      empty.className = "trade-row";
+      empty.style.setProperty("--tech-color", "#7f8ea3");
+      empty.textContent = owner ? "No posted trades." : "No trades available.";
+      tradePortOfferList.append(empty);
+    }
+
+    tradePortBuyList.textContent = "";
+    tradePortPayList.textContent = "";
+    if (owner && selected) {
+      for (const tech of techTypes) {
+        tradePortBuyList.append(createTradePortResourceRow(tech, selected.receive[tech.key], { side: "receive" }));
+        tradePortPayList.append(createTradePortResourceRow(tech, selected.pay[tech.key], { side: "pay" }));
+      }
+    } else if (!owner && selected) {
+      for (const tech of techTypes) {
+        tradePortBuyList.append(createTradePortResourceRow(tech, selected.receive[tech.key], { disabled: true, label: tech.label }));
+        tradePortPayList.append(createTradePortResourceRow(tech, selected.pay[tech.key], { disabled: true, label: tech.label }));
+      }
+    }
+
+    if (tradePortPlayerList && tradePortStoredList) {
+      tradePortPlayerList.textContent = "";
+      tradePortStoredList.textContent = "";
+      for (const tech of techTypes) {
+        tradePortPlayerList.append(createTradePortResourceRow(tech, Math.floor(techInventory[tech.key] || 0), {
+          storageMode: "deposit",
+          disabled: !owner
+        }));
+        tradePortStoredList.append(createTradePortResourceRow(tech, Math.floor(structure.tech[tech.key] || 0), {
+          storageMode: "withdraw",
+          disabled: !owner
+        }));
+      }
+    }
+
+    if (tradePortStatus) {
+      const vesselText = vessel.state === "outbound" ? "Courier outbound." : vessel.state === "returning" ? "Courier returning." : "Courier docked.";
+      tradePortStatus.textContent = owner
+        ? vesselText + " Stock pay offers to make them active."
+        : "Sell matching tech directly to this port.";
+    }
+
+    tradePortPanel.classList.add("is-open");
+    tradePortPanel.setAttribute("aria-hidden", "false");
+    syncCompactHudControls();
+    updateTouchScreenUi();
+  }
+
+  function setTradingPortOfferOnStructure(structure, offer) {
+    normalizeTradingPortState(structure);
+    const normalized = normalizeTradingPortOffer(offer, 0);
+    const index = structure.tradeOffers.findIndex((candidate) => candidate.id === normalized.id);
+    if (index >= 0) {
+      structure.tradeOffers[index] = normalized;
+    } else if (structure.tradeOffers.length < tradingPortMaxOffers) {
+      structure.tradeOffers.push(normalized);
+    }
+  }
+
+  function addTradePortOffer() {
+    const structure = activeTradePortStructure();
+    if (!structure || !isTradingPortOwner(structure)) {
+      return false;
+    }
+    normalizeTradingPortState(structure);
+    if (structure.tradeOffers.length >= tradingPortMaxOffers) {
+      return false;
+    }
+    const offer = {
+      id: "offer-" + structure.tradeOfferSeq++,
+      receive: normalizeTradeOffer({ weapon: 1 }),
+      pay: normalizeTradeOffer({ plating: 2 }),
+      enabled: true
+    };
+    selectedTradePortOfferId = offer.id;
+
+    if (isMultiplayerV2Active()) {
+      if (!sendMultiplayerV2BuildAction({
+        action: "setTradingPortOffer",
+        structureId: structure.id,
+        offer
+      })) {
+        maybeNotifyText("Reconnect before updating the trading port.");
+        return false;
+      }
+      renderTradePortPanel();
+      playSound("select");
+      return true;
+    }
+
+    structure.tradeOffers.push(offer);
+    renderTradePortPanel();
+    void savePersistentState({ includeWorld: true });
+    playSound("select");
+    return true;
+  }
+
+  function removeSelectedTradePortOffer() {
+    const structure = activeTradePortStructure();
+    if (!structure || !isTradingPortOwner(structure) || !selectedTradePortOfferId) {
+      return false;
+    }
+
+    if (isMultiplayerV2Active()) {
+      if (!sendMultiplayerV2BuildAction({
+        action: "removeTradingPortOffer",
+        structureId: structure.id,
+        offerId: selectedTradePortOfferId
+      })) {
+        maybeNotifyText("Reconnect before updating the trading port.");
+        return false;
+      }
+      selectedTradePortOfferId = "";
+      renderTradePortPanel();
+      playSound("select");
+      return true;
+    }
+
+    normalizeTradingPortState(structure);
+    structure.tradeOffers = structure.tradeOffers.filter((offer) => offer.id !== selectedTradePortOfferId);
+    selectedTradePortOfferId = structure.tradeOffers[0] ? structure.tradeOffers[0].id : "";
+    renderTradePortPanel();
+    void savePersistentState({ includeWorld: true });
+    playSound("select");
+    return true;
+  }
+
+  function adjustTradingPortOfferResource(techKey, side, delta) {
+    const structure = activeTradePortStructure();
+    const tech = techByKey(techKey);
+    const offer = structure ? selectedTradingPortOffer(structure) : null;
+    const cleanSide = side === "pay" ? "pay" : "receive";
+    if (!structure || !tech || !offer || !isTradingPortOwner(structure)) {
+      return false;
+    }
+
+    offer[cleanSide][tech.key] = clamp(Math.floor(finiteOr(offer[cleanSide][tech.key], 0)) + Math.floor(finiteOr(delta, 0)), 0, 99);
+
+    if (isMultiplayerV2Active()) {
+      if (!sendMultiplayerV2BuildAction({
+        action: "setTradingPortOffer",
+        structureId: structure.id,
+        offer
+      })) {
+        maybeNotifyText("Reconnect before updating the trading port.");
+        return false;
+      }
+      renderTradePortPanel();
+      playSound("select");
+      return true;
+    }
+
+    setTradingPortOfferOnStructure(structure, offer);
+    renderTradePortPanel();
+    void savePersistentState({ includeWorld: true });
+    playSound("select");
+    return true;
+  }
+
+  function transferTradePortTech(techKey, mode, amount) {
+    const structure = activeTradePortStructure();
+    const tech = techByKey(techKey);
+    const cleanMode = mode === "withdraw" ? "withdraw" : "deposit";
+    const cleanAmount = Math.max(1, Math.floor(finiteOr(amount, 1)));
+    if (!structure || !tech || !isTradingPortOwner(structure)) {
+      return false;
+    }
+
+    if (isMultiplayerV2Active()) {
+      if (!sendMultiplayerV2BuildAction({
+        action: "transferStructureTech",
+        structureId: structure.id,
+        techKey: tech.key,
+        mode: cleanMode,
+        amount: cleanAmount
+      })) {
+        maybeNotifyText("Reconnect before using the trading port.");
+        return false;
+      }
+      renderTradePortPanel();
+      playSound("trade");
+      return true;
+    }
+
+    structure.tech = normalizeTradeOffer(structure.tech);
+    const playerAmount = Math.max(0, Math.floor(techInventory[tech.key] || 0));
+    const storedAmount = Math.max(0, Math.floor(structure.tech[tech.key] || 0));
+    const moved = cleanMode === "withdraw" ? Math.min(cleanAmount, storedAmount) : Math.min(cleanAmount, playerAmount);
+    if (moved <= 0) {
+      return false;
+    }
+    if (cleanMode === "withdraw") {
+      structure.tech[tech.key] = storedAmount - moved;
+      techInventory[tech.key] = playerAmount + moved;
+    } else {
+      techInventory[tech.key] = playerAmount - moved;
+      structure.tech[tech.key] = storedAmount + moved;
+    }
+    updateTechUi();
+    renderTradePortPanel();
+    void savePersistentState({ includeWorld: true });
+    playSound("trade");
+    return true;
+  }
+
+  function completeTradingPortDirectTrade(structure, offer) {
+    if (!structure || !offer || !tradingPortOfferIsLive(structure, offer) || !canAffordTradeOffer(offer.receive)) {
+      return false;
+    }
+    structure.tech = normalizeTradeOffer(structure.tech);
+    for (const tech of techTypes) {
+      const receiveAmount = Math.max(0, Math.floor(offer.receive[tech.key] || 0));
+      const payAmount = Math.max(0, Math.floor(offer.pay[tech.key] || 0));
+      techInventory[tech.key] = Math.max(0, Math.floor(techInventory[tech.key] || 0) - receiveAmount) + payAmount;
+      structure.tech[tech.key] = Math.max(0, Math.floor(structure.tech[tech.key] || 0) - payAmount) + receiveAmount;
+    }
+    updateTechUi();
+    renderTradePortPanel();
+    void savePersistentState({ includeWorld: true });
+    playSound("trade");
+    maybeNotifyText("Trade complete at the port.");
+    return true;
+  }
+
+  function acceptTradePortOffer(offerId) {
+    const structure = activeTradePortStructure();
+    const offer = structure ? normalizeTradingPortState(structure).tradeOffers.find((candidate) => candidate.id === offerId) : null;
+    if (!structure || !offer || isTradingPortOwner(structure)) {
+      selectedTradePortOfferId = offerId || "";
+      renderTradePortPanel();
+      return false;
+    }
+
+    if (isMultiplayerV2Active()) {
+      if (!sendMultiplayerV2BuildAction({
+        action: "acceptTradingPortOffer",
+        structureId: structure.id,
+        offerId
+      })) {
+        maybeNotifyText("Reconnect before trading at the port.");
+        return false;
+      }
+      renderTradePortPanel();
+      playSound("trade");
+      return true;
+    }
+    return completeTradingPortDirectTrade(structure, offer);
+  }
+
+  function subtractOfferFromTech(stock, offer) {
+    const tech = normalizeTradeOffer(stock);
+    for (const type of techTypes) {
+      tech[type.key] = Math.max(0, tech[type.key] - Math.max(0, Math.floor(offer && offer[type.key] || 0)));
+    }
+    return tech;
+  }
+
+  function addOfferToTech(stock, offer) {
+    const tech = normalizeTradeOffer(stock);
+    for (const type of techTypes) {
+      tech[type.key] += Math.max(0, Math.floor(offer && offer[type.key] || 0));
+    }
+    return tech;
+  }
+
+  function cssHexColorToRgb(hex, fallback) {
+    const text = String(hex || "").trim();
+    const match = text.match(/^#([0-9a-f]{6})$/i);
+    if (!match) {
+      return fallback || { r: 255, g: 184, b: 107 };
+    }
+    const value = Number.parseInt(match[1], 16);
+    return {
+      r: (value >> 16) & 255,
+      g: (value >> 8) & 255,
+      b: value & 255
+    };
+  }
+
+  function findAutomatedTradingPortMatch(sourceStructure) {
+    normalizeTradingPortState(sourceStructure);
+    if (sourceStructure.tradeVessel && sourceStructure.tradeVessel.state !== "docked") {
+      return null;
+    }
+    for (const sourceOffer of sourceStructure.tradeOffers) {
+      if (!tradingPortOfferIsLive(sourceStructure, sourceOffer)) {
+        continue;
+      }
+      let best = null;
+      let bestDistance = Infinity;
+      for (const targetStructure of structures) {
+        if (
+          !targetStructure ||
+          targetStructure === sourceStructure ||
+          targetStructure.type !== "trading-port" ||
+          targetStructure.health <= 0 ||
+          isStructureDisabled(targetStructure)
+        ) {
+          continue;
+        }
+        const distance = Math.hypot(targetStructure.x - sourceStructure.x, targetStructure.y - sourceStructure.y);
+        if (distance > tradingPortRange || distance >= bestDistance) {
+          continue;
+        }
+        normalizeTradingPortState(targetStructure);
+        if (targetStructure.tradeVessel && targetStructure.tradeVessel.state !== "docked") {
+          continue;
+        }
+        for (const targetOffer of targetStructure.tradeOffers) {
+          if (!tradingPortOfferIsLive(targetStructure, targetOffer) || !tradingPortOffersCompatible(sourceOffer, targetOffer)) {
+            continue;
+          }
+          best = { sourceOffer, targetStructure, targetOffer };
+          bestDistance = distance;
+        }
+      }
+      if (best) {
+        return best;
+      }
+    }
+    return null;
+  }
+
+  function launchTradingPortVessel(structure, match) {
+    structure.tech = subtractOfferFromTech(structure.tech, match.sourceOffer.pay);
+    structure.tradeVessel = {
+      state: "outbound",
+      x: structure.x,
+      y: structure.y,
+      vx: 0,
+      vy: 0,
+      angle: structure.angle,
+      health: tradingPortVesselMaxHealth,
+      cooldown: 0,
+      sourceStructureId: structure.id,
+      targetStructureId: match.targetStructure.id,
+      sourceOfferId: match.sourceOffer.id,
+      targetOfferId: match.targetOffer.id,
+      cargo: normalizeTradeOffer(match.sourceOffer.pay)
+    };
+  }
+
+  function steeringPlayersForTradingVessel() {
+    const result = [{ x: player.x, y: player.y, radius: player.radius }];
+    if (typeof collectRemoteCombatPlayers === "function") {
+      for (const target of collectRemoteCombatPlayers()) {
+        if (target && target.player) {
+          result.push(target.player);
+        }
+      }
+    }
+    return result;
+  }
+
+  function steerTradingPortVessel(vessel, destination, dt) {
+    const toDest = normalize(destination.x - vessel.x, destination.y - vessel.y);
+    let steerX = toDest.x;
+    let steerY = toDest.y;
+    for (const actor of steeringPlayersForTradingVessel()) {
+      if (Math.hypot(actor.x - destination.x, actor.y - destination.y) < 190) {
+        continue;
+      }
+      const dx = vessel.x - actor.x;
+      const dy = vessel.y - actor.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      const avoidRadius = 280 + finiteOr(actor.radius, 34);
+      if (distance >= avoidRadius) {
+        continue;
+      }
+      const force = Math.pow(1 - distance / avoidRadius, 1.8) * 2.6;
+      steerX += dx / distance * force;
+      steerY += dy / distance * force;
+    }
+    const desired = normalize(steerX, steerY);
+    const destinationBody = typeof bodyById === "function" ? bodyById(destination.bodyId) : null;
+    const baseVx = destinationBody ? finiteOr(destinationBody.vx, 0) : 0;
+    const baseVy = destinationBody ? finiteOr(destinationBody.vy, 0) : 0;
+    const targetSpeed = tradingPortVesselSpeed;
+    vessel.vx += (baseVx + desired.x * targetSpeed - vessel.vx) * (1 - Math.pow(0.015, dt));
+    vessel.vy += (baseVy + desired.y * targetSpeed - vessel.vy) * (1 - Math.pow(0.015, dt));
+    const relativeVx = vessel.vx - baseVx;
+    const relativeVy = vessel.vy - baseVy;
+    const speed = Math.hypot(relativeVx, relativeVy);
+    if (speed > targetSpeed) {
+      vessel.vx = baseVx + relativeVx / speed * targetSpeed;
+      vessel.vy = baseVy + relativeVy / speed * targetSpeed;
+    }
+    vessel.x += vessel.vx * dt;
+    vessel.y += vessel.vy * dt;
+    vessel.angle = Math.atan2(vessel.vy, vessel.vx);
+  }
+
+  function dropTradeVesselCargo(vessel) {
+    const cargo = normalizeTradeOffer(vessel && vessel.cargo);
+    for (const tech of techTypes) {
+      const amount = Math.min(12, Math.max(0, Math.floor(cargo[tech.key] || 0)));
+      for (let i = 0; i < amount; i += 1) {
+        techPickups.push({
+          id: nextTechPickupId++,
+          key: tech.key,
+          label: tech.label,
+          color: cssHexColorToRgb(tech.color),
+          x: finiteOr(vessel.x, player.x) + randomRange(-16, 16),
+          y: finiteOr(vessel.y, player.y) + randomRange(-16, 16),
+          vx: finiteOr(vessel.vx, 0) * 0.18 + randomRange(-180, 180),
+          vy: finiteOr(vessel.vy, 0) * 0.18 + randomRange(-180, 180),
+          radius: 15,
+          life: techPickupLifetime,
+          maxLife: techPickupLifetime,
+          rotation: randomRange(0, Math.PI * 2),
+          wobble: randomRange(0, Math.PI * 2)
+        });
+      }
+    }
+  }
+
+  function destroyTradingPortVessel(structure, color) {
+    const vessel = normalizeTradeVessel(structure && structure.tradeVessel, structure);
+    if (!structure || vessel.state === "docked") {
+      return false;
+    }
+    dropTradeVesselCargo(vessel);
+    structure.tradeVessel = {
+      state: "docked",
+      x: structure.x,
+      y: structure.y,
+      vx: 0,
+      vy: 0,
+      angle: structure.angle,
+      health: tradingPortVesselMaxHealth,
+      cooldown: tradingPortVesselCooldown * 1.6,
+      cargo: normalizeTradeOffer(null)
+    };
+    sparks.push({
+      x: vessel.x,
+      y: vessel.y,
+      radius: 54,
+      color: color || { r: 255, g: 184, b: 107 },
+      life: 0.28,
+      maxLife: 0.28
+    });
+    maybeNotifyText("Trading vessel intercepted.");
+    return true;
+  }
+
+  function damageTradingPortVessel(structure, damage, color) {
+    const vessel = normalizeTradeVessel(structure && structure.tradeVessel, structure);
+    if (!structure || vessel.state === "docked") {
+      return false;
+    }
+    vessel.health = Math.max(0, finiteOr(vessel.health, tradingPortVesselMaxHealth) - Math.max(0, finiteOr(damage, 0)));
+    structure.tradeVessel = vessel;
+    sparks.push({
+      x: vessel.x,
+      y: vessel.y,
+      radius: 24,
+      color: color || { r: 255, g: 184, b: 107 },
+      life: 0.16,
+      maxLife: 0.16
+    });
+    if (vessel.health <= 0) {
+      return destroyTradingPortVessel(structure, color);
+    }
+    return true;
+  }
+
+  function tradeVesselHitBySegment(tailX, tailY, headX, headY, radius, damage, color) {
+    for (const structure of structures) {
+      if (!structure || structure.type !== "trading-port") {
+        continue;
+      }
+      const vessel = normalizeTradeVessel(structure.tradeVessel, structure);
+      if (!vessel || vessel.state === "docked") {
+        continue;
+      }
+      const distance = distanceToSegment(vessel.x, vessel.y, tailX, tailY, headX, headY);
+      if (distance <= tradingPortVesselRadius + Math.max(0, finiteOr(radius, 0))) {
+        return damageTradingPortVessel(structure, damage, color);
+      }
+    }
+    return false;
+  }
+
+  function completeTradingPortVesselArrival(structure, target) {
+    const vessel = normalizeTradeVessel(structure.tradeVessel, structure);
+    if (!target || target.health <= 0 || isStructureDisabled(target)) {
+      vessel.state = "returning";
+      vessel.targetStructureId = structure.id;
+      structure.tradeVessel = vessel;
+      return;
+    }
+    normalizeTradingPortState(target);
+    const targetOffer = target.tradeOffers.find((offer) => offer.id === vessel.targetOfferId);
+    const sourceOffer = structure.tradeOffers.find((offer) => offer.id === vessel.sourceOfferId);
+    if (!tradingPortOfferIsLive(target, targetOffer) || !sourceOffer || !tradingPortOffersCompatible(sourceOffer, targetOffer)) {
+      vessel.state = "returning";
+      vessel.targetStructureId = structure.id;
+      structure.tradeVessel = vessel;
+      return;
+    }
+
+    target.tech = addOfferToTech(subtractOfferFromTech(target.tech, targetOffer.pay), vessel.cargo);
+    vessel.cargo = normalizeTradeOffer(targetOffer.pay);
+    vessel.state = "returning";
+    vessel.targetStructureId = structure.id;
+    structure.tradeVessel = vessel;
+    sparks.push({
+      x: target.x,
+      y: target.y,
+      radius: 34,
+      color: { r: 255, g: 184, b: 107 },
+      life: 0.2,
+      maxLife: 0.2
+    });
+  }
+
+  function updateTradingPort(structure, dt) {
+    normalizeTradingPortState(structure);
+    structure.deploy = clamp((structure.deploy || 0) + dt * 2.7, 0, 1);
+    const vessel = structure.tradeVessel;
+    if (vessel.state === "docked") {
+      vessel.x = structure.x;
+      vessel.y = structure.y;
+      vessel.health = tradingPortVesselMaxHealth;
+      vessel.cooldown = Math.max(0, finiteOr(vessel.cooldown, 0) - dt);
+      if (vessel.cooldown <= 0) {
+        const match = findAutomatedTradingPortMatch(structure);
+        if (match) {
+          launchTradingPortVessel(structure, match);
+        }
+      }
+      return;
+    }
+
+    const destination = vessel.state === "returning" ? structure : findTradingPortStructureById(vessel.targetStructureId);
+    if (!destination) {
+      vessel.state = "returning";
+      vessel.targetStructureId = structure.id;
+      steerTradingPortVessel(vessel, structure, dt);
+    } else {
+      steerTradingPortVessel(vessel, destination, dt);
+      if (Math.hypot(vessel.x - destination.x, vessel.y - destination.y) <= 42) {
+        if (vessel.state === "outbound") {
+          completeTradingPortVesselArrival(structure, destination);
+        } else {
+          structure.tech = addOfferToTech(structure.tech, vessel.cargo);
+          structure.tradeVessel = {
+            state: "docked",
+            x: structure.x,
+            y: structure.y,
+            vx: 0,
+            vy: 0,
+            angle: structure.angle,
+            health: tradingPortVesselMaxHealth,
+            cooldown: tradingPortVesselCooldown,
+            cargo: normalizeTradeOffer(null)
+          };
+          playSound("trade", { throttleKey: "tradePortReturn:" + structure.id, throttle: 0.4 });
+        }
+      }
+    }
+
+    if (Math.random() < dt * 4.5) {
+      sparks.push({
+        x: vessel.x - Math.cos(vessel.angle) * 15 + randomRange(-4, 4),
+        y: vessel.y - Math.sin(vessel.angle) * 15 + randomRange(-4, 4),
+        radius: 12,
+        color: { r: 255, g: 184, b: 107 },
+        life: 0.12,
+        maxLife: 0.12
+      });
+    }
+  }
+
+  let activeContainerStructureId = 0;
+
+  function findContainerStructureById(id) {
+    const cleanId = Math.max(1, Math.floor(finiteOr(id, 0)));
+    for (const structure of structures) {
+      if (structure && structure.id === cleanId && structure.type === "container") {
+        return structure;
+      }
+    }
+    return null;
+  }
+
+  function canAccessContainerStructure(structure) {
+    if (!structure || structure.type !== "container" || structure.health <= 0 || isStructureDisabled(structure)) {
+      return false;
+    }
+    return Math.hypot(structure.x - player.x, structure.y - player.y) <= structureHitRadius(structure) + player.radius + 96;
+  }
+
+  function containerAtCursor() {
+    const cursor = screenToWorld(mouse.x, mouse.y);
+    let best = null;
+    let bestDistance = Infinity;
+    for (const structure of structures) {
+      if (!canAccessContainerStructure(structure)) {
+        continue;
+      }
+
+      const distance = Math.hypot(structure.x - cursor.x, structure.y - cursor.y);
+      if (distance > structureHitRadius(structure) + 18 || distance >= bestDistance) {
+        continue;
+      }
+      best = structure;
+      bestDistance = distance;
+    }
+    return best;
+  }
+
+  function activeContainerStructure() {
+    const structure = findContainerStructureById(activeContainerStructureId);
+    return canAccessContainerStructure(structure) ? structure : null;
+  }
+
+  function closeContainerSession() {
+    activeContainerStructureId = 0;
+    if (containerPanel) {
+      containerPanel.classList.remove("is-open");
+      containerPanel.setAttribute("aria-hidden", "true");
+    }
+    syncCompactHudControls();
+    updateTouchScreenUi();
+  }
+
+  function openContainerSession(structure) {
+    if (!canAccessContainerStructure(structure)) {
+      return false;
+    }
+    structure.tech = normalizeTradeOffer(structure.tech);
+    activeContainerStructureId = structure.id;
+    setPlayerInteractionMenu(false);
+    closeTradeSession();
+    closeTradePortSession();
+    setBuildMenuOpen(false);
+    renderContainerPanel();
+    playSound("select");
+    return true;
+  }
+
+  function handleContainerClick() {
+    const structure = containerAtCursor();
+    if (!structure) {
+      return false;
+    }
+    return openContainerSession(structure);
+  }
+
+  function createContainerResourceRow(tech, amount, mode) {
+    const row = document.createElement("div");
+    const dot = document.createElement("span");
+    const name = document.createElement("span");
+    const controls = document.createElement("span");
+    const value = document.createElement("strong");
+    const one = document.createElement("button");
+    const five = document.createElement("button");
+    const withdraw = mode === "withdraw";
+
+    row.className = "trade-row";
+    row.style.setProperty("--tech-color", tech.color);
+    dot.className = "trade-row__dot";
+    name.className = "trade-row__name";
+    name.textContent = tech.label;
+    controls.className = "trade-row__controls";
+    value.className = "trade-row__amount";
+    value.textContent = Math.max(0, Math.floor(amount || 0)).toString();
+    one.type = "button";
+    one.dataset.containerKey = tech.key;
+    one.dataset.containerMode = mode;
+    one.dataset.containerAmount = "1";
+    one.textContent = withdraw ? "<" : ">";
+    five.type = "button";
+    five.dataset.containerKey = tech.key;
+    five.dataset.containerMode = mode;
+    five.dataset.containerAmount = "5";
+    five.textContent = withdraw ? "<<" : ">>";
+    one.disabled = amount <= 0;
+    five.disabled = amount <= 0;
+    controls.append(value, one, five);
+    row.append(dot, name, controls);
+    return row;
+  }
+
+  function renderContainerPanel() {
+    const structure = activeContainerStructure();
+    if (!containerPanel || !containerPlayerList || !containerStoredList || !structure) {
+      closeContainerSession();
+      return;
+    }
+
+    structure.tech = normalizeTradeOffer(structure.tech);
+    if (containerName) {
+      const storedTotal = tradeOfferTotal(structure.tech);
+      containerName.textContent = storedTotal > 0 ? "Container (" + storedTotal + ")" : "Container";
+    }
+
+    containerPlayerList.textContent = "";
+    containerStoredList.textContent = "";
+    for (const tech of techTypes) {
+      containerPlayerList.append(createContainerResourceRow(tech, Math.floor(techInventory[tech.key] || 0), "deposit"));
+      containerStoredList.append(createContainerResourceRow(tech, Math.floor(structure.tech[tech.key] || 0), "withdraw"));
+    }
+
+    if (containerStatus) {
+      containerStatus.textContent = "Anyone close enough can take from this container.";
+    }
+    containerPanel.classList.add("is-open");
+    containerPanel.setAttribute("aria-hidden", "false");
+    syncCompactHudControls();
+    updateTouchScreenUi();
+  }
+
+  function transferContainerTech(techKey, mode, amount) {
+    const structure = activeContainerStructure();
+    const tech = techByKey(techKey);
+    const cleanAmount = Math.max(1, Math.floor(finiteOr(amount, 1)));
+    const cleanMode = mode === "withdraw" ? "withdraw" : "deposit";
+    if (!structure || !tech) {
+      closeContainerSession();
+      return false;
+    }
+
+    if (isMultiplayerV2Active()) {
+      if (!sendMultiplayerV2BuildAction({
+        action: "transferContainerTech",
+        structureId: structure.id,
+        techKey: tech.key,
+        mode: cleanMode,
+        amount: cleanAmount
+      })) {
+        maybeNotifyText("Reconnect before using the container.");
+        return false;
+      }
+      renderContainerPanel();
+      playSound("trade");
+      return true;
+    }
+
+    structure.tech = normalizeTradeOffer(structure.tech);
+    const playerAmount = Math.max(0, Math.floor(techInventory[tech.key] || 0));
+    const storedAmount = Math.max(0, Math.floor(structure.tech[tech.key] || 0));
+    const moved = cleanMode === "withdraw"
+      ? Math.min(cleanAmount, storedAmount)
+      : Math.min(cleanAmount, playerAmount);
+    if (moved <= 0) {
+      return false;
+    }
+
+    if (cleanMode === "withdraw") {
+      structure.tech[tech.key] = storedAmount - moved;
+      techInventory[tech.key] = playerAmount + moved;
+    } else {
+      techInventory[tech.key] = playerAmount - moved;
+      structure.tech[tech.key] = storedAmount + moved;
+    }
+
+    updateTechUi();
+    renderContainerPanel();
+    void savePersistentState({ includeWorld: true });
+    playSound("trade");
+    return true;
   }
 
   function tradeOfferTotal(offer) {
@@ -15501,14 +19515,12 @@
         tradeSendOffer.textContent = "Fixed Offer";
       }
       if (tradeAccept) {
-        tradeAccept.disabled = trade.completed || !offer || !canAffordTradeOffer(trade.localOffer);
+        tradeAccept.disabled = !offer || !canAffordTradeOffer(trade.localOffer);
         tradeAccept.textContent = "Trade";
       }
       if (tradeStatus) {
         if (!offer) {
           tradeStatus.textContent = "No offers available.";
-        } else if (trade.completed) {
-          tradeStatus.textContent = "Trade complete.";
         } else {
           const cost = describeTradeCostWithInventory(trade.localOffer);
           tradeStatus.textContent = canAffordTradeOffer(trade.localOffer)
@@ -15767,11 +19779,15 @@
     if (value === "projectile") {
       return "rivalProjectile";
     }
+    if (value === "mobBeacon") {
+      return "beacon";
+    }
     if (
       value === "particle" ||
       value === "techPickup" ||
       value === "healthPickup" ||
       value === "rivalProjectile" ||
+      value === "beacon" ||
       value === "alienoid" ||
       value === "ufo" ||
       value === "rambot" ||
@@ -15805,6 +19821,8 @@
         return healthPickups;
       case "rivalProjectile":
         return rivalProjectiles;
+      case "beacon":
+        return mobBeacons;
       case "alienoid":
         return rivals;
       case "ufo":
@@ -15864,6 +19882,9 @@
     }
     if (cleanType === "rivalProjectile") {
       return serializeProjectile(entity);
+    }
+    if (cleanType === "beacon") {
+      return serializeMobBeacon(entity);
     }
     if (cleanType === "alienoid") {
       return serializeRival(entity);
@@ -15986,6 +20007,7 @@
       state,
       actor: (extra && extra.actor) || session.actor || partyPhysicsSnapshotActor(),
       mode: (extra && extra.mode) || session.mode || "idle",
+      rangeFactor: finiteOr(extra && extra.rangeFactor, finiteOr(session.rangeFactor, currentGadgetRangeFactor())),
       active: extra && Object.prototype.hasOwnProperty.call(extra, "active") ? extra.active !== false : session.active !== false
     };
     if (extra && extra.reason) {
@@ -16036,6 +20058,7 @@
         accepted: false,
         endSent: false,
         mode: options && options.mode ? options.mode : "idle",
+        rangeFactor: finiteOr(options && options.rangeFactor, currentGadgetRangeFactor()),
         active: !(options && options.active === false),
         actor: options && options.actor ? options.actor : null
       };
@@ -16044,6 +20067,7 @@
 
     session.expiresAt = Math.max(finiteOr(session.expiresAt, 0), time + partyPhysicsSessionLocalHoldMs);
     session.mode = options && options.mode ? options.mode : session.mode;
+    session.rangeFactor = finiteOr(options && options.rangeFactor, session.rangeFactor);
     session.active = !(options && options.active === false);
     session.actor = options && options.actor ? options.actor : session.actor;
     session.endSent = false;
@@ -16059,6 +20083,7 @@
       const sent = sendPartyPhysicsMessage(messageType, session, entity, {
         actor: session.actor,
         mode: session.mode,
+        rangeFactor: session.rangeFactor,
         active: session.active
       });
       if (sent) {
@@ -16124,6 +20149,7 @@
         landedBodyId: 0,
         landedThrustDirection: 0,
         suckFactor: 1,
+        rangeFactor: 1,
         blowFactor: 1
       };
     }
@@ -16146,6 +20172,7 @@
       landedBodyId: state && state.landedBodyId ? state.landedBodyId : 0,
       landedThrustDirection,
       suckFactor: state ? state.suckFactor : 1,
+      rangeFactor: state ? state.rangeFactor : 1,
       blowFactor: state ? state.blowFactor : 1
     };
   }
@@ -16233,6 +20260,10 @@
 
   function buildRealtimeSnapshot() {
     return buildPersistentPayload(true);
+  }
+
+  function buildMultiplayerPresenceSnapshot() {
+    return buildPersistentPayload(false);
   }
 
   function updateMultiplayer(dt) {
@@ -16460,6 +20491,7 @@
         teslas: Array.isArray(world.teslas) ? world.teslas.map(normalizeTeslaSnapshot).filter(Boolean) : [],
         rockets: Array.isArray(world.rockets) ? world.rockets.map(normalizeRocketSnapshot).filter(Boolean) : [],
         fighters: Array.isArray(world.fighters) ? world.fighters.map(normalizeFighterSnapshot).filter(Boolean) : [],
+        mobBeacons: Array.isArray(world.mobBeacons) ? world.mobBeacons.map(normalizeMobBeaconSnapshot).filter(Boolean) : [],
         structures: Array.isArray(world.structures) ? world.structures.map(normalizeStructureSnapshot).filter(Boolean) : [],
         rivalProjectiles: Array.isArray(world.rivalProjectiles) ? world.rivalProjectiles.map(normalizeProjectileSnapshot).filter(Boolean) : [],
         techPickups: Array.isArray(world.techPickups) ? world.techPickups.map(normalizeTechPickupSnapshot).filter(Boolean) : [],
@@ -16490,6 +20522,9 @@
     return {
       id: typeof snapshot.id === "string" ? snapshot.id : "",
       name: typeof snapshot.name === "string" ? snapshot.name : "Player",
+      teamId: String(snapshot.teamId || ""),
+      skinId: normalizeCharacterSkinId(snapshot.skinId),
+      trailId: normalizeTrailId(snapshot.trailId),
       x: finiteOr(snapshot.x, 0),
       y: finiteOr(snapshot.y, 0),
       vx: finiteOr(snapshot.vx, 0),
@@ -16512,6 +20547,9 @@
       toolMode: activeToolMode,
       toolActive: Boolean(equippedTool && activeToolMode !== "idle" && (snapshot.toolActive || activeToolMode !== "idle")),
       moving: Boolean(snapshot.moving),
+      boosting: snapshot.boosting === true ? true : snapshot.boosting === false ? false : null,
+      jetpackMoveX: Number.isFinite(Number(snapshot.jetpackMoveX)) ? finiteOr(snapshot.jetpackMoveX, 0) : null,
+      jetpackMoveY: Number.isFinite(Number(snapshot.jetpackMoveY)) ? finiteOr(snapshot.jetpackMoveY, -1) : null,
       crouching: Boolean(snapshot.crouching)
     };
   }
@@ -16618,7 +20656,7 @@
         }),
         structures: interpolateRemoteEntityList(fromWorld.structures, toWorld.structures, progress, lead, {
           angleKeys: ["angle", "linkedAngle", "aimAngle"],
-          scalarKeys: ["x2", "y2", "deploy", "thrustAmount", "thrustDirection", "health", "maxHealth", "disabledTimer", "flash", "restLength", "restCenterDx", "restCenterDy", "linkedSurfaceOffset", "burstTimer", "burstCooldown", "missileCharge", "lockTimer", "beepTimer", "targetX", "targetY", "targetCount"]
+          scalarKeys: ["x2", "y2", "deploy", "thrustAmount", "thrustDirection", "health", "maxHealth", "disabledTimer", "flash", "restLength", "restCenterDx", "restCenterDy", "bridgeAngleOffset", "bridgeLinkedAngleOffset", "linkedSurfaceOffset", "burstTimer", "burstCooldown", "missileCharge", "lockTimer", "beepTimer", "targetX", "targetY", "targetCount"]
         }),
         rivalProjectiles: interpolateRemoteEntityList(fromWorld.rivalProjectiles, toWorld.rivalProjectiles, progress, lead, {
           scalarKeys: ["radius", "length", "life", "maxLife"]
@@ -16728,8 +20766,8 @@
     }
 
     body.mass = Math.max(1, finiteOr(body.mass, 1));
-    body.radius = radiusFromMass(body.mass);
-    body.tier = tierForMass(body.mass);
+    body.tier = tierForMassAndStellarOutcome(body.mass, body.stellarOutcome);
+    body.radius = radiusFromMassForTier(body.mass, body.tier);
     normalizeBodyEnergy(body);
     return body;
   }
@@ -17260,17 +21298,25 @@
     if (entityType === "fighter") {
       return findById(fighters);
     }
+    if (entityType === "beacon" || entityType === "mobBeacon") {
+      return findById(mobBeacons);
+    }
     return null;
   }
 
   function buildPersistentPayload(includeWorld) {
     const aim = getAim();
     const toolMode = multiplayerLocalToolModeForInput();
+    const jetpackMove = typeof jetpackLocalMoveVector === "function"
+      ? jetpackLocalMoveVector()
+      : { x: 0, y: -1 };
     const payload = {
       playerId: player.id,
       player: {
         id: player.id,
         name: player.name,
+        skinId: activeSkinId(),
+        trailId: activeTrailId(),
         x: player.x,
         y: player.y,
         vx: player.vx,
@@ -17299,7 +21345,14 @@
         aimLocalAngle: aim.angle,
         toolMode,
         toolActive: toolMode !== "idle",
+        personalTether: serializePersonalTether(),
+        gameMode: normalizeGameMode(runState.gameMode),
         moving: isMoving(),
+        boosting: typeof isJetpackBoostFlameActive === "function"
+          ? isJetpackBoostFlameActive(renderPerformance.lastFrameDt || 1 / 60)
+          : false,
+        jetpackMoveX: finiteOr(jetpackMove.x, 0),
+        jetpackMoveY: finiteOr(jetpackMove.y, -1),
         crouching: Boolean(player.landed && isMovementKeyPressed("down"))
       }
     };
@@ -17315,6 +21368,7 @@
         teslas: teslas.map(serializeTesla),
         rockets: rockets.map(serializeRocket),
         fighters: fighters.map(serializeFighter),
+        mobBeacons: isHordeModeActive() ? mobBeacons.map(serializeMobBeacon) : [],
         structures: structures.map(serializeStructure),
         spacecrafts: spacecrafts.map(serializeSpacecraft),
         rivalProjectiles: rivalProjectiles.map(serializeProjectile),
@@ -17329,12 +21383,15 @@
         nextTeslaId,
         nextRocketId,
         nextFighterId,
+        nextMobBeaconId,
+        nextSurvivalCampId,
         nextStructureId,
         nextSpacecraftId,
         nextRivalProjectileId,
         nextTechPickupId,
         nextHealthPickupId,
         difficulty: runState.difficultyId,
+        gameMode: normalizeGameMode(runState.gameMode),
         mobSpawnTimers: { ...mobSpawnTimers },
         mobWaveTimer,
         mobWaveCount,
@@ -17345,6 +21402,7 @@
         mobBossDefeatsByKind: { ...mobBossDefeatsByKind },
         mobBossProgressByKind: { ...mobBossProgressByKind },
         mobBossWarnings: serializeMobBossWarnings(),
+        survivalSpawnState: serializeSurvivalSpawnState(),
         objectives: serializeObjectiveState(),
         randomEvents: serializeRandomEventState()
       };
@@ -17392,6 +21450,7 @@
     if (snapshot.difficulty && difficultyDefinitions[snapshot.difficulty]) {
       applyDifficulty(snapshot.difficulty);
     }
+    applyGameMode(snapshot.gameMode || runState.gameMode);
 
     if (Array.isArray(snapshot.particles)) {
       if (options && options.smoothParticles) {
@@ -17466,6 +21525,17 @@
       }
     }
 
+    if (!isHordeModeActive()) {
+      mobBeacons.length = 0;
+    } else if (Array.isArray(snapshot.mobBeacons)) {
+      if (shouldSmoothWorldEntities(options)) {
+        applySmoothedEntitySnapshots(mobBeacons, snapshot.mobBeacons, normalizeMobBeaconSnapshot, { snapDistance: 720, entityType: "beacon" });
+      } else {
+        mobBeacons.length = 0;
+        mobBeacons.push(...snapshot.mobBeacons.map(normalizeMobBeaconSnapshot).filter(Boolean));
+      }
+    }
+
     if (Array.isArray(snapshot.structures)) {
       structures.length = 0;
       structures.push(...snapshot.structures.map(normalizeStructureSnapshot).filter(Boolean));
@@ -17537,6 +21607,11 @@
       Number(snapshot.nextFighterId) || 1,
       fighters.reduce((largest, fighter) => Math.max(largest, fighter.id + 1), 1)
     );
+    nextMobBeaconId = Math.max(
+      Number(snapshot.nextMobBeaconId) || 1,
+      mobBeacons.reduce((largest, beacon) => Math.max(largest, finiteOr(beacon.id, 0) + 1), 1)
+    );
+    nextSurvivalCampId = Math.max(1, Number(snapshot.nextSurvivalCampId) || nextSurvivalCampId);
     nextStructureId = Math.max(
       Number(snapshot.nextStructureId) || 1,
       structures.reduce((largest, structure) => Math.max(largest, structure.id + 1), 1)
@@ -17565,6 +21640,7 @@
     applyMobBossDefeatsByKind(snapshot.mobBossDefeatsByKind);
     applyMobBossProgressByKind(snapshot.mobBossProgressByKind, snapshot.mobDefeatsByKind, snapshot.mobBossDefeatsByKind);
     applyMobBossWarnings(snapshot.mobBossWarnings);
+    applySurvivalSpawnState(snapshot.survivalSpawnState);
     if (snapshot.objectives) {
       applyObjectiveState(snapshot.objectives);
     }
@@ -17572,6 +21648,61 @@
       applyRandomEventState(snapshot.randomEvents);
     }
     syncSpacecraftsToRandomEventState();
+  }
+
+  function serializeSurvivalSpawnState() {
+    const cooldowns = {};
+    const source = survivalSpawnState.hitSquadCooldownsByPlayerId && typeof survivalSpawnState.hitSquadCooldownsByPlayerId === "object"
+      ? survivalSpawnState.hitSquadCooldownsByPlayerId
+      : {};
+    const warningSource = survivalSpawnState.hitSquadWarningSentByPlayerId && typeof survivalSpawnState.hitSquadWarningSentByPlayerId === "object"
+      ? survivalSpawnState.hitSquadWarningSentByPlayerId
+      : {};
+    const warnings = {};
+    for (const [playerId, value] of Object.entries(source)) {
+      const cleanId = String(playerId || "");
+      if (cleanId) {
+        cooldowns[cleanId] = Math.max(0, finiteOr(value, 0));
+      }
+    }
+    for (const [playerId, sent] of Object.entries(warningSource)) {
+      const cleanId = String(playerId || "");
+      if (cleanId) {
+        warnings[cleanId] = Boolean(sent);
+      }
+    }
+    return {
+      nextCampCheckTick: Math.max(0, finiteOr(survivalSpawnState.nextCampCheckTick, survivalSpawnState.nextCampCheckAt || 0)),
+      hitSquadCooldownsByPlayerId: cooldowns,
+      hitSquadWarningSentByPlayerId: warnings,
+      nextHitSquadId: Math.max(1, Math.floor(finiteOr(survivalSpawnState.nextHitSquadId, 1)))
+    };
+  }
+
+  function applySurvivalSpawnState(snapshot) {
+    const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+    survivalSpawnState.nextCampCheckTick = Math.max(0, finiteOr(source.nextCampCheckTick, source.nextCampCheckAt || 0));
+    survivalSpawnState.nextHitSquadId = Math.max(1, Math.floor(finiteOr(source.nextHitSquadId, 1)));
+    survivalSpawnState.hitSquadCooldownsByPlayerId = {};
+    survivalSpawnState.hitSquadWarningSentByPlayerId = {};
+    const cooldowns = source.hitSquadCooldownsByPlayerId && typeof source.hitSquadCooldownsByPlayerId === "object"
+      ? source.hitSquadCooldownsByPlayerId
+      : {};
+    const warnings = source.hitSquadWarningSentByPlayerId && typeof source.hitSquadWarningSentByPlayerId === "object"
+      ? source.hitSquadWarningSentByPlayerId
+      : {};
+    for (const [playerId, value] of Object.entries(cooldowns)) {
+      const cleanId = String(playerId || "");
+      if (cleanId) {
+        survivalSpawnState.hitSquadCooldownsByPlayerId[cleanId] = Math.max(0, finiteOr(value, 0));
+      }
+    }
+    for (const [playerId, sent] of Object.entries(warnings)) {
+      const cleanId = String(playerId || "");
+      if (cleanId) {
+        survivalSpawnState.hitSquadWarningSentByPlayerId[cleanId] = Boolean(sent);
+      }
+    }
   }
 
   function applyPlayerSnapshot(snapshot) {
@@ -17603,6 +21734,7 @@
     }
     player.landed = normalizeLandingSnapshot(snapshot.landed);
     player.spacecraftInterior = normalizeSpacecraftInteriorSnapshot(snapshot.spacecraftInterior);
+    applyPersonalTetherSnapshot(snapshot.personalTether);
     player.walkCycle = finiteOr(snapshot.walkCycle, player.landed ? player.landed.walkCycle : player.walkCycle);
     cameraRoll = player.landed ? surfaceCameraRollForAngle(player.landed.angle) : (player.spacecraftInterior ? 0 : finiteOr(snapshot.cameraRoll, cameraRoll));
   }
@@ -17626,6 +21758,17 @@
       pulse: particle.pulse,
       spawnAge: particle.spawnAge,
       spawnSizeScale: particle.spawnSizeScale,
+      orbitHostId: particle.orbitHostId,
+      orbitRingIndex: particle.orbitRingIndex,
+      orbitDirection: particle.orbitDirection,
+      orbitStrength: particle.orbitStrength,
+      orbitGrace: particle.orbitGrace,
+      starBirthAge: particle.starBirthAge,
+      starEmissionAccumulator: particle.starEmissionAccumulator,
+      stellarGrowthStarted: Boolean(particle.stellarGrowthStarted),
+      stellarGrowthRate: particle.stellarGrowthRate,
+      stellarGrowthLastSampleAt: particle.stellarGrowthLastSampleAt,
+      stellarOutcome: particle.stellarOutcome || "",
       randomEventId: particle.randomEventId || "",
       randomEventRegionX: particle.randomEventRegionX,
       randomEventRegionY: particle.randomEventRegionY,
@@ -17633,7 +21776,17 @@
       ufoSapSourceGraceTimer: particle.ufoSapSourceGraceTimer,
       ufoExtractedById: particle.ufoExtractedById,
       ufoExtractedFromId: particle.ufoExtractedFromId,
-      ufoSapParticleBuffer: particle.ufoSapParticleBuffer
+      ufoSapParticleBuffer: particle.ufoSapParticleBuffer,
+      survivalCampId: particle.survivalCampId || "",
+      survivalCampX: particle.survivalCampX,
+      survivalCampY: particle.survivalCampY,
+      survivalCampHomeX: particle.survivalCampHomeX,
+      survivalCampHomeY: particle.survivalCampHomeY,
+      survivalCampMovedByPlayer: Boolean(particle.survivalCampMovedByPlayer),
+      survivalCampBodyMovedWakeSent: Boolean(particle.survivalCampBodyMovedWakeSent),
+      survivalCampLastMoverPlayerId: particle.survivalCampLastMoverPlayerId || "",
+      survivalCampBody: Boolean(particle.survivalCampBody),
+      ambientSpawnRock: Boolean(particle.ambientSpawnRock)
     };
   }
 
@@ -17867,6 +22020,7 @@
     updateSmoothedEntityCollection(teslas, dt, { positionBlend, velocityBlend, entityType: "tesla" });
     updateSmoothedEntityCollection(rockets, dt, { positionBlend, velocityBlend, entityType: "rocket" });
     updateSmoothedEntityCollection(fighters, dt, { positionBlend, velocityBlend, entityType: "fighter" });
+    updateSmoothedEntityCollection(mobBeacons, dt, { positionBlend, velocityBlend, entityType: "beacon" });
     updateSmoothedEntityCollection(rivalProjectiles, dt, { positionBlend, velocityBlend, tickLife: true, maxAge: 0.12, snapDistance: 520, entityType: "rivalProjectile" });
     updateSmoothedEntityCollection(techPickups, dt, { positionBlend, velocityBlend, tickLife: true, tickRotation: true, maxAge: 0.18, snapDistance: 520, entityType: "techPickup" });
     updateSmoothedEntityCollection(healthPickups, dt, { positionBlend, velocityBlend, tickLife: true, maxAge: 0.18, snapDistance: 520, entityType: "healthPickup" });
@@ -17891,6 +22045,7 @@
     const authorityOptions = {
       actor: snapshot.player,
       mode: state.mode,
+      rangeFactor: state.rangeFactor,
       active: state.active
     };
     if (state.landedBodyId && (state.left || state.right)) {
@@ -17898,6 +22053,7 @@
       const direction = state.left ? 1 : -1;
       const strengthFactor = state.left ? state.suckFactor : state.blowFactor;
       if (applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor, state.actor ? { x: state.actor.x, y: state.actor.y } : null)) {
+        markSurvivalCampBodyMovedByPlayer(body, state.playerId || state.actor && state.actor.id || "");
         integrateFollowerPredictedEntity(body, dt);
         controlledBodyIds.add(body.id);
         markFollowerPredictedParticle(body, now);
@@ -17927,6 +22083,7 @@
         bucketPredicted = resolveActorFunnelBucket(particle, predictionState, dt) || bucketPredicted;
       }
       if (forcePredicted || bucketPredicted) {
+        markSurvivalCampBodyMovedByPlayer(particle, state.playerId || state.actor && state.actor.id || "");
         controlledBodyIds.add(particle.id);
         markFollowerPredictedParticle(particle, now);
       }
@@ -18112,6 +22269,7 @@
   }
 
   function mobTeamSnapshotFields(mob) {
+    const eliteStars = mobEliteStarRank(mob);
     return {
       team: isPlayerTeamMob(mob) ? "player" : "",
       familiarOwnerPlayerId: typeof (mob && mob.familiarOwnerPlayerId) === "string" ? mob.familiarOwnerPlayerId : "",
@@ -18121,7 +22279,22 @@
       summonAge: Math.max(0, finiteOr(mob && mob.summonAge, 0)),
       summonDuration: Math.max(0, finiteOr(mob && mob.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(mob && mob.summonBaseRadius, mob && mob.radius)),
-      summonSpinSpeed: finiteOr(mob && mob.summonSpinSpeed, 0)
+      summonSpinSpeed: finiteOr(mob && mob.summonSpinSpeed, 0),
+      survivalCampId: typeof (mob && mob.survivalCampId) === "string" ? mob.survivalCampId : "",
+      survivalCampX: finiteOr(mob && mob.survivalCampX, 0),
+      survivalCampY: finiteOr(mob && mob.survivalCampY, 0),
+      survivalCampLeashRadius: Math.max(0, finiteOr(mob && mob.survivalCampLeashRadius, 0)),
+      survivalCampAggroTimer: Math.max(0, finiteOr(mob && mob.survivalCampAggroTimer, 0)),
+      survivalCampReturning: Boolean(mob && mob.survivalCampReturning),
+      survivalCampSlotAngle: finiteOr(mob && mob.survivalCampSlotAngle, 0),
+      survivalCampSlotRadius: Math.max(0, finiteOr(mob && mob.survivalCampSlotRadius, 0)),
+      survivalEncounterType: mob && (mob.survivalEncounterType === "camp" || mob.survivalEncounterType === "hit-squad") ? mob.survivalEncounterType : "",
+      survivalEncounterId: typeof (mob && mob.survivalEncounterId) === "string" ? mob.survivalEncounterId : "",
+      survivalTargetPlayerId: typeof (mob && mob.survivalTargetPlayerId) === "string" ? mob.survivalTargetPlayerId : "",
+      survivalCampBudget: Math.max(0, finiteOr(mob && mob.survivalCampBudget, 0)),
+      survivalCampBand: typeof (mob && mob.survivalCampBand) === "string" ? mob.survivalCampBand : "",
+      eliteStars,
+      eliteGroupSize: eliteStars > 0 ? mobEliteRewardValue(mob) : 1
     };
   }
 
@@ -18330,6 +22503,33 @@
     };
   }
 
+  function serializeMobBeacon(beacon) {
+    return {
+      kind: "beacon",
+      beaconKind: mobEntityKind(beacon),
+      isBeacon: true,
+      id: beacon.id,
+      x: beacon.x,
+      y: beacon.y,
+      vx: beacon.vx,
+      vy: beacon.vy,
+      radius: beacon.radius,
+      health: beacon.health,
+      maxHealth: beacon.maxHealth,
+      color: beacon.color,
+      flash: beacon.flash,
+      hitCooldown: beacon.hitCooldown,
+      disabledTimer: beacon.disabledTimer,
+      rotation: beacon.rotation,
+      wobble: beacon.wobble,
+      age: beacon.age,
+      respawnTimer: beacon.respawnTimer,
+      driftAngle: beacon.driftAngle,
+      gadgetForceTimer: beacon.gadgetForceTimer,
+      strafeSign: beacon.strafeSign
+    };
+  }
+
   function serializeProjectile(projectile) {
     return {
       id: projectile.id,
@@ -18397,6 +22597,7 @@
     return {
       id: structure.id,
       type: structure.type,
+      ownerPlayerId: structure.ownerPlayerId,
       bodyId: structure.bodyId,
       linkedBodyId: structure.linkedBodyId,
       angle: structure.angle,
@@ -18410,6 +22611,8 @@
       restLength: structure.restLength,
       restCenterDx: structure.restCenterDx,
       restCenterDy: structure.restCenterDy,
+      bridgeAngleOffset: structure.bridgeAngleOffset,
+      bridgeLinkedAngleOffset: structure.bridgeLinkedAngleOffset,
       aimAngle: structure.aimAngle,
       deploy: structure.deploy,
       thrustAmount: structure.thrustAmount,
@@ -18417,6 +22620,7 @@
       shootCooldown: structure.shootCooldown,
       burstTimer: structure.burstTimer,
       burstCooldown: structure.burstCooldown,
+      healPulse: structure.healPulse,
       missileCharge: structure.missileCharge,
       lockTimer: structure.lockTimer,
       beepTimer: structure.beepTimer,
@@ -18427,6 +22631,10 @@
       maxHealth: structure.maxHealth,
       disabledTimer: structure.disabledTimer,
       flash: structure.flash,
+      tech: structure.type === "container" || structure.type === "trading-port" ? normalizeTradeOffer(structure.tech) : undefined,
+      tradeOffers: structure.type === "trading-port" ? normalizeTradingPortOffers(structure.tradeOffers) : undefined,
+      tradeOfferSeq: structure.type === "trading-port" ? Math.max(1, Math.floor(finiteOr(structure.tradeOfferSeq, 1))) : undefined,
+      tradeVessel: structure.type === "trading-port" ? normalizeTradeVessel(structure.tradeVessel, structure) : undefined,
       wobble: structure.wobble
     };
   }
@@ -18446,7 +22654,8 @@
     }
 
     const mass = Math.max(1, finiteOr(snapshot.mass, 1));
-    const tier = tierForMass(mass);
+    const stellarOutcome = normalizedStellarOutcomeName(snapshot.stellarOutcome);
+    const tier = tierForMassAndStellarOutcome(mass, stellarOutcome);
     const fallbackId = nextParticleId;
     const particle = {
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, fallbackId))),
@@ -18455,7 +22664,7 @@
       vx: finiteOr(snapshot.vx, 0),
       vy: finiteOr(snapshot.vy, 0),
       mass,
-      radius: radiusFromMass(mass),
+      radius: radiusFromMassForTier(mass, tier),
       tier,
       energy: finiteOr(snapshot.energy, Number.NaN),
       maxEnergy: finiteOr(snapshot.maxEnergy, Number.NaN),
@@ -18467,6 +22676,17 @@
       pulse: finiteOr(snapshot.pulse, randomRange(0.8, 1.25)),
       spawnAge: clamp(finiteOr(snapshot.spawnAge, particleSpawnTransitionDuration), 0, particleSpawnTransitionDuration),
       spawnSizeScale: finiteOr(snapshot.spawnSizeScale, 1),
+      orbitHostId: Math.max(0, Math.floor(finiteOr(snapshot.orbitHostId, 0))),
+      orbitRingIndex: Math.max(0, Math.floor(finiteOr(snapshot.orbitRingIndex, 0))),
+      orbitDirection: finiteOr(snapshot.orbitDirection, 1) < 0 ? -1 : 1,
+      orbitStrength: clamp(finiteOr(snapshot.orbitStrength, 0), 0, 1),
+      orbitGrace: Math.max(0, finiteOr(snapshot.orbitGrace, 0)),
+      starBirthAge: clamp(finiteOr(snapshot.starBirthAge, tier.name === "star" ? starBirthTransitionDuration : 0), 0, starBirthTransitionDuration),
+      starEmissionAccumulator: Math.max(0, finiteOr(snapshot.starEmissionAccumulator, 0)),
+      stellarGrowthStarted: Boolean(snapshot.stellarGrowthStarted),
+      stellarGrowthRate: Math.max(0, finiteOr(snapshot.stellarGrowthRate, 0)),
+      stellarGrowthLastSampleAt: Math.max(0, finiteOr(snapshot.stellarGrowthLastSampleAt, 0)),
+      stellarOutcome,
       randomEventId: typeof snapshot.randomEventId === "string" ? snapshot.randomEventId : "",
       randomEventRegionX: finiteOr(snapshot.randomEventRegionX, Number.NaN),
       randomEventRegionY: finiteOr(snapshot.randomEventRegionY, Number.NaN),
@@ -18474,7 +22694,17 @@
       ufoSapSourceGraceTimer: Math.max(0, finiteOr(snapshot.ufoSapSourceGraceTimer, 0)),
       ufoExtractedById: Math.max(0, Math.floor(finiteOr(snapshot.ufoExtractedById, 0))),
       ufoExtractedFromId: Math.max(0, Math.floor(finiteOr(snapshot.ufoExtractedFromId, 0))),
-      ufoSapParticleBuffer: Math.max(0, finiteOr(snapshot.ufoSapParticleBuffer, 0))
+      ufoSapParticleBuffer: Math.max(0, finiteOr(snapshot.ufoSapParticleBuffer, 0)),
+      survivalCampId: typeof snapshot.survivalCampId === "string" ? snapshot.survivalCampId : "",
+      survivalCampX: finiteOr(snapshot.survivalCampX, 0),
+      survivalCampY: finiteOr(snapshot.survivalCampY, 0),
+      survivalCampHomeX: finiteOr(snapshot.survivalCampHomeX, Number.NaN),
+      survivalCampHomeY: finiteOr(snapshot.survivalCampHomeY, Number.NaN),
+      survivalCampMovedByPlayer: Boolean(snapshot.survivalCampMovedByPlayer),
+      survivalCampBodyMovedWakeSent: Boolean(snapshot.survivalCampBodyMovedWakeSent),
+      survivalCampLastMoverPlayerId: typeof snapshot.survivalCampLastMoverPlayerId === "string" ? snapshot.survivalCampLastMoverPlayerId : "",
+      survivalCampBody: Boolean(snapshot.survivalCampBody),
+      ambientSpawnRock: Boolean(snapshot.ambientSpawnRock)
     };
     normalizeBodyEnergy(particle);
     return particle;
@@ -18483,10 +22713,16 @@
   function normalizeMobBossSnapshotFields(snapshot, kind, baseHealth, baseRadius) {
     const isBoss = Boolean(snapshot && snapshot.isBoss);
     const bossStars = isBoss ? bossStarRankValue(snapshot.bossStars) : 0;
+    const eliteStars = isBoss ? 0 : mobEliteStarRankValue(snapshot && snapshot.eliteStars);
+    const eliteGroupSize = eliteStars > 0
+      ? Math.max(mobEliteCompressionSize, Math.floor(finiteOr(snapshot && snapshot.eliteGroupSize, eliteStars * mobEliteCompressionSize)))
+      : 1;
     return {
       isBoss,
       bossBaseKind: isBoss && snapshot.bossBaseKind && mobTierOrder.includes(snapshot.bossBaseKind) ? snapshot.bossBaseKind : (isBoss ? kind : ""),
       bossStars,
+      eliteStars,
+      eliteGroupSize,
       minionCooldown: isBoss
         ? clamp(finiteOr(snapshot.minionCooldown, randomRange(mobBossMinionCooldownMin, mobBossMinionCooldownMax)), 0, mobBossMinionCooldownMax)
         : 0,
@@ -18495,12 +22731,13 @@
         : 0,
       bossBodyEvadeTimer: clamp(finiteOr(snapshot.bossBodyEvadeTimer, 0), 0, bossBodyEvadeDuration),
       bossBodyEvadeSpeedCap: clamp(finiteOr(snapshot.bossBodyEvadeSpeedCap, 0), 0, bossBodyEvadeMaxSpeed),
-      maxHealthCap: isBoss ? Math.max(baseHealth, baseHealth * mobBossHealthMultiplier * bossHealthScaleForStars(bossStars)) : baseHealth,
-      fallbackRadius: isBoss ? baseRadius * mobBossRadiusMultiplier : baseRadius
+      maxHealthCap: isBoss ? Math.max(baseHealth, baseHealth * mobBossHealthMultiplier * bossHealthScaleForStars(bossStars)) : baseHealth * mobEliteHealthScale(eliteStars),
+      fallbackRadius: isBoss ? baseRadius * mobBossRadiusMultiplier : baseRadius * mobEliteRadiusScale(eliteStars)
     };
   }
 
   function normalizeMobTeamSnapshotFields(snapshot, fallbackRadius) {
+    const eliteStars = snapshot && snapshot.isBoss ? 0 : mobEliteStarRankValue(snapshot && snapshot.eliteStars);
     return {
       team: snapshot && snapshot.team === "player" ? "player" : "",
       familiarOwnerPlayerId: typeof (snapshot && snapshot.familiarOwnerPlayerId) === "string" ? snapshot.familiarOwnerPlayerId : "",
@@ -18510,7 +22747,29 @@
       summonAge: Math.max(0, finiteOr(snapshot && snapshot.summonAge, 0)),
       summonDuration: Math.max(0, finiteOr(snapshot && snapshot.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(snapshot && snapshot.summonBaseRadius, fallbackRadius)),
-      summonSpinSpeed: finiteOr(snapshot && snapshot.summonSpinSpeed, 0)
+      summonSpinSpeed: finiteOr(snapshot && snapshot.summonSpinSpeed, 0),
+      survivalCampId: typeof (snapshot && snapshot.survivalCampId) === "string" ? snapshot.survivalCampId : "",
+      survivalCampX: finiteOr(snapshot && snapshot.survivalCampX, 0),
+      survivalCampY: finiteOr(snapshot && snapshot.survivalCampY, 0),
+      survivalCampHomeX: finiteOr(snapshot && snapshot.survivalCampHomeX, Number.NaN),
+      survivalCampHomeY: finiteOr(snapshot && snapshot.survivalCampHomeY, Number.NaN),
+      survivalCampMovedByPlayer: Boolean(snapshot && snapshot.survivalCampMovedByPlayer),
+      survivalCampBodyMovedWakeSent: Boolean(snapshot && snapshot.survivalCampBodyMovedWakeSent),
+      survivalCampLastMoverPlayerId: typeof (snapshot && snapshot.survivalCampLastMoverPlayerId) === "string" ? snapshot.survivalCampLastMoverPlayerId : "",
+      survivalCampLeashRadius: Math.max(0, finiteOr(snapshot && snapshot.survivalCampLeashRadius, 0)),
+      survivalCampAggroTimer: Math.max(0, finiteOr(snapshot && snapshot.survivalCampAggroTimer, 0)),
+      survivalCampReturning: Boolean(snapshot && snapshot.survivalCampReturning),
+      survivalCampSlotAngle: finiteOr(snapshot && snapshot.survivalCampSlotAngle, 0),
+      survivalCampSlotRadius: Math.max(0, finiteOr(snapshot && snapshot.survivalCampSlotRadius, 0)),
+      survivalEncounterType: snapshot && (snapshot.survivalEncounterType === "camp" || snapshot.survivalEncounterType === "hit-squad") ? snapshot.survivalEncounterType : "",
+      survivalEncounterId: typeof (snapshot && snapshot.survivalEncounterId) === "string" ? snapshot.survivalEncounterId : "",
+      survivalTargetPlayerId: typeof (snapshot && snapshot.survivalTargetPlayerId) === "string" ? snapshot.survivalTargetPlayerId : "",
+      survivalCampBudget: Math.max(0, finiteOr(snapshot && snapshot.survivalCampBudget, 0)),
+      survivalCampBand: typeof (snapshot && snapshot.survivalCampBand) === "string" ? snapshot.survivalCampBand : "",
+      eliteStars,
+      eliteGroupSize: eliteStars > 0
+        ? Math.max(mobEliteCompressionSize, Math.floor(finiteOr(snapshot && snapshot.eliteGroupSize, eliteStars * mobEliteCompressionSize)))
+        : 1
     };
   }
 
@@ -18821,6 +23080,43 @@
     };
   }
 
+  function normalizeMobBeaconSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+
+    const kind = mobTierOrder.includes(snapshot.beaconKind)
+      ? snapshot.beaconKind
+      : mobTierOrder.includes(snapshot.kind)
+      ? snapshot.kind
+      : "alienoid";
+    const maxHealth = Math.max(1, finiteOr(snapshot.maxHealth, mobBeaconMaxHealth(kind)));
+    return {
+      kind: "beacon",
+      beaconKind: kind,
+      isBeacon: true,
+      id: Math.max(1, Math.floor(finiteOr(snapshot.id, nextMobBeaconId))),
+      x: finiteOr(snapshot.x, 0),
+      y: finiteOr(snapshot.y, 0),
+      vx: finiteOr(snapshot.vx, 0),
+      vy: finiteOr(snapshot.vy, 0),
+      radius: Math.max(12, finiteOr(snapshot.radius, 46)),
+      health: clamp(finiteOr(snapshot.health, maxHealth), 0, maxHealth),
+      maxHealth,
+      color: normalizeColorSnapshot(snapshot.color, mobBeaconColor(kind)),
+      flash: Math.max(0, finiteOr(snapshot.flash, 0)),
+      hitCooldown: Math.max(0, finiteOr(snapshot.hitCooldown, 0)),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
+      rotation: finiteOr(snapshot.rotation, 0),
+      wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2)),
+      age: Math.max(0, finiteOr(snapshot.age, 0)),
+      respawnTimer: clamp(finiteOr(snapshot.respawnTimer, 0), 0, mobBeaconRespawnDuration),
+      driftAngle: finiteOr(snapshot.driftAngle, randomRange(0, Math.PI * 2)),
+      gadgetForceTimer: Math.max(0, finiteOr(snapshot.gadgetForceTimer, 0)),
+      strafeSign: Number(snapshot.strafeSign) < 0 ? -1 : 1
+    };
+  }
+
   function normalizeStructureSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== "object") {
       return null;
@@ -18836,6 +23132,7 @@
     return {
       id: Math.max(1, Math.floor(finiteOr(snapshot.id, nextStructureId))),
       type,
+      ownerPlayerId: String(snapshot.ownerPlayerId || ""),
       bodyId: Math.max(1, Math.floor(finiteOr(snapshot.bodyId, 1))),
       linkedBodyId: Math.max(0, Math.floor(finiteOr(snapshot.linkedBodyId, 0))),
       angle,
@@ -18849,6 +23146,8 @@
       restLength: Math.max(0, finiteOr(snapshot.restLength, 0)),
       restCenterDx: finiteOr(snapshot.restCenterDx, 0),
       restCenterDy: finiteOr(snapshot.restCenterDy, 0),
+      bridgeAngleOffset: Number.isFinite(Number(snapshot.bridgeAngleOffset)) ? finiteOr(snapshot.bridgeAngleOffset, 0) : undefined,
+      bridgeLinkedAngleOffset: Number.isFinite(Number(snapshot.bridgeLinkedAngleOffset)) ? finiteOr(snapshot.bridgeLinkedAngleOffset, 0) : undefined,
       aimAngle: finiteOr(snapshot.aimAngle, angle),
       deploy: clamp(finiteOr(snapshot.deploy, 0), 0, 1),
       thrustAmount: clamp(finiteOr(snapshot.thrustAmount, 0), 0, 1),
@@ -18856,6 +23155,7 @@
       shootCooldown: finiteOr(snapshot.shootCooldown, randomRange(0.2, 0.8)),
       burstTimer: Math.max(0, finiteOr(snapshot.burstTimer, 0)),
       burstCooldown: Math.max(0, finiteOr(snapshot.burstCooldown, randomRange(0.4, accumulatorBurstInterval))),
+      healPulse: clamp(finiteOr(snapshot.healPulse, 0), 0, 1),
       missileCharge: clamp(finiteOr(snapshot.missileCharge, type === "missile-launcher" ? randomRange(0, 0.45) : 0), 0, 1),
       lockTimer: Math.max(0, finiteOr(snapshot.lockTimer, 0)),
       beepTimer: Math.max(0, finiteOr(snapshot.beepTimer, 0)),
@@ -18866,6 +23166,13 @@
       maxHealth: clamp(finiteOr(snapshot.maxHealth, structureMaxHealth(type)), 1, structureMaxHealth(type)),
       disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
       flash: Math.max(0, finiteOr(snapshot.flash, 0)),
+      tech: type === "container" || type === "trading-port" ? normalizeTradeOffer(snapshot.tech) : undefined,
+      tradeOffers: type === "trading-port" ? normalizeTradingPortOffers(snapshot.tradeOffers) : undefined,
+      tradeOfferSeq: type === "trading-port" ? Math.max(1, Math.floor(finiteOr(snapshot.tradeOfferSeq, 1))) : undefined,
+      tradeVessel: type === "trading-port" ? normalizeTradeVessel(snapshot.tradeVessel, {
+        x: finiteOr(snapshot.x, 0),
+        y: finiteOr(snapshot.y, 0)
+      }) : undefined,
       wobble: finiteOr(snapshot.wobble, randomRange(0, Math.PI * 2))
     };
   }
@@ -19007,6 +23314,7 @@
       life: finiteOr(snapshot.life, 1),
       maxLife: finiteOr(snapshot.maxLife, 2.2),
       damage: finiteOr(snapshot.damage, rivalProjectileDamage),
+      ownerPlayerId: String(snapshot.ownerPlayerId || ""),
       knockback: finiteOr(snapshot.knockback, 0),
       toolDisable: finiteOr(snapshot.toolDisable, 0),
       cause: typeof snapshot.cause === "string" ? snapshot.cause : "",
@@ -19126,7 +23434,8 @@
   function createCelestialBodyState(options) {
     const settings = options || {};
     const mass = Math.max(0.001, finiteOr(settings.mass, 1));
-    const tier = tierForMass(mass);
+    const stellarOutcome = normalizedStellarOutcomeName(settings.stellarOutcome);
+    const tier = tierForMassAndStellarOutcome(mass, stellarOutcome);
     const id = Number.isFinite(Number(settings.id))
       ? Math.max(1, Math.floor(Number(settings.id)))
       : nextParticleId++;
@@ -19138,7 +23447,7 @@
       vx: finiteOr(settings.vx, 0),
       vy: finiteOr(settings.vy, 0),
       mass,
-      radius: radiusFromMass(mass),
+      radius: radiusFromMassForTier(mass, tier),
       tier,
       rotation: finiteOr(settings.rotation, 0),
       angularVelocity: finiteOr(settings.angularVelocity, 0),
@@ -19147,7 +23456,22 @@
       wobble: finiteOr(settings.wobble, randomRange(0, Math.PI * 2)),
       pulse: finiteOr(settings.pulse, randomRange(0.8, 1.25)),
       spawnAge: clamp(finiteOr(settings.spawnAge, 0), 0, particleSpawnTransitionDuration),
-      spawnSizeScale: finiteOr(settings.spawnSizeScale, ambientSpawnSizeScale(id, textureSeed))
+      spawnSizeScale: finiteOr(settings.spawnSizeScale, ambientSpawnSizeScale(id, textureSeed)),
+      starBirthAge: clamp(finiteOr(settings.starBirthAge, tier.name === "star" ? 0 : starBirthTransitionDuration), 0, starBirthTransitionDuration),
+      starEmissionAccumulator: Math.max(0, finiteOr(settings.starEmissionAccumulator, 0)),
+      stellarGrowthStarted: Boolean(settings.stellarGrowthStarted),
+      stellarGrowthRate: Math.max(0, finiteOr(settings.stellarGrowthRate, 0)),
+      stellarGrowthLastSampleAt: Math.max(0, finiteOr(settings.stellarGrowthLastSampleAt, 0)),
+      stellarOutcome,
+      survivalCampId: typeof settings.survivalCampId === "string" ? settings.survivalCampId : "",
+      survivalCampX: finiteOr(settings.survivalCampX, 0),
+      survivalCampY: finiteOr(settings.survivalCampY, 0),
+      survivalCampHomeX: finiteOr(settings.survivalCampHomeX, Number.NaN),
+      survivalCampHomeY: finiteOr(settings.survivalCampHomeY, Number.NaN),
+      survivalCampMovedByPlayer: Boolean(settings.survivalCampMovedByPlayer),
+      survivalCampBodyMovedWakeSent: Boolean(settings.survivalCampBodyMovedWakeSent),
+      survivalCampLastMoverPlayerId: typeof settings.survivalCampLastMoverPlayerId === "string" ? settings.survivalCampLastMoverPlayerId : "",
+      survivalCampBody: Boolean(settings.survivalCampBody)
     };
     normalizeBodyEnergy(body);
     return body;
@@ -19195,6 +23519,39 @@
     return clamp(1 - bossStarRankValue(stars) * mobBossStarCooldownReduction, 0.42, 1);
   }
 
+  function mobEliteStarRankValue(value) {
+    return clamp(Math.floor(finiteOr(value, 0)), 0, mobEliteMaxStars);
+  }
+
+  function mobEliteStarRank(mob) {
+    return mob && !mob.isBoss ? mobEliteStarRankValue(mob.eliteStars) : 0;
+  }
+
+  function mobEliteRewardValue(mob) {
+    const stars = mobEliteStarRank(mob);
+    return stars > 0
+      ? Math.max(1, Math.floor(finiteOr(mob && mob.eliteGroupSize, stars * mobEliteCompressionSize)))
+      : 1;
+  }
+
+  function mobEliteHealthScale(stars) {
+    return 1 + mobEliteStarRankValue(stars) * mobEliteHealthMultiplier;
+  }
+
+  function mobEliteRadiusScale(stars) {
+    return 1 + mobEliteStarRankValue(stars) * mobEliteRadiusMultiplier;
+  }
+
+  function mobEliteStatScale(mob, perStar) {
+    const stars = mobEliteStarRank(mob);
+    return stars > 0 ? 1 + stars * Math.max(0, finiteOr(perStar, 0)) : 1;
+  }
+
+  function mobEliteCooldownScale(mob) {
+    const stars = mobEliteStarRank(mob);
+    return stars > 0 ? clamp(1 - stars * mobEliteCooldownReduction, 0.7, 1) : 1;
+  }
+
   function createMobFromBlueprint(kind, x, y, overrides) {
     const blueprint = mobEntityBlueprints[kind] || mobEntityBlueprints.alienoid;
     const settings = overrides || {};
@@ -19202,10 +23559,14 @@
     const speedJitter = Math.max(0, finiteOr(blueprint.speedJitter, 16));
     const isBoss = Boolean(settings.isBoss);
     const bossStars = isBoss ? Math.max(0, Math.floor(finiteOr(settings.bossStars, 0))) : 0;
-    const radius = isBoss ? blueprint.radius * mobBossRadiusMultiplier : blueprint.radius;
+    const eliteStars = isBoss ? 0 : mobEliteStarRankValue(settings.eliteStars);
+    const eliteGroupSize = eliteStars > 0
+      ? Math.max(mobEliteCompressionSize, Math.floor(finiteOr(settings.eliteGroupSize, eliteStars * mobEliteCompressionSize)))
+      : 1;
+    const radius = isBoss ? blueprint.radius * mobBossRadiusMultiplier : blueprint.radius * mobEliteRadiusScale(eliteStars);
     const maxHealth = isBoss
       ? blueprint.health * mobBossHealthMultiplier * bossHealthScaleForStars(bossStars)
-      : blueprint.health;
+      : blueprint.health * mobEliteHealthScale(eliteStars);
     return Object.assign({
       kind,
       id: nextMobId(kind),
@@ -19223,13 +23584,15 @@
       strafeSign: Math.random() < 0.5 ? -1 : 1,
       rotation: 0,
       wobble: randomRange(0, Math.PI * 2),
+      eliteStars,
+      eliteGroupSize,
       bossStars,
       team: settings.team === "player" ? "player" : "",
       summonAge: Math.max(0, finiteOr(settings.summonAge, 0)),
       summonDuration: Math.max(0, finiteOr(settings.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(settings.summonBaseRadius, radius)),
       summonSpinSpeed: finiteOr(settings.summonSpinSpeed, 0)
-    }, settings, { bossStars });
+    }, settings, { eliteStars, eliteGroupSize, bossStars });
   }
 
   function createBossMob(kind, x, y) {
@@ -19285,15 +23648,40 @@
     });
   }
 
-  function randomAmbientParticleMass() {
+  function ambientMassDetail(spawnPoint, roll, salt) {
+    const x = finiteOr(spawnPoint && spawnPoint.x, 0);
+    const y = finiteOr(spawnPoint && spawnPoint.y, 0);
+    const wave = Math.sin(x * 0.017 + y * 0.023 + roll * 977.3 + salt * 43.7) * 43758.5453;
+    return wave - Math.floor(wave);
+  }
+
+  function randomAmbientParticleMass(spawnPoint) {
+    const patchAffinity = clamp(finiteOr(spawnPoint && spawnPoint.patchAffinity, 0), 0, 1);
+    const voidAffinity = clamp(finiteOr(spawnPoint && spawnPoint.voidAffinity, 0), 0, 1);
+    const richness = clamp(patchAffinity - voidAffinity * 0.55, 0, 1);
+    const spacingRoom = clamp((finiteOr(spawnPoint && spawnPoint.densityNearest, 260) - 185) / 260, 0.12, 1);
+    const crowdRoom = clamp(1 - finiteOr(spawnPoint && spawnPoint.crowdCount, 0) * 0.12, 0.38, 1);
+    const resourceRoom = spacingRoom * crowdRoom;
     const roll = Math.random();
-    if (roll < 0.58) {
+    const detail = ambientMassDetail(spawnPoint, roll, 1);
+    const rockChance = Math.max(0, (richness - 0.28) / 0.72) * (0.04 + richness * 0.065) * resourceRoom;
+
+    if (roll < rockChance) {
+      return 10;
+    }
+
+    const particleRoll = (roll - rockChance) / Math.max(0.0001, 1 - rockChance);
+    const tinyCutoff = clamp(0.58 - richness * 0.2 + voidAffinity * 0.22, 0.38, 0.78);
+    const smallCutoff = clamp(0.84 - richness * 0.14 + voidAffinity * 0.08, tinyCutoff + 0.08, 0.94);
+    const mediumCutoff = clamp(0.96 - richness * 0.06, smallCutoff + 0.03, 0.985);
+
+    if (particleRoll < tinyCutoff) {
       return 1;
     }
-    if (roll < 0.84) {
-      return 2;
+    if (particleRoll < smallCutoff) {
+      return richness > 0.62 && detail < 0.34 ? 3 : 2;
     }
-    if (roll < 0.96) {
+    if (particleRoll < mediumCutoff) {
       return 3;
     }
     return 4;
@@ -19813,6 +24201,34 @@
     return clamp(affinity, 0, 1);
   }
 
+  function particleVoidAffinityAt(x, y) {
+    const cellSize = 2350;
+    const cellX = Math.floor(x / cellSize);
+    const cellY = Math.floor(y / cellSize);
+    let affinity = 0;
+
+    for (let yOffset = -1; yOffset <= 1; yOffset += 1) {
+      for (let xOffset = -1; xOffset <= 1; xOffset += 1) {
+        const patchX = cellX + xOffset;
+        const patchY = cellY + yOffset;
+        const roll = particlePatchNoise(patchX, patchY, 9);
+        if (roll < 0.64) {
+          continue;
+        }
+
+        const centerX = (patchX + particlePatchNoise(patchX, patchY, 10)) * cellSize;
+        const centerY = (patchY + particlePatchNoise(patchX, patchY, 11)) * cellSize;
+        const radius = 780 + particlePatchNoise(patchX, patchY, 12) * 760;
+        const distance = Math.hypot(x - centerX, y - centerY);
+        const falloff = clamp(1 - distance / radius, 0, 1);
+        const strength = 0.54 + particlePatchNoise(patchX, patchY, 13) * 0.5;
+        affinity += falloff * falloff * strength;
+      }
+    }
+
+    return clamp(affinity, 0, 1);
+  }
+
   function chooseParticleSpawnPoint(anchor, options) {
     const localFill = Boolean(options && options.localFill);
     const playfieldFill = Boolean(options && options.playfieldFill);
@@ -19820,7 +24236,7 @@
     const anchors = activePartyPlayerAnchors();
     const minPlayerDistance = 760;
     const maxPlayerDistance = 1760;
-    const preferredParticleSpacing = 155;
+    const preferredParticleSpacing = 230;
     const localFillRadius = particlePlayfieldRadius();
     const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
     const moving = speed > 45;
@@ -19858,24 +24274,35 @@
       const nearestPlayer = nearestPartyAnchorDistance(x, y, anchors);
       const density = ambientParticleDensityAt(x, y);
       const patchAffinity = particlePatchAffinityAt(x, y);
+      const voidAffinity = particleVoidAffinityAt(x, y) * (1 - patchAffinity * 0.55);
       const tooCloseToPlayer = Math.max(0, minPlayerDistance - nearestPlayer);
       const patchWeight = localFill ? 0.24 : 1;
-      const preferredSpacing = preferredParticleSpacing * (1 - patchAffinity * 0.38);
+      const preferredSpacing = preferredParticleSpacing * (1 - patchAffinity * 0.16 + voidAffinity * 0.55);
       const spacingPenalty = Math.max(0, preferredSpacing - density.nearest);
       const score =
         nearestPlayer * 0.16 +
-        density.nearest * (1.08 - patchAffinity * 0.48) +
-        patchAffinity * 720 * patchWeight -
-        density.crowdCount * (135 - patchAffinity * 88) -
+        density.nearest * (1.08 - patchAffinity * 0.2 + voidAffinity * 0.22) +
+        patchAffinity * 860 * patchWeight -
+        voidAffinity * 560 * (localFill ? 0.48 : 1) -
+        density.crowdCount * (135 - patchAffinity * 45 + voidAffinity * 72) -
         (1 - patchAffinity) * 105 * patchWeight -
         tooCloseToPlayer * 7.5 -
-        spacingPenalty * (3.2 - patchAffinity * 1.1);
+        spacingPenalty * (3.2 - patchAffinity * 1.25 + voidAffinity * 1.2);
       if (!best || score > best.score) {
-        best = { x, y, angle, score };
+        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount };
       }
     }
 
-    return best || { x: source.x, y: source.y, angle: randomRange(0, Math.PI * 2), score: 0 };
+    return best || {
+      x: source.x,
+      y: source.y,
+      angle: randomRange(0, Math.PI * 2),
+      score: 0,
+      patchAffinity: particlePatchAffinityAt(source.x, source.y),
+      voidAffinity: particleVoidAffinityAt(source.x, source.y),
+      densityNearest: 480,
+      crowdCount: 0
+    };
   }
 
   function spawnParticleNearPlayer(anchor, options) {
@@ -19884,9 +24311,10 @@
     const particle = createParticle(
       spawnPoint.x,
       spawnPoint.y,
-      randomAmbientParticleMass(),
+      randomAmbientParticleMass(spawnPoint),
       randomParticleColor()
     );
+    particle.ambientSpawnRock = particle.tier && particle.tier.name === "rock";
     particle.vx += finiteOr(source.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(6, 26);
     particle.vy += finiteOr(source.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(6, 26);
     particles.push(particle);
@@ -19902,10 +24330,11 @@
     const replacement = createParticle(
       spawnPoint.x,
       spawnPoint.y,
-      randomAmbientParticleMass(),
+      randomAmbientParticleMass(spawnPoint),
       randomParticleColor()
     );
     replacement.id = id;
+    replacement.ambientSpawnRock = replacement.tier && replacement.tier.name === "rock";
     replacement.spawnSizeScale = ambientSpawnSizeScale(replacement.id, replacement.textureSeed);
     replacement.vx += finiteOr(source.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(6, 26);
     replacement.vy += finiteOr(source.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(6, 26);
@@ -20071,12 +24500,91 @@
     };
   }
 
+  function mobBeaconVisual(kind) {
+    return mobBeaconVisuals[kind] || mobBeaconVisuals.alienoid;
+  }
+
+  function mobBeaconColor(kind) {
+    return mobBeaconVisual(kind).color || { r: 255, g: 115, b: 173 };
+  }
+
+  function isMobBeacon(entity) {
+    return Boolean(entity && entity.isBeacon);
+  }
+
+  function mobEntityKind(entity) {
+    const kind = isMobBeacon(entity) ? entity.beaconKind : entity && entity.kind;
+    return mobTierOrder.includes(kind) ? kind : "alienoid";
+  }
+
+  function techKeyForMobKind(kind) {
+    if (kind === "ufo") {
+      return "suction";
+    }
+    if (kind === "rambot") {
+      return "plating";
+    }
+    if (kind === "engineer") {
+      return "repair";
+    }
+    if (kind === "tesla") {
+      return "energy";
+    }
+    if (kind === "satellite") {
+      return "target";
+    }
+    if (kind === "rocket") {
+      return "propulsion";
+    }
+    if (kind === "fighter") {
+      return "shield";
+    }
+    return "weapon";
+  }
+
+  function mobBeaconMaxHealth(kind) {
+    const tier = Math.max(0, mobTierOrder.indexOf(kind));
+    return 260 + tier * 34;
+  }
+
+  function createMobBeacon(kind, x, y, overrides) {
+    const settings = overrides && typeof overrides === "object" ? overrides : {};
+    const beaconKind = mobTierOrder.includes(kind) ? kind : "alienoid";
+    const maxHealth = Math.max(1, finiteOr(settings.maxHealth, mobBeaconMaxHealth(beaconKind)));
+    const id = Number.isFinite(Number(settings.id))
+      ? Math.max(1, Math.floor(Number(settings.id)))
+      : nextMobBeaconId++;
+    return {
+      kind: "beacon",
+      beaconKind,
+      isBeacon: true,
+      id,
+      x,
+      y,
+      vx: finiteOr(settings.vx, randomRange(-18, 18)),
+      vy: finiteOr(settings.vy, randomRange(-18, 18)),
+      radius: Math.max(12, finiteOr(settings.radius, 46)),
+      health: clamp(finiteOr(settings.health, maxHealth), 0, maxHealth),
+      maxHealth,
+      color: normalizeColorSnapshot(settings.color, mobBeaconColor(beaconKind)),
+      flash: Math.max(0, finiteOr(settings.flash, 0)),
+      hitCooldown: Math.max(0, finiteOr(settings.hitCooldown, 0)),
+      disabledTimer: Math.max(0, finiteOr(settings.disabledTimer, 0)),
+      rotation: finiteOr(settings.rotation, randomRange(0, Math.PI * 2)),
+      wobble: finiteOr(settings.wobble, randomRange(0, Math.PI * 2)),
+      age: Math.max(0, finiteOr(settings.age, 0)),
+      respawnTimer: Math.max(0, finiteOr(settings.respawnTimer, 0)),
+      driftAngle: finiteOr(settings.driftAngle, randomRange(0, Math.PI * 2)),
+      strafeSign: Number(settings.strafeSign) < 0 ? -1 : 1
+    };
+  }
+
   function dropHealthPickups(rival) {
     if (player.health >= player.maxHealth) {
       return;
     }
 
-    const dropChance = difficultyHealthDropChance(rival.kind === "ufo" ? 0.55 : 0.45);
+    const dropChance = difficultyHealthDropChance(rival.kind === "ufo" ? 0.32 : 0.28);
     const count = Math.random() < dropChance ? 1 : 0;
 
     for (let i = 0; i < count; i += 1) {
@@ -20085,8 +24593,14 @@
   }
 
   function mobName(mob) {
-    const blueprint = mob && mobEntityBlueprints[mob.kind] ? mobEntityBlueprints[mob.kind] : mobEntityBlueprints.alienoid;
-    return blueprint.label;
+    const kind = mobEntityKind(mob);
+    const blueprint = mobEntityBlueprints[kind] || mobEntityBlueprints.alienoid;
+    const stars = mobEliteStarRank(mob);
+    return isMobBeacon(mob)
+      ? blueprint.label + " beacon"
+      : stars > 0
+        ? stars + "-star " + blueprint.label
+        : blueprint.label;
   }
 
   function difficultyTechDropCount() {
@@ -20099,28 +24613,14 @@
   }
 
   function dropMobTech(mob) {
-    let techKey = "weapon";
-    if (mob.kind === "ufo") {
-      techKey = "suction";
-    } else if (mob.kind === "rambot") {
-      techKey = "plating";
-    } else if (mob.kind === "engineer") {
-      techKey = "repair";
-    } else if (mob.kind === "tesla") {
-      techKey = "energy";
-    } else if (mob.kind === "satellite") {
-      techKey = "target";
-    } else if (mob.kind === "rocket") {
-      techKey = "propulsion";
-    } else if (mob.kind === "fighter") {
-      techKey = "shield";
-    }
-
-    const dropCount = mob.isBoss ? mobBossDropCount : difficultyTechDropCount();
+    const kind = mobEntityKind(mob);
+    const techKey = techKeyForMobKind(kind);
+    const baseDropCount = isMobBeacon(mob) ? mobBeaconDropCount : mob.isBoss ? mobBossDropCount : difficultyTechDropCount();
+    const dropCount = baseDropCount * mobEliteRewardValue(mob);
     for (let i = 0; i < dropCount; i += 1) {
       techPickups.push(createTechPickup(techKey, mob.x, mob.y, mob.vx, mob.vy));
     }
-    if (mob.defeatedBySpanner && isMechanicalMob(mob) && Math.random() < spannerTechBonusChance) {
+    if (!isMobBeacon(mob) && mob.defeatedBySpanner && isMechanicalMob(mob) && Math.random() < spannerTechBonusChance) {
       techPickups.push(createTechPickup(techKey, mob.x, mob.y, mob.vx, mob.vy));
     }
   }
@@ -20168,6 +24668,7 @@
     mob.flash = 0.28;
     mob.hitCooldown = Math.max(finiteOr(mob.hitCooldown, 0), 0.42);
     emitMobDamageParticles(mob, damage, color);
+    wakeSurvivalCampFromMob(mob);
 
     if (color) {
       sparks.push({
@@ -20182,28 +24683,37 @@
 
     if (mob.health <= 0) {
       mob.defeatedBySpanner = mob.lastDamageTool === "spanner";
-      if (!isPlayerTeamMob(mob)) {
-        lifeStats.mobsDefeated += 1;
-        lifeStats.mobScore += scoreMobKill(mob.kind);
-        if (mobDefeatsByKind[mob.kind] !== undefined) {
-          mobDefeatsByKind[mob.kind] += 1;
-          if (!mob.isBoss && mobBossProgressByKind[mob.kind] !== undefined) {
-            mobBossProgressByKind[mob.kind] = Math.min(
+      if (isMobBeacon(mob)) {
+        mob.respawnTimer = mobBeaconRespawnDuration;
+        mob.age = 0;
+        dropMobTech(mob);
+        notifyMobBeaconSuspended(mobEntityKind(mob), mob.respawnTimer);
+      } else if (!isPlayerTeamMob(mob)) {
+        const rewardValue = mobEliteRewardValue(mob);
+        lifeStats.mobsDefeated += rewardValue;
+        lifeStats.mobScore += scoreMobKill(mobEntityKind(mob)) * rewardValue;
+        const kind = mobEntityKind(mob);
+        if (mobDefeatsByKind[kind] !== undefined) {
+          mobDefeatsByKind[kind] += rewardValue;
+          if (!mob.isBoss && mobBossProgressByKind[kind] !== undefined) {
+            mobBossProgressByKind[kind] = Math.min(
               mobBossDefeatsToUnlock,
-              Math.max(0, Math.floor(finiteOr(mobBossProgressByKind[mob.kind], 0))) + 1
+              Math.max(0, Math.floor(finiteOr(mobBossProgressByKind[kind], 0))) + rewardValue
             );
           }
-          if (!mob.isBoss && mobBossProgressByKind[mob.kind] === mobBossDefeatsToUnlock) {
-            maybeNotifyText(mobBossLabel(mob.kind) + " sightings unlocked.", {
-              groupKey: "mob-boss-unlocked:" + mob.kind,
-              lifetime: 4200
-            });
+          if (!mob.isBoss && mobBossProgressByKind[kind] === mobBossDefeatsToUnlock) {
+            maybeNotifyMobBossUnlocked(kind);
+            maybeScheduleMobBoss(kind);
           }
         }
-        if (mob.isBoss && mobBossDefeatsByKind[mob.kind] !== undefined) {
-          mobBossDefeatsByKind[mob.kind] += 1;
-          if (mobBossProgressByKind[mob.kind] !== undefined) {
-            mobBossProgressByKind[mob.kind] = 0;
+        if (mob.isBoss && mobBossDefeatsByKind[kind] !== undefined) {
+          mobBossDefeatsByKind[kind] += 1;
+          if (mobBossProgressByKind[kind] !== undefined) {
+            mobBossProgressByKind[kind] = 0;
+          }
+          const nextBossKind = mobTierOrder[mobTierOrder.indexOf(kind) + 1];
+          if (nextBossKind) {
+            maybeNotifyMobBossUnlocked(nextBossKind);
           }
         }
         dropHealthPickups(mob);
@@ -20426,6 +24936,190 @@
     return bestValid || best || randomOffscreenPoint(spawnMargin, spawnSpread, source, cameraZoomMin);
   }
 
+  function mobBeaconForKind(kind) {
+    return mobBeacons.find((beacon) => beacon && beacon.beaconKind === kind) || null;
+  }
+
+  function isMobBeaconRevealed(beacon) {
+    if (!beacon || beacon.health <= 0) {
+      return false;
+    }
+    return Math.hypot(beacon.x - player.x, beacon.y - player.y) <= mobBeaconRevealDistance;
+  }
+
+  function nearestMobBeaconDistance(x, y, ignoreBeacon) {
+    let nearest = Infinity;
+    for (const beacon of mobBeacons) {
+      if (!beacon || beacon === ignoreBeacon || beacon.health <= 0) {
+        continue;
+      }
+      const distance = Math.hypot(x - beacon.x, y - beacon.y);
+      if (distance < nearest) {
+        nearest = distance;
+      }
+    }
+    return nearest;
+  }
+
+  function nearestMobBeaconAnchor(beacon, anchors) {
+    const source = Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors();
+    let nearest = source[0] || player;
+    let nearestDistance = Infinity;
+    for (const anchor of source) {
+      const distance = Math.hypot(beacon.x - anchor.x, beacon.y - anchor.y);
+      if (distance < nearestDistance) {
+        nearest = anchor;
+        nearestDistance = distance;
+      }
+    }
+    return {
+      anchor: nearest,
+      distance: Number.isFinite(nearestDistance) ? nearestDistance : 0
+    };
+  }
+
+  function chooseMobBeaconSpawnPoint(kind, anchors) {
+    const sourceAnchors = Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors();
+    const source = leastPopulatedMobSpawnAnchor(sourceAnchors);
+    let best = null;
+    let bestValid = null;
+    const tierIndex = Math.max(0, mobTierOrder.indexOf(kind));
+    const baseAngle = tierIndex * 2.399963229728653 + randomRange(-0.55, 0.55);
+
+    for (let attempt = 0; attempt < 48; attempt += 1) {
+      const angle = attempt < 8
+        ? baseAngle + attempt * (Math.PI * 2 / 8) + randomRange(-0.18, 0.18)
+        : randomRange(0, Math.PI * 2);
+      const distance = randomRange(mobBeaconMinPlayerDistance, mobBeaconMaxPlayerDistance);
+      const drift = rotatePoint(randomRange(-320, 320), randomRange(-320, 320), angle + Math.PI / 2);
+      const x = source.x + Math.cos(angle) * distance + drift.x;
+      const y = source.y + Math.sin(angle) * distance + drift.y;
+      const nearestPlayer = nearestPartyAnchorDistance(x, y, sourceAnchors);
+      const nearestBeacon = nearestMobBeaconDistance(x, y, null);
+      const beaconSpacing = Number.isFinite(nearestBeacon) ? Math.min(nearestBeacon, mobBeaconPreferredSeparation * 2.4) : mobBeaconPreferredSeparation * 1.8;
+      const tooCloseToPlayer = Math.max(0, mobBeaconMinPlayerDistance - nearestPlayer);
+      const tooFarFromPlayer = Math.max(0, nearestPlayer - mobBeaconMaxPlayerDistance);
+      const tooCloseToBeacon = Math.max(0, mobBeaconPreferredSeparation - beaconSpacing);
+      const score = beaconSpacing * 0.9 + nearestPlayer * 0.12 - tooCloseToPlayer * 8 - tooFarFromPlayer * 2.5 - tooCloseToBeacon * 7;
+      if (!best || score > best.score) {
+        best = { x, y, score };
+      }
+      if (
+        nearestPlayer >= mobBeaconMinPlayerDistance &&
+        nearestPlayer <= mobBeaconMaxPlayerDistance &&
+        beaconSpacing >= mobBeaconPreferredSeparation &&
+        (!bestValid || score > bestValid.score)
+      ) {
+        bestValid = { x, y, score };
+      }
+    }
+
+    return bestValid || best || {
+      x: source.x + mobBeaconMinPlayerDistance,
+      y: source.y
+    };
+  }
+
+  function replaceMobBeaconState(beacon, kind, spawn) {
+    const next = createMobBeacon(kind, spawn.x, spawn.y);
+    Object.assign(beacon, next);
+    return beacon;
+  }
+
+  function ensureMobBeacon(kind, anchors) {
+    let beacon = mobBeaconForKind(kind);
+    if (beacon) {
+      return beacon;
+    }
+    const spawn = chooseMobBeaconSpawnPoint(kind, anchors);
+    beacon = createMobBeacon(kind, spawn.x, spawn.y);
+    mobBeacons.push(beacon);
+    return beacon;
+  }
+
+  function isMobBeaconReady(kind) {
+    const beacon = mobBeaconForKind(kind);
+    return Boolean(beacon && beacon.health > 0 && finiteOr(beacon.age, 0) >= mobBeaconWarmupDuration);
+  }
+
+  function updateMobBeaconMotion(beacon, anchors, dt) {
+    const nearest = nearestMobBeaconAnchor(beacon, anchors);
+    const anchor = nearest.anchor || player;
+    const distance = Math.max(1, nearest.distance);
+    const fromAnchorX = (beacon.x - anchor.x) / distance;
+    const fromAnchorY = (beacon.y - anchor.y) / distance;
+    const wave = finiteOr(beacon.wobble, 0) + finiteOr(beacon.age, 0) * 0.55;
+    let ax = Math.cos(finiteOr(beacon.driftAngle, 0) + Math.sin(wave) * 0.4) * 16;
+    let ay = Math.sin(finiteOr(beacon.driftAngle, 0) + Math.cos(wave * 0.73) * 0.4) * 16;
+
+    const gadgetControlled = finiteOr(beacon.gadgetForceTimer, 0) > 0;
+    if (!gadgetControlled && distance < mobBeaconMinPlayerDistance) {
+      const strength = clamp((mobBeaconMinPlayerDistance - distance) / 900, 0.25, 2.2) * 54;
+      ax += fromAnchorX * strength;
+      ay += fromAnchorY * strength;
+    } else if (!gadgetControlled && distance > mobBeaconMaxPlayerDistance) {
+      const strength = clamp((distance - mobBeaconMaxPlayerDistance) / 1200, 0.35, 2.5) * 68;
+      ax -= fromAnchorX * strength;
+      ay -= fromAnchorY * strength;
+    }
+
+    for (const other of mobBeacons) {
+      if (!other || other === beacon || other.health <= 0) {
+        continue;
+      }
+      const dx = beacon.x - other.x;
+      const dy = beacon.y - other.y;
+      const spacing = Math.hypot(dx, dy) || 1;
+      if (spacing >= mobBeaconPreferredSeparation) {
+        continue;
+      }
+      const strength = (mobBeaconPreferredSeparation - spacing) / mobBeaconPreferredSeparation * 46;
+      ax += dx / spacing * strength;
+      ay += dy / spacing * strength;
+    }
+
+    beacon.vx += ax * dt;
+    beacon.vy += ay * dt;
+    beacon.vx *= Math.pow(0.9, dt);
+    beacon.vy *= Math.pow(0.9, dt);
+    const speed = Math.hypot(beacon.vx, beacon.vy);
+    if (speed > mobBeaconMaxSpeed) {
+      beacon.vx = (beacon.vx / speed) * mobBeaconMaxSpeed;
+      beacon.vy = (beacon.vy / speed) * mobBeaconMaxSpeed;
+    }
+    beacon.x += beacon.vx * dt;
+    beacon.y += beacon.vy * dt;
+    beacon.rotation += (0.24 + Math.max(0, mobTierOrder.indexOf(beacon.beaconKind)) * 0.015) * dt * finiteOr(beacon.strafeSign, 1);
+    beacon.driftAngle += 0.18 * dt * finiteOr(beacon.strafeSign, 1);
+  }
+
+  function updateMobBeacons(dt, anchors) {
+    const sourceAnchors = Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors();
+    for (const kind of mobTierOrder) {
+      if (!isMobTierUnlocked(kind)) {
+        continue;
+      }
+      const beacon = ensureMobBeacon(kind, sourceAnchors);
+      beacon.hitCooldown = Math.max(0, finiteOr(beacon.hitCooldown, 0) - dt);
+      beacon.disabledTimer = Math.max(0, finiteOr(beacon.disabledTimer, 0) - dt);
+      beacon.flash = Math.max(0, finiteOr(beacon.flash, 0) - dt);
+      beacon.gadgetForceTimer = Math.max(0, finiteOr(beacon.gadgetForceTimer, 0) - dt);
+      tickMobBodyImpactCooldowns(beacon, dt);
+
+      if (beacon.health <= 0) {
+        beacon.respawnTimer = Math.max(0, finiteOr(beacon.respawnTimer, mobBeaconRespawnDuration) - dt);
+        if (beacon.respawnTimer <= 0) {
+          replaceMobBeaconState(beacon, kind, chooseMobBeaconSpawnPoint(kind, sourceAnchors));
+        }
+        continue;
+      }
+
+      beacon.age = Math.max(0, finiteOr(beacon.age, 0) + dt);
+      beacon.respawnTimer = 0;
+      updateMobBeaconMotion(beacon, sourceAnchors, dt);
+    }
+  }
+
   function spawnAlienoidNearPlayer(anchor, anchors) {
     const spawn = chooseMobSpawnPoint("alienoid", 110, 360, anchor, anchors);
     rivals.push(createRival(spawn.x, spawn.y));
@@ -20470,8 +25164,51 @@
     return (mobEntityBlueprints[kind] && mobEntityBlueprints[kind].label ? mobEntityBlueprints[kind].label : "Mob") + " boss";
   }
 
-  function isMobBossUnlocked(kind) {
+  function formatMobBeaconSuspensionDuration(seconds) {
+    const total = Math.max(0, Math.ceil(finiteOr(seconds, mobBeaconRespawnDuration)));
+    const minutes = Math.floor(total / 60);
+    const remainingSeconds = total % 60;
+    return minutes + ":" + String(remainingSeconds).padStart(2, "0");
+  }
+
+  function mobBeaconSuspensionLabel(kind) {
+    return mobObjectivePluralLabels[kind] || ((mobEntityBlueprints[kind] && mobEntityBlueprints[kind].label) || "Mobs");
+  }
+
+  function notifyMobBeaconSuspended(kind, seconds) {
+    const mobKind = mobTierOrder.includes(kind) ? kind : "alienoid";
+    updateGroupedNotificationText(
+      "mob-beacon-suspended:" + mobKind,
+      mobBeaconSuspensionLabel(mobKind) + " suspended for " + formatMobBeaconSuspensionDuration(seconds) + ".",
+      { lifetime: 5200 }
+    );
+  }
+
+  function mobBossProgressReady(kind) {
     return Math.max(0, mobBossProgressByKind[kind] || 0) >= mobBossDefeatsToUnlock;
+  }
+
+  function previousMobBossDefeated(kind) {
+    const index = mobTierOrder.indexOf(kind);
+    if (index <= 0) {
+      return true;
+    }
+    const previousKind = mobTierOrder[index - 1];
+    return Math.max(0, Math.floor(finiteOr(mobBossDefeatsByKind[previousKind], 0))) > 0;
+  }
+
+  function isMobBossUnlocked(kind) {
+    return mobBossProgressReady(kind) && previousMobBossDefeated(kind);
+  }
+
+  function maybeNotifyMobBossUnlocked(kind) {
+    if (!isMobBossUnlocked(kind)) {
+      return;
+    }
+    maybeNotifyText(mobBossLabel(kind) + " sightings unlocked.", {
+      groupKey: "mob-boss-unlocked:" + kind,
+      lifetime: 4200
+    });
   }
 
   function hasLiveMobBoss(kind) {
@@ -20550,8 +25287,11 @@
   }
 
   function randomEngineerBossSummonKind() {
-    const options = mobTierOrder.filter((kind) => kind !== "engineer");
-    return options[Math.floor(randomRange(0, options.length))] || "alienoid";
+    const options = mobTierOrder.filter((kind) => kind !== "engineer" && isMobBeaconReady(kind));
+    if (!options.length) {
+      return "";
+    }
+    return options[Math.floor(randomRange(0, options.length))] || "";
   }
 
   function collectionPushMob(kind, mob) {
@@ -20579,6 +25319,9 @@
       return false;
     }
     const kind = randomEngineerBossSummonKind();
+    if (!kind) {
+      return false;
+    }
     const angleToPlayer = targetPlayer ? Math.atan2(targetPlayer.y - engineer.y, targetPlayer.x - engineer.x) : randomRange(0, Math.PI * 2);
     const angle = angleToPlayer + randomRange(-0.95, 0.95);
     const distance = randomRange(185, 315);
@@ -20613,6 +25356,12 @@
     for (const kind of mobTierOrder) {
       const warning = mobBossWarningFor(kind);
       if (!warning || !warning.active) {
+        continue;
+      }
+
+      if (!isMobBeaconReady(kind)) {
+        warning.timer = Math.max(1, finiteOr(warning.timer, 1));
+        warning.lastNoticeSecond = -1;
         continue;
       }
 
@@ -20830,7 +25579,7 @@
   }
 
   function buildMobWaveSlots(targetCount, anchors) {
-    const eligibleKinds = unlockedMobKinds();
+    const eligibleKinds = unlockedMobKinds().filter(isMobBeaconReady);
     const reservedCounts = {};
     const slots = [];
 
@@ -20844,6 +25593,261 @@
     }
 
     return slots;
+  }
+
+  function survivalLiveMobCap(kind, anchors) {
+    const playerCount = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Array.isArray(anchors) && anchors.length ? anchors.length : 1));
+    const playerScale = 1 + Math.max(0, playerCount - 1) * 0.3;
+    const bossPressureCap = mobBossSpawnPressure(kind) * mobBossLiveCapBonus;
+    return Math.max(playerCount, Math.round(baseLiveMobCap(kind) * playerScale * activeDifficulty().mobBatchScale) + bossPressureCap);
+  }
+
+  function activeSurvivalCampCount() {
+    const camps = new Set();
+    for (const mob of hostileCombatMobs()) {
+      if (mob && mob.survivalCampId) {
+        camps.add(mob.survivalCampId);
+      }
+    }
+    return camps.size;
+  }
+
+  function survivalCampCap(anchors) {
+    const playerCount = Math.max(1, Math.min(crazyGamesRoomMaxPlayers, Array.isArray(anchors) && anchors.length ? anchors.length : 1));
+    return Math.max(1, Math.round((survivalCampBaseCap + Math.max(0, playerCount - 1)) * activeDifficulty().mobBatchScale));
+  }
+
+  function nearestSurvivalCampDistance(x, y) {
+    let nearest = Infinity;
+    const seen = new Set();
+    for (const mob of hostileCombatMobs()) {
+      if (!mob || !mob.survivalCampId || seen.has(mob.survivalCampId)) {
+        continue;
+      }
+      seen.add(mob.survivalCampId);
+      const distance = Math.hypot(x - finiteOr(mob.survivalCampX, mob.x), y - finiteOr(mob.survivalCampY, mob.y));
+      if (distance < nearest) {
+        nearest = distance;
+      }
+    }
+    return nearest;
+  }
+
+  function chooseSurvivalCampSpawnPoint(kind, anchors) {
+    const sourceAnchors = Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors();
+    const source = leastPopulatedMobSpawnAnchor(sourceAnchors);
+    let best = null;
+    let bestValid = null;
+    const tierIndex = Math.max(0, mobTierOrder.indexOf(kind));
+    const baseAngle = tierIndex * 2.399963229728653 + randomRange(-0.4, 0.4);
+
+    for (let attempt = 0; attempt < 56; attempt += 1) {
+      const angle = attempt < 10
+        ? baseAngle + attempt * (Math.PI * 2 / 10) + randomRange(-0.22, 0.22)
+        : randomRange(0, Math.PI * 2);
+      const distance = randomRange(survivalCampMinPlayerDistance, survivalCampMaxPlayerDistance);
+      const drift = rotatePoint(randomRange(-520, 520), randomRange(-520, 520), angle + Math.PI / 2);
+      const x = source.x + Math.cos(angle) * distance + drift.x;
+      const y = source.y + Math.sin(angle) * distance + drift.y;
+      const nearestPlayer = nearestPartyAnchorDistance(x, y, sourceAnchors);
+      const nearestCamp = nearestSurvivalCampDistance(x, y);
+      const campSpacing = Number.isFinite(nearestCamp) ? Math.min(nearestCamp, survivalCampPreferredSeparation * 2.2) : survivalCampPreferredSeparation * 1.8;
+      const tooCloseToPlayer = Math.max(0, survivalCampMinPlayerDistance - nearestPlayer);
+      const tooFarFromPlayer = Math.max(0, nearestPlayer - survivalCampMaxPlayerDistance);
+      const tooCloseToCamp = Math.max(0, survivalCampPreferredSeparation - campSpacing);
+      const score = campSpacing * 0.82 + nearestPlayer * 0.16 - tooCloseToPlayer * 8 - tooFarFromPlayer * 1.8 - tooCloseToCamp * 6;
+      if (!best || score > best.score) {
+        best = { x, y, score };
+      }
+      if (
+        nearestPlayer >= survivalCampMinPlayerDistance &&
+        nearestPlayer <= survivalCampMaxPlayerDistance &&
+        campSpacing >= survivalCampPreferredSeparation &&
+        (!bestValid || score > bestValid.score)
+      ) {
+        bestValid = { x, y, score };
+      }
+    }
+
+    return bestValid || best || {
+      x: source.x + survivalCampMinPlayerDistance,
+      y: source.y
+    };
+  }
+
+  function survivalCampEligibleKinds(primaryKind) {
+    const readyKinds = unlockedMobKinds().filter(isMobBeaconReady);
+    if (!readyKinds.includes(primaryKind)) {
+      readyKinds.push(primaryKind);
+    }
+    return readyKinds.filter((kind) => isMobTierUnlocked(kind) && isMobBeaconReady(kind));
+  }
+
+  function chooseSurvivalCampMobKind(primaryKind, eligibleKinds) {
+    if (!eligibleKinds.length || Math.random() < 0.68) {
+      return primaryKind;
+    }
+    const primaryIndex = Math.max(0, mobTierOrder.indexOf(primaryKind));
+    const weighted = [];
+    for (const kind of eligibleKinds) {
+      const distance = Math.abs(Math.max(0, mobTierOrder.indexOf(kind)) - primaryIndex);
+      const copies = Math.max(1, 4 - distance);
+      for (let i = 0; i < copies; i += 1) {
+        weighted.push(kind);
+      }
+    }
+    return weighted[Math.floor(Math.random() * weighted.length)] || primaryKind;
+  }
+
+  function compressMobSpawnSlots(slots) {
+    const remainingByKind = {};
+    const order = [];
+    for (const kind of slots) {
+      if (!remainingByKind[kind]) {
+        remainingByKind[kind] = 0;
+        order.push(kind);
+      }
+      remainingByKind[kind] += 1;
+    }
+
+    const entries = [];
+    for (const kind of order) {
+      let remaining = remainingByKind[kind];
+      while (remaining >= mobEliteCompressionSize) {
+        const groupSize = Math.min(remaining, mobEliteCompressionSize * mobEliteMaxStars);
+        const stars = clamp(Math.floor(groupSize / mobEliteCompressionSize), 1, mobEliteMaxStars);
+        const represented = stars * mobEliteCompressionSize;
+        entries.push({ kind, eliteStars: stars, eliteGroupSize: represented });
+        remaining -= represented;
+      }
+      for (let i = 0; i < remaining; i += 1) {
+        entries.push({ kind, eliteStars: 0, eliteGroupSize: 1 });
+      }
+    }
+    return entries;
+  }
+
+  function survivalCampBodyMass(index, primaryKind) {
+    const tierIndex = Math.max(0, mobTierOrder.indexOf(primaryKind));
+    if (index === 0) {
+      return tierIndex >= 5 ? randomRange(750, 1650) : tierIndex >= 2 ? randomRange(survivalCampRadarBodyMinMass, 620) : randomRange(survivalCampRadarBodyMinMass, 220);
+    }
+    const roll = Math.random();
+    if (roll < 0.28) {
+      return randomRange(10, 48);
+    }
+    if (roll < 0.72) {
+      return randomRange(50, 148);
+    }
+    if (tierIndex >= 3 && roll < 0.92) {
+      return randomRange(150, 520);
+    }
+    return randomRange(1, 8);
+  }
+
+  function spawnSurvivalCampBodies(campId, campX, campY, primaryKind) {
+    const bodyCount = Math.floor(randomRange(survivalCampBodyMin, survivalCampBodyMax + 1));
+    const bodyIds = [];
+    for (let i = 0; i < bodyCount; i += 1) {
+      const angle = randomRange(0, Math.PI * 2) + i * 2.399963229728653;
+      const distance = i === 0 ? randomRange(0, 120) : randomRange(260, survivalCampIdleRadius * 1.05);
+      const mass = survivalCampBodyMass(i, primaryKind);
+      const body = createParticle(
+        campX + Math.cos(angle) * distance,
+        campY + Math.sin(angle) * distance,
+        mass,
+        randomParticleColor()
+      );
+      const tangent = angle + Math.PI / 2;
+      const driftSpeed = clamp(Math.sqrt(Math.max(1, mass)) * 2.4, 18, 82);
+      body.vx = Math.cos(tangent) * driftSpeed + randomRange(-12, 12);
+      body.vy = Math.sin(tangent) * driftSpeed + randomRange(-12, 12);
+      body.survivalCampId = campId;
+      body.survivalCampX = campX;
+      body.survivalCampY = campY;
+      body.survivalCampHomeX = body.x;
+      body.survivalCampHomeY = body.y;
+      body.survivalCampBody = true;
+      if (bodyIds.length && body.tier && body.tier.name !== "star") {
+        body.orbitHostId = bodyIds[0];
+        body.orbitDirection = Math.random() < 0.5 ? -1 : 1;
+        body.orbitStrength = 0.35;
+      }
+      particles.push(body);
+      bodyIds.push(body.id);
+    }
+    return bodyIds;
+  }
+
+  function spawnSurvivalMobCamp(primaryKind, anchors) {
+    const sourceAnchors = (Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors()).slice(0, crazyGamesRoomMaxPlayers);
+    const eligibleKinds = survivalCampEligibleKinds(primaryKind);
+    if (!eligibleKinds.length || activeSurvivalCampCount() >= survivalCampCap(sourceAnchors)) {
+      return false;
+    }
+
+    const center = chooseSurvivalCampSpawnPoint(primaryKind, sourceAnchors);
+    const campId = "survival-camp-" + nextSurvivalCampId++;
+    spawnSurvivalCampBodies(campId, center.x, center.y, primaryKind);
+    const playerCount = Math.max(1, sourceAnchors.length);
+    const mobCount = Math.floor(randomRange(survivalCampMobsMin, survivalCampMobsMax + 1)) + Math.max(0, playerCount - 1);
+    const slots = [];
+
+    for (let i = 0; i < mobCount; i += 1) {
+      slots.push(chooseSurvivalCampMobKind(primaryKind, eligibleKinds));
+    }
+
+    const entries = compressMobSpawnSlots(slots);
+    for (let i = 0; i < entries.length; i += 1) {
+      const entry = entries[i];
+      const kind = entry.kind;
+      const angle = randomRange(0, Math.PI * 2) + i * 2.399963229728653;
+      const radius = randomRange(180, survivalCampIdleRadius);
+      const x = center.x + Math.cos(angle) * radius + randomRange(-80, 80);
+      const y = center.y + Math.sin(angle) * radius + randomRange(-80, 80);
+      const mob = createMobByKind(kind, x, y, {
+        survivalCampId: campId,
+        survivalCampX: center.x,
+        survivalCampY: center.y,
+        survivalCampLeashRadius: survivalCampLeashRadius,
+        survivalCampAggroTimer: 0,
+        survivalCampReturning: false,
+        survivalCampSlotAngle: angle,
+        survivalCampSlotRadius: radius,
+        eliteStars: entry.eliteStars,
+        eliteGroupSize: entry.eliteGroupSize
+      });
+      mob.vx += Math.cos(angle + Math.PI / 2) * randomRange(10, 34);
+      mob.vy += Math.sin(angle + Math.PI / 2) * randomRange(10, 34);
+      mobCollectionByKind(kind).push(mob);
+    }
+
+    return true;
+  }
+
+  function updateSurvivalMobSpawns(dt, anchors) {
+    mobWaveTimer = difficultyMobWaveInterval();
+    const sourceAnchors = (Array.isArray(anchors) && anchors.length ? anchors : activeMobSpawnAnchors()).slice(0, crazyGamesRoomMaxPlayers);
+    for (const kind of mobTierOrder) {
+      if (!isMobTierUnlocked(kind) || !isMobBeaconReady(kind)) {
+        mobSpawnTimers[kind] = Math.min(finiteOr(mobSpawnTimers[kind], difficultyMobSpawnInterval(kind)), difficultyMobSpawnInterval(kind));
+        continue;
+      }
+
+      if (activeSurvivalCampCount() >= survivalCampCap(sourceAnchors)) {
+        mobSpawnTimers[kind] = Math.min(finiteOr(mobSpawnTimers[kind], difficultyMobSpawnInterval(kind)), difficultyMobSpawnInterval(kind));
+        continue;
+      }
+
+      mobSpawnTimers[kind] = finiteOr(mobSpawnTimers[kind], difficultyMobSpawnInterval(kind)) - dt;
+      while (mobSpawnTimers[kind] <= 0) {
+        spawnSurvivalMobCamp(kind, sourceAnchors);
+        mobSpawnTimers[kind] += mobSpawnIntervalWithBossPressure(kind);
+        if (activeSurvivalCampCount() >= survivalCampCap(sourceAnchors)) {
+          break;
+        }
+      }
+    }
   }
 
   function chooseMobWaveClumpCenter(anchor, anchors) {
@@ -20896,10 +25900,16 @@
         continue;
       }
       const center = chooseMobWaveClumpCenter(sourceAnchors[anchorIndex], sourceAnchors);
-      for (let i = 0; i < kinds.length; i += 1) {
-        const offset = clumpOffset(i, kinds.length);
-        spawnMobByKindAt(kinds[i], center.x + offset.x, center.y + offset.y);
-        spawnedKinds.add(kinds[i]);
+      const entries = compressMobSpawnSlots(kinds);
+      for (let i = 0; i < entries.length; i += 1) {
+        const entry = entries[i];
+        const offset = clumpOffset(i, entries.length);
+        const mob = createMobByKind(entry.kind, center.x + offset.x, center.y + offset.y, {
+          eliteStars: entry.eliteStars,
+          eliteGroupSize: entry.eliteGroupSize
+        });
+        mobCollectionByKind(entry.kind).push(mob);
+        spawnedKinds.add(entry.kind);
       }
     }
 
@@ -20943,21 +25953,11 @@
 
   function updateMobSpawns(dt) {
     const anchors = activeMobSpawnAnchors();
-    updateMobBossWarnings(dt, anchors);
-    if (updateMobSpawnRest(dt, anchors)) {
+    if (!isHordeModeActive()) {
+      updateSurvivalAllowanceMobSpawns(dt, anchors);
       return;
     }
-
-    mobWaveTimer -= dt;
-    while (mobWaveTimer <= 0) {
-      const slots = buildMobWaveSlots(rollMobWaveSize(anchors), anchors);
-      const spawnedKinds = spawnMobWave(slots, anchors);
-      for (const kind of spawnedKinds) {
-        maybeScheduleMobBoss(kind);
-      }
-      mobWaveCount += 1;
-      mobWaveTimer += mobWaveIntervalWithBossPressure();
-    }
+    updateHordeMobSpawns(dt, anchors);
   }
 
   function seedStarDust() {
@@ -20974,6 +25974,551 @@
 
   function cameraLocalToWorld(x, y) {
     return rotatePoint(x, y, -cameraRoll);
+  }
+
+  function updateHordeMobSpawns(dt, anchors) {
+    updateMobBeacons(dt, anchors);
+    updateMobBossWarnings(dt, anchors);
+    if (updateMobSpawnRest(dt, anchors)) {
+      return;
+    }
+
+    mobWaveTimer -= dt;
+    while (mobWaveTimer <= 0) {
+      const slots = buildMobWaveSlots(rollMobWaveSize(anchors), anchors);
+      if (slots.length) {
+        const spawnedKinds = spawnMobWave(slots, anchors);
+        for (const kind of spawnedKinds) {
+          maybeScheduleMobBoss(kind);
+        }
+        mobWaveCount += 1;
+      }
+      mobWaveTimer += mobWaveIntervalWithBossPressure();
+    }
+  }
+
+  const survivalAllowanceMobCosts = {
+    alienoid: 50,
+    ufo: 150,
+    rambot: 240,
+    engineer: 300,
+    tesla: 360,
+    satellite: 480,
+    rocket: 520,
+    fighter: 700
+  };
+
+  function survivalMobAllowanceCost(kind, options) {
+    const baseCost = survivalAllowanceMobCosts[kind] || survivalAllowanceMobCosts.alienoid;
+    const settings = options && typeof options === "object" ? options : {};
+    if (settings.isBoss) {
+      return Math.round(baseCost * (12 + Math.max(0, Math.floor(finiteOr(settings.bossStars, 0))) * 4));
+    }
+    const stars = mobEliteStarRankValue(settings.eliteStars);
+    if (stars > 0) {
+      return Math.round(baseCost * stars * mobEliteCompressionSize * 1.15);
+    }
+    return baseCost;
+  }
+
+  function survivalAllowanceCandidateList(budget, options) {
+    const settings = options && typeof options === "object" ? options : {};
+    const allowBosses = settings.allowBosses !== false;
+    const candidates = [];
+    for (const kind of mobTierOrder) {
+      const baseCost = survivalMobAllowanceCost(kind);
+      if (baseCost <= budget) {
+        candidates.push({ kind, cost: baseCost, eliteStars: 0, eliteGroupSize: 1, isBoss: false, weight: 1 / Math.pow(baseCost, 1.15) });
+      }
+      for (let stars = 1; stars <= mobEliteMaxStars; stars += 1) {
+        const cost = survivalMobAllowanceCost(kind, { eliteStars: stars });
+        if (cost <= budget) {
+          candidates.push({
+            kind,
+            cost,
+            eliteStars: stars,
+            eliteGroupSize: stars * mobEliteCompressionSize,
+            isBoss: false,
+            weight: 0.55 / Math.pow(cost, 1.1)
+          });
+        }
+      }
+      if (allowBosses) {
+        for (let bossStars = 0; bossStars <= 2; bossStars += 1) {
+          const cost = survivalMobAllowanceCost(kind, { isBoss: true, bossStars });
+          if (cost <= budget) {
+            candidates.push({
+              kind,
+              cost,
+              eliteStars: 0,
+              eliteGroupSize: 1,
+              isBoss: true,
+              bossStars,
+              weight: 0.18 / Math.pow(cost, 1.04)
+            });
+          }
+        }
+      }
+    }
+    return candidates;
+  }
+
+  function chooseWeightedSurvivalCandidate(candidates) {
+    const totalWeight = candidates.reduce((sum, candidate) => sum + Math.max(0, finiteOr(candidate.weight, 0)), 0);
+    if (totalWeight <= 0) {
+      return candidates[0] || null;
+    }
+    let roll = randomRange(0, totalWeight);
+    for (const candidate of candidates) {
+      roll -= Math.max(0, finiteOr(candidate.weight, 0));
+      if (roll <= 0) {
+        return candidate;
+      }
+    }
+    return candidates[candidates.length - 1] || null;
+  }
+
+  function planSurvivalAllowanceMobs(budget, options) {
+    let remaining = Math.max(0, finiteOr(budget, 0));
+    const entries = [];
+    while (remaining >= survivalAllowanceMobCosts.alienoid && entries.length < 18) {
+      const candidates = survivalAllowanceCandidateList(remaining, options);
+      if (!candidates.length) {
+        break;
+      }
+      const choice = chooseWeightedSurvivalCandidate(candidates);
+      if (!choice || choice.cost > remaining) {
+        break;
+      }
+      entries.push({
+        kind: choice.kind,
+        cost: choice.cost,
+        eliteStars: choice.eliteStars || 0,
+        eliteGroupSize: choice.eliteGroupSize || 1,
+        isBoss: Boolean(choice.isBoss),
+        bossStars: Math.max(0, Math.floor(finiteOr(choice.bossStars, 0)))
+      });
+      remaining -= choice.cost;
+    }
+    return entries;
+  }
+
+  function activeSurvivalSpawnPlayers() {
+    const players = [];
+    const seen = new Set();
+    function add(source) {
+      if (!source || !Number.isFinite(Number(source.x)) || !Number.isFinite(Number(source.y))) {
+        return;
+      }
+      const playerId = String(source.playerId || source.id || "");
+      if (playerId && seen.has(playerId)) {
+        return;
+      }
+      if (playerId) {
+        seen.add(playerId);
+      }
+      players.push({
+        id: playerId,
+        playerId,
+        x: source.x,
+        y: source.y,
+        vx: finiteOr(source.vx, 0),
+        vy: finiteOr(source.vy, 0),
+        radius: Math.max(1, finiteOr(source.radius, player.radius)),
+        score: Math.max(1, Math.round(finiteOr(source.score, 1)))
+      });
+    }
+
+    if (!deathState.active && player.health > 0) {
+      add({
+        id: player.id,
+        x: player.x,
+        y: player.y,
+        vx: player.vx,
+        vy: player.vy,
+        radius: player.radius,
+        score: Math.max(finiteOr(player.score, 1), finiteOr(lifeStats.currentScore, 1))
+      });
+    }
+
+    if (isPartyHost() && multiplayer.partyPlayerSnapshots.size) {
+      const now = performance.now();
+      for (const [playerId, entry] of multiplayer.partyPlayerSnapshots) {
+        if (!entry || now - finiteOr(entry.receivedAt, 0) > 2200) {
+          continue;
+        }
+        const source = entry.snapshot && typeof entry.snapshot === "object" ? entry.snapshot : {};
+        const remotePlayer = predictPartyRemotePlayer(normalizeRemotePlayerSnapshot(source.player || source), entry.receivedAt);
+        if (!remotePlayer || remotePlayer.health <= 0) {
+          continue;
+        }
+        add({ ...remotePlayer, id: playerId, playerId, score: finiteOr(remotePlayer.score, source.score || 1) });
+      }
+    }
+
+    return players.slice(0, crazyGamesRoomMaxPlayers);
+  }
+
+  function survivalTotalOnlineScore(players) {
+    return Math.max(1, Math.round((players || []).reduce((sum, entry) => sum + Math.max(1, finiteOr(entry.score, 1)), 0)));
+  }
+
+  function activeSurvivalEncounterCounts() {
+    const seen = new Set();
+    const counts = { starter: 0, standard: 0, dangerous: 0, boss: 0, total: 0 };
+    for (const mob of hostileCombatMobs()) {
+      if (!mob || mob.health <= 0 || isPlayerTeamMob(mob)) {
+        continue;
+      }
+      const encounterId = mob.survivalEncounterId || mob.survivalCampId || "";
+      if (!encounterId || seen.has(encounterId) || mob.survivalEncounterType === "hit-squad") {
+        continue;
+      }
+      seen.add(encounterId);
+      const band = mob.survivalCampBand || "starter";
+      counts[band] = Math.max(0, counts[band] || 0) + 1;
+      counts.total += 1;
+    }
+    return counts;
+  }
+
+  function activeSurvivalHitSquadForPlayer(playerId) {
+    const cleanId = String(playerId || "");
+    if (!cleanId) {
+      return false;
+    }
+    return hostileCombatMobs().some((mob) => (
+      mob &&
+      mob.health > 0 &&
+      mob.survivalEncounterType === "hit-squad" &&
+      String(mob.survivalTargetPlayerId || "") === cleanId
+    ));
+  }
+
+  function cleanupSurvivalHitSquads(players) {
+    const activeTargetIds = new Set((players || []).map((entry) => String(entry && (entry.playerId || entry.id) || "")).filter(Boolean));
+    for (const collection of [rivals, ufos, rambots, engineers, teslas, rockets, fighters]) {
+      for (let i = collection.length - 1; i >= 0; i -= 1) {
+        const mob = collection[i];
+        if (mob && mob.survivalEncounterType === "hit-squad" && !activeTargetIds.has(String(mob.survivalTargetPlayerId || ""))) {
+          collection.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  function survivalCampBands(totalScore, playerCount) {
+    return [
+      { id: "starter", target: 6 + Math.max(1, playerCount), minBudget: 50, maxBudget: Math.min(250, Math.max(50, totalScore)), allowBosses: false },
+      { id: "standard", target: totalScore >= 150 ? 3 : 0, minBudget: totalScore * 0.75, maxBudget: totalScore * 1.1, allowBosses: totalScore >= 600 },
+      { id: "dangerous", target: totalScore >= 400 ? 2 : 0, minBudget: totalScore * 1.2, maxBudget: totalScore * 2, allowBosses: totalScore >= 900 },
+      { id: "boss", target: totalScore >= 1200 ? 1 : 0, minBudget: totalScore * 2, maxBudget: totalScore * 3.5, allowBosses: true }
+    ];
+  }
+
+  function chooseSurvivalCampBand(players) {
+    const totalScore = survivalTotalOnlineScore(players);
+    const counts = activeSurvivalEncounterCounts();
+    for (const band of survivalCampBands(totalScore, players.length || 1)) {
+      if (band.target > 0 && (counts[band.id] || 0) < band.target) {
+        const budget = clamp(randomRange(band.minBudget, band.maxBudget), 50, Math.max(50, band.maxBudget));
+        return { ...band, budget: Math.max(50, Math.round(budget)), totalScore };
+      }
+    }
+    return null;
+  }
+
+  function nearestSurvivalAllowanceCampDistance(x, y) {
+    let nearest = Infinity;
+    const seen = new Set();
+    for (const mob of hostileCombatMobs()) {
+      const encounterId = mob && (mob.survivalEncounterId || mob.survivalCampId);
+      if (!mob || !encounterId || seen.has(encounterId) || mob.survivalEncounterType === "hit-squad") {
+        continue;
+      }
+      seen.add(encounterId);
+      const distance = Math.hypot(x - finiteOr(mob.survivalCampX, mob.x), y - finiteOr(mob.survivalCampY, mob.y));
+      if (distance < nearest) {
+        nearest = distance;
+      }
+    }
+    return nearest;
+  }
+
+  function survivalFullZoomOutRadius() {
+    return Math.hypot(width || 1280, height || 720) / (2 * Math.max(0.001, finiteOr(cameraZoomMin, 0.08)));
+  }
+
+  function chooseSurvivalAllowanceSpawnPoint(players, options) {
+    const sourcePlayers = Array.isArray(players) && players.length ? players : activeSurvivalSpawnPlayers();
+    const source = leastPopulatedMobSpawnAnchor(sourcePlayers);
+    const settings = options && typeof options === "object" ? options : {};
+    const minDistance = Math.max(
+      finiteOr(settings.minDistance, survivalCampSpawnMinDistance),
+      survivalFullZoomOutRadius() + finiteOr(settings.zoomPadding, survivalCampSpawnDistancePadding)
+    );
+    const spread = Math.max(1, finiteOr(settings.spread, survivalCampSpawnDistanceSpread));
+    const preferredSeparation = Math.max(0, finiteOr(settings.preferredSeparation, survivalCampAllowancePreferredSeparation));
+    let best = null;
+    let bestValid = null;
+
+    for (let attempt = 0; attempt < 72; attempt += 1) {
+      const angle = randomRange(0, Math.PI * 2);
+      const distance = randomRange(minDistance, minDistance + spread);
+      const side = angle + Math.PI / 2;
+      const x = source.x + Math.cos(angle) * distance + Math.cos(side) * randomRange(-720, 720);
+      const y = source.y + Math.sin(angle) * distance + Math.sin(side) * randomRange(-720, 720);
+      const nearestPlayer = nearestPartyAnchorDistance(x, y, sourcePlayers);
+      const nearestCamp = nearestSurvivalAllowanceCampDistance(x, y);
+      const spacing = Number.isFinite(nearestCamp) ? Math.min(nearestCamp, preferredSeparation * 2.4) : preferredSeparation * 1.8;
+      const tooCloseToPlayer = Math.max(0, minDistance - nearestPlayer);
+      const tooCloseToCamp = Math.max(0, preferredSeparation - spacing);
+      const score = nearestPlayer * 0.24 + spacing * 0.82 - tooCloseToPlayer * 9 - tooCloseToCamp * 6;
+      if (!best || score > best.score) {
+        best = { x, y, score };
+      }
+      if (nearestPlayer >= minDistance && spacing >= preferredSeparation && (!bestValid || score > bestValid.score)) {
+        bestValid = { x, y, score };
+      }
+    }
+
+    return bestValid || best || { x: source.x + minDistance, y: source.y };
+  }
+
+  function survivalCampBodyMasses(budget) {
+    const bodyBudget = clamp(finiteOr(budget, 50) * 0.45, 25, 2000);
+    const bodyCount = clamp(Math.floor(2 + Math.log2(Math.max(1, finiteOr(budget, 50)) / 150)), 2, 6);
+    const masses = [];
+    let remaining = bodyBudget;
+    for (let i = 0; i < bodyCount; i += 1) {
+      const slotsLeft = bodyCount - i;
+      const average = remaining / Math.max(1, slotsLeft);
+      const mass = i === bodyCount - 1 ? remaining : clamp(randomRange(average * 0.55, average * 1.55), 1, remaining - (slotsLeft - 1));
+      masses.push(Math.max(1, mass));
+      remaining = Math.max(0, remaining - mass);
+    }
+    if (!masses.some((mass) => mass >= survivalCampRadarBodyMinMass)) {
+      masses[0] = survivalCampRadarBodyMinMass;
+    }
+    return masses;
+  }
+
+  function spawnSurvivalAllowanceCampBodies(campId, campX, campY, budget) {
+    const masses = survivalCampBodyMasses(budget);
+    const bodyIds = [];
+    for (let i = 0; i < masses.length; i += 1) {
+      const angle = randomRange(0, Math.PI * 2) + i * 2.399963229728653;
+      const distance = i === 0 ? randomRange(0, 140) : randomRange(260, survivalCampIdleRadius * 1.16);
+      const body = createParticle(campX + Math.cos(angle) * distance, campY + Math.sin(angle) * distance, masses[i], randomParticleColor());
+      const tangent = angle + Math.PI / 2;
+      const driftSpeed = clamp(Math.sqrt(Math.max(1, masses[i])) * 2.4, 18, 82);
+      body.vx = Math.cos(tangent) * driftSpeed + randomRange(-12, 12);
+      body.vy = Math.sin(tangent) * driftSpeed + randomRange(-12, 12);
+      body.survivalCampId = campId;
+      body.survivalCampX = campX;
+      body.survivalCampY = campY;
+      body.survivalCampHomeX = body.x;
+      body.survivalCampHomeY = body.y;
+      body.survivalCampBody = true;
+      if (bodyIds.length && body.tier && body.tier.name !== "star") {
+        body.orbitHostId = bodyIds[0];
+        body.orbitDirection = Math.random() < 0.5 ? -1 : 1;
+        body.orbitStrength = 0.35;
+      }
+      particles.push(body);
+      bodyIds.push(body.id);
+    }
+  }
+
+  function spawnSurvivalAllowanceMob(entry, x, y, overrides) {
+    const settings = {
+      ...(overrides && typeof overrides === "object" ? overrides : {}),
+      isBoss: Boolean(entry.isBoss),
+      bossBaseKind: entry.isBoss ? entry.kind : "",
+      bossStars: Math.max(0, Math.floor(finiteOr(entry.bossStars, 0))),
+      eliteStars: entry.isBoss ? 0 : entry.eliteStars,
+      eliteGroupSize: entry.isBoss ? 1 : entry.eliteGroupSize
+    };
+    const mob = createMobByKind(entry.kind, x, y, settings);
+    mobCollectionByKind(entry.kind).push(mob);
+    return mob;
+  }
+
+  function spawnSurvivalAllowanceCamp(band, players) {
+    const entries = planSurvivalAllowanceMobs(band.budget, { allowBosses: band.allowBosses });
+    if (!entries.length) {
+      return false;
+    }
+    const center = chooseSurvivalAllowanceSpawnPoint(players, {
+      minDistance: survivalCampSpawnMinDistance,
+      zoomPadding: survivalCampSpawnDistancePadding,
+      spread: survivalCampSpawnDistanceSpread,
+      preferredSeparation: survivalCampAllowancePreferredSeparation
+    });
+    const campId = "survival-camp-" + nextSurvivalCampId++;
+    spawnSurvivalAllowanceCampBodies(campId, center.x, center.y, band.budget);
+
+    for (let i = 0; i < entries.length; i += 1) {
+      const entry = entries[i];
+      const angle = randomRange(0, Math.PI * 2) + i * 2.399963229728653;
+      const radius = randomRange(180, survivalCampIdleRadius);
+      const mob = spawnSurvivalAllowanceMob(
+        entry,
+        center.x + Math.cos(angle) * radius + randomRange(-80, 80),
+        center.y + Math.sin(angle) * radius + randomRange(-80, 80),
+        {
+          survivalCampId: campId,
+          survivalCampX: center.x,
+          survivalCampY: center.y,
+          survivalCampLeashRadius: survivalCampLeashRadius,
+          survivalCampAggroTimer: 0,
+          survivalCampReturning: false,
+          survivalCampSlotAngle: angle,
+          survivalCampSlotRadius: radius,
+          survivalEncounterType: "camp",
+          survivalEncounterId: campId,
+          survivalCampBudget: band.budget,
+          survivalCampBand: band.id
+        }
+      );
+      mob.vx += Math.cos(angle + Math.PI / 2) * randomRange(10, 34);
+      mob.vy += Math.sin(angle + Math.PI / 2) * randomRange(10, 34);
+    }
+    return true;
+  }
+
+  function updateSurvivalAllowanceCamps(nowSeconds, players) {
+    if (nowSeconds < finiteOr(survivalSpawnState.nextCampCheckTick, survivalSpawnState.nextCampCheckAt || 0)) {
+      return;
+    }
+    survivalSpawnState.nextCampCheckTick = nowSeconds + survivalCampCheckInterval;
+    const band = chooseSurvivalCampBand(players);
+    if (band) {
+      spawnSurvivalAllowanceCamp(band, players);
+    }
+  }
+
+  function scheduleNextSurvivalHitSquad(playerId, nowSeconds, first) {
+    const cooldown = first
+      ? survivalHitSquadFirstGrace
+      : randomRange(survivalHitSquadCooldownMin, survivalHitSquadCooldownMax);
+    survivalSpawnState.hitSquadCooldownsByPlayerId[playerId] = nowSeconds + cooldown;
+    if (!survivalSpawnState.hitSquadWarningSentByPlayerId || typeof survivalSpawnState.hitSquadWarningSentByPlayerId !== "object") {
+      survivalSpawnState.hitSquadWarningSentByPlayerId = {};
+    }
+    survivalSpawnState.hitSquadWarningSentByPlayerId[playerId] = false;
+  }
+
+  function maybeWarnSurvivalHitSquad(playerId, remainingSeconds) {
+    if (!survivalSpawnState.hitSquadWarningSentByPlayerId || typeof survivalSpawnState.hitSquadWarningSentByPlayerId !== "object") {
+      survivalSpawnState.hitSquadWarningSentByPlayerId = {};
+    }
+    if (survivalSpawnState.hitSquadWarningSentByPlayerId[playerId] || remainingSeconds <= 0 || remainingSeconds > survivalHitSquadWarningLead) {
+      return;
+    }
+    survivalSpawnState.hitSquadWarningSentByPlayerId[playerId] = true;
+    if (typeof updateGroupedNotificationText === "function") {
+      updateGroupedNotificationText("survival-hit-squad-warning:" + playerId, "Hostiles inbound in " + Math.ceil(remainingSeconds) + "s.", { lifetime: 2400 });
+    } else if (typeof maybeNotifyText === "function") {
+      maybeNotifyText("Hostiles inbound in " + Math.ceil(remainingSeconds) + "s.", { groupKey: "survival-hit-squad-warning:" + playerId, lifetime: 2400 });
+    }
+  }
+
+  function survivalHitSquadElapsedRamp(elapsedSeconds) {
+    const rampSpan = Math.max(1, survivalHitSquadBudgetFullRampTime - survivalHitSquadFirstGrace);
+    const progress = clamp((Math.max(0, finiteOr(elapsedSeconds, 0)) - survivalHitSquadFirstGrace) / rampSpan, 0, 1);
+    return survivalHitSquadBudgetRampFloor + (1 - survivalHitSquadBudgetRampFloor) * progress;
+  }
+
+  function survivalHitSquadBudgetForScore(score, elapsedSeconds) {
+    const cleanScore = Math.max(1, finiteOr(score, 1));
+    const curvedBudget = survivalHitSquadBudgetBase + Math.pow(cleanScore, survivalHitSquadBudgetScoreExponent) * survivalHitSquadBudgetScoreScale;
+    const maxBudget = Math.max(survivalHitSquadBudgetBase, cleanScore * survivalHitSquadBudgetMaxScoreScale);
+    return clamp(curvedBudget * survivalHitSquadElapsedRamp(elapsedSeconds), survivalHitSquadBudgetBase, maxBudget);
+  }
+
+  function survivalHitSquadAllowBosses(score, elapsedSeconds) {
+    return finiteOr(score, 0) >= survivalHitSquadBossScore && finiteOr(elapsedSeconds, 0) >= survivalHitSquadBossGrace;
+  }
+
+  function spawnSurvivalHitSquad(target) {
+    const targetId = String(target && (target.playerId || target.id) || "");
+    if (!targetId) {
+      return false;
+    }
+    const elapsedSeconds = Math.max(0, (performance.now() - lifeStats.startedAt) / 1000);
+    const score = Math.max(1, finiteOr(target.score, 1));
+    const budget = clamp(
+      survivalHitSquadBudgetForScore(score, elapsedSeconds) * randomRange(0.85, 1.15),
+      survivalHitSquadBudgetBase,
+      Math.max(survivalHitSquadBudgetBase, score * survivalHitSquadBudgetMaxScoreScale)
+    );
+    const entries = planSurvivalAllowanceMobs(budget, { allowBosses: survivalHitSquadAllowBosses(score, elapsedSeconds) });
+    if (!entries.length) {
+      return false;
+    }
+    const center = chooseSurvivalAllowanceSpawnPoint([target], {
+      minDistance: survivalHitSquadSpawnMinDistance,
+      zoomPadding: survivalHitSquadSpawnDistancePadding,
+      spread: survivalHitSquadSpawnDistanceSpread,
+      preferredSeparation: 900
+    });
+    const squadId = "survival-hit-squad-" + Math.max(1, Math.floor(finiteOr(survivalSpawnState.nextHitSquadId, 1)));
+    survivalSpawnState.nextHitSquadId += 1;
+    for (let i = 0; i < entries.length; i += 1) {
+      const entry = entries[i];
+      const angle = randomRange(0, Math.PI * 2) + i * 2.399963229728653;
+      const radius = randomRange(70, 260);
+      spawnSurvivalAllowanceMob(
+        entry,
+        center.x + Math.cos(angle) * radius,
+        center.y + Math.sin(angle) * radius,
+        {
+          survivalEncounterType: "hit-squad",
+          survivalEncounterId: squadId,
+          survivalTargetPlayerId: targetId
+        }
+      );
+    }
+    return true;
+  }
+
+  function updateSurvivalHitSquads(nowSeconds, players) {
+    for (const target of players) {
+      const targetId = String(target && (target.playerId || target.id) || "");
+      if (!targetId) {
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(survivalSpawnState.hitSquadCooldownsByPlayerId, targetId)) {
+        scheduleNextSurvivalHitSquad(targetId, nowSeconds, true);
+        continue;
+      }
+      const remainingSeconds = finiteOr(survivalSpawnState.hitSquadCooldownsByPlayerId[targetId], 0) - nowSeconds;
+      if (remainingSeconds > 0) {
+        maybeWarnSurvivalHitSquad(targetId, remainingSeconds);
+        continue;
+      }
+      if (!activeSurvivalHitSquadForPlayer(targetId)) {
+        spawnSurvivalHitSquad(target);
+      }
+      scheduleNextSurvivalHitSquad(targetId, nowSeconds, false);
+    }
+  }
+
+  function updateSurvivalAllowanceMobSpawns(dt, anchors) {
+    void dt;
+    void anchors;
+    mobWaveTimer = difficultyMobWaveInterval();
+    mobBeacons.length = 0;
+    const players = activeSurvivalSpawnPlayers();
+    if (!players.length) {
+      cleanupSurvivalHitSquads([]);
+      return;
+    }
+    const nowSeconds = Math.max(0, (performance.now() - lifeStats.startedAt) / 1000);
+    cleanupSurvivalHitSquads(players);
+    updateSurvivalAllowanceCamps(nowSeconds, players);
+    updateSurvivalHitSquads(nowSeconds, players);
   }
 
   function worldToScreen(x, y) {
@@ -21098,10 +26643,14 @@
   }
 
   function isLandableBody(particle) {
-    return isAsteroidOrLarger(particle);
+    return isAsteroidOrLarger(particle) && !isStarBody(particle);
   }
 
   function bodyPushResponse(target) {
+    if (isStarBody(target)) {
+      return 0.22;
+    }
+
     const mass = Math.max(1, finiteOr(target && target.mass, 1));
     const asteroidThreshold = thresholdForTierName("asteroid");
     if (mass < asteroidThreshold) {
@@ -21194,7 +26743,7 @@
   }
 
   function isStructureHostBody(particle) {
-    return particle && particle.tier.threshold >= structurePlacementTierThreshold;
+    return particle && particle.tier && !isStarBody(particle) && particle.tier.threshold >= structurePlacementTierThreshold;
   }
 
   function structurePlacementThresholdForType(type) {
@@ -21205,11 +26754,11 @@
   }
 
   function isStructureHostBodyForType(particle, type) {
-    return particle && particle.tier.threshold >= structurePlacementThresholdForType(type);
+    return particle && particle.tier && !isStarBody(particle) && particle.tier.threshold >= structurePlacementThresholdForType(type);
   }
 
   function isKnownStructureType(type) {
-    return type === "turret" || type === "missile-launcher" || type === "accumulator" || type === "shield-generator" || type === "plating-block" || type === "battery" || type === "communication-relay" || type === "jet" || type === "tether" || type === "bridge";
+    return type === "turret" || type === "missile-launcher" || type === "accumulator" || type === "shield-generator" || type === "plating-block" || type === "container" || type === "trading-port" || type === "battery" || type === "medbay" || type === "communication-relay" || type === "jet" || type === "tether" || type === "bridge";
   }
 
   function isLinkedStructureType(type) {
@@ -21282,6 +26831,15 @@
     }
     if (structure.type === "battery") {
       return 42;
+    }
+    if (structure.type === "container") {
+      return 48;
+    }
+    if (structure.type === "trading-port") {
+      return 58;
+    }
+    if (structure.type === "medbay") {
+      return 52;
     }
     if (structure.type === "accumulator") {
       return 44;
@@ -21379,6 +26937,15 @@
     }
     if (type === "battery") {
       return surfaceOffset + 15;
+    }
+    if (type === "container") {
+      return surfaceOffset + 19;
+    }
+    if (type === "trading-port") {
+      return surfaceOffset + 24;
+    }
+    if (type === "medbay") {
+      return surfaceOffset + 20;
     }
     if (type === "shield-generator") {
       return surfaceOffset + 20;
@@ -21806,9 +27373,13 @@
   }
 
   function createStructure(recipe, placement, linkedPlacement) {
+    const restCenterDx = linkedPlacement ? linkedPlacement.body.x - placement.body.x : 0;
+    const restCenterDy = linkedPlacement ? linkedPlacement.body.y - placement.body.y : 0;
+    const restCenterAngle = Math.atan2(restCenterDy, restCenterDx);
     const structure = {
       id: nextStructureId++,
       type: recipe.structureType,
+      ownerPlayerId: player.id,
       bodyId: placement.bodyId,
       linkedBodyId: linkedPlacement ? linkedPlacement.bodyId : 0,
       angle: placement.angle,
@@ -21820,8 +27391,10 @@
       x2: linkedPlacement ? linkedPlacement.x : placement.x,
       y2: linkedPlacement ? linkedPlacement.y : placement.y,
       restLength: linkedPlacement ? linkedStructureRestLength(recipe.structureType, placement, linkedPlacement) : 0,
-      restCenterDx: linkedPlacement ? linkedPlacement.body.x - placement.body.x : 0,
-      restCenterDy: linkedPlacement ? linkedPlacement.body.y - placement.body.y : 0,
+      restCenterDx,
+      restCenterDy,
+      bridgeAngleOffset: recipe.structureType === "bridge" && linkedPlacement ? shortestAngleDelta(restCenterAngle, placement.angle) : 0,
+      bridgeLinkedAngleOffset: recipe.structureType === "bridge" && linkedPlacement ? shortestAngleDelta(restCenterAngle, linkedPlacement.angle) : 0,
       aimAngle: placement.angle,
       deploy: 0,
       thrustAmount: 0,
@@ -21829,6 +27402,7 @@
       shootCooldown: randomRange(0.2, 0.8),
       burstTimer: 0,
       burstCooldown: randomRange(0.4, accumulatorBurstInterval),
+      healPulse: 0,
       missileCharge: 0,
       lockTimer: 0,
       beepTimer: 0,
@@ -21839,6 +27413,10 @@
       maxHealth: structureMaxHealth(recipe.structureType),
       disabledTimer: 0,
       flash: 0,
+      tech: normalizeTradeOffer(null),
+      tradeOffers: [],
+      tradeOfferSeq: 1,
+      tradeVessel: null,
       wobble: randomRange(0, Math.PI * 2)
     };
     return structure;
@@ -22328,9 +27906,9 @@
     const placement = currentStructurePlacement();
     if (!placement.valid) {
       maybeNotifyText(recipe.structureType === "tether"
-        ? "Tethers can anchor to boulders, asteroids, or larger bodies."
+        ? "Tethers can anchor to non-star boulders, asteroids, or larger bodies."
         : isLinkedStructureType(recipe.structureType)
-          ? recipe.name + "s need boulder-sized or larger bodies."
+          ? recipe.name + "s need non-star boulder-sized or larger bodies."
           : "Structures need a dwarf moon, moon, planet, or plate surface.");
       return false;
     }
@@ -22855,7 +28433,9 @@
 
     const direction = mouse.left ? 1 : -1;
     const strengthFactor = mouse.left ? currentGadgetSuckFactor() : currentGadgetBlowFactor();
-    applyGadgetThrustToBody(body, getAim().world, direction, dt, strengthFactor, { x: player.x, y: player.y });
+    if (applyGadgetThrustToBody(body, getAim().world, direction, dt, strengthFactor, { x: player.x, y: player.y })) {
+      markSurvivalCampBodyMovedByPlayer(body, player.id || "");
+    }
   }
 
   function applyGadgetThrustToBody(body, aimWorld, direction, dt, strengthFactor = 1, forcePoint) {
@@ -22902,7 +28482,9 @@
       const direction = state.left ? 1 : -1;
       const strengthFactor = state.left ? state.suckFactor : state.blowFactor;
       const forcePoint = state.actor ? { x: state.actor.x, y: state.actor.y } : null;
-      applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor, forcePoint);
+      if (applyGadgetThrustToBody(body, state.aimWorld, direction, dt, strengthFactor, forcePoint)) {
+        markSurvivalCampBodyMovedByPlayer(body, state.playerId || state.actor && state.actor.id || "");
+      }
     }
   }
 
@@ -23069,6 +28651,7 @@
       middle: canUseSuctionControls() && mouse.middle,
       right: canUseSuctionControls() && mouse.right,
       suckFactor: currentGadgetSuckFactor(),
+      rangeFactor: currentGadgetRangeFactor(),
       blowFactor: currentGadgetBlowFactor(),
       toolId: equippedToolId,
       viscious: isVisciousVacuumEquipped()
@@ -23086,6 +28669,7 @@
       middle: enabled && mouse.middle,
       right: enabled && mouse.right,
       suckFactor: currentGadgetSuckFactor(),
+      rangeFactor: currentGadgetRangeFactor(),
       blowFactor: currentGadgetBlowFactor(),
       toolId: equippedToolId,
       viscious: isVisciousVacuumEquipped(),
@@ -23134,7 +28718,7 @@
     if (isSuctionTool(equippedTool) && isPartyGadgetActiveMode(mode)) {
       return multiplayerContinuousEnergyActivationCost(suctionEnergyDrain, dt);
     }
-    if (equippedTool === familiarNetToolId && (mode === "fire" || mode === "release")) {
+    if ((equippedTool === familiarNetToolId || equippedTool === personalTetherToolId) && (mode === "fire" || mode === "release")) {
       return 0;
     }
     if (mode === "fire") {
@@ -23196,6 +28780,15 @@
         return "fire";
       }
       if (releaseStarted) {
+        return "release";
+      }
+      return "idle";
+    }
+    if (equippedToolId === personalTetherToolId) {
+      if (mouse.left && actorCanAffordMultiplayerToolMode(player, equippedToolId, "fire", dt)) {
+        return "fire";
+      }
+      if (mouse.right && actorCanAffordMultiplayerToolMode(player, equippedToolId, "release", dt)) {
         return "release";
       }
       return "idle";
@@ -23308,6 +28901,7 @@
       middle: active && mode === "hold",
       right: active && mode === "push",
       suckFactor: finiteOr(options && options.suckFactor, 1),
+      rangeFactor: finiteOr(options && options.rangeFactor, finiteOr(options && options.suckFactor, 1)),
       blowFactor: finiteOr(options && options.blowFactor, 1),
       toolId: actor.equippedTool || defaultToolId,
       viscious: actor.equippedTool === visciousVacuumToolId,
@@ -23322,6 +28916,7 @@
   function localPartyGadgetState(playerSnapshot) {
     return partyGadgetStateFromActor(actorFromPartyPlayerSnapshot(playerSnapshot), null, performance.now(), {
       suckFactor: currentGadgetSuckFactor(),
+      rangeFactor: currentGadgetRangeFactor(),
       blowFactor: currentGadgetBlowFactor(),
       bucketPadding: 0,
       lead: 0,
@@ -23377,12 +28972,25 @@
     );
   }
 
-  function partyGadgetMiddleGatherRange(forward, side, targetRadius, padding) {
+  function gadgetRangeFactorForState(state) {
+    return Math.max(0.1, finiteOr(state && state.rangeFactor, finiteOr(state && state.suckFactor, 1)));
+  }
+
+  function gadgetForceReachForState(state) {
+    return gadgetForceReach * gadgetRangeFactorForState(state);
+  }
+
+  function gadgetHoldReachForState(state) {
+    return gadgetHoldReach * gadgetRangeFactorForState(state);
+  }
+
+  function partyGadgetMiddleGatherRange(forward, side, targetRadius, padding, state) {
     const radius = Math.max(0, finiteOr(targetRadius, 0));
     const extra = Math.max(0, finiteOr(padding, 0));
+    const holdReach = gadgetHoldReachForState(state);
     return (
       forward > funnelShape.backX - 130 - extra * 0.25 &&
-      forward < gadgetHoldReach + radius + 90 + extra &&
+      forward < holdReach + radius + 90 + extra &&
       side < 188 + radius + extra * 0.45
     );
   }
@@ -23402,12 +29010,14 @@
     const side = length(sideX, sideY);
     const padding = Math.max(0, finiteOr(options && options.padding, 0));
     const coneWidth = 64 + Math.max(0, forward) * 0.42;
+    const forceReach = gadgetForceReachForState(state);
+    const holdReach = gadgetHoldReachForState(state);
     const pullHoldRange = (state.left || state.middle) &&
       forward > -80 - padding * 0.25 &&
-      forward < gadgetForceReach + target.radius + padding &&
+      forward < forceReach + target.radius + padding &&
       side < coneWidth + target.radius + padding * 0.35;
     const middleGatherRange = state.middle &&
-      partyGadgetMiddleGatherRange(forward, side, target.radius, padding);
+      partyGadgetMiddleGatherRange(forward, side, target.radius, padding, state);
     const pushRange = state.right &&
       forward > -28 - padding * 0.2 &&
       forward < 470 + target.radius + padding &&
@@ -23421,7 +29031,7 @@
       bucket,
       score: Math.min(
         Math.abs(forward - funnelShape.captureX) + side * 1.4,
-        middleGatherRange ? Math.abs(forward - gadgetHoldReach) + side * 0.65 : mouthDistance
+        middleGatherRange ? Math.abs(forward - holdReach) + side * 0.65 : mouthDistance
       )
     };
   }
@@ -23447,20 +29057,23 @@
     const sideY = toTargetY - aimWorld.y * forward;
     const side = length(sideX, sideY);
     const coneWidth = 64 + Math.max(0, forward) * 0.42;
-    const inCone = forward > -70 && forward < gadgetForceReach && side < coneWidth;
+    const forceReach = gadgetForceReachForState(state);
+    const holdReach = gadgetHoldReachForState(state);
+    const inCone = forward > -70 && forward < forceReach && side < coneWidth;
     const toMouthX = funnel.x - target.x;
     const toMouthY = funnel.y - target.y;
     const mouthDist = length(toMouthX, toMouthY);
     const pushResponse = bodyPushResponse(target);
+    const targetRadius = finiteOr(target.radius, 1);
     const captureInFunnel = options.captureInFunnel !== false;
     const pullTowardActor = options.pullTowardActor === true;
     const torquePoint = target.tier ? bodySurfacePointForForce(target, actor.x, actor.y) : null;
 
-    const middleGatherRange = middleActive && partyGadgetMiddleGatherRange(forward, side, target.radius, 0);
+    const middleGatherRange = middleActive && partyGadgetMiddleGatherRange(forward, side, target.radius, 0, state);
 
     if (middleActive && (inCone || middleGatherRange)) {
-      const holdX = actor.x + aimWorld.x * gadgetHoldReach;
-      const holdY = actor.y + aimWorld.y * gadgetHoldReach;
+      const holdX = actor.x + aimWorld.x * holdReach;
+      const holdY = actor.y + aimWorld.y * holdReach;
       const toHoldX = holdX - target.x;
       const toHoldY = holdY - target.y;
       const holdDistance = length(toHoldX, toHoldY);
@@ -23483,6 +29096,7 @@
         target.vx += deltaVx;
         target.vy += deltaVy;
       }
+      markSurvivalCampBodyMovedByPlayer(target, state.playerId || actor.id || "");
       markDirectGadgetBodyForceIntent(target, actor);
       target.vx *= Math.pow(0.16 + (1 - response) * 0.42, dt);
       target.vy *= Math.pow(0.16 + (1 - response) * 0.42, dt);
@@ -23521,6 +29135,7 @@
         target.vx += deltaVx;
         target.vy += deltaVy;
       }
+      markSurvivalCampBodyMovedByPlayer(target, state.playerId || actor.id || "");
       markDirectGadgetBodyForceIntent(target, actor);
 
       if (!pullTowardActor && captureInFunnel && mouthDist < funnel.radius + target.radius * 2.2) {
@@ -23541,7 +29156,7 @@
       }
     }
 
-    if (rightActive && forward > -20 && forward < 470 && side < coneWidth * 0.9) {
+    if (rightActive && forward > -20 - targetRadius * 0.15 && forward < 470 + targetRadius && side < coneWidth * 0.9 + targetRadius * 0.32) {
       const blastFalloff = clamp(1 - Math.max(0, forward) / 520, 0.22, 1);
       const sidePush = normalize(sideX, sideY);
       const force = 1450 * finiteOr(state.blowFactor, 1) * blastFalloff * pushResponse;
@@ -23553,6 +29168,7 @@
         target.vx += deltaVx;
         target.vy += deltaVy;
       }
+      markSurvivalCampBodyMovedByPlayer(target, state.playerId || actor.id || "");
       markDirectGadgetBodyForceIntent(target, actor);
     }
 
@@ -23580,7 +29196,7 @@
     const side = length(sideX, sideY);
     const targetRadius = Math.max(0, finiteOr(target.radius, 0));
     const coneWidth = 64 + Math.max(0, forward) * 0.42;
-    const pullRange = forward > -70 && forward < gadgetForceReach + targetRadius && side < coneWidth + targetRadius * 0.28;
+    const pullRange = forward > -70 && forward < gadgetForceReachForState(state) + targetRadius && side < coneWidth + targetRadius * 0.28;
     const pushRange = forward > -20 && forward < 470 + targetRadius && side < coneWidth * 0.95 + targetRadius * 0.28;
     const activeRange = mode === "push" ? pushRange : pullRange;
     if (!activeRange) {
@@ -23710,6 +29326,36 @@
         applyVisciousVacuumToMob(state, mob, dt);
         if (mob.health <= 0) {
           break;
+        }
+      }
+    }
+  }
+
+  function updateMobBeaconGadgetForces(dt) {
+    const aim = getAim();
+    const states = [];
+    const localState = localGadgetStateForFrame(aim, getFunnel(aim));
+    if (localState && localState.active) {
+      states.push(localState);
+    }
+    for (const state of activePartyGadgetStates()) {
+      if (state && state.active) {
+        states.push(state);
+      }
+    }
+    if (!states.length) {
+      return;
+    }
+
+    for (const beacon of mobBeacons) {
+      if (!beacon || beacon.health <= 0) {
+        continue;
+      }
+      for (const state of states) {
+        if (gadgetStateMayReachTarget(state, beacon, 80)) {
+          if (applyActorGadgetForces(beacon, state, dt, { captureInFunnel: false })) {
+            beacon.gadgetForceTimer = 0.18;
+          }
         }
       }
     }
@@ -23864,6 +29510,9 @@
     target.y = actor.y + aimWorld.y * resolvedState.x + normal.y * resolvedState.y;
     target.vx = finiteOr(actor.vx, 0) + aimWorld.x * resolvedState.vx + normal.x * resolvedState.vy;
     target.vy = finiteOr(actor.vy, 0) + aimWorld.y * resolvedState.vx + normal.y * resolvedState.vy;
+    if (insideCup || touchedBucket) {
+      markSurvivalCampBodyMovedByPlayer(target, state.playerId || actor.id || "");
+    }
     return insideCup || touchedBucket;
   }
 
@@ -23977,6 +29626,7 @@
     return partyGadgetStateFromActor(remotePlayer, gadget, receivedAt, {
       bucketPadding: 0,
       suckFactor: finiteOr(gadget && gadget.suckFactor, 1),
+      rangeFactor: finiteOr(gadget && gadget.rangeFactor, finiteOr(gadget && gadget.suckFactor, 1)),
       blowFactor: finiteOr(gadget && gadget.blowFactor, 1),
       lead: gadget && gadget.active ? partyRemoteGadgetPredictionLead : 0,
       maxLead: gadget && gadget.active ? partyRemoteGadgetPredictionMax : 0
@@ -23997,7 +29647,7 @@
       return false;
     }
 
-    const reach = gadgetForceReach + Math.max(0, finiteOr(target.radius, 0)) + Math.max(0, finiteOr(padding, 0)) + 180;
+    const reach = gadgetForceReachForState(state) + Math.max(0, finiteOr(target.radius, 0)) + Math.max(0, finiteOr(padding, 0)) + 180;
     const dx = target.x - state.actor.x;
     const dy = target.y - state.actor.y;
     return dx * dx + dy * dy <= reach * reach;
@@ -24039,7 +29689,15 @@
     let best = null;
     let bestDistance = -Infinity;
     for (const particle of particles) {
-      if (!particle || !particle.tier || particle.tier.name !== "particle" || finiteOr(particle.ufoSapTimer, 0) > 0) {
+      if (
+        !particle ||
+        !particle.tier ||
+        particle.tier.solid ||
+        particle.randomEventId ||
+        particle.survivalCampBody ||
+        finiteOr(particle.ufoSapTimer, 0) > 0 ||
+        isUfoBeamCargo(particle)
+      ) {
         continue;
       }
       const distance = nearestPartyAnchorDistance(particle.x, particle.y, anchors);
@@ -24060,6 +29718,218 @@
     }
   }
 
+  function starParticleColor(star) {
+    const core = { r: 255, g: 210, b: 92 };
+    const ember = { r: 255, g: 116, b: 70 };
+    return mixColor(core, mixColor(star.color, ember, 1, 2), 3, 2);
+  }
+
+  function emitStarParticle(star) {
+    const angle = randomRange(0, Math.PI * 2);
+    const nx = Math.cos(angle);
+    const ny = Math.sin(angle);
+    const tangent = randomRange(-62, 62);
+    const spawnDistance = solidBodyContactRadius(star) + randomRange(58, 108);
+    const mass = Math.random() < 0.78 ? 1 : 2;
+    const particle = createParticle(
+      star.x + nx * spawnDistance,
+      star.y + ny * spawnDistance,
+      mass,
+      starParticleColor(star)
+    );
+    const speed = randomRange(78, 178);
+    particle.vx = finiteOr(star.vx, 0) * 0.35 + nx * speed - ny * tangent;
+    particle.vy = finiteOr(star.vy, 0) * 0.35 + ny * speed + nx * tangent;
+    particle.spawnAge = 0;
+    particle.spawnSizeScale = randomRange(1, 1.18);
+    particles.push(particle);
+  }
+
+  function recycleAmbientParticleForStarEmission(star) {
+    let removeIndex = -1;
+    let removeScore = -Infinity;
+    const protectedRadius = solidBodyContactRadius(star) + 420;
+
+    for (let i = 0; i < particles.length; i += 1) {
+      const particle = particles[i];
+      if (
+        !particle ||
+        particle === star ||
+        !particle.tier ||
+        particle.tier.name !== "particle" ||
+        particle.randomEventId ||
+        isUfoBeamCargo(particle)
+      ) {
+        continue;
+      }
+
+      const distanceFromStar = Math.hypot(finiteOr(particle.x, 0) - finiteOr(star.x, 0), finiteOr(particle.y, 0) - finiteOr(star.y, 0));
+      if (distanceFromStar < protectedRadius) {
+        continue;
+      }
+      const score = distanceFromStar + Math.max(0, finiteOr(particle.mass, 1) - 1) * 70;
+      if (score > removeScore) {
+        removeScore = score;
+        removeIndex = i;
+      }
+    }
+
+    if (removeIndex < 0) {
+      return false;
+    }
+    particles.splice(removeIndex, 1);
+    return true;
+  }
+
+  function updateStarParticleEmission(star, dt, particleBudget) {
+    if (!isStarBody(star)) {
+      return 0;
+    }
+
+    star.starBirthAge = Math.min(
+      starBirthTransitionDuration,
+      Math.max(0, finiteOr(star.starBirthAge, starBirthTransitionDuration)) + dt
+    );
+    star.starEmissionAccumulator = finiteOr(star.starEmissionAccumulator, 0) + starParticleEmissionRate(star) * dt;
+    let emitted = 0;
+    let recycled = 0;
+    const budgetLimit = particleBudget + 36;
+    while (
+      star.starEmissionAccumulator >= 1 &&
+      emitted < starParticleEmissionMaxPerFrame
+    ) {
+      if (particles.length >= budgetLimit) {
+        if (!recycleAmbientParticleForStarEmission(star)) {
+          break;
+        }
+        recycled += 1;
+      }
+      star.starEmissionAccumulator -= 1;
+      emitStarParticle(star);
+      emitted += 1;
+    }
+    return Math.max(0, emitted - recycled);
+  }
+
+  function pushStarStructureDestructionSpark(structure, star) {
+    const points = [
+      { x: finiteOr(structure.x, star.x), y: finiteOr(structure.y, star.y) }
+    ];
+    if (structure.linkedBodyId) {
+      points.push({ x: finiteOr(structure.x2, structure.x), y: finiteOr(structure.y2, structure.y) });
+    }
+
+    for (const point of points) {
+      sparks.push({
+        x: point.x,
+        y: point.y,
+        radius: randomRange(44, 96),
+        color: { r: 255, g: 142, b: 74 },
+        life: randomRange(0.32, 0.62),
+        maxLife: 0.62,
+        vx: randomRange(-80, 80),
+        vy: randomRange(-80, 80)
+      });
+    }
+  }
+
+  function destroyStructuresForStarBody(star) {
+    let destroyed = 0;
+    for (let i = structures.length - 1; i >= 0; i -= 1) {
+      const structure = structures[i];
+      if (structure && (structure.bodyId === star.id || structure.linkedBodyId === star.id)) {
+        pushStarStructureDestructionSpark(structure, star);
+        structures.splice(i, 1);
+        destroyed += 1;
+      }
+    }
+    return destroyed;
+  }
+
+  function emitStarFormationBurst(star, destroyedStructureCount) {
+    const burstCount = clamp(22 + destroyedStructureCount * 4, 22, 48);
+    for (let i = 0; i < burstCount; i += 1) {
+      const angle = (Math.PI * 2 * i) / burstCount + randomRange(-0.12, 0.12);
+      const speed = randomRange(120, 430);
+      sparks.push({
+        x: star.x + Math.cos(angle) * randomRange(star.radius * 0.24, star.radius * 0.88),
+        y: star.y + Math.sin(angle) * randomRange(star.radius * 0.24, star.radius * 0.88),
+        radius: randomRange(star.radius * 0.18, star.radius * 0.58),
+        color: i % 3 === 0 ? { r: 255, g: 244, b: 168 } : { r: 255, g: 122, b: 66 },
+        life: randomRange(0.42, 0.95),
+        maxLife: 0.95,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed
+      });
+    }
+  }
+
+  function ejectActorFromStarBirth(actor, star, footOffset) {
+    if (!actor || !actor.landed) {
+      return;
+    }
+    const angle = Math.atan2(finiteOr(actor.y, star.y) - star.y, finiteOr(actor.x, star.x) - star.x);
+    const nx = Math.cos(angle);
+    const ny = Math.sin(angle);
+    actor.x = star.x + nx * (solidBodyContactRadius(star) + finiteOr(actor.radius, player.radius) + Math.max(24, footOffset * 0.35));
+    actor.y = star.y + ny * (solidBodyContactRadius(star) + finiteOr(actor.radius, player.radius) + Math.max(24, footOffset * 0.35));
+    actor.vx = finiteOr(star.vx, 0) + nx * starContactKnockback;
+    actor.vy = finiteOr(star.vy, 0) + ny * starContactKnockback;
+    actor.landed = null;
+  }
+
+  function stellarGrowthSourceForMerge(a, b, fallback) {
+    if (a && (a.stellarGrowthStarted || normalizedStellarOutcomeName(a.stellarOutcome) || a.tier && a.tier.name === "star")) {
+      return a;
+    }
+    if (b && (b.stellarGrowthStarted || normalizedStellarOutcomeName(b.stellarOutcome) || b.tier && b.tier.name === "star")) {
+      return b;
+    }
+    return fallback || a || b || null;
+  }
+
+  function copyStellarGrowthState(target, source) {
+    target.stellarGrowthStarted = Boolean(source && source.stellarGrowthStarted);
+    target.stellarGrowthRate = Math.max(0, finiteOr(source && source.stellarGrowthRate, 0));
+    target.stellarGrowthLastSampleAt = Math.max(0, finiteOr(source && source.stellarGrowthLastSampleAt, 0));
+    target.stellarOutcome = normalizedStellarOutcomeName(source && source.stellarOutcome);
+  }
+
+  function updateStellarGrowthForMerge(body, previousMass, gainedMass, nowSeconds) {
+    if (!body || finiteOr(body.mass, 0) < thresholdForTierName("star")) {
+      return;
+    }
+
+    const now = Math.max(0, finiteOr(nowSeconds, performance.now() / 1000));
+    if (previousMass < thresholdForTierName("star")) {
+      body.stellarGrowthStarted = true;
+      body.stellarGrowthLastSampleAt = now;
+      if (finiteOr(body.mass, 0) >= stellarEvolutionEndThreshold) {
+        body.stellarGrowthRate = Math.max(finiteOr(body.stellarGrowthRate, 0), Math.max(0, finiteOr(body.mass, 0) - thresholdForTierName("star")));
+      }
+      return;
+    }
+
+    const elapsed = Math.max(1 / 30, now - finiteOr(body.stellarGrowthLastSampleAt, now));
+    const instantRate = Math.max(0, finiteOr(gainedMass, 0)) / elapsed;
+    const previousRate = Math.max(0, finiteOr(body.stellarGrowthRate, 0));
+    const alpha = clamp(elapsed / Math.max(0.001, stellarGrowthAverageWindowSeconds), 0.08, 0.55);
+    body.stellarGrowthRate = previousRate > 0 ? previousRate + (instantRate - previousRate) * alpha : instantRate;
+    body.stellarGrowthStarted = true;
+    body.stellarGrowthLastSampleAt = now;
+  }
+
+  function finalizeStellarOutcomeTier(body) {
+    if (!body) {
+      return;
+    }
+    if (finiteOr(body.mass, 0) >= stellarEvolutionEndThreshold) {
+      body.stellarOutcome = normalizedStellarOutcomeName(body.stellarOutcome) || stellarOutcomeForGrowthRate(body.stellarGrowthRate);
+    }
+    body.tier = tierForMassAndStellarOutcome(body.mass, body.stellarOutcome);
+    body.radius = radiusFromMassForTier(body.mass, body.tier);
+  }
+
   function updateParticles(dt) {
     const aim = getAim();
     const funnel = getFunnel(aim);
@@ -24070,7 +29940,7 @@
     const partyGadgetStates = activePartyGadgetStates();
     const partySpawnAnchors = activePartyPlayerAnchors();
     const activeTargetParticles = activeParticleTargetCount(partySpawnAnchors);
-    const maxParticleBudget = Math.round(activeTargetParticles * 1.28);
+    const maxParticleBudget = activeTargetParticles;
     const playfieldFill = useParticlePlayfieldFill();
     const localFillRadius = playfieldFill ? particlePlayfieldRadius() : particleDensityRadius();
 
@@ -24094,6 +29964,10 @@
       spawnTimer += needsLocalFill ? 0.035 : 0.11 - deficit * 0.07;
     }
 
+    if (isPartySessionActive() || multiplayer.remoteUniverses.size > 0) {
+      applyLocalBodyGravity(dt);
+    }
+
     for (let i = particles.length - 1; i >= 0; i -= 1) {
       const particle = particles[i];
       const isLandedBody = particle.id === landedBodyId;
@@ -24108,6 +29982,9 @@
         particleSpawnTransitionDuration,
         Math.max(0, finiteOr(particle.spawnAge, particleSpawnTransitionDuration)) + dt
       );
+      if (isStarBody(particle)) {
+        ambientParticleCount += updateStarParticleEmission(particle, dt, maxParticleBudget);
+      }
 
       if (
         suctionActive &&
@@ -24128,6 +30005,7 @@
         particle.gadgetStabilized = false;
       }
 
+      applyOrbitCaptureForces(particle, particles, dt);
       if (!particle.gadgetStabilized || !particle.tier.solid) {
         particle.vx += Math.sin(particle.wobble + performance.now() * 0.0007) * 4 * dt;
         particle.vy += Math.cos(particle.wobble * 1.7 + performance.now() * 0.0006) * 4 * dt;
@@ -24143,6 +30021,7 @@
       }
       particle.x += particle.vx * dt;
       particle.y += particle.vy * dt;
+      maybeWakeSurvivalCampFromMovedBody(particle);
       integrateBodyAngularMotion(particle, dt);
       if (
         vacuumBucketActive &&
@@ -24171,6 +30050,86 @@
 
     mergeParticles();
     resolvePlayerBodyCollisions();
+  }
+
+  function canLocalGravityClusterBody(body) {
+    return Boolean(
+      body &&
+      body.tier &&
+      body.tier.threshold <= thresholdForTierName("asteroid") &&
+      !isProtectedStrategicBody(body)
+    );
+  }
+
+  function localGravityBucketKey(x, y, cellSize) {
+    return Math.floor(x / cellSize) + ":" + Math.floor(y / cellSize);
+  }
+
+  function applyLocalBodyGravity(dt) {
+    if (!Array.isArray(particles) || particles.length < 2 || dt <= 0) {
+      return;
+    }
+
+    const cellSize = localBodyGravityRadius;
+    const buckets = new Map();
+    for (const body of particles) {
+      if (!canLocalGravityClusterBody(body)) {
+        continue;
+      }
+      const key = localGravityBucketKey(body.x, body.y, cellSize);
+      if (!buckets.has(key)) {
+        buckets.set(key, []);
+      }
+      buckets.get(key).push(body);
+    }
+
+    const checked = new Set();
+    for (const a of particles) {
+      if (!canLocalGravityClusterBody(a)) {
+        continue;
+      }
+      const cellX = Math.floor(a.x / cellSize);
+      const cellY = Math.floor(a.y / cellSize);
+      for (let gx = cellX - 1; gx <= cellX + 1; gx += 1) {
+        for (let gy = cellY - 1; gy <= cellY + 1; gy += 1) {
+          const bucket = buckets.get(gx + ":" + gy);
+          if (!bucket) {
+            continue;
+          }
+          for (const b of bucket) {
+            if (!b || a === b || !canLocalGravityClusterBody(b)) {
+              continue;
+            }
+            const low = Math.min(a.id, b.id);
+            const high = Math.max(a.id, b.id);
+            const pairKey = low + ":" + high;
+            if (checked.has(pairKey)) {
+              continue;
+            }
+            checked.add(pairKey);
+            if (areBodiesTetherConnected(a, b)) {
+              continue;
+            }
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const distance = Math.hypot(dx, dy);
+            const reach = localBodyGravityRadius + Math.max(0, finiteOr(a.radius, 0) + finiteOr(b.radius, 0)) * 0.45;
+            if (distance <= 0.001 || distance > reach) {
+              continue;
+            }
+            const closeness = 1 - distance / reach;
+            const totalMass = Math.max(1, finiteOr(a.mass, 1) + finiteOr(b.mass, 1));
+            const force = Math.min(localBodyGravityMaxAcceleration, localBodyGravityForce * closeness * closeness);
+            const nx = dx / distance;
+            const ny = dy / distance;
+            a.vx += nx * force * clamp(finiteOr(b.mass, 1) / totalMass, 0.12, 0.88) * dt;
+            a.vy += ny * force * clamp(finiteOr(b.mass, 1) / totalMass, 0.12, 0.88) * dt;
+            b.vx -= nx * force * clamp(finiteOr(a.mass, 1) / totalMass, 0.12, 0.88) * dt;
+            b.vy -= ny * force * clamp(finiteOr(a.mass, 1) / totalMass, 0.12, 0.88) * dt;
+          }
+        }
+      }
+    }
   }
 
   function dominantMergeBody(a, b) {
@@ -24253,7 +30212,7 @@
   }
 
   function shouldSkipParticleMerge(a, b) {
-    return isFreshUfoSapSourcePair(a, b);
+    return isFreshUfoSapSourcePair(a, b) || Boolean(a && a.ambientSpawnRock) || Boolean(b && b.ambientSpawnRock);
   }
 
   function isMergeBlockingTether(structure) {
@@ -24402,7 +30361,7 @@
 
           if (dx * dx + dy * dy <= minDist * minDist) {
             const absorbingPair = absorbingCollisionPair(a, b);
-            if (!absorbingPair) {
+            if (!absorbingPair || shouldOrbitPreventMerge(a, b)) {
               if (allowBounceResolution) {
                 resolveBodyBounce(a, b, dx, dy, minDist);
               }
@@ -24411,18 +30370,30 @@
 
             const absorberIndex = particles.indexOf(absorbingPair.absorber);
             const absorbedIndex = particles.indexOf(absorbingPair.absorbed);
-            if (absorberIndex < 0 || absorbedIndex < 0 || absorberIndex === absorbedIndex) {
-              continue;
-            }
+          if (absorberIndex < 0 || absorbedIndex < 0 || absorberIndex === absorbedIndex) {
+            continue;
+          }
 
+          if (
+            absorbingPair.absorbed.survivalCampBody &&
+            connectedScoredBodyIds().has(absorbingPair.absorber.id) &&
+            typeof wakeSurvivalCampFromBody === "function"
+          ) {
+            wakeSurvivalCampFromBody(absorbingPair.absorbed);
+          }
           recordPlayerAbsorption(absorbingPair.absorber, absorbingPair.absorbed);
           const mass = absorbingPair.absorber.mass + absorbingPair.absorbed.mass;
           const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;
-          const tier = tierForMass(mass);
-          const graduated = tier.threshold > previousTier.threshold;
+          let tier = tierForMass(mass);
+          const stellarSource = stellarGrowthSourceForMerge(a, b, absorbingPair.absorber);
+          const previousStellarMass = Math.max(0, finiteOr(stellarSource && stellarSource.mass, 0));
+          const gainedStellarMass = Math.max(0, mass - previousStellarMass);
+          const graduated = tier.threshold > previousTier.threshold || (mass >= stellarEvolutionEndThreshold && !stellarOutcomeTierNames.includes(previousTier.name));
+          const becameStar = tier.name === "star" && previousTier.name !== "star";
           const visualSource = graduated ? dominantMergeBody(a, b) : absorbingPair.absorber;
           const color = graduated ? mixColor(a.color, b.color, a.mass, b.mass) : absorbingPair.absorber.color;
           const absorbedParticleLightColor = absorbingPair.absorbed.color || color;
+          const previousMergeRadius = Math.max(finiteOr(a.radius, 0), finiteOr(b.radius, 0));
           normalizeBodyEnergy(a);
           normalizeBodyEnergy(b);
           const storedEnergy = clamp(finiteOr(a.energy, 0), 0, Math.max(1, finiteOr(a.maxEnergy, 0)))
@@ -24449,22 +30420,53 @@
               : visualSource.textureSeed,
             color,
             wobble: graduated ? randomRange(0, Math.PI * 2) : visualSource.wobble,
-            pulse: graduated ? randomRange(0.8, 1.25) : visualSource.pulse
+            pulse: graduated ? randomRange(0.8, 1.25) : visualSource.pulse,
+            starBirthAge: becameStar
+              ? 0
+              : tier.name === "star"
+                ? finiteOr(visualSource.starBirthAge, starBirthTransitionDuration)
+                : 0,
+            starEmissionAccumulator: tier.name === "star"
+              ? finiteOr(visualSource.starEmissionAccumulator, 0)
+              : 0
           };
+          if (graduated) {
+            merged.promotionStartedAt = performance.now();
+            merged.promotionDuration = bodyPromotionEffectDuration;
+            merged.promotionColor = shadeColor(color, 88);
+            merged.promotedFromTier = previousTier.name;
+            merged.promotedToTier = tier.name;
+          }
+          copyStellarGrowthState(merged, stellarSource);
+          updateStellarGrowthForMerge(merged, previousStellarMass, gainedStellarMass, performance.now() / 1000);
+          finalizeStellarOutcomeTier(merged);
+          tier = merged.tier;
+          if (tier.threshold > previousTier.threshold) {
+            merged.radius = Math.max(merged.radius, previousMergeRadius * bodyTierEvolutionSizeScale);
+          }
           normalizeBodyEnergy(merged);
           merged.energy = clamp(storedEnergy, 0, merged.maxEnergy || 0);
 
           if (player.landed && (player.landed.bodyId === a.id || player.landed.bodyId === b.id)) {
-            player.landed.bodyId = merged.id;
-            player.landed.angle = Math.atan2(player.y - merged.y, player.x - merged.x);
+            if (isStarBody(merged)) {
+              ejectActorFromStarBirth(player, merged, playerFootOffset);
+            } else {
+              player.landed.bodyId = merged.id;
+              player.landed.angle = Math.atan2(player.y - merged.y, player.x - merged.x);
+            }
           }
 
           for (const rival of rivals) {
             if (rival.landed && (rival.landed.bodyId === a.id || rival.landed.bodyId === b.id)) {
-              rival.landed.bodyId = merged.id;
-              rival.landed.angle = Math.atan2(rival.y - merged.y, rival.x - merged.x);
-              rival.residentTier = merged.tier.name;
-              applyRivalSurfaceConstraint(rival);
+              if (isStarBody(merged)) {
+                ejectActorFromStarBirth(rival, merged, rivalFootOffset);
+                rival.residentTier = merged.tier.name;
+              } else {
+                rival.landed.bodyId = merged.id;
+                rival.landed.angle = Math.atan2(rival.y - merged.y, rival.x - merged.x);
+                rival.residentTier = merged.tier.name;
+                applyRivalSurfaceConstraint(rival);
+              }
             }
           }
 
@@ -24475,9 +30477,22 @@
             if (structure.linkedBodyId === a.id || structure.linkedBodyId === b.id) {
               structure.linkedBodyId = merged.id;
             }
-            if (structure.bodyId === merged.id || structure.linkedBodyId === merged.id) {
+            if (!isStarBody(merged) && (structure.bodyId === merged.id || structure.linkedBodyId === merged.id)) {
               applyStructureSurfaceConstraint(structure);
             }
+          }
+
+          const destroyedStructureCount = isStarBody(merged) ? destroyStructuresForStarBody(merged) : 0;
+          if (becameStar) {
+            emitStarFormationBurst(merged, destroyedStructureCount);
+            maybeNotifyText(
+              destroyedStructureCount
+                ? "Planet collapsed into a star. Structures burned away."
+                : "Planet collapsed into a star.",
+              { groupKey: "star-formed" }
+            );
+          } else if (stellarOutcomeTierNames.includes(tier.name) && !stellarOutcomeTierNames.includes(previousTier.name)) {
+            maybeNotifyText("Star collapsed into " + tier.article + " " + tier.name + ".", { groupKey: "stellar-branch-formed" });
           }
 
           sparks.push({
@@ -24488,6 +30503,17 @@
             life: 0.42,
             maxLife: 0.42
           });
+          if (graduated) {
+            sparks.push({
+              x: merged.x,
+              y: merged.y,
+              radius: Math.max(merged.radius * 2.65, 58),
+              color: merged.promotionColor || color,
+              life: bodyPromotionEffectDuration,
+              maxLife: bodyPromotionEffectDuration,
+              promotionBurst: true
+            });
+          }
 
           particles[absorberIndex] = merged;
           particles.splice(absorbedIndex, 1);
@@ -24839,12 +30865,39 @@
     };
   }
 
+  function damageLocalPlayerOnStarContact(particle, nx, ny) {
+    if (!isStarBody(particle) || player.hitCooldown > 0) {
+      return;
+    }
+
+    player.vx += nx * starContactKnockback;
+    player.vy += ny * starContactKnockback;
+    if (damageLocalPlayer(starContactDamagePerSecond * starContactDamageCooldown, {
+      cause: "Star contact",
+      cooldown: starContactDamageCooldown,
+      flash: 0.42
+    })) {
+      return;
+    }
+    maybeNotifyText("Star plasma is burning your hull.", { groupKey: "star-contact" });
+    sparks.push({
+      x: player.x - nx * player.radius * 0.35,
+      y: player.y - ny * player.radius * 0.35,
+      radius: 52,
+      color: { r: 255, g: 196, b: 76 },
+      life: 0.28,
+      maxLife: 0.28,
+      vx: nx * 90,
+      vy: ny * 90
+    });
+  }
+
   function resolvePlayerBodyCollisions() {
     for (const particle of particles) {
       if (!particle.tier.solid) {
         continue;
       }
-      if (player.landed && player.landed.bodyId === particle.id) {
+      if (player.landed && player.landed.bodyId === particle.id && !isStarBody(particle)) {
         continue;
       }
 
@@ -24860,6 +30913,7 @@
       const playerShare = 1 - bodyShare;
 
       if (isSelfVacuumPulledBodyContact(player, particle, nx, ny)) {
+        markSurvivalCampBodyMovedByPlayer(particle, player.id || "");
         resolveSelfVacuumPulledBodyContact(player, particle, nx, ny, overlap, 0.88);
         continue;
       }
@@ -24868,6 +30922,7 @@
       player.y += ny * overlap * playerShare;
       particle.x -= nx * overlap * bodyShare;
       particle.y -= ny * overlap * bodyShare;
+      markSurvivalCampBodyMovedByPlayer(particle, player.id || "");
 
       const relativeVelocity = (player.vx - particle.vx) * nx + (player.vy - particle.vy) * ny;
       if (relativeVelocity < 0) {
@@ -24878,6 +30933,7 @@
         player.vy += ny * impulse * 0.72;
         applyBodyVelocityChangeAtPoint(particle, -nx * impulse * bodyShare, -ny * impulse * bodyShare, pointX, pointY, bodyConstraintTorqueResponse);
       }
+      damageLocalPlayerOnStarContact(particle, nx, ny);
     }
   }
 
@@ -24886,7 +30942,7 @@
       if (!particle.tier.solid) {
         continue;
       }
-      if (player.landed && player.landed.bodyId === particle.id) {
+      if (player.landed && player.landed.bodyId === particle.id && !isStarBody(particle)) {
         continue;
       }
 
@@ -24900,6 +30956,7 @@
       const overlap = contact.overlap;
 
       if (isSelfVacuumPulledBodyContact(player, particle, nx, ny)) {
+        markSurvivalCampBodyMovedByPlayer(particle, player.id || "");
         resolveSelfVacuumPulledBodyContact(player, particle, nx, ny, overlap, 0.86);
         continue;
       }
@@ -24913,11 +30970,12 @@
         player.vx += nx * impulse;
         player.vy += ny * impulse;
       }
+      damageLocalPlayerOnStarContact(particle, nx, ny);
     }
   }
 
   function allCombatMobs() {
-    return rivals.concat(ufos, rambots, engineers, teslas, rockets, fighters);
+    return rivals.concat(ufos, rambots, engineers, teslas, rockets, fighters, mobBeacons);
   }
 
   function isPlayerTeamMob(mob) {
@@ -26108,20 +32166,250 @@
     resetMouseButtons();
   }
 
+  function isPersonalTetherEquipped() {
+    return equippedToolId === personalTetherToolId && !areToolsDisabled();
+  }
+
+  function hasPersonalTether() {
+    return personalTetherState.bodyId > 0;
+  }
+
+  function clearPersonalTether(options) {
+    if (!hasPersonalTether()) {
+      return false;
+    }
+    personalTetherState.bodyId = 0;
+    personalTetherState.angle = 0;
+    personalTetherState.surfaceOffset = 0;
+    personalTetherState.restLength = 0;
+    personalTetherState.deploy = 0;
+    personalTetherState.wobble = 0;
+    if (!options || options.notify !== false) {
+      maybeNotifyText("Personal tether detached.", { groupKey: "personal-tether" });
+    }
+    return true;
+  }
+
+  function personalTetherAnchor(body) {
+    if (!body) {
+      return null;
+    }
+    const angle = finiteOr(personalTetherState.angle, 0);
+    const surfaceOffset = Math.max(0, finiteOr(personalTetherState.surfaceOffset, 0));
+    const radius = Math.max(1, finiteOr(body.radius, radiusFromMass(body.mass))) + surfaceOffset;
+    return {
+      x: finiteOr(body.x, 0) + Math.cos(angle) * radius,
+      y: finiteOr(body.y, 0) + Math.sin(angle) * radius,
+      angle
+    };
+  }
+
+  function personalTetherEndpoint() {
+    const body = bodyById(personalTetherState.bodyId);
+    const anchor = personalTetherAnchor(body);
+    if (!body || !anchor) {
+      return null;
+    }
+    return {
+      body,
+      x: anchor.x,
+      y: anchor.y,
+      angle: anchor.angle,
+      restLength: Math.max(80, finiteOr(personalTetherState.restLength, 0)),
+      deploy: clamp(finiteOr(personalTetherState.deploy, 0), 0, 1),
+      wobble: finiteOr(personalTetherState.wobble, 0)
+    };
+  }
+
+  function serializePersonalTether() {
+    return hasPersonalTether()
+      ? {
+          bodyId: personalTetherState.bodyId,
+          angle: personalTetherState.angle,
+          surfaceOffset: personalTetherState.surfaceOffset,
+          restLength: personalTetherState.restLength,
+          deploy: personalTetherState.deploy,
+          wobble: personalTetherState.wobble
+        }
+      : null;
+  }
+
+  function applyPersonalTetherSnapshot(snapshot) {
+    const source = snapshot && typeof snapshot === "object" ? snapshot : null;
+    if (!source || !bodyById(source.bodyId)) {
+      clearPersonalTether({ notify: false });
+      return false;
+    }
+    personalTetherState.bodyId = Math.max(0, Math.floor(finiteOr(source.bodyId, 0)));
+    personalTetherState.angle = finiteOr(source.angle, 0);
+    personalTetherState.surfaceOffset = Math.max(0, finiteOr(source.surfaceOffset, 0));
+    personalTetherState.restLength = clamp(finiteOr(source.restLength, 0), 80, personalTetherMaxRestLength);
+    personalTetherState.deploy = clamp(finiteOr(source.deploy, 1), 0, 1);
+    personalTetherState.wobble = finiteOr(source.wobble, randomRange(0, Math.PI * 2));
+    return true;
+  }
+
+  function findPersonalTetherTarget() {
+    const cursor = screenToWorld(mouse.x, mouse.y);
+    let best = null;
+    let bestScore = Infinity;
+
+    for (const body of particles) {
+      if (!isLandableBody(body)) {
+        continue;
+      }
+      const dx = cursor.x - body.x;
+      const dy = cursor.y - body.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      const angle = Math.atan2(dy, dx);
+      const surfaceOffset = surfaceExtensionAtAngle(body, angle);
+      const contactRadius = Math.max(1, finiteOr(body.radius, radiusFromMass(body.mass))) + surfaceOffset;
+      const cursorBodyGap = Math.max(0, distance - contactRadius);
+      const playerDistance = Math.max(0, Math.hypot(player.x - body.x, player.y - body.y) - contactRadius);
+      if (cursorBodyGap > 84 || playerDistance > personalTetherMaxAttachDistance) {
+        continue;
+      }
+      const score = cursorBodyGap + Math.max(0, contactRadius - distance) * 0.18 + playerDistance * 0.08;
+      if (score < bestScore) {
+        bestScore = score;
+        best = { body, angle, surfaceOffset };
+      }
+    }
+
+    return best;
+  }
+
+  function attachPersonalTetherToTarget(target) {
+    if (!target || !target.body) {
+      maybeNotifyText("Aim the personal tether at a non-star body.", { groupKey: "personal-tether" });
+      return false;
+    }
+
+    const body = target.body;
+    const surfaceRadius = Math.max(1, finiteOr(body.radius, radiusFromMass(body.mass))) + Math.max(0, finiteOr(target.surfaceOffset, 0));
+    const anchorX = body.x + Math.cos(target.angle) * surfaceRadius;
+    const anchorY = body.y + Math.sin(target.angle) * surfaceRadius;
+    const length = Math.hypot(player.x - anchorX, player.y - anchorY);
+    if (length > personalTetherMaxAttachDistance) {
+      maybeNotifyText("That body is too far for the personal tether.", { groupKey: "personal-tether" });
+      return false;
+    }
+
+    personalTetherState.bodyId = body.id;
+    personalTetherState.angle = target.angle;
+    personalTetherState.surfaceOffset = Math.max(0, finiteOr(target.surfaceOffset, 0));
+    personalTetherState.restLength = clamp(length, 80, personalTetherMaxRestLength);
+    personalTetherState.deploy = 0.15;
+    personalTetherState.wobble = randomRange(0, Math.PI * 2);
+    maybeNotifyText("Personal tether attached.", { groupKey: "personal-tether" });
+    playSound("place", { throttleKey: "personalTetherAttach", throttle: 0.12, volume: 0.7 });
+    return true;
+  }
+
+  function handlePersonalTetherMouseDown(button) {
+    if (!isPersonalTetherEquipped() || buildMenuOpen) {
+      return false;
+    }
+    if (button === 2) {
+      if (clearPersonalTether()) {
+        playSound("detach", { throttleKey: "personalTetherDetach", throttle: 0.12, volume: 0.74 });
+      }
+      clearMouseButtonsOnly();
+      return true;
+    }
+    if (button !== 0) {
+      return false;
+    }
+
+    attachPersonalTetherToTarget(findPersonalTetherTarget());
+    clearMouseButtonsOnly();
+    return true;
+  }
+
+  function updatePersonalTether(dt) {
+    if (!hasPersonalTether()) {
+      return false;
+    }
+
+    const body = bodyById(personalTetherState.bodyId);
+    if (!body || !isLandableBody(body)) {
+      clearPersonalTether({ notify: false });
+      return false;
+    }
+
+    personalTetherState.deploy = clamp(finiteOr(personalTetherState.deploy, 0) + dt * 5.2, 0, 1);
+    const anchor = personalTetherAnchor(body);
+    const dx = player.x - anchor.x;
+    const dy = player.y - anchor.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const restLength = clamp(finiteOr(personalTetherState.restLength, distance), 80, personalTetherMaxRestLength);
+    personalTetherState.restLength = restLength;
+    const tautLength = restLength + personalTetherGive;
+    if (distance <= tautLength) {
+      return true;
+    }
+
+    const nx = dx / distance;
+    const ny = dy / distance;
+    const extension = distance - tautLength;
+    const relativeSpeed = (finiteOr(player.vx, 0) - finiteOr(body.vx, 0)) * nx +
+      (finiteOr(player.vy, 0) - finiteOr(body.vy, 0)) * ny;
+    const pullSpeed = Math.max(0, relativeSpeed);
+    const bodyMassDamping = clamp(1 / Math.pow(Math.max(1, finiteOr(body.mass, 1)) / 420, 0.32), 0.09, 1.12);
+    const bodyAcceleration = clamp(
+      (extension * personalTetherSpring + pullSpeed * personalTetherDamping) * bodyMassDamping,
+      0,
+      personalTetherBodyMaxAcceleration
+    );
+    const playerAcceleration = clamp(
+      extension * (personalTetherSpring + 1.4) + pullSpeed * (personalTetherDamping + 1.2),
+      0,
+      personalTetherPlayerMaxAcceleration
+    );
+    const bodyDelta = bodyAcceleration * dt;
+    const playerDelta = playerAcceleration * dt;
+
+    applyBodyVelocityChangeAtPoint(body, nx * bodyDelta, ny * bodyDelta, anchor.x, anchor.y, bodyConstraintTorqueResponse);
+    markSurvivalCampBodyMovedByPlayer(body, player.id || "");
+    player.vx -= nx * playerDelta;
+    player.vy -= ny * playerDelta;
+
+    if (extension > 180) {
+      const correction = (extension - 180) * 0.08;
+      body.x += nx * correction * bodyMassDamping;
+      body.y += ny * correction * bodyMassDamping;
+      player.x -= nx * correction * 0.42;
+      player.y -= ny * correction * 0.42;
+    }
+
+    if (Math.random() < dt * clamp(extension / 220, 0.04, 0.48)) {
+      sparks.push({
+        x: (player.x + anchor.x) / 2 + randomRange(-8, 8),
+        y: (player.y + anchor.y) / 2 + randomRange(-8, 8),
+        radius: 16 + clamp(extension * 0.05, 0, 18),
+        color: { r: 169, g: 133, b: 255 },
+        life: 0.14,
+        maxLife: 0.14
+      });
+    }
+
+    return true;
+  }
+
   const rogueTraderEventId = "rogue-trader";
   const rogueTraderMapColor = { r: 255, g: 184, b: 96 };
   const rogueTraderEventSettings = {
     duration: 62,
-    approachDuration: 14,
-    serviceDriftDistance: 220,
-    leaveSpeed: 640,
+    approachDuration: 18,
+    serviceDriftDistance: 150,
+    leaveSpeed: 520,
     leaveVerticalDrift: -28,
     disappearDistance: 2200,
     disappearRightDistance: 1700,
     radius: 900,
-    targetDistanceMin: 620,
-    targetDistanceMax: 960,
-    spawnDistance: 1850,
+    targetDistanceMin: 1800,
+    targetDistanceMax: 2600,
+    spawnDistance: 3600,
     earliestSpawnTime: 10 * 60
   };
   const traderSniperRange = 1780;
@@ -26149,7 +32437,6 @@
         { id: "market-room", kind: "room", label: "Trading Bay", x: 75, y: -35, w: 380, h: 250, floorInset: 26, maxHealth: 390, color: "#282d34" },
         { id: "engine-room", kind: "room", label: "Engine Room", x: 415, y: -35, w: 300, h: 250, floorInset: 26, maxHealth: 340, color: "#2a2e33" },
         { id: "port-turret", kind: "turret", label: "Port Turret", x: -95, y: -224, radius: 32, maxHealth: 155, angle: -Math.PI / 2 },
-        { id: "ventral-turret", kind: "turret", label: "Ventral Turret", x: 340, y: 170, radius: 32, maxHealth: 155, angle: Math.PI / 2 },
         { id: "generator", kind: "generator", label: "Generator", x: 80, y: 80, w: 102, h: 64, maxHealth: 180, color: "#596a44" },
         { id: "battery", kind: "battery", label: "Battery", x: -155, y: 82, w: 96, h: 62, maxHealth: 155, color: "#566641" },
         { id: "life-support", kind: "life-support", label: "Life Support", x: -210, y: -126, w: 116, h: 68, maxHealth: 155, color: "#426656" },
@@ -26412,6 +32699,8 @@
       localX: finiteOr(snapshot.localX, 0),
       localY: finiteOr(snapshot.localY, 0),
       walkSpeed: finiteOr(snapshot.walkSpeed, 0),
+      forceExit: Boolean(snapshot.forceExit),
+      forceExitSpeed: Math.max(0, finiteOr(snapshot.forceExitSpeed, 0)),
       onFloor: snapshot.onFloor !== false
     };
   }
@@ -26619,7 +32908,7 @@
     craft.vy = finiteOr(craft.rogueTraderDepartureVy, rogueTraderEventSettings.leaveVerticalDrift);
     craft.rotation = 0;
     if (player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id) {
-      leaveSpacecraftInterior(craft, { speed: 260 });
+      requestPlayerSpacecraftExit(craft, { speed: 260, reason: "Rogue Trader departing." });
     }
     if (multiplayer.trade && multiplayer.trade.kind === "npc" && multiplayer.trade.spacecraftId === craft.id) {
       closeTradeSession();
@@ -26635,7 +32924,7 @@
     craft.y += craft.vy * seconds;
     craft.rotation = 0;
     if (player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id) {
-      leaveSpacecraftInterior(craft, { speed: 260 });
+      requestPlayerSpacecraftExit(craft, { speed: 260, reason: "Rogue Trader departing." });
     }
     const rightClearance = craft.x - finiteOr(player.x, craft.x);
     return (
@@ -26659,7 +32948,7 @@
     craft.rotation = 0;
     updateSpacecraftWorldFields(craft);
     if (position.departing && player.spacecraftInterior && player.spacecraftInterior.spacecraftId === craft.id) {
-      leaveSpacecraftInterior(craft, { speed: 260 });
+      requestPlayerSpacecraftExit(craft, { speed: 260, reason: "Rogue Trader departing." });
     }
     return craft;
   }
@@ -26852,6 +33141,8 @@
       localX: entryX,
       localY: floor ? floor.centerY : finiteOr(craft.door.y, 0),
       walkSpeed: 0,
+      forceExit: false,
+      forceExitSpeed: 0,
       onFloor: true
     };
     player.vx = 0;
@@ -26878,6 +33169,20 @@
     player.vy = dir.y * finiteOr(settings.speed, 190) + finiteOr(craft.vy, 0);
     cameraRoll = 0;
     maybeNotifyText("Exited " + craft.name + ".");
+  }
+
+  function requestPlayerSpacecraftExit(craft, options) {
+    if (!craft || !player.spacecraftInterior || player.spacecraftInterior.spacecraftId !== craft.id) {
+      return false;
+    }
+    const settings = options || {};
+    player.spacecraftInterior.forceExit = true;
+    player.spacecraftInterior.forceExitSpeed = Math.max(156, finiteOr(settings.speed, 210));
+    if (!player.spacecraftInterior.forceExitNotified) {
+      player.spacecraftInterior.forceExitNotified = true;
+      maybeNotifyText(settings.reason || (craft.name + " is leaving."));
+    }
+    return true;
   }
 
   function ejectPlayerFromSpacecraft(craft, reason) {
@@ -26969,8 +33274,11 @@
     let localX = finiteOr(state.localX, 0);
     let localY = finiteOr(state.localY, 0);
     let inputX = 0;
+    const forcedExit = Boolean(state.forceExit);
 
-    if (!isVacuumHoldActive()) {
+    if (forcedExit) {
+      inputX = -1;
+    } else if (!isVacuumHoldActive()) {
       if (isMovementKeyPressed("left")) inputX -= 1;
       if (isMovementKeyPressed("right")) inputX += 1;
     }
@@ -26984,7 +33292,8 @@
 
     localY = floor.centerY;
     const walkDirection = inputX < 0 ? -1 : inputX > 0 ? 1 : 0;
-    const walkSpeed = walkDirection ? 156 * weaponSlowFactor : 0;
+    const forcedExitSpeed = Math.max(156, finiteOr(state.forceExitSpeed, 210));
+    const walkSpeed = walkDirection ? (forcedExit ? forcedExitSpeed : 156 * weaponSlowFactor) : 0;
     if (walkDirection) {
       const nextX = localX + walkDirection * walkSpeed * dt;
       const nextFloor = spacecraftFloorForX(craft, nextX, localY);
@@ -27002,7 +33311,7 @@
     const door = craft.door || {};
     const doorX = finiteOr(door.x, -craft.width * 0.5);
     if (spacecraftDoorContainsLocal(craft, localX, localY, -8) && localX < doorX - 48) {
-      leaveSpacecraftInterior(craft, { localX, localY, speed: 210 });
+      leaveSpacecraftInterior(craft, { localX, localY, speed: forcedExit ? forcedExitSpeed : 210 });
       return true;
     }
 
@@ -27014,6 +33323,8 @@
     state.localX = localX;
     state.localY = localY;
     state.walkSpeed = walkSpeed;
+    state.forceExit = forcedExit;
+    state.forceExitSpeed = forcedExit ? forcedExitSpeed : 0;
     state.onFloor = true;
     const world = spacecraftLocalToWorld(craft, localX, localY);
     player.x = world.x;
@@ -27231,8 +33542,8 @@
       radius: finiteOr(settings.radius, 4),
       length: finiteOr(settings.length, 42),
       color,
-      life: finiteOr(settings.life, 1.05),
-      maxLife: finiteOr(settings.life, 1.05),
+      life: finiteOr(settings.life, 1.15),
+      maxLife: finiteOr(settings.life, 1.15),
       damage: finiteOr(settings.damage, turretLaserDamage),
       knockback: finiteOr(settings.knockback, turretLaserKnockback),
       hitMessage: mobName(target) + " picked off by " + craft.name + ".",
@@ -27337,11 +33648,11 @@
 
     if (!trading && nearbyTarget && npc.sniperCooldown <= 0) {
       const shotAngle = fireSpacecraftDefenseLaser(craft, npc.worldX, npc.worldY, nearbyTarget, {
-        speed: 1160,
+        speed: 1340,
         damage: 42,
         length: 96,
         radius: 4,
-        life: 2.15,
+        life: 2.35,
         knockback: 320,
         color: { r: 255, g: 213, b: 122 },
         weaponLabel: "trader sniper",
@@ -27476,7 +33787,7 @@
       techInventory[tech.key] += Math.max(0, Math.floor(trade.remoteOffer[tech.key] || 0));
     }
 
-    trade.completed = true;
+    trade.completed = false;
     updateTechUi();
     void savePersistentState({ includeWorld: false });
     renderTradePanel();
@@ -28222,6 +34533,11 @@
         continue;
       }
 
+      if (tradeVesselHitBySegment(tailX, tailY, laser.x, laser.y, laser.radius, laser.damage || playerWeaponDefaults.damage, laser.color)) {
+        playerLasers.splice(i, 1);
+        continue;
+      }
+
       let stoppedByHit = false;
       for (const mob of allCombatMobs()) {
         if (mob.health <= 0 || mob.hitCooldown > 0 || isPlayerTeamMob(mob)) {
@@ -28417,8 +34733,8 @@
         radius: rival.isBoss ? 7 : 5,
         length: randomRange(rival.isBoss ? 48 : 34, rival.isBoss ? 64 : 46),
         color: laserColor,
-        life: rival.isBoss ? 2.5 : 2.2,
-        maxLife: rival.isBoss ? 2.5 : 2.2,
+      life: rival.isBoss ? 2.75 : 2.38,
+      maxLife: rival.isBoss ? 2.75 : 2.38,
         damage: difficultyMobDamage(bossScaledDamage(rival, rivalProjectileDamage)),
         toolDisable: 0,
         cause: rival.isBoss ? "Alienoid boss laser" : "Alienoid laser",
@@ -28443,7 +34759,7 @@
 
   function fireTeslaLightning(tesla, target, dist) {
     const targetEntity = target && target.kind === "structure" ? target : (target && target.player ? target.player : target && target.target && target.target.player ? target.target.player : player);
-    const leadTime = clamp(dist / 980, 0, 0.65);
+    const leadTime = clamp(dist / 1120, 0, 0.65);
     const aim = normalize(
       targetEntity.x + finiteOr(targetEntity.vx, 0) * leadTime * 0.42 - tesla.x,
       targetEntity.y + finiteOr(targetEntity.vy, 0) * leadTime * 0.42 - tesla.y
@@ -28455,13 +34771,13 @@
       id: nextRivalProjectileId++,
       x: tesla.x + aim.x * muzzleDistance,
       y: tesla.y + aim.y * muzzleDistance,
-      vx: aim.x * 980 + tesla.vx * 0.08,
-      vy: aim.y * 980 + tesla.vy * 0.08,
+      vx: aim.x * 1120 + tesla.vx * 0.08,
+      vy: aim.y * 1120 + tesla.vy * 0.08,
       radius: 8,
       length: randomRange(tesla.isBoss ? 108 : 76, tesla.isBoss ? 142 : 104),
       color,
-      life: 0.58,
-      maxLife: 0.58,
+      life: 0.64,
+      maxLife: 0.64,
       damage: tesla.isBoss ? difficultyMobDamage(bossScaledDamage(tesla, teslaLightningDamage)) : 0,
       toolDisable: teslaToolDisableDuration * (tesla.isBoss ? 1.45 : 1),
       cause: tesla.isBoss ? "Tesla boss lightning" : "Tesla lightning",
@@ -28508,8 +34824,8 @@
       radius: rocket.isBoss ? 13 : 10,
       length: randomRange(rocket.isBoss ? 58 : 42, rocket.isBoss ? 72 : 54),
       color,
-      life: 2.4,
-      maxLife: 2.4,
+      life: 2.62,
+      maxLife: 2.62,
       damage: difficultyMobDamage(bossScaledDamage(rocket, satelliteMissileDamage)),
       toolDisable: 0,
       cause: rocket.isBoss ? "Satellite boss missile" : "Satellite missile",
@@ -28614,8 +34930,8 @@
         radius: 5,
         length: randomRange(38, 50),
         color,
-        life: 2.0,
-        maxLife: 2.0,
+        life: 2.18,
+        maxLife: 2.18,
         damage: difficultyMobDamage(bossScaledDamage(fighter, 9)),
         toolDisable: 0,
         cause: fighter.isBoss ? "Fighter boss cannon" : "Fighter cannon",
@@ -28652,8 +34968,8 @@
       radius: 4,
       length: randomRange(30, 40),
       color,
-      life: 1.55,
-      maxLife: 1.55,
+      life: 1.7,
+      maxLife: 1.7,
       damage: difficultyMobDamage(bossScaledDamage(fighter, 5.5)),
       toolDisable: 0,
       cause: "Fighter boss machine gun",
@@ -28796,7 +35112,7 @@
     const closestY = ay + aby * t;
     const dx = body.x - closestX;
     const dy = body.y - closestY;
-    const blockRadius = (body.tier && body.tier.name === "planet" ? solidBodyContactRadius(body) : body.radius) + padding;
+    const blockRadius = (body.tier && (body.tier.name === "planet" || body.tier.name === "star") ? solidBodyContactRadius(body) : body.radius) + padding;
 
     if (dx * dx + dy * dy > blockRadius * blockRadius) {
       return null;
@@ -29075,25 +35391,31 @@
   }
 
   function bossScaledDamage(mob, damage) {
-    return mob && mob.isBoss
-      ? damage * mobBossDamageMultiplier * bossStatScaleForStars(bossStarRank(mob), mobBossStarDamageMultiplier)
-      : damage;
+    if (mob && mob.isBoss) {
+      return damage * mobBossDamageMultiplier * bossStatScaleForStars(bossStarRank(mob), mobBossStarDamageMultiplier);
+    }
+    return damage * mobEliteStatScale(mob, mobEliteDamageMultiplier);
   }
 
   function bossCooldownScale(mob) {
-    return mob && mob.isBoss ? 0.68 * bossCooldownScaleForStars(bossStarRank(mob)) : 1;
+    if (mob && mob.isBoss) {
+      return 0.68 * bossCooldownScaleForStars(bossStarRank(mob));
+    }
+    return mobEliteCooldownScale(mob);
   }
 
   function bossChaseForce(mob, baseForce) {
-    return mob && mob.isBoss
-      ? baseForce * 1.18 * bossStatScaleForStars(bossStarRank(mob), mobBossStarForceMultiplier)
-      : baseForce;
+    if (mob && mob.isBoss) {
+      return baseForce * 1.18 * bossStatScaleForStars(bossStarRank(mob), mobBossStarForceMultiplier);
+    }
+    return baseForce * mobEliteStatScale(mob, mobEliteForceMultiplier);
   }
 
   function bossStrafeForce(mob, baseForce) {
-    return mob && mob.isBoss
-      ? baseForce * 1.35 * bossStatScaleForStars(bossStarRank(mob), mobBossStarForceMultiplier)
-      : baseForce;
+    if (mob && mob.isBoss) {
+      return baseForce * 1.35 * bossStatScaleForStars(bossStarRank(mob), mobBossStarForceMultiplier);
+    }
+    return baseForce * mobEliteStatScale(mob, mobEliteForceMultiplier);
   }
 
   function isMobDisabled(mob) {
@@ -29269,6 +35591,8 @@
       chaseMaxSpeed = baseMaxSpeed *
         (mobBossMaxSpeedMultiplier + mobBossDirectionalSpeedBonus * alignment * sustainedMotion) *
         bossStatScaleForStars(bossStarRank(mob), mobBossStarSpeedMultiplier);
+    } else {
+      chaseMaxSpeed = baseMaxSpeed * mobEliteStatScale(mob, mobEliteSpeedMultiplier);
     }
     if (finiteOr(mob.bossBodyEvadeTimer, 0) > 0) {
       return Math.max(chaseMaxSpeed, clamp(finiteOr(mob.bossBodyEvadeSpeedCap, 0), chaseMaxSpeed, bossBodyEvadeMaxSpeed));
@@ -29332,7 +35656,7 @@
       const muzzleScatter = randomRange(-12, 12);
       const forwardScatter = randomRange(-5, 9);
       const pelletSpeed = rivalProjectileSpeed + randomRange(45, 175);
-      const pelletLife = randomRange(1.18, 1.68);
+      const pelletLife = randomRange(1.28, 1.82);
       rivalProjectiles.push({
         id: nextRivalProjectileId++,
         x: rival.x + dirX * (muzzleDistance + forwardScatter) + sideX * muzzleScatter,
@@ -29413,8 +35737,8 @@
       radius: 4,
       length: 38,
       color,
-      life: 1.05,
-      maxLife: 1.05,
+      life: 1.15,
+      maxLife: 1.15,
       damage: turretLaserDamage,
       knockback: turretLaserKnockback,
       hitMessage: mobName(target) + " dropped by a turret.",
@@ -29759,6 +36083,9 @@
     if (!structure || structure.health <= 0) {
       return false;
     }
+    if (structure.type === "tether") {
+      return false;
+    }
 
     const maxHealth = Math.max(1, finiteOr(structure.maxHealth, structureMaxHealth(structure.type)));
     structure.maxHealth = maxHealth;
@@ -30093,6 +36420,292 @@
     }
   }
 
+  function addBridgeComponentRecord(adjacency, bodyId, record) {
+    if (!adjacency.has(bodyId)) {
+      adjacency.set(bodyId, []);
+    }
+    adjacency.get(bodyId).push(record);
+  }
+
+  function bridgeRigidRestAngle(structure, firstBody, secondBody) {
+    return Math.atan2(
+      finiteOr(structure.restCenterDy, secondBody.y - firstBody.y),
+      finiteOr(structure.restCenterDx, secondBody.x - firstBody.x)
+    );
+  }
+
+  function ensureBridgeRigidAnchorOffsets(structure, firstBody, secondBody) {
+    const restAngle = bridgeRigidRestAngle(structure, firstBody, secondBody);
+    if (!Number.isFinite(Number(structure.bridgeAngleOffset))) {
+      structure.bridgeAngleOffset = shortestAngleDelta(restAngle, finiteOr(structure.angle, restAngle));
+    }
+    if (!Number.isFinite(Number(structure.bridgeLinkedAngleOffset))) {
+      structure.bridgeLinkedAngleOffset = shortestAngleDelta(restAngle, finiteOr(structure.linkedAngle, restAngle + Math.PI));
+    }
+  }
+
+  function addBridgeFrameCorrection(corrections, bodyId, currentAngle, desiredAngle) {
+    if (!corrections.has(bodyId)) {
+      corrections.set(bodyId, { sin: 0, cos: 0, count: 0 });
+    }
+    const delta = shortestAngleDelta(currentAngle, desiredAngle);
+    const correction = corrections.get(bodyId);
+    correction.sin += Math.sin(delta);
+    correction.cos += Math.cos(delta);
+    correction.count += 1;
+  }
+
+  function applyBridgeComponentAnchorCorrections(component) {
+    const corrections = new Map();
+    const desiredAngles = [];
+    for (const record of component.records) {
+      const structure = record.structure;
+      const restAngle = bridgeRigidRestAngle(structure, record.firstBody, record.secondBody);
+      const firstDesired = restAngle + finiteOr(structure.bridgeAngleOffset, 0);
+      const secondDesired = restAngle + finiteOr(structure.bridgeLinkedAngleOffset, Math.PI);
+      desiredAngles.push({ structure, firstDesired, secondDesired });
+      addBridgeFrameCorrection(corrections, record.firstBody.id, finiteOr(structure.angle, firstDesired), firstDesired);
+      addBridgeFrameCorrection(corrections, record.secondBody.id, finiteOr(structure.linkedAngle, secondDesired), secondDesired);
+    }
+
+    for (const bodyId of component.bodyIds) {
+      const correction = corrections.get(bodyId);
+      if (!correction || !correction.count) {
+        continue;
+      }
+      const angleStep = Math.atan2(correction.sin, correction.cos);
+      rotateBodyMountedFrame(bodyId, angleStep);
+    }
+
+    for (const desired of desiredAngles) {
+      desired.structure.angle = desired.firstDesired;
+      desired.structure.linkedAngle = desired.secondDesired;
+    }
+  }
+
+  function bridgeConstraintRecords() {
+    const records = [];
+    const adjacency = new Map();
+    for (const structure of structures) {
+      if (!isActiveBridge(structure)) {
+        continue;
+      }
+
+      const firstBody = bodyById(structure.bodyId);
+      const secondBody = bodyById(structure.linkedBodyId);
+      if (!firstBody || !secondBody || firstBody.id === secondBody.id || !applyLinkedStructureSurfaceConstraint(structure)) {
+        continue;
+      }
+
+      let restDx = finiteOr(structure.restCenterDx, secondBody.x - firstBody.x);
+      let restDy = finiteOr(structure.restCenterDy, secondBody.y - firstBody.y);
+      if (Math.hypot(restDx, restDy) < 1) {
+        restDx = secondBody.x - firstBody.x;
+        restDy = secondBody.y - firstBody.y;
+      }
+      structure.restCenterDx = restDx;
+      structure.restCenterDy = restDy;
+      ensureBridgeRigidAnchorOffsets(structure, firstBody, secondBody);
+
+      const record = { structure, firstBody, secondBody };
+      records.push(record);
+      addBridgeComponentRecord(adjacency, firstBody.id, record);
+      addBridgeComponentRecord(adjacency, secondBody.id, record);
+    }
+    return { records, adjacency };
+  }
+
+  function bridgeConstraintComponents(records, adjacency) {
+    const components = [];
+    const visitedBodies = new Set();
+    const visitedStructures = new Set();
+    for (const record of records) {
+      if (visitedStructures.has(record.structure.id)) {
+        continue;
+      }
+
+      const bodyIds = [];
+      const componentRecords = [];
+      const queue = [record.firstBody.id];
+      visitedBodies.add(record.firstBody.id);
+      for (let cursor = 0; cursor < queue.length; cursor += 1) {
+        const bodyId = queue[cursor];
+        bodyIds.push(bodyId);
+        for (const linkedRecord of adjacency.get(bodyId) || []) {
+          if (!visitedStructures.has(linkedRecord.structure.id)) {
+            visitedStructures.add(linkedRecord.structure.id);
+            componentRecords.push(linkedRecord);
+          }
+          const otherBodyId = linkedRecord.firstBody.id === bodyId
+            ? linkedRecord.secondBody.id
+            : linkedRecord.firstBody.id;
+          if (!visitedBodies.has(otherBodyId)) {
+            visitedBodies.add(otherBodyId);
+            queue.push(otherBodyId);
+          }
+        }
+      }
+
+      if (bodyIds.length > 1 && componentRecords.length) {
+        components.push({ bodyIds, records: componentRecords });
+      }
+    }
+    return components;
+  }
+
+  function solveBridgeConstraintComponent(component, dt) {
+    const bodies = component.bodyIds.map(bodyById).filter(Boolean);
+    if (bodies.length < 2) {
+      return false;
+    }
+
+    const bodyMap = new Map();
+    const adjacency = new Map();
+    let totalMass = 0;
+    let centerX = 0;
+    let centerY = 0;
+    let averageVx = 0;
+    let averageVy = 0;
+    for (const body of bodies) {
+      const mass = Math.max(1, finiteOr(body.mass, 1));
+      bodyMap.set(body.id, { body, mass });
+      totalMass += mass;
+      centerX += finiteOr(body.x, 0) * mass;
+      centerY += finiteOr(body.y, 0) * mass;
+      averageVx += finiteOr(body.vx, 0) * mass;
+      averageVy += finiteOr(body.vy, 0) * mass;
+      adjacency.set(body.id, []);
+    }
+    if (totalMass <= 0) {
+      return false;
+    }
+    centerX /= totalMass;
+    centerY /= totalMass;
+    averageVx /= totalMass;
+    averageVy /= totalMass;
+
+    for (const record of component.records) {
+      addBridgeComponentRecord(adjacency, record.firstBody.id, record);
+      addBridgeComponentRecord(adjacency, record.secondBody.id, record);
+    }
+
+    const rootId = bodies[0].id;
+    const localOffsets = new Map([[rootId, { x: 0, y: 0 }]]);
+    const queue = [rootId];
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const bodyId = queue[cursor];
+      const baseOffset = localOffsets.get(bodyId) || { x: 0, y: 0 };
+      for (const record of adjacency.get(bodyId) || []) {
+        const fromFirst = record.firstBody.id === bodyId;
+        const otherBodyId = fromFirst ? record.secondBody.id : record.firstBody.id;
+        if (!bodyMap.has(otherBodyId) || localOffsets.has(otherBodyId)) {
+          continue;
+        }
+        const restDx = finiteOr(record.structure.restCenterDx, record.secondBody.x - record.firstBody.x);
+        const restDy = finiteOr(record.structure.restCenterDy, record.secondBody.y - record.firstBody.y);
+        localOffsets.set(otherBodyId, {
+          x: baseOffset.x + (fromFirst ? restDx : -restDx),
+          y: baseOffset.y + (fromFirst ? restDy : -restDy)
+        });
+        queue.push(otherBodyId);
+      }
+    }
+
+    if (localOffsets.size !== bodies.length) {
+      return false;
+    }
+
+    let restCenterX = 0;
+    let restCenterY = 0;
+    for (const body of bodies) {
+      const entry = bodyMap.get(body.id);
+      const offset = localOffsets.get(body.id);
+      restCenterX += offset.x * entry.mass;
+      restCenterY += offset.y * entry.mass;
+    }
+    restCenterX /= totalMass;
+    restCenterY /= totalMass;
+
+    let angularNumerator = 0;
+    let angularDenominator = 0;
+    for (const body of bodies) {
+      const entry = bodyMap.get(body.id);
+      const offset = localOffsets.get(body.id);
+      offset.x -= restCenterX;
+      offset.y -= restCenterY;
+      const relativeVx = finiteOr(body.vx, 0) - averageVx;
+      const relativeVy = finiteOr(body.vy, 0) - averageVy;
+      angularNumerator += entry.mass * (offset.x * relativeVy - offset.y * relativeVx);
+      angularDenominator += entry.mass * (offset.x * offset.x + offset.y * offset.y);
+    }
+
+    const angularVelocity = angularDenominator > 1
+      ? clamp(
+          (angularNumerator / angularDenominator) * Math.pow(bridgeAngularDamping, dt),
+          -bridgeMaxAngularSpeed,
+          bridgeMaxAngularSpeed
+        )
+      : 0;
+    const angleStep = angularVelocity * dt;
+    if (Math.abs(angleStep) > 0.000001) {
+      for (const record of component.records) {
+        const rotatedRest = rotatePoint(
+          finiteOr(record.structure.restCenterDx, record.secondBody.x - record.firstBody.x),
+          finiteOr(record.structure.restCenterDy, record.secondBody.y - record.firstBody.y),
+          angleStep
+        );
+        record.structure.restCenterDx = rotatedRest.x;
+        record.structure.restCenterDy = rotatedRest.y;
+      }
+      for (const body of bodies) {
+        rotateBodyMountedFrame(body.id, angleStep);
+        const offset = localOffsets.get(body.id);
+        const rotatedOffset = rotatePoint(offset.x, offset.y, angleStep);
+        offset.x = rotatedOffset.x;
+        offset.y = rotatedOffset.y;
+      }
+    }
+    applyBridgeComponentAnchorCorrections(component);
+
+    const velocityBlend = 1 - Math.pow(0.0001, dt);
+    for (const body of bodies) {
+      const offset = localOffsets.get(body.id);
+      body.x = centerX + offset.x;
+      body.y = centerY + offset.y;
+      const targetVx = averageVx - angularVelocity * offset.y;
+      const targetVy = averageVy + angularVelocity * offset.x;
+      body.vx = finiteOr(body.vx, 0) + (targetVx - finiteOr(body.vx, 0)) * velocityBlend;
+      body.vy = finiteOr(body.vy, 0) + (targetVy - finiteOr(body.vy, 0)) * velocityBlend;
+      body.angularVelocity = clamp(
+        finiteOr(body.angularVelocity, 0) + (angularVelocity - finiteOr(body.angularVelocity, 0)) * velocityBlend * 0.35,
+        -bodyMaxAngularSpeed,
+        bodyMaxAngularSpeed
+      );
+    }
+
+    for (const record of component.records) {
+      applyLinkedStructureSurfaceConstraint(record.structure);
+    }
+    return true;
+  }
+
+  function solveBridgeConstraints(dt) {
+    const graph = bridgeConstraintRecords();
+    if (!graph.records.length) {
+      return;
+    }
+
+    let movedAny = false;
+    for (const component of bridgeConstraintComponents(graph.records, graph.adjacency)) {
+      if (solveBridgeConstraintComponent(component, dt)) {
+        movedAny = true;
+      }
+    }
+    if (movedAny) {
+      syncStructuresToSurfaces(false);
+    }
+  }
+
   function updateBridge(structure, dt) {
     const firstBody = bodyById(structure.bodyId);
     const secondBody = bodyById(structure.linkedBodyId);
@@ -30101,90 +36714,6 @@
     }
 
     structure.deploy = clamp((structure.deploy || 0) + dt * 2.8, 0, 1);
-
-    let restDx = finiteOr(structure.restCenterDx, secondBody.x - firstBody.x);
-    let restDy = finiteOr(structure.restCenterDy, secondBody.y - firstBody.y);
-    let restLength = Math.hypot(restDx, restDy);
-    if (restLength < 1) {
-      restDx = secondBody.x - firstBody.x;
-      restDy = secondBody.y - firstBody.y;
-      restLength = Math.hypot(restDx, restDy) || 1;
-    }
-
-    const firstMass = Math.max(1, finiteOr(firstBody.mass, 1));
-    const secondMass = Math.max(1, finiteOr(secondBody.mass, 1));
-    const totalMass = firstMass + secondMass;
-    const firstShare = clamp(secondMass / totalMass, 0.08, 0.92);
-    const secondShare = clamp(firstMass / totalMass, 0.08, 0.92);
-    const currentDx = secondBody.x - firstBody.x;
-    const currentDy = secondBody.y - firstBody.y;
-    const leverLengthSq = Math.max(1, currentDx * currentDx + currentDy * currentDy);
-    const relativeVx = finiteOr(secondBody.vx, 0) - finiteOr(firstBody.vx, 0);
-    const relativeVy = finiteOr(secondBody.vy, 0) - finiteOr(firstBody.vy, 0);
-    const angularVelocity = clamp(
-      ((currentDx * relativeVy - currentDy * relativeVx) / leverLengthSq) * Math.pow(bridgeAngularDamping, dt),
-      -bridgeMaxAngularSpeed,
-      bridgeMaxAngularSpeed
-    );
-    const angleStep = angularVelocity * dt;
-
-    if (Math.abs(angleStep) > 0.000001) {
-      const rotated = rotatePoint(restDx, restDy, angleStep);
-      restDx = rotated.x;
-      restDy = rotated.y;
-      rotateBodyMountedFrame(firstBody.id, angleStep);
-      rotateBodyMountedFrame(secondBody.id, angleStep);
-    }
-
-    structure.restCenterDx = restDx;
-    structure.restCenterDy = restDy;
-
-    const centerX = (firstBody.x * firstMass + secondBody.x * secondMass) / totalMass;
-    const centerY = (firstBody.y * firstMass + secondBody.y * secondMass) / totalMass;
-    firstBody.x = centerX - restDx * firstShare;
-    firstBody.y = centerY - restDy * firstShare;
-    secondBody.x = centerX + restDx * secondShare;
-    secondBody.y = centerY + restDy * secondShare;
-
-    const averageVx = (finiteOr(firstBody.vx, 0) * firstMass + finiteOr(secondBody.vx, 0) * secondMass) / totalMass;
-    const averageVy = (finiteOr(firstBody.vy, 0) * firstMass + finiteOr(secondBody.vy, 0) * secondMass) / totalMass;
-    const firstRadiusX = -restDx * firstShare;
-    const firstRadiusY = -restDy * firstShare;
-    const secondRadiusX = restDx * secondShare;
-    const secondRadiusY = restDy * secondShare;
-    const firstTargetVx = averageVx - angularVelocity * firstRadiusY;
-    const firstTargetVy = averageVy + angularVelocity * firstRadiusX;
-    const secondTargetVx = averageVx - angularVelocity * secondRadiusY;
-    const secondTargetVy = averageVy + angularVelocity * secondRadiusX;
-    const velocityBlend = 1 - Math.pow(0.0001, dt);
-    applyBodyVelocityChangeAtPoint(
-      firstBody,
-      (firstTargetVx - firstBody.vx) * velocityBlend,
-      (firstTargetVy - firstBody.vy) * velocityBlend,
-      structure.x,
-      structure.y,
-      bodyConstraintTorqueResponse
-    );
-    applyBodyVelocityChangeAtPoint(
-      secondBody,
-      (secondTargetVx - secondBody.vx) * velocityBlend,
-      (secondTargetVy - secondBody.vy) * velocityBlend,
-      structure.x2,
-      structure.y2,
-      bodyConstraintTorqueResponse
-    );
-    firstBody.angularVelocity = clamp(
-      finiteOr(firstBody.angularVelocity, 0) + (angularVelocity - finiteOr(firstBody.angularVelocity, 0)) * velocityBlend * 0.35,
-      -bodyMaxAngularSpeed,
-      bodyMaxAngularSpeed
-    );
-    secondBody.angularVelocity = clamp(
-      finiteOr(secondBody.angularVelocity, 0) + (angularVelocity - finiteOr(secondBody.angularVelocity, 0)) * velocityBlend * 0.35,
-      -bodyMaxAngularSpeed,
-      bodyMaxAngularSpeed
-    );
-
-    applyLinkedStructureSurfaceConstraint(structure);
 
     if (Math.random() < dt * 0.7) {
       const geometry = bridgeGeometry(structure);
@@ -30259,6 +36788,50 @@
     }
   }
 
+  function medbayHalfAngle(body, structure) {
+    const centerRadius = Math.max(24, body.radius + structureBaseSurfaceOffset(structure) + medbayInteriorWidth * 0.18);
+    return Math.min(Math.PI, medbayInteriorWidth / centerRadius / 2);
+  }
+
+  function playerInsideMedbay(body, structure) {
+    return Boolean(
+      player.landed &&
+      !player.landed.bridgeId &&
+      body &&
+      player.landed.bodyId === body.id &&
+      Math.abs(shortestAngleDelta(finiteOr(structure.angle, 0), finiteOr(player.landed.angle, 0))) <= medbayHalfAngle(body, structure)
+    );
+  }
+
+  function updateMedbay(structure, dt) {
+    const body = bodyById(structure.bodyId);
+    const missingHealth = Math.max(0, finiteOr(player.maxHealth, 100) - finiteOr(player.health, 0));
+    const canHeal = missingHealth > 0 && playerInsideMedbay(body, structure);
+    const maxHeal = Math.min(missingHealth, medbayHealRate * dt);
+    const energyCost = medbayHealRate > 0 ? medbayEnergyDrain * (maxHeal / medbayHealRate) : 0;
+    const healing = canHeal && maxHeal > 0 && spendBodyEnergy(body, energyCost);
+
+    structure.deploy = clamp(finiteOr(structure.deploy, 0) + dt * 3.2, 0, 1);
+    structure.healPulse = clamp(finiteOr(structure.healPulse, 0) - dt * 2.6, 0, 1);
+
+    if (!healing) {
+      return;
+    }
+
+    player.health = Math.min(player.maxHealth, player.health + maxHeal);
+    structure.healPulse = 1;
+    if (Math.random() < dt * 2.4) {
+      sparks.push({
+        x: player.x + randomRange(-10, 10),
+        y: player.y + randomRange(-16, 10),
+        radius: 14 + randomRange(0, 14),
+        color: { r: 123, g: 255, b: 173 },
+        life: 0.16,
+        maxLife: 0.16
+      });
+    }
+  }
+
   function updateStructures(dt) {
     for (let i = structures.length - 1; i >= 0; i -= 1) {
       const structure = structures[i];
@@ -30307,6 +36880,11 @@
         continue;
       }
 
+      if (structure.type === "medbay") {
+        updateMedbay(structure, dt);
+        continue;
+      }
+
       if (structure.type === "accumulator") {
         updateAccumulator(structure, dt);
         continue;
@@ -30319,6 +36897,11 @@
 
       if (structure.type === "missile-launcher") {
         updateMissileLauncher(structure, dt);
+        continue;
+      }
+
+      if (structure.type === "trading-port") {
+        updateTradingPort(structure, dt);
         continue;
       }
 
@@ -30372,6 +36955,7 @@
       }
     }
 
+    solveBridgeConstraints(dt);
     solveTetherConstraints(dt);
   }
 
@@ -30409,6 +36993,11 @@
             maxLife: 0.22
           });
           playSound("mobHit", { throttleKey: "familiarProjectileImpact" });
+          rivalProjectiles.splice(i, 1);
+          continue;
+        }
+
+        if (tradeVesselHitBySegment(tailX, tailY, projectile.x, projectile.y, hitRadius, projectile.damage || rivalProjectileDamage, projectile.color)) {
           rivalProjectiles.splice(i, 1);
           continue;
         }
@@ -30505,6 +37094,11 @@
           maxLife: 0.22
         });
         playSound("mobHit", { throttleKey: "projectileImpact" });
+        rivalProjectiles.splice(i, 1);
+        continue;
+      }
+
+      if (tradeVesselHitBySegment(tailX, tailY, projectile.x, projectile.y, hitRadius, projectile.damage || rivalProjectileDamage, projectile.color)) {
         rivalProjectiles.splice(i, 1);
         continue;
       }
@@ -31008,8 +37602,8 @@
   }
 
   function updateBodyAfterMassChange(body, previousTier) {
-    body.radius = radiusFromMass(body.mass);
-    body.tier = tierForMass(body.mass);
+    body.tier = tierForMassAndStellarOutcome(body.mass, body.stellarOutcome);
+    body.radius = radiusFromMassForTier(body.mass, body.tier);
     normalizeBodyEnergy(body);
     body.textureSeed += 0.09;
 
@@ -31311,6 +37905,10 @@
         continue;
       }
 
+      if (updateSurvivalCampMobHome(ufo, dt)) {
+        continue;
+      }
+
       const target = combatTargetForMob(ufo);
       if (!target) {
         updateFamiliarMob(ufo, dt);
@@ -31381,6 +37979,9 @@
       if (!mob || mob === source || mob.health <= 0 || isMobSummoning(mob)) {
         continue;
       }
+      if (isSurvivalCampMob(mob) && finiteOr(mob.survivalCampAggroTimer, 0) <= 0) {
+        continue;
+      }
       const distance = Math.hypot(mob.x - source.x, mob.y - source.y);
       if (distance < bestDistance) {
         best = mob;
@@ -31398,6 +37999,173 @@
       player: mob,
       publicName: mobName(mob)
     };
+  }
+
+  function isSurvivalCampMob(mob) {
+    return Boolean(
+      mob &&
+      mob.survivalCampId &&
+      !isPlayerTeamMob(mob) &&
+      !isHordeModeActive()
+    );
+  }
+
+  function clearSurvivalCampAttackState(mob) {
+    if (!mob) {
+      return;
+    }
+    mob.lightningWarmup = 0;
+    mob.lockTimer = 0;
+    mob.volleyTimer = 0;
+    mob.volleyShots = 0;
+    mob.scanProgress = 0;
+    mob.chargeTimer = 0;
+    mob.chargePower = 0;
+    mob.machineGunShots = 0;
+    mob.pistonTimer = 0;
+    mob.pistonHit = false;
+    mob.recoverTimer = Math.max(0.16, finiteOr(mob.recoverTimer, 0));
+  }
+
+  function wakeSurvivalCampFromMob(mob) {
+    if (!isSurvivalCampMob(mob)) {
+      return false;
+    }
+    const campId = mob.survivalCampId;
+    const wakeX = finiteOr(mob.survivalCampX, mob.x);
+    const wakeY = finiteOr(mob.survivalCampY, mob.y);
+    for (const campMob of hostileCombatMobs()) {
+      if (
+        !campMob ||
+        campMob.survivalCampId !== campId ||
+        campMob.health <= 0 ||
+        Math.hypot(campMob.x - wakeX, campMob.y - wakeY) > survivalCampWakeRadius
+      ) {
+        continue;
+      }
+      campMob.survivalCampAggroTimer = survivalCampAggroDuration;
+      campMob.survivalCampReturning = false;
+    }
+    return true;
+  }
+
+  function wakeSurvivalCampFromBody(body) {
+    if (!body || !body.survivalCampBody || !body.survivalCampId || isHordeModeActive()) {
+      return false;
+    }
+
+    const campId = body.survivalCampId;
+    const wakeX = finiteOr(body.survivalCampX, body.x);
+    const wakeY = finiteOr(body.survivalCampY, body.y);
+    for (const campMob of hostileCombatMobs()) {
+      if (
+        !campMob ||
+        campMob.survivalCampId !== campId ||
+        campMob.health <= 0 ||
+        Math.hypot(campMob.x - wakeX, campMob.y - wakeY) > survivalCampWakeRadius
+      ) {
+        continue;
+      }
+      campMob.survivalCampAggroTimer = survivalCampAggroDuration;
+      campMob.survivalCampReturning = false;
+    }
+    return true;
+  }
+
+  function ensureSurvivalCampBodyHome(body) {
+    if (!body || !body.survivalCampBody) {
+      return null;
+    }
+    if (!Number.isFinite(Number(body.survivalCampHomeX)) || !Number.isFinite(Number(body.survivalCampHomeY))) {
+      body.survivalCampHomeX = finiteOr(body.x, 0);
+      body.survivalCampHomeY = finiteOr(body.y, 0);
+    }
+    return {
+      x: finiteOr(body.survivalCampHomeX, body.x),
+      y: finiteOr(body.survivalCampHomeY, body.y)
+    };
+  }
+
+  function markSurvivalCampBodyMovedByPlayer(body, playerId) {
+    if (!body || !body.survivalCampBody) {
+      return;
+    }
+    ensureSurvivalCampBodyHome(body);
+    body.survivalCampMovedByPlayer = true;
+    body.survivalCampLastMoverPlayerId = String(playerId || "");
+  }
+
+  function maybeWakeSurvivalCampFromMovedBody(body) {
+    if (!body || !body.survivalCampBody || !body.survivalCampMovedByPlayer || body.survivalCampBodyMovedWakeSent) {
+      return false;
+    }
+    const home = ensureSurvivalCampBodyHome(body);
+    if (!home || Math.hypot(finiteOr(body.x, home.x) - home.x, finiteOr(body.y, home.y) - home.y) < survivalCampBodyWakeDistance) {
+      return false;
+    }
+    body.survivalCampBodyMovedWakeSent = true;
+    return wakeSurvivalCampFromBody(body);
+  }
+
+  function updateSurvivalCampMobHome(mob, dt) {
+    if (!isSurvivalCampMob(mob)) {
+      return false;
+    }
+
+    const campX = finiteOr(mob.survivalCampX, mob.x);
+    const campY = finiteOr(mob.survivalCampY, mob.y);
+    const leashRadius = Math.max(600, finiteOr(mob.survivalCampLeashRadius, survivalCampLeashRadius));
+    const homeDx = campX - mob.x;
+    const homeDy = campY - mob.y;
+    const homeDistance = Math.hypot(homeDx, homeDy);
+    mob.survivalCampAggroTimer = Math.max(0, finiteOr(mob.survivalCampAggroTimer, 0) - dt);
+
+    if (mob.survivalCampAggroTimer > 0 && homeDistance <= leashRadius) {
+      return false;
+    }
+
+    if (homeDistance > leashRadius || mob.survivalCampAggroTimer <= 0) {
+      mob.survivalCampAggroTimer = 0;
+      mob.survivalCampReturning = homeDistance > survivalCampReturnRadius;
+      clearSurvivalCampAttackState(mob);
+    }
+
+    const time = performance.now() * 0.001;
+    const slotAngle = finiteOr(mob.survivalCampSlotAngle, finiteOr(mob.wobble, 0)) + Math.sin(time * 0.16 + finiteOr(mob.wobble, 0)) * 0.18;
+    const slotRadius = clamp(finiteOr(mob.survivalCampSlotRadius, survivalCampIdleRadius * 0.65), 120, survivalCampIdleRadius);
+    const targetX = campX + Math.cos(slotAngle) * slotRadius;
+    const targetY = campY + Math.sin(slotAngle) * slotRadius;
+    const toTargetX = targetX - mob.x;
+    const toTargetY = targetY - mob.y;
+    const targetDistance = Math.hypot(toTargetX, toTargetY) || 1;
+    const nx = toTargetX / targetDistance;
+    const ny = toTargetY / targetDistance;
+    const tangentX = -ny * finiteOr(mob.strafeSign, 1);
+    const tangentY = nx * finiteOr(mob.strafeSign, 1);
+    const returnForce = homeDistance > survivalCampReturnRadius ? 176 : targetDistance > 120 ? 92 : 22;
+    const strafeForce = targetDistance < 240 ? 48 : 18;
+
+    mob.vx += nx * returnForce * dt + tangentX * strafeForce * dt;
+    mob.vy += ny * returnForce * dt + tangentY * strafeForce * dt;
+    mob.vx += Math.sin(time * 0.7 + finiteOr(mob.wobble, 0)) * 9 * dt;
+    mob.vy += Math.cos(time * 0.63 + finiteOr(mob.wobble, 0)) * 9 * dt;
+    mob.vx *= Math.pow(homeDistance > survivalCampReturnRadius ? 0.76 : 0.62, dt);
+    mob.vy *= Math.pow(homeDistance > survivalCampReturnRadius ? 0.76 : 0.62, dt);
+
+    const speed = Math.hypot(mob.vx, mob.vy);
+    const maxSpeed = homeDistance > survivalCampReturnRadius ? 250 : 118;
+    if (speed > maxSpeed) {
+      mob.vx = (mob.vx / speed) * maxSpeed;
+      mob.vy = (mob.vy / speed) * maxSpeed;
+    }
+
+    mob.x += mob.vx * dt;
+    mob.y += mob.vy * dt;
+    if (homeDistance <= survivalCampReturnRadius * 0.72) {
+      mob.survivalCampReturning = false;
+    }
+    mob.rotation = Math.atan2(mob.vy || ny, mob.vx || nx) + Math.PI / 2;
+    return true;
   }
 
   function activeFamiliarCommand(mob) {
@@ -31420,6 +38188,22 @@
     mob.familiarCommandY = finiteOr(mob.y, 0);
   }
 
+  function survivalHitSquadCombatTarget(mob) {
+    const targetId = String(mob && mob.survivalTargetPlayerId || "");
+    if (!targetId || isHordeModeActive() || typeof collectCombatPlayerTargets !== "function") {
+      return null;
+    }
+    for (const target of collectCombatPlayerTargets()) {
+      const playerId = target && target.local
+        ? String(player.id || "")
+        : String(target && target.remote && target.remote.playerId || target && target.player && target.player.id || "");
+      if (playerId === targetId && target.player && target.player.health > 0) {
+        return target;
+      }
+    }
+    return null;
+  }
+
   function combatTargetForMob(mob) {
     if (isPlayerTeamMob(mob)) {
       if (activeFamiliarCommand(mob)) {
@@ -31427,6 +38211,9 @@
       }
       const target = nearestHostileMobTarget(mob);
       return target ? familiarEnemyCombatTarget(target.mob) : null;
+    }
+    if (mob && mob.survivalEncounterType === "hit-squad") {
+      return survivalHitSquadCombatTarget(mob);
     }
     return nearestCombatPlayerTarget(mob.x, mob.y);
   }
@@ -31528,6 +38315,10 @@
       const bossAltReady = tickBossAltAttackCooldown(rival, dt);
       if (isMobDisabled(rival)) {
         updateDisabledMobDrift(rival, dt);
+        continue;
+      }
+
+      if (updateSurvivalCampMobHome(rival, dt)) {
         continue;
       }
 
@@ -31943,6 +38734,10 @@
         continue;
       }
 
+      if (updateSurvivalCampMobHome(rambot, dt)) {
+        continue;
+      }
+
       const target = combatTargetForMob(rambot);
       if (!target) {
         updateFamiliarMob(rambot, dt);
@@ -32140,6 +38935,10 @@
         continue;
       }
 
+      if (updateSurvivalCampMobHome(engineer, dt)) {
+        continue;
+      }
+
       const playerTarget = combatTargetForMob(engineer);
       if (!playerTarget) {
         updateFamiliarMob(engineer, dt);
@@ -32252,6 +39051,10 @@
       if (isMobDisabled(tesla)) {
         tesla.lightningWarmup = 0;
         updateDisabledMobDrift(tesla, dt);
+        continue;
+      }
+
+      if (updateSurvivalCampMobHome(tesla, dt)) {
         continue;
       }
 
@@ -32533,7 +39336,7 @@
   }
 
   function launchRocketBossSplitMinions(rocket, targetPlayer) {
-    if (!rocket || !rocket.isBoss || !targetPlayer) {
+    if (!rocket || !rocket.isBoss || !targetPlayer || !isMobBeaconReady("rocket")) {
       return;
     }
 
@@ -32729,6 +39532,10 @@
         continue;
       }
 
+      if (updateSurvivalCampMobHome(rocket, dt)) {
+        continue;
+      }
+
       if (rocket.kind !== "satellite") {
         updateRocketShip(rocket, dt);
         continue;
@@ -32892,6 +39699,10 @@
         continue;
       }
 
+      if (updateSurvivalCampMobHome(fighter, dt)) {
+        continue;
+      }
+
       const target = combatTargetForMob(fighter);
       if (!target) {
         updateFamiliarMob(fighter, dt);
@@ -32997,6 +39808,82 @@
     ctx.beginPath();
     ctx.arc(particle.x - radius * 0.28, particle.y - radius * 0.34, Math.max(1.4, radius * 0.22), 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  function bodyPromotionVisualProgress(particle) {
+    if (!particle || !Number.isFinite(Number(particle.promotionStartedAt))) {
+      return null;
+    }
+
+    const duration = Math.max(0.001, finiteOr(particle.promotionDuration, bodyPromotionEffectDuration));
+    const age = Math.max(0, (performance.now() - particle.promotionStartedAt) / 1000);
+    if (age >= duration) {
+      return null;
+    }
+
+    const progress = clamp(age / duration, 0, 1);
+    return {
+      age,
+      duration,
+      progress,
+      fade: 1 - progress,
+      ease: 1 - Math.pow(1 - progress, 3)
+    };
+  }
+
+  function drawBodyPromotionEffect(particle, radius, time) {
+    const visual = bodyPromotionVisualProgress(particle);
+    if (!visual) {
+      return;
+    }
+
+    const color = particle.promotionColor || shadeColor(particle.color, 72);
+    const flash = Math.sin((1 - visual.fade) * Math.PI);
+    const ringRadius = radius * (1.18 + visual.ease * 1.05);
+    const innerRing = radius * (0.82 + visual.ease * 0.28);
+    const rayCount = particle.tier && particle.tier.threshold >= thresholdForTierName("moon") ? 18 : 12;
+
+    ctx.save();
+    ctx.translate(particle.x, particle.y);
+    ctx.rotate(finiteOr(particle.rotation, 0) * 0.24 + time * 0.0012);
+    ctx.globalCompositeOperation = "lighter";
+
+    const haloRadius = radius * (2.15 + visual.ease * 1.2);
+    const halo = ctx.createRadialGradient(0, 0, radius * 0.42, 0, 0, haloRadius);
+    halo.addColorStop(0, colorString(shadeColor(color, 92), 0.24 * visual.fade + 0.1 * flash));
+    halo.addColorStop(0.38, colorString(color, 0.18 * visual.fade));
+    halo.addColorStop(1, colorString(color, 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 0, haloRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = colorString(shadeColor(color, 96), 0.66 * visual.fade);
+    ctx.lineWidth = Math.max(2.2, radius * 0.055 * visual.fade);
+    ctx.beginPath();
+    ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = colorString(color, 0.24 * visual.fade);
+    ctx.lineWidth = Math.max(1.4, radius * 0.022);
+    ctx.beginPath();
+    ctx.arc(0, 0, innerRing, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.lineCap = "round";
+    for (let i = 0; i < rayCount; i += 1) {
+      const angle = (Math.PI * 2 * i) / rayCount + Math.sin(time * 0.002 + particle.textureSeed + i) * 0.05;
+      const inner = radius * (1.03 + visual.ease * 0.25);
+      const outer = radius * (1.42 + visual.ease * (0.75 + Math.abs(textureNoise(particle.textureSeed, i + 51)) * 0.36));
+      ctx.strokeStyle = colorString(i % 2 ? color : shadeColor(color, 96), 0.28 * visual.fade);
+      ctx.lineWidth = Math.max(1.6, radius * 0.025);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+      ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+      ctx.stroke();
+    }
+
+    ctx.restore();
   }
 
   function particleSpawnVisualState(particle) {
@@ -33211,12 +40098,6 @@
     ctx.translate(particle.x, particle.y);
     ctx.rotate(particle.textureSeed * 0.12 + finiteOr(particle.rotation, 0));
 
-    if (consumeBodyGlowBudget()) {
-      ctx.globalCompositeOperation = "lighter";
-      drawGlow({ x: 0, y: 0, color: particle.color }, radius, 0.38);
-    }
-    ctx.globalCompositeOperation = "source-over";
-
     const gradient = ctx.createRadialGradient(-radius * 0.4, -radius * 0.36, radius * 0.02, 0, 0, radius);
     gradient.addColorStop(0, colorString(light, 0.98));
     gradient.addColorStop(0.55, colorString(mid, 0.98));
@@ -33248,11 +40129,192 @@
     ctx.restore();
   }
 
+  function drawStarBody(particle, radius, time) {
+    const birthProgress = clamp(
+      finiteOr(particle.starBirthAge, starBirthTransitionDuration) / Math.max(0.001, starBirthTransitionDuration),
+      0,
+      1
+    );
+    const birthEase = 1 - Math.pow(1 - birthProgress, 3);
+    const coreRadius = radius * (0.68 + birthEase * 0.32);
+    const coronaPulse = 1 + Math.sin(time * 0.006 + particle.textureSeed) * 0.055;
+    const coronaRadius = radius * (2.05 + (1 - birthProgress) * 1.15) * coronaPulse;
+    const coreColor = { r: 255, g: 242, b: 178 };
+    const midColor = mixColor({ r: 255, g: 178, b: 70 }, particle.color, 4, 1);
+    const rimColor = mixColor({ r: 255, g: 85, b: 58 }, particle.color, 3, 1);
+
+    ctx.save();
+    ctx.translate(particle.x, particle.y);
+    ctx.rotate(finiteOr(particle.rotation, 0) + particle.textureSeed * 0.013);
+    ctx.globalCompositeOperation = "lighter";
+
+    const corona = ctx.createRadialGradient(0, 0, radius * 0.18, 0, 0, coronaRadius);
+    corona.addColorStop(0, colorString(coreColor, 0.5));
+    corona.addColorStop(0.28, colorString(midColor, 0.24));
+    corona.addColorStop(1, colorString(rimColor, 0));
+    ctx.fillStyle = corona;
+    ctx.beginPath();
+    ctx.arc(0, 0, coronaRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.lineCap = "round";
+    for (let i = 0; i < 18; i += 1) {
+      const angle = (Math.PI * 2 * i) / 18 + Math.sin(time * 0.0014 + particle.textureSeed + i) * 0.08;
+      const inner = radius * randomStarRayInner(i, particle.textureSeed);
+      const outer = radius * (1.18 + Math.abs(textureNoise(particle.textureSeed, i + 31)) * 0.72 + (1 - birthProgress) * 0.65);
+      ctx.strokeStyle = colorString(i % 3 === 0 ? coreColor : midColor, 0.13 + (1 - birthProgress) * 0.12);
+      ctx.lineWidth = Math.max(2, radius * (0.012 + Math.abs(textureNoise(particle.textureSeed, i + 11)) * 0.012));
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+      ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+      ctx.stroke();
+    }
+
+    ctx.globalCompositeOperation = "source-over";
+    const surface = ctx.createRadialGradient(-coreRadius * 0.28, -coreRadius * 0.33, coreRadius * 0.08, 0, 0, coreRadius);
+    surface.addColorStop(0, colorString(coreColor, 1));
+    surface.addColorStop(0.44, colorString(midColor, 0.98));
+    surface.addColorStop(1, colorString(rimColor, 0.98));
+    ctx.fillStyle = surface;
+    ctx.beginPath();
+    ctx.arc(0, 0, coreRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.clip();
+
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 7; i += 1) {
+      const y = -coreRadius * 0.58 + i * coreRadius * 0.2;
+      const wave = Math.sin(time * 0.003 + particle.textureSeed + i) * coreRadius * 0.08;
+      ctx.strokeStyle = colorString(i % 2 ? { r: 255, g: 116, b: 68 } : coreColor, 0.22);
+      ctx.lineWidth = Math.max(2, coreRadius * 0.032);
+      ctx.beginPath();
+      ctx.ellipse(wave, y, coreRadius * 1.12, coreRadius * 0.08, textureNoise(particle.textureSeed, i) * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    if (birthProgress < 1) {
+      ctx.save();
+      ctx.translate(particle.x, particle.y);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "rgba(255, 228, 138, " + (0.55 * (1 - birthProgress)) + ")";
+      ctx.lineWidth = Math.max(4, radius * (0.08 - birthProgress * 0.035));
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * (0.74 + birthProgress * 2.35), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function randomStarRayInner(index, seed) {
+    return 0.72 + Math.abs(textureNoise(seed, index + 77)) * 0.22;
+  }
+
+  function drawStellarRemnantBody(particle, radius, time) {
+    const tierName = particle && particle.tier ? particle.tier.name : "";
+    const isBlackHole = tierName === "black hole";
+    const isNeutron = tierName === "neutron star";
+    const coreColor = isBlackHole
+      ? { r: 4, g: 6, b: 15 }
+      : isNeutron
+        ? { r: 172, g: 238, b: 255 }
+        : { r: 244, g: 250, b: 255 };
+    const rimColor = isBlackHole
+      ? { r: 122, g: 80, b: 255 }
+      : isNeutron
+        ? { r: 98, g: 226, b: 255 }
+        : { r: 180, g: 224, b: 255 };
+    const pulse = 1 + Math.sin(time * (isNeutron ? 0.014 : 0.006) + particle.textureSeed) * (isNeutron ? 0.08 : 0.035);
+
+    ctx.save();
+    ctx.translate(particle.x, particle.y);
+    ctx.rotate(finiteOr(particle.rotation, 0) + time * (isBlackHole ? 0.00018 : 0.00008));
+
+    ctx.globalCompositeOperation = "lighter";
+    const halo = ctx.createRadialGradient(0, 0, radius * 0.2, 0, 0, radius * (isBlackHole ? 2.4 : 1.9));
+    halo.addColorStop(0, colorString(rimColor, isBlackHole ? 0.22 : 0.5));
+    halo.addColorStop(0.42, colorString(rimColor, isBlackHole ? 0.12 : 0.18));
+    halo.addColorStop(1, colorString(rimColor, 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * (isBlackHole ? 2.4 : 1.9), 0, Math.PI * 2);
+    ctx.fill();
+
+    if (isBlackHole) {
+      ctx.strokeStyle = "rgba(255, 210, 122, 0.72)";
+      ctx.lineWidth = Math.max(4, radius * 0.09);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, radius * 1.45, radius * 0.38, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (isNeutron) {
+      ctx.strokeStyle = colorString(rimColor, 0.72);
+      ctx.lineWidth = Math.max(3, radius * 0.055);
+      ctx.beginPath();
+      ctx.moveTo(-radius * 1.45, 0);
+      ctx.lineTo(radius * 1.45, 0);
+      ctx.stroke();
+    }
+
+    ctx.globalCompositeOperation = "source-over";
+    const surface = ctx.createRadialGradient(-radius * 0.24, -radius * 0.28, radius * 0.04, 0, 0, radius * pulse);
+    surface.addColorStop(0, colorString(isBlackHole ? { r: 60, g: 66, b: 98 } : { r: 255, g: 255, b: 255 }, 1));
+    surface.addColorStop(0.48, colorString(coreColor, isBlackHole ? 0.98 : 0.96));
+    surface.addColorStop(1, colorString(isBlackHole ? { r: 0, g: 0, b: 0 } : rimColor, 0.98));
+    ctx.fillStyle = surface;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * (isBlackHole ? 0.72 : 0.88) * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawOrbitRings(particle, time) {
+    const rings = orbitRingsForBody(particle);
+    if (!rings.length) {
+      return;
+    }
+
+    const zoom = Math.max(0.001, finiteOr(cameraZoom, 1));
+    const lineWidth = clamp(1.2 / zoom, 1.6, 3.8);
+    const light = shadeColor(particle.color, 84);
+    const rim = isStarBody(particle)
+      ? { r: 255, g: 214, b: 118 }
+      : mixColor(light, { r: 116, g: 244, b: 255 }, 2, 1);
+
+    ctx.save();
+    ctx.translate(particle.x, particle.y);
+    ctx.rotate(finiteOr(particle.rotation, 0) * 0.18);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+
+    for (let i = rings.length - 1; i >= 0; i -= 1) {
+      const radius = rings[i];
+      const pulse = 0.72 + Math.sin(time * 0.0028 + finiteOr(particle.textureSeed, 0) + i * 1.7) * 0.16;
+      const alpha = (isStarBody(particle) ? 0.13 : 0.16) + pulse * 0.045;
+      ctx.strokeStyle = colorString(rim, alpha);
+      ctx.lineWidth = lineWidth;
+      ctx.setLineDash([Math.max(16, radius * 0.11), Math.max(12, radius * 0.055)]);
+      ctx.lineDashOffset = -time * (0.018 + i * 0.006) * (i % 2 ? -1 : 1);
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      ctx.strokeStyle = colorString(rim, alpha * 0.18);
+      ctx.lineWidth = lineWidth * 2.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawBody(particle, time) {
     const pulse = 1 + Math.sin(time * 0.004 * particle.pulse + particle.id) * 0.035;
     const spawnSizeScale = particle.tier.name === "particle" ? clamp(finiteOr(particle.spawnSizeScale, 1), 1, 1.18) : 1;
     const spawnVisual = particleSpawnVisualState(particle);
     const radius = particle.radius * pulse * spawnSizeScale * spawnVisual.scale;
+    const lodRadius = particle.radius * spawnSizeScale * spawnVisual.scale;
 
     if (radius <= 0.05 || spawnVisual.alpha <= 0.005) {
       return;
@@ -33260,6 +40322,8 @@
 
     ctx.save();
     ctx.globalAlpha *= spawnVisual.alpha;
+    drawBodyPromotionEffect(particle, Math.max(particle.radius * spawnSizeScale * spawnVisual.scale, radius), time);
+    drawOrbitRings(particle, time);
 
     if (particle.tier.name === "particle") {
       drawTinyParticle(particle, radius);
@@ -33267,13 +40331,21 @@
       return;
     }
 
-    if (particle.tier.name !== "planet" && consumeBodyGlowBudget()) {
-      ctx.globalCompositeOperation = "lighter";
-      drawGlow(particle, radius, 0.48);
+    if (particle.tier.name === "star") {
+      drawStarBody(particle, radius, time);
+      ctx.restore();
+      return;
     }
+
+    if (stellarOutcomeTierNames.includes(particle.tier.name)) {
+      drawStellarRemnantBody(particle, radius, time);
+      ctx.restore();
+      return;
+    }
+
     ctx.globalCompositeOperation = "source-over";
 
-    if (shouldDrawSimpleBody(particle, radius)) {
+    if (shouldDrawSimpleBody(particle, lodRadius)) {
       drawSimpleBody(particle, radius, 0.96);
       drawBodyEnergyMeter(particle, radius);
       ctx.restore();
@@ -33497,15 +40569,18 @@
   }
 
   function drawBossNameplate(mob, time) {
-    if (!mob || !mob.isBoss || mob.health <= 0) {
+    if (!mob || mob.health <= 0) {
       return;
     }
 
-    const stars = bossStarRank(mob);
+    const stars = mob.isBoss ? bossStarRank(mob) : mobEliteStarRank(mob);
+    if (!mob.isBoss && stars <= 0) {
+      return;
+    }
     const visibleStars = Math.min(5, stars);
     const extraStars = Math.max(0, stars - visibleStars);
     const color = mob.color || { r: 255, g: 115, b: 173 };
-    const label = mobBossLabel(mob.kind);
+    const label = mob.isBoss ? mobBossLabel(mob.kind) : mobName(mob);
     const baseY = mob.y - Math.max(82, finiteOr(mob.radius, 34) * 1.65);
 
     ctx.save();
@@ -34964,6 +42039,183 @@
     ctx.restore();
   }
 
+  function drawContainer(structure, time, alpha, valid) {
+    const deploy = clamp(structure.deploy || 0, 0, 1);
+    const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 88, g: 226, b: 255 };
+    const total = tradeOfferTotal(structure.tech);
+    const fill = clamp(total / 30, 0, 1);
+    const pulse = 0.78 + Math.sin(time * 0.007 + (structure.wobble || 0)) * 0.12;
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(structure.x, structure.y);
+    ctx.rotate(structure.angle + Math.PI / 2);
+
+    ctx.fillStyle = "rgba(6, 10, 24, 0.86)";
+    ctx.strokeStyle = "rgba(235, 246, 255, 0.34)";
+    ctx.lineWidth = 3;
+    roundRectPath(-35, 9, 70, 19, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    const shellGradient = ctx.createLinearGradient(-30, -25, 30, 20);
+    shellGradient.addColorStop(0, "#f8fbff");
+    shellGradient.addColorStop(0.45, "#8fa0b8");
+    shellGradient.addColorStop(1, "#273149");
+    ctx.fillStyle = shellGradient;
+    ctx.strokeStyle = "rgba(8, 12, 23, 0.84)";
+    ctx.lineWidth = 3;
+    roundRectPath(-30, -23 - deploy * 3, 60, 45 + deploy * 3, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(8, 12, 23, 0.64)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-27, -8);
+    ctx.lineTo(27, -8);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(8, 12, 23, 0.72)";
+    roundRectPath(-18, -2, 36, 17, 5);
+    ctx.fill();
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = colorString(accent, 0.2 + fill * 0.45);
+    roundRectPath(-16, 0, 32 * Math.max(0.08, fill), 13, 4);
+    ctx.fill();
+    ctx.strokeStyle = colorString(accent, 0.16 + deploy * 0.22 + fill * 0.34);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -2, (24 + fill * 16) * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(248, 251, 255, 0.72)";
+    for (const x of [-21, 21]) {
+      ctx.beginPath();
+      ctx.arc(x, 19, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawTradingPort(structure, time, alpha, valid) {
+    const deploy = clamp(structure.deploy || 0, 0, 1);
+    const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 255, g: 184, b: 107 };
+    const offers = Array.isArray(structure.tradeOffers) ? structure.tradeOffers.length : 0;
+    const vessel = normalizeTradeVessel(structure.tradeVessel, structure);
+    const vesselAway = vessel && vessel.state !== "docked";
+    const pulse = 0.78 + Math.sin(time * 0.008 + (structure.wobble || 0)) * 0.12;
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(structure.x, structure.y);
+    ctx.rotate(structure.angle + Math.PI / 2);
+
+    ctx.fillStyle = "rgba(6, 10, 24, 0.88)";
+    ctx.strokeStyle = "rgba(235, 246, 255, 0.34)";
+    ctx.lineWidth = 3;
+    roundRectPath(-44, 8, 88, 22, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    const shellGradient = ctx.createLinearGradient(-36, -30, 36, 20);
+    shellGradient.addColorStop(0, "#f8fbff");
+    shellGradient.addColorStop(0.46, "#9fb1c4");
+    shellGradient.addColorStop(1, "#273149");
+    ctx.fillStyle = shellGradient;
+    ctx.strokeStyle = "rgba(8, 12, 23, 0.86)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-36, 16);
+    ctx.lineTo(-25, -26 - deploy * 5);
+    ctx.lineTo(25, -26 - deploy * 5);
+    ctx.lineTo(36, 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(8, 12, 23, 0.52)";
+    ctx.lineWidth = 3;
+    for (const x of [-17, 0, 17]) {
+      ctx.beginPath();
+      ctx.moveTo(x, 12);
+      ctx.lineTo(x * 0.72, -20 - deploy * 4);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = colorString(accent, 0.18 + deploy * 0.3);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -5, (28 + offers * 3 + deploy * 12) * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = colorString(accent, 0.18 + offers * 0.06 + deploy * 0.24);
+    ctx.beginPath();
+    ctx.arc(0, -6, 15 + Math.min(offers, 4) * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = vesselAway ? "rgba(255, 184, 107, 0.46)" : colorString(accent, 0.95);
+    ctx.beginPath();
+    ctx.moveTo(0, -33 - deploy * 8);
+    ctx.lineTo(13, -8);
+    ctx.lineTo(-13, -8);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawTradeVessel(vessel, time, alpha) {
+    if (!vessel || vessel.state === "docked") {
+      return;
+    }
+
+    const speed = Math.hypot(finiteOr(vessel.vx, 0), finiteOr(vessel.vy, 0));
+    const angle = speed > 6 ? Math.atan2(vessel.vy, vessel.vx) : finiteOr(vessel.angle, 0);
+    const healthPct = clamp(finiteOr(vessel.health, tradingPortVesselMaxHealth) / tradingPortVesselMaxHealth, 0, 1);
+    const cargoGlow = tradeOfferTotal(vessel.cargo) > 0 ? 1 : 0.32;
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(vessel.x, vessel.y);
+    ctx.rotate(angle + Math.PI / 2);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = "rgba(255, 184, 107, 0.16)";
+    ctx.beginPath();
+    ctx.ellipse(0, 6, 32 + cargoGlow * 10, 18 + cargoGlow * 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(6, 10, 24, 0.92)";
+    ctx.strokeStyle = "rgba(248, 251, 255, 0.62)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -25);
+    ctx.lineTo(18, 15);
+    ctx.lineTo(5, 10);
+    ctx.lineTo(0, 25);
+    ctx.lineTo(-5, 10);
+    ctx.lineTo(-18, 15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = healthPct > 0.42 ? "#ffb86b" : "#ff6d6d";
+    ctx.beginPath();
+    ctx.arc(0, -3, 6 + Math.sin(time * 0.018) * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
   function drawAccumulator(structure, time, alpha, valid) {
     const deploy = clamp(structure.deploy || 0, 0, 1);
     const pulse = 1 + Math.sin(time * 0.007 + (structure.wobble || 0)) * 0.05;
@@ -35021,6 +42273,57 @@
     ctx.fillStyle = colorString(accent, 0.92);
     ctx.beginPath();
     ctx.arc(0, -2, 6 + deploy * 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawMedbay(structure, time, alpha, valid) {
+    const deploy = clamp(structure.deploy || 0, 0, 1);
+    const healPulse = clamp(finiteOr(structure.healPulse, 0), 0, 1);
+    const pulse = 1 + Math.sin(time * 0.008 + (structure.wobble || 0)) * 0.05;
+    const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 123, g: 255, b: 173 };
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(structure.x, structure.y);
+    ctx.rotate(structure.angle + Math.PI / 2);
+
+    ctx.fillStyle = "rgba(6, 10, 24, 0.86)";
+    ctx.strokeStyle = "rgba(235, 246, 255, 0.34)";
+    ctx.lineWidth = 3;
+    roundRectPath(-38, 8, 76, 20, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    const shellGradient = ctx.createLinearGradient(-30, -26, 30, 18);
+    shellGradient.addColorStop(0, "#f8fbff");
+    shellGradient.addColorStop(0.46, "#9fb1c4");
+    shellGradient.addColorStop(1, "#283446");
+    ctx.fillStyle = shellGradient;
+    ctx.strokeStyle = "rgba(8, 12, 23, 0.82)";
+    ctx.lineWidth = 3;
+    roundRectPath(-31, -24 - deploy * 4, 62, 43 + deploy * 4, 11);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = colorString(accent, 0.16 + deploy * 0.2 + healPulse * 0.28);
+    ctx.beginPath();
+    ctx.ellipse(0, -5, (22 + healPulse * 10) * pulse, (14 + healPulse * 5) * pulse, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = colorString(accent, 0.32 + deploy * 0.28 + healPulse * 0.34);
+    ctx.lineWidth = 2 + healPulse * 2;
+    ctx.beginPath();
+    ctx.arc(0, -5, 20 + deploy * 9 + healPulse * 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = colorString(accent, 0.94);
+    roundRectPath(-6, -18, 12, 27, 4);
+    ctx.fill();
+    roundRectPath(-18, -7, 36, 12, 4);
     ctx.fill();
 
     ctx.restore();
@@ -35343,6 +42646,81 @@
     drawTetherAnchor(structure, x2, y2, finiteOr(structure.linkedAngle, structure.angle + Math.PI), time, alpha, valid);
   }
 
+  function drawPersonalTether(time) {
+    const endpoint = personalTetherEndpoint();
+    if (!endpoint) {
+      return;
+    }
+
+    const x1 = player.x;
+    const y1 = player.y;
+    const x2 = endpoint.x;
+    const y2 = endpoint.y;
+    if (!isWorldCircleNearView((x1 + x2) / 2, (y1 + y2) / 2, Math.hypot(x2 - x1, y2 - y1) * 0.5, 760)) {
+      return;
+    }
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.hypot(dx, dy);
+    if (length <= 8) {
+      return;
+    }
+
+    const accent = { r: 169, g: 133, b: 255 };
+    const deploy = clamp(endpoint.deploy, 0, 1);
+    const angle = Math.atan2(dy, dx);
+    const wave = Math.sin(time * 0.007 + endpoint.wobble) * 4;
+    const normalX = -dy / length;
+    const normalY = dx / length;
+    const midX = (x1 + x2) / 2 + normalX * wave;
+    const midY = (y1 + y2) / 2 + normalY * wave;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(5, 8, 18, 0.86)";
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(midX, midY, x2, y2);
+    ctx.stroke();
+    ctx.strokeStyle = colorString(accent, 0.62 + deploy * 0.22);
+    ctx.lineWidth = 5;
+    ctx.setLineDash([18, 12]);
+    ctx.lineDashOffset = -time * 0.035;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(midX, midY, x2, y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "rgba(248, 251, 255, 0.54)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(midX, midY, x2, y2);
+    ctx.stroke();
+    ctx.restore();
+
+    drawTetherAnchor({
+      deploy,
+      wobble: endpoint.wobble
+    }, x2, y2, endpoint.angle, time, 0.82, true);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = colorString(accent, 0.24 + deploy * 0.18);
+    ctx.beginPath();
+    ctx.arc(x1 - Math.cos(angle) * player.radius * 0.38, y1 - Math.sin(angle) * player.radius * 0.38, 18 + deploy * 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = colorString(accent, 0.76);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(x1 - Math.cos(angle) * player.radius * 0.38, y1 - Math.sin(angle) * player.radius * 0.38, 10 + deploy * 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawBridge(structure, time, alpha, valid) {
     const x2 = finiteOr(structure.x2, structure.x);
     const y2 = finiteOr(structure.y2, structure.y);
@@ -35430,6 +42808,12 @@
       drawPlatingBlock(structure, time, alpha, valid);
     } else if (structure.type === "battery") {
       drawBattery(structure, time, alpha, valid);
+    } else if (structure.type === "container") {
+      drawContainer(structure, time, alpha, valid);
+    } else if (structure.type === "trading-port") {
+      drawTradingPort(structure, time, alpha, valid);
+    } else if (structure.type === "medbay") {
+      drawMedbay(structure, time, alpha, valid);
     } else if (structure.type === "accumulator") {
       drawAccumulator(structure, time, alpha, valid);
     } else if (structure.type === "shield-generator") {
@@ -35501,6 +42885,17 @@
       }
       drawStructure(structure, time, 1, true);
     }
+    for (const structure of structures) {
+      if (structure.type !== "trading-port") {
+        continue;
+      }
+      const vessel = normalizeTradeVessel(structure.tradeVessel, structure);
+      if (!vessel || vessel.state === "docked" || !isWorldCircleNearView(vessel.x, vessel.y, 80, 760)) {
+        continue;
+      }
+      drawTradeVessel(vessel, time, 1);
+    }
+    drawPersonalTether(time);
   }
 
   function drawStructurePlacementPreview(time) {
@@ -35563,6 +42958,212 @@
     ctx.restore();
   }
 
+  function drawMobBeaconGlyph(beacon, visual, accent, coreRadius, time) {
+    const shape = visual.shape || "eye";
+    if (shape === "saucer") {
+      ctx.fillStyle = colorString(accent, 0.92);
+      ctx.strokeStyle = "#111827";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, coreRadius * 0.82, coreRadius * 0.34, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = colorString(shadeColor(visual.color, -28), 0.95);
+      ctx.beginPath();
+      ctx.arc(0, -coreRadius * 0.16, coreRadius * 0.34, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      return;
+    }
+
+    if (shape === "gear") {
+      ctx.fillStyle = colorString(accent, 0.92);
+      ctx.strokeStyle = "#111827";
+      ctx.lineWidth = 4;
+      for (let i = 0; i < 8; i += 1) {
+        ctx.save();
+        ctx.rotate(i * Math.PI / 4);
+        roundRectPath(-4, -coreRadius * 0.92, 8, 14, 3);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, coreRadius * 0.52, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#111827";
+      ctx.beginPath();
+      ctx.arc(0, 0, coreRadius * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    if (shape === "cross") {
+      ctx.fillStyle = colorString(accent, 0.94);
+      ctx.strokeStyle = "#0f1b22";
+      ctx.lineWidth = 4;
+      roundRectPath(-7, -coreRadius * 0.72, 14, coreRadius * 1.44, 5);
+      ctx.fill();
+      ctx.stroke();
+      roundRectPath(-coreRadius * 0.72, -7, coreRadius * 1.44, 14, 5);
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+
+    if (shape === "bolt") {
+      ctx.fillStyle = colorString(accent, 0.96);
+      ctx.strokeStyle = "#102012";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(4, -coreRadius * 0.86);
+      ctx.lineTo(-14, -2);
+      ctx.lineTo(1, -2);
+      ctx.lineTo(-5, coreRadius * 0.82);
+      ctx.lineTo(18, -9);
+      ctx.lineTo(4, -9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+
+    if (shape === "dish") {
+      ctx.strokeStyle = colorString(accent, 0.94);
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(-4, 2, coreRadius * 0.62, -0.9, 0.9);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(4, 2);
+      ctx.lineTo(coreRadius * 0.62, -coreRadius * 0.46);
+      ctx.moveTo(4, 2);
+      ctx.lineTo(coreRadius * 0.62, coreRadius * 0.46);
+      ctx.stroke();
+      ctx.fillStyle = colorString(accent, 0.9);
+      ctx.beginPath();
+      ctx.arc(-coreRadius * 0.42, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    if (shape === "flame") {
+      const flare = Math.sin(time * 0.018 + beacon.wobble) * 3;
+      ctx.fillStyle = colorString(accent, 0.95);
+      ctx.strokeStyle = "#2b1508";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, -coreRadius * 0.92);
+      ctx.bezierCurveTo(coreRadius * 0.58, -coreRadius * 0.34, coreRadius * 0.34, coreRadius * 0.42, 0, coreRadius * 0.78 + flare);
+      ctx.bezierCurveTo(-coreRadius * 0.4, coreRadius * 0.38, -coreRadius * 0.54, -coreRadius * 0.24, 0, -coreRadius * 0.92);
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+
+    if (shape === "chevron") {
+      ctx.strokeStyle = colorString(accent, 0.96);
+      ctx.lineWidth = 7;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(-coreRadius * 0.58, coreRadius * 0.48);
+      ctx.lineTo(0, -coreRadius * 0.52);
+      ctx.lineTo(coreRadius * 0.58, coreRadius * 0.48);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-coreRadius * 0.36, coreRadius * 0.02);
+      ctx.lineTo(0, -coreRadius * 0.58);
+      ctx.lineTo(coreRadius * 0.36, coreRadius * 0.02);
+      ctx.stroke();
+      return;
+    }
+
+    ctx.fillStyle = colorString(accent, 0.92);
+    ctx.strokeStyle = "#241021";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, coreRadius * 0.74, coreRadius * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#241021";
+    ctx.beginPath();
+    ctx.arc(0, 0, coreRadius * 0.17, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawMobBeacon(beacon, time) {
+    if (!isMobBeaconRevealed(beacon)) {
+      return;
+    }
+
+    const visual = mobBeaconVisual(beacon.beaconKind);
+    const color = beacon.flash > 0 ? { r: 255, g: 246, b: 210 } : visual.color;
+    const accent = visual.accent || shadeColor(color, 52);
+    const radius = finiteOr(beacon.radius, 46);
+    const pulse = 1 + Math.sin(time * 0.007 + finiteOr(beacon.wobble, 0)) * 0.045;
+    const warmup = clamp(finiteOr(beacon.age, 0) / mobBeaconWarmupDuration, 0, 1);
+
+    ctx.save();
+    ctx.translate(beacon.x, beacon.y + Math.sin(time * 0.004 + beacon.wobble) * 8);
+    ctx.rotate(finiteOr(beacon.rotation, 0));
+    ctx.scale(pulse, pulse);
+
+    ctx.globalCompositeOperation = "lighter";
+    const glow = ctx.createRadialGradient(0, 0, radius * 0.22, 0, 0, radius * (2.5 + warmup * 0.5));
+    glow.addColorStop(0, colorString(color, 0.26 + warmup * 0.18));
+    glow.addColorStop(1, colorString(color, 0));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.strokeStyle = colorString(color, 0.52);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 1.1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * warmup);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 6;
+    ctx.fillStyle = colorString(shadeColor(color, -46), 0.94);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i += 1) {
+      const angle = -Math.PI / 2 + i * Math.PI / 3;
+      const pointRadius = radius * (i % 2 ? 0.78 : 1);
+      const x = Math.cos(angle) * pointRadius;
+      const y = Math.sin(angle) * pointRadius;
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = colorString(color, 0.86);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.56, 0, Math.PI * 2);
+    ctx.fill();
+    drawMobBeaconGlyph(beacon, visual, accent, radius * 0.52, time);
+
+    if (gameSettings.hudEnabled !== false) {
+      const healthPct = clamp(beacon.health / beacon.maxHealth, 0, 1);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.54)";
+      roundRectPath(-radius * 0.86, -radius * 1.48, radius * 1.72, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = healthPct > 0.45 ? "#72ff94" : "#ff6d6d";
+      roundRectPath(-radius * 0.86, -radius * 1.48, radius * 1.72 * healthPct, 7, 3.5);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
   function drawRivals(time) {
     ctx.save();
     ctx.translate(width / 2, height / 2);
@@ -35604,6 +43205,16 @@
 
     drawStructures(time);
     drawStructurePlacementPreview(time);
+
+    for (const beacon of mobBeacons) {
+      if (!isMobBeaconRevealed(beacon)) {
+        continue;
+      }
+      if (!isWorldCircleNearView(beacon.x, beacon.y, beacon.radius || 48, 420)) {
+        continue;
+      }
+      drawMobBeacon(beacon, time);
+    }
 
     for (const ufo of ufos) {
       if (!isWorldCircleNearView(ufo.x, ufo.y, ufo.radius || 40, 360)) {
@@ -35713,6 +43324,7 @@
     time: 0
   };
   const remoteJetpackExhausts = new Map();
+  const smokeTrailStates = new Map();
 
   function invalidateRenderCaches() {
     mapBodyCache.frameId = -1;
@@ -35779,6 +43391,16 @@
         ctx.strokeStyle = colorString(spark.color, 0.62 * (1 - progress));
         ctx.lineWidth = 4.5 + (1 - progress) * 3;
         ctx.arc(spark.x, spark.y, spark.radius * clamp(progress, 0.04, 1), 0, Math.PI * 2);
+      } else if (spark.promotionBurst) {
+        const pulse = Math.sin(progress * Math.PI);
+        ctx.strokeStyle = colorString(shadeColor(spark.color, 86), 0.5 * (1 - progress));
+        ctx.lineWidth = 4 + pulse * 3;
+        ctx.arc(spark.x, spark.y, spark.radius * (0.38 + progress * 0.82), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.strokeStyle = colorString(spark.color, 0.22 * (1 - progress));
+        ctx.lineWidth = 1.8;
+        ctx.arc(spark.x, spark.y, spark.radius * (0.76 + progress * 0.38), 0, Math.PI * 2);
       } else if (spark.summonTelegraph) {
         const pulse = 0.72 + Math.sin(performance.now() * 0.018) * 0.18;
         ctx.strokeStyle = colorString(spark.color, (0.5 + pulse * 0.2) * (1 - progress));
@@ -35969,6 +43591,8 @@
       left: true,
       middle: false,
       right: false,
+      suckFactor: currentGadgetSuckFactor(),
+      rangeFactor: currentGadgetRangeFactor(),
       bucketActive: true,
       bucketPadding: 0,
       landedBodyId: player.landed ? player.landed.bodyId : null
@@ -35996,7 +43620,7 @@
       if (!particle || !particle.color || !partyGadgetCanAffectParticle(state, particle)) {
         continue;
       }
-      if (!isWorldCircleNearView(particle.x, particle.y, particle.radius, gadgetForceReach + 220)) {
+      if (!isWorldCircleNearView(particle.x, particle.y, particle.radius, gadgetForceReachForState(state) + 220)) {
         continue;
       }
 
@@ -36065,13 +43689,13 @@
       }
 
       const tierName = particle.tier.name;
-      const tierScale = tierName === "planet" ? 4.7 : tierName === "moon" ? 4.4 : tierName === "dwarf moon" ? 4.1 : tierName === "asteroid" ? 3.8 : 3.25;
-      const tierAlpha = tierName === "planet" ? 0.066 : tierName === "moon" ? 0.058 : tierName === "dwarf moon" ? 0.052 : tierName === "asteroid" ? 0.046 : 0.038;
+      const tierScale = tierName === "star" ? 6.4 : tierName === "planet" ? 4.7 : tierName === "moon" ? 4.4 : tierName === "dwarf moon" ? 4.1 : tierName === "asteroid" ? 3.8 : 3.25;
+      const tierAlpha = tierName === "star" ? 0.11 : tierName === "planet" ? 0.066 : tierName === "moon" ? 0.058 : tierName === "dwarf moon" ? 0.052 : tierName === "asteroid" ? 0.046 : 0.038;
       drawWorldDynamicLight(particle.x, particle.y, particle.radius * tierScale + 80, particle.color, tierAlpha * pulse, {
         minRadius: 56,
-        maxRadius: tierName === "planet" ? 680 : 540,
-        warmth: 0.78,
-        core: 0.16
+        maxRadius: tierName === "star" ? 960 : tierName === "planet" ? 680 : 540,
+        warmth: tierName === "star" ? 0.96 : 0.78,
+        core: tierName === "star" ? 0.24 : 0.16
       });
     }
   }
@@ -36274,6 +43898,7 @@
 
   function dynamicStructureColor(structure) {
     if (structure.type === "battery") return { r: 157, g: 255, b: 122 };
+    if (structure.type === "medbay") return { r: 123, g: 255, b: 173 };
     if (structure.type === "accumulator") return { r: 88, g: 226, b: 255 };
     if (structure.type === "turret") return { r: 255, g: 115, b: 173 };
     if (structure.type === "missile-launcher") return { r: 255, g: 184, b: 88 };
@@ -36319,6 +43944,9 @@
         radius += 64;
       } else if (structure.type === "missile-launcher") {
         alpha += clamp(finiteOr(structure.lockTimer, 0) / missileLauncherLockDuration, 0, 1) * 0.032;
+      } else if (structure.type === "medbay") {
+        alpha += clamp(finiteOr(structure.healPulse, 0), 0, 1) * 0.052;
+        radius += 44;
       }
 
       drawWorldDynamicLight(structure.x, structure.y, radius, dynamicStructureColor(structure), alpha, {
@@ -36379,6 +44007,14 @@
       if (!isWorldCircleNearView(fighter.x, fighter.y, 300, 460)) continue;
       const shield = clamp(finiteOr(fighter.shieldActive, 0) / 0.55, 0, 1);
       drawWorldDynamicLight(fighter.x, fighter.y, 172 + shield * 130, fighter.color, 0.044 + shield * 0.052, { minRadius: 48, maxRadius: 300, warmth: 0.72, core: 0.1 });
+    }
+
+    for (const beacon of mobBeacons) {
+      if (!isMobBeaconRevealed(beacon)) continue;
+      if (!isWorldCircleNearView(beacon.x, beacon.y, 340, 520)) continue;
+      const warmup = clamp(finiteOr(beacon.age, 0) / mobBeaconWarmupDuration, 0, 1);
+      const pulse = 0.86 + Math.sin(time * 0.007 + finiteOr(beacon.wobble, 0)) * 0.14;
+      drawWorldDynamicLight(beacon.x, beacon.y, 190 + warmup * 120, beacon.color, (0.044 + warmup * 0.038) * pulse, { minRadius: 54, maxRadius: 340, warmth: 0.74, core: 0.1 });
     }
   }
 
@@ -36479,11 +44115,12 @@
       drawRemoteEntityCollection(world.teslas, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
       drawRemoteEntityCollection(world.rockets, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
       drawRemoteEntityCollection(world.fighters, transform, drawRemoteMobEcho, time, heavyMobLimit, renderRadiusSq);
+      drawRemoteEntityCollection(world.mobBeacons, transform, drawRemoteMobBeaconEcho, time, heavyMobLimit, renderRadiusSq);
       drawRemoteEntityCollection(world.alienoids, transform, drawRemoteMobEcho, time, alienoidLimit, renderRadiusSq);
 
       if (snapshot.player) {
         ctx.globalAlpha = remotePlayerAlpha;
-        drawRemotePlayer(transformedRemoteEntity(snapshot.player, transform), remote.publicName, time);
+        drawRemotePlayer(transformedRemoteEntity({ ...snapshot.player, teamId: remote.teamId || snapshot.player.teamId || "" }, transform), remote.publicName, time);
       }
 
       ctx.restore();
@@ -36565,6 +44202,10 @@
     ctx.restore();
   }
 
+  function drawRemoteMobBeaconEcho(beacon, time) {
+    drawMobBeacon(beacon, time);
+  }
+
   function drawRemoteEntityCollection(collection, transform, drawFn, time, limit, radiusSq) {
     if (!Array.isArray(collection) || !collection.length) {
       return;
@@ -36640,11 +44281,12 @@
     ctx.restore();
   }
 
-  function drawGadgetHoldField(originX, originY, dirX, dirY, normalX, normalY, time, compact) {
+  function drawGadgetHoldField(originX, originY, dirX, dirY, normalX, normalY, time, compact, rangeFactor) {
     const mouthX = originX + dirX * funnelShape.rimX;
     const mouthY = originY + dirY * funnelShape.rimX;
-    const pointX = originX + dirX * gadgetHoldReach;
-    const pointY = originY + dirY * gadgetHoldReach;
+    const holdReach = gadgetHoldReach * Math.max(0.1, finiteOr(rangeFactor, 1));
+    const pointX = originX + dirX * holdReach;
+    const pointY = originY + dirY * holdReach;
     const innerWidth = compact ? 106 : 124;
     const outerWidth = compact ? 88 : 106;
     const outerLength = compact ? 84 : 108;
@@ -36770,7 +44412,19 @@
     const localVelocity = rotatePoint(remotePlayer.vx || 0, remotePlayer.vy || 0, -bodyRotation);
     const speed = Math.hypot(localVelocity.x, localVelocity.y);
     let target = null;
-    if (speed > 8) {
+    const hasJetpackMove = Number.isFinite(Number(remotePlayer.jetpackMoveX)) && Number.isFinite(Number(remotePlayer.jetpackMoveY));
+    if (hasJetpackMove) {
+      const moveX = finiteOr(remotePlayer.jetpackMoveX, 0);
+      const moveY = finiteOr(remotePlayer.jetpackMoveY, -1);
+      const moveLength = Math.hypot(moveX, moveY);
+      if (moveLength > 0.001) {
+        target = {
+          x: -moveX / moveLength,
+          y: -moveY / moveLength
+        };
+      }
+    }
+    if (!target && speed > 8) {
       target = {
         x: -localVelocity.x / speed,
         y: -localVelocity.y / speed
@@ -36812,8 +44466,25 @@
     return smoothed;
   }
 
-  function drawRemoteJetFlames(remotePlayer, time, bodyRotation) {
-    drawJetpackFlamePlumes(time, smoothedRemoteJetpackExhaust(remotePlayer, bodyRotation, time), 0);
+  function drawRemoteJetFlames(remotePlayer, time, bodyRotation, active) {
+    const remoteId = String(remotePlayer.id || remotePlayer.name || "remote");
+    const ownerKey = "remote:" + remoteId;
+    const shouldEmit = active !== false;
+    const boostAmount = shouldEmit ? 1 : 0;
+    const cachedExhaust = remoteJetpackExhausts.get(remoteId);
+    const exhaust = shouldEmit
+      ? smoothedRemoteJetpackExhaust(remotePlayer, bodyRotation, time)
+      : cachedExhaust
+        ? { x: cachedExhaust.x, y: cachedExhaust.y }
+        : { x: 0, y: 1 };
+    drawJetpackFlamePlumes(
+      time,
+      exhaust,
+      boostAmount,
+      remotePlayer.trailId,
+      ownerKey,
+      shouldEmit ? null : { emit: false, drawFlame: false }
+    );
   }
 
   function drawRemoteAstronautSuit(remotePlayer, time, bob, bodyRotation) {
@@ -36821,8 +44492,39 @@
     const lean = remotePlayer.landed ? 0 : clamp(localVelocity.x / 460, -1, 1) * 0.14;
     const damaged = remotePlayer.health <= 0;
     const crouching = remotePlayer.landed && remotePlayer.crouching;
+    const suit = skinPaletteForId(remotePlayer.skinId);
+    const model = skinModelForId(remotePlayer.skinId);
     const remoteWalkCycle = finiteOr(remotePlayer.walkCycle, remotePlayer.landed ? remotePlayer.landed.walkCycle : time * 0.006);
     const remoteWalkSpeed = remotePlayer.landed ? remotePlayer.landed.walkSpeed || 0 : 0;
+    const remoteSpeed = Math.hypot(remotePlayer.vx || 0, remotePlayer.vy || 0);
+    const hasBoostingSnapshot = remotePlayer.boosting === true || remotePlayer.boosting === false;
+    const remoteJetActive = !remotePlayer.landed && (
+      hasBoostingSnapshot
+        ? remotePlayer.boosting === true
+        : remotePlayer.moving || remoteSpeed > 34
+    );
+    const remoteTrailOwnerKey = "remote:" + String(remotePlayer.id || remotePlayer.name || "remote");
+    const remoteTrailLingering = !remoteJetActive &&
+      isStatefulBoostTrailId(remotePlayer.trailId) &&
+      smokeTrailHasLivePuffs(remoteTrailOwnerKey, time, remotePlayer.trailId);
+    if (model !== "astronaut") {
+      drawCharacterBodyOn(ctx, 0, 0, time, localVelocity, bodyRotation, {
+        suit,
+        model,
+        centerX: 0,
+        centerY: bob,
+        onFoot: Boolean(remotePlayer.landed),
+        crouching,
+        walkCycle: remoteWalkCycle,
+        walkSpeed: remoteWalkSpeed,
+        drawJetFlames: remoteJetActive || remoteTrailLingering
+          ? function () {
+              drawRemoteJetFlames(remotePlayer, time, bodyRotation, remoteJetActive);
+            }
+          : null
+      });
+      return;
+    }
     const walkBounce = remotePlayer.landed && !crouching && Math.abs(remoteWalkSpeed) > 1
       ? Math.max(0, Math.sin(remoteWalkCycle * 2)) * 3
       : 0;
@@ -36838,8 +44540,8 @@
       ctx.translate(0, -playerFootOffset);
     }
 
-    if (!remotePlayer.landed && (remotePlayer.moving || Math.hypot(remotePlayer.vx || 0, remotePlayer.vy || 0) > 34)) {
-      drawRemoteJetFlames(remotePlayer, time, bodyRotation);
+    if (remoteJetActive || remoteTrailLingering) {
+      drawRemoteJetFlames(remotePlayer, time, bodyRotation, remoteJetActive);
     }
 
     ctx.lineJoin = "round";
@@ -36847,14 +44549,14 @@
     ctx.strokeStyle = "rgba(23, 27, 44, 0.72)";
     ctx.lineWidth = 4;
 
-    ctx.fillStyle = damaged ? "#ffd7d7" : "#f4f2ea";
+    ctx.fillStyle = damaged ? "#ffd7d7" : suit.torso || "#f4f2ea";
     roundRectPath(-22, 18, 44, 58, 13);
     ctx.fill();
     ctx.stroke();
 
-    drawAstronautLegs(remoteWalkCycle, remoteWalkSpeed, crouching, damaged ? "#e9b9c0" : "#d9dee8");
+    drawAstronautLegs(remoteWalkCycle, remoteWalkSpeed, crouching, damaged ? "#e9b9c0" : suit.limb || "#d9dee8");
 
-    ctx.fillStyle = "#f8f5ec";
+    ctx.fillStyle = damaged ? "#ffe3e3" : suit.arm || "#f8f5ec";
     roundRectPath(-35, 22, 13, 28, 7);
     ctx.fill();
     ctx.stroke();
@@ -36862,13 +44564,13 @@
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = damaged ? "#fff1f1" : "#ffffff";
+    ctx.fillStyle = damaged ? "#fff1f1" : suit.helmet || "#ffffff";
     ctx.beginPath();
     ctx.ellipse(0, -23, 38, 40, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = damaged ? "#fff1f1" : suit.helmet || "#ffffff";
     roundRectPath(-45, -29, 10, 25, 6);
     ctx.fill();
     ctx.stroke();
@@ -36896,7 +44598,7 @@
     ctx.ellipse(12, -18, 11, 7, -0.35, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#cfd7e7";
+    ctx.fillStyle = damaged ? "#f0c4cb" : suit.panel || "#cfd7e7";
     roundRectPath(-19, 27, 38, 26, 6);
     ctx.fill();
     ctx.stroke();
@@ -36911,7 +44613,7 @@
     ctx.beginPath();
     ctx.arc(-7, 47, 2.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#64e3ff";
+    ctx.fillStyle = damaged ? "#64e3ff" : suit.accent || "#64e3ff";
     ctx.beginPath();
     ctx.arc(7, 47, 2.5, 0, Math.PI * 2);
     ctx.fill();
@@ -37339,6 +45041,7 @@
       const energyPct = clamp(finiteOr(remotePlayer.energy, remotePlayer.maxEnergy || 100) / Math.max(1, finiteOr(remotePlayer.maxEnergy, 100)), 0, 1);
       const toolsDisabled = finiteOr(remotePlayer.toolDisabledTimer, 0) > 0;
       const label = publicName || remotePlayer.name || "Contact";
+      const teammate = Boolean(isSharedPublicWorldActive() && multiplayer.sharedTeamId && remotePlayer.teamId === multiplayer.sharedTeamId);
 
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -37377,7 +45080,7 @@
         const widthLabel = Math.min(160, ctx.measureText(label).width + 18);
         roundRectPath(screen.x - widthLabel / 2, screen.y - 120, widthLabel, 22, 8);
         ctx.fill();
-        ctx.fillStyle = "#dffcff";
+        ctx.fillStyle = teammate ? "#9dff7a" : "#dffcff";
         ctx.fillText(label, screen.x, screen.y - 109, widthLabel - 10);
       }
       ctx.restore();
@@ -37396,7 +45099,8 @@
 
     const alpha = clamp(Math.min(1, emote.life / 0.45), 0, 1);
     const speech = emote.speech || emote.label || "";
-    const symbol = emote.emote === "duel" ? "!" : emote.emote === "peace" ? "=" : "$";
+    const symbol = emote.emote === "duel" ? "!" : emote.emote === "peace" ? "=" : emote.emote === "team" ? "+" : emote.emote === "leave" ? "-" : "$";
+    const teamEmote = emote.emote === "team" || emote.emote === "leave";
     const y = screen.y - 154;
 
     ctx.save();
@@ -37407,13 +45111,13 @@
     ctx.textBaseline = "middle";
     const bubbleWidth = Math.min(130, ctx.measureText(speech).width + 42);
     ctx.fillStyle = "rgba(3, 8, 24, 0.78)";
-    ctx.strokeStyle = emote.emote === "duel" || emote.emote === "peace" ? "rgba(255, 229, 111, 0.72)" : "rgba(88, 226, 255, 0.62)";
+    ctx.strokeStyle = emote.emote === "duel" || emote.emote === "peace" ? "rgba(255, 229, 111, 0.72)" : teamEmote ? "rgba(157, 255, 122, 0.72)" : "rgba(88, 226, 255, 0.62)";
     ctx.lineWidth = 1.5;
     roundRectPath(screen.x - bubbleWidth / 2, y - 15, bubbleWidth, 30, 8);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = emote.emote === "duel" || emote.emote === "peace" ? "#ffe56f" : "#58e2ff";
+    ctx.fillStyle = emote.emote === "duel" || emote.emote === "peace" ? "#ffe56f" : teamEmote ? "#9dff7a" : "#58e2ff";
     ctx.fillText(symbol, screen.x - bubbleWidth / 2 + 17, y + 0.5, 18);
     ctx.fillStyle = "#f8fbff";
     ctx.fillText(speech, screen.x + 12, y + 0.5, bubbleWidth - 34);
@@ -37433,7 +45137,8 @@
     const mouthX = centerX + aim.local.x * funnelShape.rimX;
     const mouthY = centerY + aim.local.y * funnelShape.rimX;
     const normal = { x: -aim.local.y, y: aim.local.x };
-    const fieldLength = holding ? gadgetHoldReach - funnelShape.rimX : pulling ? 320 : 250;
+    const rangeFactor = Math.max(0.1, currentGadgetRangeFactor());
+    const fieldLength = holding ? gadgetHoldReach * rangeFactor - funnelShape.rimX : pulling ? 320 * rangeFactor : 250;
     const time = performance.now() * 0.004;
     const gatherColor = pulling ? activeGadgetGatherColor(aim) : null;
     const gatherLight = gatherColor ? normalizeDynamicLightColor(gatherColor, { r: 114, g: 244, b: 255 }) : null;
@@ -37444,7 +45149,7 @@
     ctx.lineCap = "round";
 
     if (holding) {
-      drawGadgetHoldField(centerX, centerY, aim.local.x, aim.local.y, normal.x, normal.y, time, false);
+      drawGadgetHoldField(centerX, centerY, aim.local.x, aim.local.y, normal.x, normal.y, time, false, rangeFactor);
       ctx.restore();
       return;
     }
@@ -37493,21 +45198,25 @@
     ctx.restore();
   }
 
-  function roundRectPath(x, y, w, h, r) {
+  function roundRectPathOn(targetCtx, x, y, w, h, r) {
     const widthValue = finiteOr(w, 0);
     const heightValue = finiteOr(h, 0);
     if (widthValue <= 0 || heightValue <= 0) {
-      ctx.beginPath();
+      targetCtx.beginPath();
       return;
     }
     const radius = Math.max(0, Math.min(Math.abs(finiteOr(r, 0)), widthValue / 2, heightValue / 2));
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.arcTo(x + widthValue, y, x + widthValue, y + heightValue, radius);
-    ctx.arcTo(x + widthValue, y + heightValue, x, y + heightValue, radius);
-    ctx.arcTo(x, y + heightValue, x, y, radius);
-    ctx.arcTo(x, y, x + widthValue, y, radius);
-    ctx.closePath();
+    targetCtx.beginPath();
+    targetCtx.moveTo(x + radius, y);
+    targetCtx.arcTo(x + widthValue, y, x + widthValue, y + heightValue, radius);
+    targetCtx.arcTo(x + widthValue, y + heightValue, x, y + heightValue, radius);
+    targetCtx.arcTo(x, y + heightValue, x, y, radius);
+    targetCtx.arcTo(x, y, x + widthValue, y, radius);
+    targetCtx.closePath();
+  }
+
+  function roundRectPath(x, y, w, h, r) {
+    roundRectPathOn(ctx, x, y, w, h, r);
   }
 
   function jetpackLocalMoveVector() {
@@ -37567,7 +45276,7 @@
     return smoothed;
   }
 
-  function drawJetpackFlamePlumes(time, exhaust, boost) {
+  function drawClassicJetpackFlamePlumesOn(targetCtx, time, exhaust, boost) {
     const boostAmount = clamp(finiteOr(boost, 0), 0, 1);
     const boostScale = 1 + boostAmount * 0.38;
     const exhaustAngle = Math.atan2(finiteOr(exhaust.y, 1), finiteOr(exhaust.x, 0)) - Math.PI / 2;
@@ -37577,8 +45286,8 @@
       1.18
     );
 
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = "lighter";
 
     for (const x of [-16, 16]) {
       const splay = x < 0 ? -0.08 : 0.08;
@@ -37586,55 +45295,1544 @@
       const widthSize = (8.5 + boostAmount * 3.2) * (0.92 + Math.sin(time * 0.052 + x) * 0.08);
       const outerLength = plumeLength * (1.18 + Math.sin(time * 0.066 + x * 0.4) * 0.08);
 
-      ctx.save();
-      ctx.translate(x, 43);
-      ctx.rotate(exhaustAngle + splay);
+      targetCtx.save();
+      targetCtx.translate(x, 43);
+      targetCtx.rotate(exhaustAngle + splay);
 
-      const glow = ctx.createRadialGradient(0, outerLength * 0.42, 0, 0, outerLength * 0.5, outerLength * 0.72);
+      const glow = targetCtx.createRadialGradient(0, outerLength * 0.42, 0, 0, outerLength * 0.5, outerLength * 0.72);
       glow.addColorStop(0, "rgba(255, 207, 64, " + (0.36 + boostAmount * 0.18) + ")");
       glow.addColorStop(0.46, "rgba(255, 151, 38, " + (0.2 + boostAmount * 0.14) + ")");
       glow.addColorStop(1, "rgba(255, 101, 24, 0)");
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.ellipse(0, outerLength * 0.5, widthSize * 2.3, outerLength * 0.58, 0, 0, Math.PI * 2);
-      ctx.fill();
+      targetCtx.fillStyle = glow;
+      targetCtx.beginPath();
+      targetCtx.ellipse(0, outerLength * 0.5, widthSize * 2.3, outerLength * 0.58, 0, 0, Math.PI * 2);
+      targetCtx.fill();
 
-      const plume = ctx.createLinearGradient(0, 2, 0, plumeLength);
+      const plume = targetCtx.createLinearGradient(0, 2, 0, plumeLength);
       plume.addColorStop(0, "rgba(255, 244, 106, " + (0.95 + boostAmount * 0.05) + ")");
       plume.addColorStop(0.24, "rgba(255, 205, 58, " + (0.78 + boostAmount * 0.16) + ")");
       plume.addColorStop(0.58, "rgba(255, 137, 45, " + (0.5 + boostAmount * 0.18) + ")");
       plume.addColorStop(1, "rgba(255, 82, 24, 0)");
-      ctx.fillStyle = plume;
-      ctx.beginPath();
-      ctx.moveTo(-widthSize, 3);
-      ctx.quadraticCurveTo(-widthSize * 0.42, plumeLength * 0.42, -widthSize * 0.16, plumeLength * 0.72);
-      ctx.quadraticCurveTo(0, plumeLength * (0.92 + boostAmount * 0.08), widthSize * 0.18, plumeLength * 0.7);
-      ctx.quadraticCurveTo(widthSize * 0.5, plumeLength * 0.36, widthSize, 3);
-      ctx.closePath();
-      ctx.fill();
+      targetCtx.fillStyle = plume;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-widthSize, 3);
+      targetCtx.quadraticCurveTo(-widthSize * 0.42, plumeLength * 0.42, -widthSize * 0.16, plumeLength * 0.72);
+      targetCtx.quadraticCurveTo(0, plumeLength * (0.92 + boostAmount * 0.08), widthSize * 0.18, plumeLength * 0.7);
+      targetCtx.quadraticCurveTo(widthSize * 0.5, plumeLength * 0.36, widthSize, 3);
+      targetCtx.closePath();
+      targetCtx.fill();
 
-      ctx.strokeStyle = "rgba(255, 238, 84, " + (0.34 + boostAmount * 0.2) + ")";
-      ctx.lineWidth = 1.5 + boostAmount * 0.5;
-      ctx.beginPath();
-      ctx.moveTo(-widthSize * 0.34, 9);
-      ctx.quadraticCurveTo(-widthSize * 0.16, plumeLength * 0.36, -widthSize * 0.05, plumeLength * 0.72);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(widthSize * 0.34, 8);
-      ctx.quadraticCurveTo(widthSize * 0.16, plumeLength * 0.34, widthSize * 0.04, plumeLength * 0.66);
-      ctx.stroke();
-      ctx.restore();
+      targetCtx.strokeStyle = "rgba(255, 238, 84, " + (0.34 + boostAmount * 0.2) + ")";
+      targetCtx.lineWidth = 1.5 + boostAmount * 0.5;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-widthSize * 0.34, 9);
+      targetCtx.quadraticCurveTo(-widthSize * 0.16, plumeLength * 0.36, -widthSize * 0.05, plumeLength * 0.72);
+      targetCtx.stroke();
+      targetCtx.beginPath();
+      targetCtx.moveTo(widthSize * 0.34, 8);
+      targetCtx.quadraticCurveTo(widthSize * 0.16, plumeLength * 0.34, widthSize * 0.04, plumeLength * 0.66);
+      targetCtx.stroke();
+      targetCtx.restore();
     }
 
-    ctx.restore();
+    targetCtx.restore();
   }
 
-  function drawJetFlames(time) {
-    if (!isJetpackBoostFlameActive(renderPerformance.lastFrameDt || 1 / 60)) {
+  const decorativeBoostTrailStyles = Object.freeze({
+    "trail-water": {
+      type: "water",
+      emitInterval: 24,
+      life: 640,
+      speed: 138,
+      sideSpeed: 4,
+      radius: 3.6,
+      growth: 0.38,
+      scaleMin: 0.42,
+      scaleMax: 0.9,
+      alpha: 0.78,
+      flameBase: 0.06,
+      flameScale: 0.04
+    },
+    "trail-magic": {
+      type: "magic",
+      emitInterval: 50,
+      life: 880,
+      speed: 84,
+      sideSpeed: 34,
+      radius: 6.2,
+      growth: 0.22,
+      scaleMin: 0.45,
+      scaleMax: 1.62,
+      alpha: 0.86,
+      flameBase: 0.16,
+      flameScale: 0.1
+    },
+    "trail-rainbow": {
+      type: "rainbow",
+      emitInterval: 42,
+      life: 820,
+      speed: 96,
+      sideSpeed: 30,
+      radius: 7.3,
+      growth: 0.28,
+      scaleMin: 0.46,
+      scaleMax: 1.82,
+      alpha: 0.82,
+      flameBase: 0.18,
+      flameScale: 0.1
+    },
+    "trail-plasma": {
+      type: "plasma",
+      emitInterval: 40,
+      life: 720,
+      speed: 118,
+      sideSpeed: 22,
+      radius: 6.8,
+      growth: 0.32,
+      scaleMin: 0.48,
+      scaleMax: 1.74,
+      alpha: 0.9,
+      flameBase: 0.16,
+      flameScale: 0.12
+    },
+    "trail-snow": {
+      type: "snow",
+      emitInterval: 58,
+      life: 1060,
+      speed: 78,
+      sideSpeed: 32,
+      radius: 6,
+      growth: 0.18,
+      scaleMin: 0.38,
+      scaleMax: 1.48,
+      alpha: 0.84,
+      flameBase: 0.1,
+      flameScale: 0.08
+    },
+    "trail-bats": {
+      type: "bats",
+      emitInterval: 88,
+      life: 980,
+      speed: 82,
+      sideSpeed: 48,
+      radius: 8.4,
+      growth: 0.1,
+      scaleMin: 0.55,
+      scaleMax: 1.95,
+      alpha: 0.88,
+      flameBase: 0.13,
+      flameScale: 0.08
+    },
+    "trail-hearts": {
+      type: "hearts",
+      emitInterval: 62,
+      life: 960,
+      speed: 76,
+      sideSpeed: 36,
+      radius: 7.2,
+      growth: 0.18,
+      scaleMin: 0.45,
+      scaleMax: 1.58,
+      alpha: 0.86,
+      flameBase: 0.12,
+      flameScale: 0.08
+    },
+    "trail-flowers": {
+      type: "flowers",
+      emitInterval: 68,
+      life: 1040,
+      speed: 74,
+      sideSpeed: 38,
+      radius: 7,
+      growth: 0.18,
+      scaleMin: 0.42,
+      scaleMax: 1.68,
+      alpha: 0.86,
+      flameBase: 0.11,
+      flameScale: 0.08
+    }
+  });
+
+  function normalizedBoostTrailId(trailId) {
+    const rawId = String(trailId || "");
+    const normalizedId = typeof normalizeTrailId === "function" ? normalizeTrailId(rawId) : rawId;
+    return normalizedId || rawId;
+  }
+
+  function boostTrailStateKey(ownerKey, trailId) {
+    const cleanTrailId = normalizedBoostTrailId(trailId) || "trail-classic-flame";
+    return (ownerKey ? String(ownerKey) : "trail-default") + ":" + cleanTrailId;
+  }
+
+  function decorativeBoostTrailStyleForId(trailId) {
+    return decorativeBoostTrailStyles[normalizedBoostTrailId(trailId)] || null;
+  }
+
+  function isStatefulBoostTrailId(trailId) {
+    const cleanTrailId = normalizedBoostTrailId(trailId);
+    return cleanTrailId === "trail-smoke" || Boolean(decorativeBoostTrailStyleForId(cleanTrailId));
+  }
+
+  function drawSmokeCloudPuffOn(targetCtx, x, y, radius, alpha, seed, time) {
+    const lobeCount = 5;
+    for (let lobe = 0; lobe < lobeCount; lobe += 1) {
+      const isCore = lobe === 0;
+      const angle = seed * 1.73 + lobe * (Math.PI * 2 / (lobeCount - 1)) + Math.sin(time * 0.0017 + seed + lobe) * 0.24;
+      const distance = isCore ? 0 : radius * (0.28 + 0.1 * Math.sin(seed * 2.1 + lobe));
+      const lobeRadius = radius * (isCore ? 0.92 : 0.48 + 0.16 * Math.sin(seed + lobe * 2.4));
+      const lobeX = x + Math.cos(angle) * distance;
+      const lobeY = y + Math.sin(angle) * distance * 0.74;
+      const smoke = targetCtx.createRadialGradient(
+        lobeX - lobeRadius * 0.22,
+        lobeY - lobeRadius * 0.28,
+        lobeRadius * 0.06,
+        lobeX,
+        lobeY,
+        lobeRadius
+      );
+
+      smoke.addColorStop(0, "rgba(245, 248, 250, " + (alpha * 0.94) + ")");
+      smoke.addColorStop(0.38, "rgba(177, 188, 199, " + (alpha * 0.8) + ")");
+      smoke.addColorStop(0.74, "rgba(82, 94, 110, " + (alpha * 0.44) + ")");
+      smoke.addColorStop(1, "rgba(38, 44, 56, 0)");
+      targetCtx.fillStyle = smoke;
+      targetCtx.beginPath();
+      targetCtx.arc(lobeX, lobeY, Math.max(1, lobeRadius), 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.strokeStyle = "rgba(222, 232, 240, " + (alpha * 0.14) + ")";
+      targetCtx.lineWidth = Math.max(0.8, lobeRadius * 0.045);
+      targetCtx.stroke();
+    }
+  }
+
+  function smokeTrailStateForKey(ownerKey, time, trailId) {
+    const key = boostTrailStateKey(ownerKey, trailId || "trail-smoke");
+    let state = smokeTrailStates.get(key);
+    if (!state) {
+      state = {
+        puffs: [],
+        lastEmitTime: time - 330,
+        lastSeenTime: time,
+        nextSeed: 1,
+        trailId: normalizedBoostTrailId(trailId || "trail-smoke")
+      };
+      smokeTrailStates.set(key, state);
+      return state;
+    }
+
+    if (time < finiteOr(state.lastSeenTime, 0) || time - finiteOr(state.lastSeenTime, 0) > 1400) {
+      state.puffs = [];
+      state.lastEmitTime = time - 330;
+    }
+    state.lastSeenTime = time;
+    state.trailId = normalizedBoostTrailId(trailId || state.trailId || "trail-smoke");
+    return state;
+  }
+
+  function smokeTrailHasLivePuffs(ownerKey, time, trailId) {
+    const state = smokeTrailStates.get(boostTrailStateKey(ownerKey, trailId || "trail-smoke"));
+    if (!state || !Array.isArray(state.puffs)) {
+      return false;
+    }
+    const livePuffs = [];
+    for (const puff of state.puffs) {
+      const age = time - finiteOr(puff.birthTime, time);
+      if (age < Math.max(1, finiteOr(puff.life, 900))) {
+        livePuffs.push(puff);
+      }
+    }
+    state.puffs = livePuffs;
+    return livePuffs.length > 0;
+  }
+
+  function pruneSmokeTrailStates(time) {
+    if (smokeTrailStates.size <= 80) {
+      return;
+    }
+    const oldestAllowed = time - 2400;
+    for (const [key, state] of smokeTrailStates) {
+      if (finiteOr(state.lastSeenTime, 0) < oldestAllowed) {
+        smokeTrailStates.delete(key);
+      }
+    }
+    while (smokeTrailStates.size > 80) {
+      const first = smokeTrailStates.keys().next();
+      if (first.done) {
+        break;
+      }
+      smokeTrailStates.delete(first.value);
+    }
+  }
+
+  function emitSmokeTrailPuff(state, nozzleX, nozzleY, dirAngle, boostAmount, birthTime) {
+    const seed = state.nextSeed || 1;
+    state.nextSeed = seed + 1;
+    const dirX = Math.cos(dirAngle);
+    const dirY = Math.sin(dirAngle);
+    const normalX = -dirY;
+    const normalY = dirX;
+    const jitter = Math.sin(seed * 12.9898) * 0.5 + Math.sin(seed * 4.1414) * 0.5;
+    const sideSpeed = (Math.sin(seed * 7.233) * 22) + (nozzleX < 0 ? -4 : 4);
+
+    state.puffs.push({
+      birthTime,
+      life: 840 + Math.abs(Math.sin(seed * 3.712)) * 300,
+      x: nozzleX + dirX * (7 + boostAmount * 3) + normalX * jitter * 4,
+      y: nozzleY + dirY * (7 + boostAmount * 3) + normalY * jitter * 4,
+      dirX,
+      dirY,
+      normalX,
+      normalY,
+      sideSpeed,
+      speed: 66 + boostAmount * 52 + Math.abs(Math.sin(seed * 5.31)) * 18,
+      radius: 9.5 + boostAmount * 3 + Math.abs(Math.sin(seed * 2.57)) * 3.4,
+      boostAmount,
+      seed
+    });
+  }
+
+  function emitSmokeTrailPuffs(state, time, exhaust, boostAmount) {
+    const emitInterval = 62;
+    const nozzleY = 43;
+    const exhaustDir = Math.atan2(finiteOr(exhaust.y, 1), finiteOr(exhaust.x, 0));
+    let emittedSteps = 0;
+
+    while (state.lastEmitTime + emitInterval <= time && emittedSteps < 6) {
+      state.lastEmitTime += emitInterval;
+      for (const nozzleX of [-17, 17]) {
+        const splay = nozzleX < 0 ? -0.13 : 0.13;
+        emitSmokeTrailPuff(state, nozzleX, nozzleY, exhaustDir + splay, boostAmount, state.lastEmitTime);
+      }
+      emittedSteps += 1;
+    }
+
+    if (emittedSteps >= 6 && state.lastEmitTime + emitInterval < time) {
+      state.lastEmitTime = time;
+    }
+  }
+
+  function drawSmokeTrailPuffsOn(targetCtx, state, time, boostAmount) {
+    const livePuffs = [];
+    for (const puff of state.puffs) {
+      const age = time - finiteOr(puff.birthTime, time);
+      const life = Math.max(1, finiteOr(puff.life, 900));
+      const t = clamp(age / life, 0, 1);
+      const puffBoost = clamp(finiteOr(puff.boostAmount, boostAmount), 0, 1);
+      if (t >= 1) {
+        continue;
+      }
+      const ageSeconds = Math.max(0, age) / 1000;
+      const fadeIn = clamp(t * 5.6, 0, 1);
+      const fadeOut = clamp((1 - t) * 1.22, 0, 1);
+      const alpha = (0.43 + puffBoost * 0.17) * fadeIn * Math.pow(fadeOut, 0.56);
+      if (alpha < 0.02) {
+        puff.renderAlpha = 0;
+        livePuffs.push(puff);
+        continue;
+      }
+      const curl = Math.sin(time * 0.0031 + puff.seed * 1.77) * (3 + t * 13);
+      const distance = 5 + finiteOr(puff.speed, 80) * ageSeconds + t * t * (34 + puffBoost * 18);
+      const side = finiteOr(puff.sideSpeed, 0) * ageSeconds + curl;
+
+      livePuffs.push(puff);
+      puff.renderT = t;
+      puff.renderX = finiteOr(puff.x, 0) + finiteOr(puff.dirX, 0) * distance + finiteOr(puff.normalX, 0) * side;
+      puff.renderY = finiteOr(puff.y, 0) + finiteOr(puff.dirY, 0) * distance + finiteOr(puff.normalY, 0) * side;
+      puff.renderRadius = finiteOr(puff.radius, 10) + t * (33 + puffBoost * 12);
+      puff.renderAlpha = alpha;
+    }
+
+    state.puffs = livePuffs;
+    livePuffs.sort(function (a, b) {
+      return finiteOr(b.renderT, 0) - finiteOr(a.renderT, 0);
+    });
+    for (const puff of livePuffs) {
+      if (!Number.isFinite(Number(puff.renderAlpha)) || puff.renderAlpha <= 0) {
+        continue;
+      }
+      drawSmokeCloudPuffOn(
+        targetCtx,
+        finiteOr(puff.renderX, 0),
+        finiteOr(puff.renderY, 0),
+        finiteOr(puff.renderRadius, 10),
+        finiteOr(puff.renderAlpha, 0),
+        finiteOr(puff.seed, 0),
+        time
+      );
+    }
+  }
+
+  function hslaColor(hue, saturation, lightness, alpha) {
+    const wrappedHue = ((finiteOr(hue, 0) % 360) + 360) % 360;
+    return "hsla(" + Math.round(wrappedHue) + ", " + saturation + "%, " + lightness + "%, " + alpha + ")";
+  }
+
+  function rgbaColor(red, green, blue, alpha) {
+    return "rgba(" + red + ", " + green + ", " + blue + ", " + alpha + ")";
+  }
+
+  function trailSeedNoise(seed, salt) {
+    return 0.5 + Math.sin(finiteOr(seed, 0) * 12.9898 + finiteOr(salt, 0) * 78.233) * 0.5;
+  }
+
+  function trailParticleProgress(puff) {
+    return clamp(finiteOr(puff && puff.renderT, 0), 0, 1);
+  }
+
+  function drawHeartPathOn(targetCtx, size) {
+    targetCtx.beginPath();
+    targetCtx.moveTo(0, size * 0.54);
+    targetCtx.bezierCurveTo(-size * 0.82, -size * 0.04, -size * 0.74, -size * 0.74, -size * 0.22, -size * 0.58);
+    targetCtx.bezierCurveTo(-size * 0.04, -size * 0.52, 0, -size * 0.32, 0, -size * 0.22);
+    targetCtx.bezierCurveTo(0, -size * 0.32, size * 0.04, -size * 0.52, size * 0.22, -size * 0.58);
+    targetCtx.bezierCurveTo(size * 0.74, -size * 0.74, size * 0.82, -size * 0.04, 0, size * 0.54);
+    targetCtx.closePath();
+  }
+
+  function drawBatShapeOn(targetCtx, size, alpha) {
+    targetCtx.fillStyle = "rgba(25, 23, 42, " + alpha + ")";
+    targetCtx.strokeStyle = rgbaColor(169, 133, 255, alpha * 0.42);
+    targetCtx.lineWidth = Math.max(0.8, size * 0.07);
+    targetCtx.beginPath();
+    targetCtx.moveTo(0, -size * 0.18);
+    targetCtx.bezierCurveTo(-size * 0.18, -size * 0.48, -size * 0.46, -size * 0.46, -size * 0.64, -size * 0.16);
+    targetCtx.quadraticCurveTo(-size * 0.48, -size * 0.08, -size * 0.42, size * 0.16);
+    targetCtx.quadraticCurveTo(-size * 0.22, size * 0.04, -size * 0.08, size * 0.32);
+    targetCtx.quadraticCurveTo(0, size * 0.16, size * 0.08, size * 0.32);
+    targetCtx.quadraticCurveTo(size * 0.22, size * 0.04, size * 0.42, size * 0.16);
+    targetCtx.quadraticCurveTo(size * 0.48, -size * 0.08, size * 0.64, -size * 0.16);
+    targetCtx.bezierCurveTo(size * 0.46, -size * 0.46, size * 0.18, -size * 0.48, 0, -size * 0.18);
+    targetCtx.closePath();
+    targetCtx.fill();
+    targetCtx.stroke();
+  }
+
+  function drawWaterTrailParticleOn(targetCtx, size, alpha, seed, time, puff) {
+    const t = trailParticleProgress(puff);
+    const fade = clamp((1 - t) * 1.28, 0, 1);
+    const drift = time * 0.0048 + seed;
+    targetCtx.globalCompositeOperation = "lighter";
+
+    for (let bubble = 0; bubble < 2; bubble += 1) {
+      const bubbleSeed = seed + bubble * 1.91;
+      const angle = bubbleSeed + drift * (0.9 + bubble * 0.22);
+      const distance = size * (0.44 + bubble * 0.48 + trailSeedNoise(seed, bubble) * 0.34);
+      const bubbleSize = size * (0.13 + trailSeedNoise(seed, bubble + 4) * 0.14) * (0.85 + fade * 0.15);
+      const bubbleAlpha = alpha * fade * (0.24 + bubble * 0.08);
+      targetCtx.fillStyle = rgbaColor(184, 241, 255, bubbleAlpha * 0.28);
+      targetCtx.beginPath();
+      targetCtx.arc(Math.cos(angle) * distance, Math.sin(angle) * distance * 0.62, Math.max(0.75, bubbleSize), 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.strokeStyle = rgbaColor(235, 255, 255, bubbleAlpha * 0.82);
+      targetCtx.lineWidth = Math.max(0.65, bubbleSize * 0.16);
+      targetCtx.stroke();
+    }
+
+    if (trailSeedNoise(seed, 8.2) > 0.42) {
+      const dropletLength = Math.max(2.2, size * (0.56 + trailSeedNoise(seed, 9.4) * 0.34));
+      const dropletWidth = Math.max(0.8, size * (0.12 + trailSeedNoise(seed, 3.8) * 0.08));
+      targetCtx.fillStyle = rgbaColor(164, 235, 255, alpha * fade * 0.3);
+      targetCtx.beginPath();
+      targetCtx.ellipse(
+        Math.sin(drift * 1.2) * size * 0.28,
+        Math.cos(drift) * size * 0.2,
+        dropletWidth,
+        dropletLength,
+        seed + time * 0.003,
+        0,
+        Math.PI * 2
+      );
+      targetCtx.fill();
+
+      targetCtx.strokeStyle = rgbaColor(245, 255, 255, alpha * fade * 0.28);
+      targetCtx.lineWidth = Math.max(0.7, dropletWidth * 0.42);
+      targetCtx.lineCap = "round";
+      targetCtx.beginPath();
+      targetCtx.arc(0, 0, dropletLength * 0.72, seed + t, seed + t + Math.PI * 0.7);
+      targetCtx.stroke();
+    }
+  }
+
+  function drawMagicTrailParticleOn(targetCtx, size, alpha, seed, time, puff) {
+    const hue = 268 + Math.sin(seed * 2.11 + time * 0.003) * 34;
+    const t = trailParticleProgress(puff);
+    targetCtx.globalCompositeOperation = "lighter";
+    targetCtx.fillStyle = hslaColor(hue, 96, 77, alpha * 0.9);
+    targetCtx.strokeStyle = hslaColor(hue + 42, 96, 88, alpha * 0.72);
+    targetCtx.lineWidth = Math.max(0.8, size * 0.11);
+    targetCtx.beginPath();
+    targetCtx.moveTo(0, -size);
+    targetCtx.lineTo(size * 0.22, -size * 0.22);
+    targetCtx.lineTo(size, 0);
+    targetCtx.lineTo(size * 0.22, size * 0.22);
+    targetCtx.lineTo(0, size);
+    targetCtx.lineTo(-size * 0.22, size * 0.22);
+    targetCtx.lineTo(-size, 0);
+    targetCtx.lineTo(-size * 0.22, -size * 0.22);
+    targetCtx.closePath();
+    targetCtx.fill();
+    targetCtx.stroke();
+    targetCtx.fillStyle = hslaColor(hue + 84, 92, 92, alpha * 0.88);
+    targetCtx.beginPath();
+    targetCtx.arc(size * 0.7, -size * 0.56, Math.max(1.1, size * 0.16), 0, Math.PI * 2);
+    targetCtx.fill();
+
+    targetCtx.strokeStyle = hslaColor(hue + 120, 88, 84, alpha * 0.34 * (1 - t * 0.3));
+    targetCtx.lineWidth = Math.max(0.75, size * 0.07);
+    targetCtx.beginPath();
+    targetCtx.arc(0, 0, size * (1.08 + t * 0.28), seed, seed + Math.PI * 1.55);
+    targetCtx.stroke();
+    for (let mote = 0; mote < 3; mote += 1) {
+      const angle = time * 0.006 + seed + mote * Math.PI * 2 / 3;
+      const distance = size * (0.8 + mote * 0.18);
+      const moteSize = Math.max(0.9, size * (0.1 + trailSeedNoise(seed, mote + 7) * 0.12));
+      targetCtx.fillStyle = hslaColor(hue + mote * 38, 94, 88, alpha * (0.42 + mote * 0.09));
+      targetCtx.beginPath();
+      targetCtx.arc(Math.cos(angle) * distance, Math.sin(angle) * distance, moteSize, 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+  }
+
+  function drawRainbowTrailParticleOn(targetCtx, size, alpha, seed, time, puff) {
+    const hue = seed * 49 + time * 0.045;
+    const t = trailParticleProgress(puff);
+    targetCtx.globalCompositeOperation = "lighter";
+    targetCtx.lineCap = "round";
+    const sparkleAlpha = alpha * (0.18 + (1 - t) * 0.42);
+    const pixel = Math.max(1.4, size * 0.24);
+    targetCtx.fillStyle = hslaColor(hue, 98, 74, sparkleAlpha);
+    targetCtx.fillRect(-pixel * 0.5, -pixel * 0.5, pixel, pixel);
+    if (trailSeedNoise(seed, 3.4) > 0.42) {
+      drawPixelSparkOn(targetCtx, Math.sin(time * 0.003 + seed) * size * 0.72, Math.cos(time * 0.004 + seed) * size * 0.72, Math.max(1, pixel * 0.72), sparkleAlpha * 0.76);
+    }
+  }
+
+  function drawPlasmaTrailParticleOn(targetCtx, size, alpha, seed, time, puff) {
+    const flicker = 0.84 + Math.sin(time * 0.017 + seed) * 0.16;
+    const t = trailParticleProgress(puff);
+    targetCtx.globalCompositeOperation = "lighter";
+    const glow = targetCtx.createRadialGradient(0, 0, 0, 0, 0, size * 1.54);
+    glow.addColorStop(0, rgbaColor(250, 255, 255, alpha * flicker));
+    glow.addColorStop(0.34, rgbaColor(100, 227, 255, alpha * 0.82));
+    glow.addColorStop(0.72, rgbaColor(255, 115, 255, alpha * 0.44));
+    glow.addColorStop(1, rgbaColor(65, 29, 160, 0));
+    targetCtx.fillStyle = glow;
+    targetCtx.beginPath();
+    targetCtx.arc(0, 0, size, 0, Math.PI * 2);
+    targetCtx.fill();
+
+    targetCtx.strokeStyle = rgbaColor(236, 255, 255, alpha * 0.82);
+    targetCtx.lineWidth = Math.max(0.9, size * 0.16);
+    targetCtx.beginPath();
+    targetCtx.moveTo(-size * 0.62, -size * 0.18);
+    targetCtx.lineTo(-size * 0.1, size * 0.08 + Math.sin(seed) * size * 0.16);
+    targetCtx.lineTo(size * 0.28, -size * 0.06);
+    targetCtx.lineTo(size * 0.64, size * 0.18);
+    targetCtx.stroke();
+
+    targetCtx.strokeStyle = rgbaColor(255, 115, 255, alpha * 0.48 * flicker * (1 - t * 0.2));
+    targetCtx.lineWidth = Math.max(0.75, size * 0.1);
+    for (let fork = 0; fork < 3; fork += 1) {
+      const angle = seed + fork * Math.PI * 2 / 3 + time * 0.006;
+      const mid = size * (0.42 + trailSeedNoise(seed, fork) * 0.28);
+      const outer = size * (1.1 + trailSeedNoise(seed, fork + 4) * 0.5);
+      targetCtx.beginPath();
+      targetCtx.moveTo(Math.cos(angle) * mid * 0.35, Math.sin(angle) * mid * 0.35);
+      targetCtx.lineTo(Math.cos(angle + 0.22) * mid, Math.sin(angle + 0.22) * mid);
+      targetCtx.lineTo(Math.cos(angle - 0.18) * outer, Math.sin(angle - 0.18) * outer);
+      targetCtx.stroke();
+    }
+  }
+
+  function drawSnowTrailParticleOn(targetCtx, size, alpha, seed, time, puff) {
+    const armCount = 6;
+    const t = trailParticleProgress(puff);
+    targetCtx.globalCompositeOperation = "lighter";
+    const haze = targetCtx.createRadialGradient(0, 0, 0, 0, 0, size * 1.8);
+    haze.addColorStop(0, rgbaColor(255, 255, 255, alpha * 0.16));
+    haze.addColorStop(0.68, rgbaColor(185, 245, 255, alpha * 0.12));
+    haze.addColorStop(1, rgbaColor(185, 245, 255, 0));
+    targetCtx.fillStyle = haze;
+    targetCtx.beginPath();
+    targetCtx.arc(0, 0, size * 1.8, 0, Math.PI * 2);
+    targetCtx.fill();
+
+    targetCtx.strokeStyle = rgbaColor(232, 255, 255, alpha * 0.86);
+    targetCtx.lineWidth = Math.max(0.85, size * 0.12);
+    targetCtx.lineCap = "round";
+    for (let arm = 0; arm < armCount; arm += 1) {
+      const angle = arm * Math.PI * 2 / armCount + Math.sin(time * 0.002 + seed) * 0.08;
+      const outerX = Math.cos(angle) * size;
+      const outerY = Math.sin(angle) * size;
+      targetCtx.beginPath();
+      targetCtx.moveTo(0, 0);
+      targetCtx.lineTo(outerX, outerY);
+      targetCtx.stroke();
+      const branchAngle = angle + 0.58;
+      const branchBaseX = Math.cos(angle) * size * 0.55;
+      const branchBaseY = Math.sin(angle) * size * 0.55;
+      targetCtx.beginPath();
+      targetCtx.moveTo(branchBaseX, branchBaseY);
+      targetCtx.lineTo(branchBaseX + Math.cos(branchAngle) * size * 0.22, branchBaseY + Math.sin(branchAngle) * size * 0.22);
+      targetCtx.stroke();
+    }
+    targetCtx.fillStyle = rgbaColor(255, 255, 255, alpha * 0.9);
+    targetCtx.beginPath();
+    targetCtx.arc(0, 0, Math.max(1.1, size * 0.18), 0, Math.PI * 2);
+    targetCtx.fill();
+
+    for (let flurry = 0; flurry < 4; flurry += 1) {
+      const angle = seed * 0.7 + flurry * Math.PI * 0.5 + time * 0.0018;
+      const distance = size * (0.88 + flurry * 0.22 + t * 0.8);
+      targetCtx.fillStyle = rgbaColor(255, 255, 255, alpha * (0.18 + flurry * 0.04) * (1 - t * 0.38));
+      targetCtx.beginPath();
+      targetCtx.arc(Math.cos(angle) * distance, Math.sin(angle) * distance, Math.max(0.7, size * 0.08), 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+  }
+
+  function drawBatTrailParticleOn(targetCtx, size, alpha, seed, time, puff) {
+    const flap = 0.88 + Math.sin(time * 0.018 + seed * 2.4) * 0.18;
+    const t = trailParticleProgress(puff);
+    const moon = targetCtx.createRadialGradient(-size * 0.34, -size * 0.2, 0, -size * 0.34, -size * 0.2, size * 1.6);
+    moon.addColorStop(0, rgbaColor(169, 133, 255, alpha * 0.24));
+    moon.addColorStop(1, rgbaColor(64, 45, 118, 0));
+    targetCtx.fillStyle = moon;
+    targetCtx.beginPath();
+    targetCtx.arc(-size * 0.34, -size * 0.2, size * 1.6, 0, Math.PI * 2);
+    targetCtx.fill();
+
+    targetCtx.globalAlpha = finiteOr(targetCtx.globalAlpha, 1) * alpha;
+    targetCtx.scale(1, flap);
+    drawBatShapeOn(targetCtx, size, 1);
+    for (let mini = 0; mini < 2; mini += 1) {
+      const angle = seed + mini * Math.PI * 1.4 + time * 0.004;
+      const miniScale = 0.34 + trailSeedNoise(seed, mini + 5) * 0.2;
+      targetCtx.save();
+      targetCtx.translate(Math.cos(angle) * size * (1.1 + t * 0.4), Math.sin(angle) * size * (0.72 + t * 0.2));
+      targetCtx.rotate(Math.sin(angle) * 0.5);
+      targetCtx.scale(miniScale, miniScale * (0.92 + Math.sin(time * 0.02 + seed + mini) * 0.14));
+      drawBatShapeOn(targetCtx, size, 0.58 * (1 - t * 0.35));
+      targetCtx.restore();
+    }
+  }
+
+  function drawHeartTrailParticleOn(targetCtx, size, alpha, seed, time, puff) {
+    const hue = 338 + Math.sin(seed * 1.8 + time * 0.004) * 16;
+    const t = trailParticleProgress(puff);
+    targetCtx.globalCompositeOperation = "lighter";
+    targetCtx.fillStyle = hslaColor(hue, 96, 66, alpha * 0.9);
+    targetCtx.strokeStyle = hslaColor(hue + 18, 96, 86, alpha * 0.5);
+    targetCtx.lineWidth = Math.max(0.8, size * 0.09);
+    drawHeartPathOn(targetCtx, size);
+    targetCtx.fill();
+    targetCtx.stroke();
+
+    targetCtx.strokeStyle = hslaColor(hue + 38, 88, 86, alpha * 0.28 * (1 - t));
+    targetCtx.lineWidth = Math.max(0.8, size * 0.08);
+    targetCtx.beginPath();
+    targetCtx.arc(0, -size * 0.04, size * (0.96 + t * 0.8), 0, Math.PI * 2);
+    targetCtx.stroke();
+    for (let small = 0; small < 2; small += 1) {
+      const angle = seed + small * Math.PI + time * 0.003;
+      const smallSize = size * (0.26 + trailSeedNoise(seed, small + 9) * 0.16);
+      targetCtx.save();
+      targetCtx.translate(Math.cos(angle) * size * (0.9 + t * 0.35), Math.sin(angle) * size * 0.7 - size * t * 0.35);
+      targetCtx.rotate(Math.sin(angle) * 0.5);
+      targetCtx.fillStyle = hslaColor(hue + small * 22, 96, 72, alpha * 0.52 * (1 - t * 0.28));
+      drawHeartPathOn(targetCtx, smallSize);
+      targetCtx.fill();
+      targetCtx.restore();
+    }
+  }
+
+  function drawFlowerTrailParticleOn(targetCtx, size, alpha, seed, time, puff) {
+    const hue = seed % 3 === 0 ? 326 : seed % 3 === 1 ? 42 : 158;
+    const t = trailParticleProgress(puff);
+    targetCtx.globalCompositeOperation = "source-over";
+    targetCtx.strokeStyle = rgbaColor(102, 224, 184, alpha * 0.45 * (1 - t * 0.25));
+    targetCtx.lineWidth = Math.max(0.85, size * 0.08);
+    targetCtx.lineCap = "round";
+    targetCtx.beginPath();
+    targetCtx.moveTo(-size * 0.95, size * 0.22);
+    targetCtx.quadraticCurveTo(-size * 0.26, -size * (0.34 + t * 0.22), size * 0.74, -size * 0.08);
+    targetCtx.stroke();
+
+    for (let petal = 0; petal < 5; petal += 1) {
+      const angle = petal * Math.PI * 2 / 5 + Math.sin(time * 0.0025 + seed) * 0.08;
+      targetCtx.save();
+      targetCtx.rotate(angle);
+      targetCtx.fillStyle = hslaColor(hue + petal * 8, 84, 72, alpha * 0.76);
+      targetCtx.beginPath();
+      targetCtx.ellipse(size * 0.38, 0, size * (0.24 + trailSeedNoise(seed, petal) * 0.18), size * (0.12 + trailSeedNoise(seed, petal + 8) * 0.09), 0, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.restore();
+    }
+    targetCtx.fillStyle = rgbaColor(255, 216, 77, alpha * 0.92);
+    targetCtx.beginPath();
+    targetCtx.arc(0, 0, Math.max(1.2, size * 0.23), 0, Math.PI * 2);
+    targetCtx.fill();
+
+    for (let loose = 0; loose < 3; loose += 1) {
+      const angle = seed * 0.8 + loose * Math.PI * 0.72 + time * 0.002;
+      const distance = size * (0.88 + loose * 0.3 + t * 0.65);
+      targetCtx.save();
+      targetCtx.translate(Math.cos(angle) * distance, Math.sin(angle) * distance * 0.74);
+      targetCtx.rotate(angle + time * 0.003);
+      targetCtx.fillStyle = hslaColor(hue + loose * 24, 84, 74, alpha * 0.42 * (1 - t * 0.35));
+      targetCtx.beginPath();
+      targetCtx.ellipse(0, 0, Math.max(1, size * 0.18), Math.max(0.8, size * 0.08), 0, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.restore();
+    }
+  }
+
+  function orderedTrailPuffs(livePuffs, minAlpha) {
+    const points = [];
+    for (const puff of livePuffs) {
+      const alpha = finiteOr(puff.renderAlpha, 0);
+      if (alpha <= finiteOr(minAlpha, 0.02)) {
+        continue;
+      }
+      points.push(puff);
+    }
+    points.sort(function (a, b) {
+      return finiteOr(a.renderT, 0) - finiteOr(b.renderT, 0);
+    });
+    return points;
+  }
+
+  function trailPuffGroupsByNozzle(livePuffs) {
+    const left = [];
+    const right = [];
+    for (const puff of orderedTrailPuffs(livePuffs, 0.02)) {
+      const nozzleX = Number.isFinite(Number(puff.nozzleX)) ? Number(puff.nozzleX) : finiteOr(puff.x, 0);
+      if (nozzleX < 0) {
+        left.push(puff);
+      } else {
+        right.push(puff);
+      }
+    }
+    return [left, right].filter(function (group) {
+      return group.length >= 2;
+    });
+  }
+
+  function trailCenterlinePoints(livePuffs, bucketCount) {
+    const ordered = orderedTrailPuffs(livePuffs, 0.02);
+    const count = Math.max(4, Math.min(18, Math.floor(finiteOr(bucketCount, 12))));
+    const buckets = [];
+    for (let i = 0; i < count; i += 1) {
+      buckets.push({ x: 0, y: 0, t: 0, alpha: 0, count: 0 });
+    }
+    for (const puff of ordered) {
+      const index = clamp(Math.floor(finiteOr(puff.renderT, 0) * (count - 1)), 0, count - 1);
+      const bucket = buckets[index];
+      const alpha = Math.max(0.001, finiteOr(puff.renderAlpha, 0));
+      bucket.x += finiteOr(puff.renderX, 0) * alpha;
+      bucket.y += finiteOr(puff.renderY, 0) * alpha;
+      bucket.t += finiteOr(puff.renderT, 0) * alpha;
+      bucket.alpha += alpha;
+      bucket.count += 1;
+    }
+    const points = [];
+    for (const bucket of buckets) {
+      if (bucket.count <= 0 || bucket.alpha <= 0) {
+        continue;
+      }
+      points.push({
+        x: bucket.x / bucket.alpha,
+        y: bucket.y / bucket.alpha,
+        t: bucket.t / bucket.alpha,
+        alpha: clamp(bucket.alpha / Math.max(1, bucket.count), 0, 1)
+      });
+    }
+    return points;
+  }
+
+  function trailPointX(point) {
+    return Number.isFinite(Number(point && point.renderX)) ? Number(point.renderX) : finiteOr(point && point.x, 0);
+  }
+
+  function trailPointY(point) {
+    return Number.isFinite(Number(point && point.renderY)) ? Number(point.renderY) : finiteOr(point && point.y, 0);
+  }
+
+  function trailPointT(point) {
+    return Number.isFinite(Number(point && point.renderT)) ? Number(point.renderT) : finiteOr(point && point.t, 0);
+  }
+
+  function trailNormalAtPoint(points, index) {
+    if (!points || points.length < 2) {
+      return { x: 0, y: 1 };
+    }
+    const previous = points[Math.max(0, index - 1)];
+    const next = points[Math.min(points.length - 1, index + 1)];
+    const dx = trailPointX(next) - trailPointX(previous);
+    const dy = trailPointY(next) - trailPointY(previous);
+    const length = Math.hypot(dx, dy);
+    if (length <= 0.001) {
+      return { x: 0, y: 1 };
+    }
+    return { x: -dy / length, y: dx / length };
+  }
+
+  function drawTrailCurveOn(targetCtx, points, lineWidth, strokeStyle, options) {
+    const config = options && typeof options === "object" ? options : {};
+    if (!points || points.length < 2) {
+      return;
+    }
+    const offset = finiteOr(config.offset, 0);
+    const wave = finiteOr(config.wave, 0);
+    const phase = finiteOr(config.phase, 0);
+    targetCtx.strokeStyle = strokeStyle;
+    targetCtx.lineWidth = Math.max(0.2, finiteOr(lineWidth, 1));
+    targetCtx.lineCap = config.lineCap || "round";
+    targetCtx.lineJoin = config.lineJoin || "round";
+    targetCtx.beginPath();
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index];
+      const normal = trailNormalAtPoint(points, index);
+      const waveOffset = wave !== 0 ? Math.sin(trailPointT(point) * Math.PI * 5 + phase) * wave : 0;
+      const x = trailPointX(point) + normal.x * (offset + waveOffset);
+      const y = trailPointY(point) + normal.y * (offset + waveOffset);
+      if (index === 0) {
+        targetCtx.moveTo(x, y);
+      } else {
+        targetCtx.lineTo(x, y);
+      }
+    }
+    targetCtx.stroke();
+  }
+
+  function smoothedTrailPoints(points, passes) {
+    if (!Array.isArray(points) || points.length < 3) {
+      return Array.isArray(points) ? points.slice() : [];
+    }
+    let smoothed = points.map(function (point) {
+      return {
+        x: trailPointX(point),
+        y: trailPointY(point),
+        t: trailPointT(point),
+        alpha: finiteOr(point && point.alpha, finiteOr(point && point.renderAlpha, 1))
+      };
+    });
+    const passCount = Math.max(1, Math.floor(finiteOr(passes, 1)));
+    for (let pass = 0; pass < passCount; pass += 1) {
+      const next = [smoothed[0]];
+      for (let index = 1; index < smoothed.length - 1; index += 1) {
+        const previous = smoothed[index - 1];
+        const current = smoothed[index];
+        const following = smoothed[index + 1];
+        next.push({
+          x: previous.x * 0.24 + current.x * 0.52 + following.x * 0.24,
+          y: previous.y * 0.24 + current.y * 0.52 + following.y * 0.24,
+          t: current.t,
+          alpha: current.alpha
+        });
+      }
+      next.push(smoothed[smoothed.length - 1]);
+      smoothed = next;
+    }
+    return smoothed;
+  }
+
+  function transformedTrailPoint(points, index, options) {
+    const config = options && typeof options === "object" ? options : {};
+    const point = points[index];
+    const normal = trailNormalAtPoint(points, index);
+    const wave = finiteOr(config.wave, 0);
+    const phase = finiteOr(config.phase, 0);
+    const offset = finiteOr(config.offset, 0);
+    const waveOffset = wave !== 0 ? Math.sin(trailPointT(point) * Math.PI * 4 + phase) * wave : 0;
+    return {
+      x: trailPointX(point) + normal.x * (offset + waveOffset),
+      y: trailPointY(point) + normal.y * (offset + waveOffset)
+    };
+  }
+
+  function drawSmoothTrailCurveOn(targetCtx, points, lineWidth, strokeStyle, options) {
+    const config = options && typeof options === "object" ? options : {};
+    if (!points || points.length < 2) {
+      return;
+    }
+    targetCtx.strokeStyle = strokeStyle;
+    targetCtx.lineWidth = Math.max(0.2, finiteOr(lineWidth, 1));
+    targetCtx.lineCap = config.lineCap || "round";
+    targetCtx.lineJoin = config.lineJoin || "round";
+    targetCtx.beginPath();
+    const first = transformedTrailPoint(points, 0, config);
+    targetCtx.moveTo(first.x, first.y);
+    for (let index = 1; index < points.length - 1; index += 1) {
+      const current = transformedTrailPoint(points, index, config);
+      const following = transformedTrailPoint(points, index + 1, config);
+      targetCtx.quadraticCurveTo(current.x, current.y, (current.x + following.x) / 2, (current.y + following.y) / 2);
+    }
+    const last = transformedTrailPoint(points, points.length - 1, config);
+    targetCtx.lineTo(last.x, last.y);
+    targetCtx.stroke();
+  }
+
+  function drawTaperedTrailRibbonOn(targetCtx, points, options) {
+    const config = options && typeof options === "object" ? options : {};
+    if (!points || points.length < 2) {
       return;
     }
 
-    drawJetpackFlamePlumes(time, smoothedLocalJetpackExhaust(time), 1);
+    const sourceWidth = finiteOr(config.sourceWidth, 3);
+    const fanWidth = finiteOr(config.fanWidth, 10);
+    const fanPower = Math.max(0.1, finiteOr(config.fanPower, 0.7));
+    const wave = finiteOr(config.wave, 0);
+    const phase = finiteOr(config.phase, 0);
+    const left = [];
+    const right = [];
+
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index];
+      const t = clamp(trailPointT(point), 0, 1);
+      const normal = trailNormalAtPoint(points, index);
+      const width = sourceWidth + fanWidth * Math.pow(t, fanPower);
+      const ripple = wave !== 0 ? Math.sin(t * Math.PI * 5 + phase) * wave * (0.25 + t * 0.75) : 0;
+      const x = trailPointX(point);
+      const y = trailPointY(point);
+      left.push({
+        x: x + normal.x * (width + ripple),
+        y: y + normal.y * (width + ripple)
+      });
+      right.push({
+        x: x - normal.x * (width - ripple * 0.45),
+        y: y - normal.y * (width - ripple * 0.45)
+      });
+    }
+
+    targetCtx.fillStyle = config.fillStyle || "rgba(80, 220, 255, 0.4)";
+    targetCtx.beginPath();
+    targetCtx.moveTo(left[0].x, left[0].y);
+    for (let index = 1; index < left.length; index += 1) {
+      targetCtx.lineTo(left[index].x, left[index].y);
+    }
+    for (let index = right.length - 1; index >= 0; index -= 1) {
+      targetCtx.lineTo(right[index].x, right[index].y);
+    }
+    targetCtx.closePath();
+    targetCtx.fill();
+  }
+
+  function waterStreamWidthAt(t, sourceWidth, midWidth, tailWidth) {
+    const age = clamp(t, 0, 1);
+    const swell = Math.sin(age * Math.PI);
+    return Math.max(0.4, finiteOr(sourceWidth, 4) * (1 - age) + finiteOr(tailWidth, 2) * age + finiteOr(midWidth, 8) * swell);
+  }
+
+  function transformedWaterStreamPoint(points, index, time, options) {
+    const config = options && typeof options === "object" ? options : {};
+    const point = points[index];
+    const normal = trailNormalAtPoint(points, index);
+    const t = clamp(trailPointT(point), 0, 1);
+    const wave = finiteOr(config.wave, 0);
+    const offset = finiteOr(config.offset, 0);
+    const phase = finiteOr(config.phase, 0);
+    const ripple = Math.sin(t * Math.PI * 6.5 - time * 0.012 + phase) * wave * (0.35 + t * 0.65);
+    const shimmer = Math.sin(t * Math.PI * 13 + time * 0.018 + phase * 0.7) * wave * 0.18;
+    return {
+      x: trailPointX(point) + normal.x * (offset + ripple + shimmer),
+      y: trailPointY(point) + normal.y * (offset + ripple + shimmer)
+    };
+  }
+
+  function drawWaterStreamStrokeOn(targetCtx, points, time, options) {
+    const config = options && typeof options === "object" ? options : {};
+    if (!points || points.length < 2) {
+      return;
+    }
+
+    targetCtx.lineCap = "round";
+    targetCtx.lineJoin = "round";
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1];
+      const current = points[index];
+      const t = clamp((trailPointT(previous) + trailPointT(current)) * 0.5, 0, 1);
+      const fade = clamp((1 - t) * 1.32, 0, 1);
+      if (fade <= 0.01) {
+        continue;
+      }
+      const start = transformedWaterStreamPoint(points, index - 1, time, config);
+      const end = transformedWaterStreamPoint(points, index, time, config);
+      const sourceWidth = finiteOr(config.sourceWidth, 4);
+      const midWidth = finiteOr(config.midWidth, 7);
+      const tailWidth = finiteOr(config.tailWidth, 1.5);
+      targetCtx.strokeStyle = config.colorFn
+        ? config.colorFn(t, fade)
+        : rgbaColor(92, 213, 255, finiteOr(config.alpha, 0.6) * fade);
+      targetCtx.lineWidth = waterStreamWidthAt(t, sourceWidth, midWidth, tailWidth);
+      targetCtx.beginPath();
+      targetCtx.moveTo(start.x, start.y);
+      targetCtx.quadraticCurveTo(
+        (start.x + end.x) * 0.5,
+        (start.y + end.y) * 0.5,
+        end.x,
+        end.y
+      );
+      targetCtx.stroke();
+    }
+  }
+
+  function drawPixelSparkOn(targetCtx, x, y, size, alpha) {
+    const pixel = Math.max(1, finiteOr(size, 2));
+    targetCtx.fillStyle = rgbaColor(255, 255, 255, alpha);
+    targetCtx.fillRect(x - pixel * 0.5, y - pixel * 0.5, pixel, pixel);
+    targetCtx.fillRect(x - pixel * 1.7, y - pixel * 0.5, pixel, pixel);
+    targetCtx.fillRect(x + pixel * 0.7, y - pixel * 0.5, pixel, pixel);
+    targetCtx.fillRect(x - pixel * 0.5, y - pixel * 1.7, pixel, pixel);
+    targetCtx.fillRect(x - pixel * 0.5, y + pixel * 0.7, pixel, pixel);
+  }
+
+  function drawMagicLightSparkOn(targetCtx, x, y, size, alpha, hue) {
+    const sparkSize = Math.max(1, finiteOr(size, 3));
+    const glow = targetCtx.createRadialGradient(x, y, 0, x, y, sparkSize * 2.8);
+    glow.addColorStop(0, hslaColor(hue, 100, 92, alpha));
+    glow.addColorStop(0.42, hslaColor(hue + 34, 96, 74, alpha * 0.45));
+    glow.addColorStop(1, hslaColor(hue + 68, 94, 55, 0));
+    targetCtx.fillStyle = glow;
+    targetCtx.beginPath();
+    targetCtx.arc(x, y, sparkSize * 2.8, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.strokeStyle = hslaColor(hue, 100, 94, alpha * 0.92);
+    targetCtx.lineWidth = Math.max(0.8, sparkSize * 0.18);
+    targetCtx.lineCap = "round";
+    targetCtx.beginPath();
+    targetCtx.moveTo(x - sparkSize, y);
+    targetCtx.lineTo(x + sparkSize, y);
+    targetCtx.moveTo(x, y - sparkSize);
+    targetCtx.lineTo(x, y + sparkSize);
+    targetCtx.stroke();
+  }
+
+  function drawBatBackdropTrailOn(targetCtx, livePuffs, time) {
+    const points = trailCenterlinePoints(livePuffs, 11);
+    if (points.length < 2) {
+      return;
+    }
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = "lighter";
+    drawTrailCurveOn(targetCtx, points, 32, "rgba(169, 133, 255, 0.16)", { wave: 7, phase: time * 0.004 });
+    drawTrailCurveOn(targetCtx, points, 18, "rgba(224, 196, 255, 0.13)", { wave: 4, phase: time * 0.006 + 1.2 });
+    for (let i = 0; i < points.length; i += 2) {
+      const point = points[i];
+      const radius = 16 + Math.sin(time * 0.004 + i) * 3;
+      const glow = targetCtx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius * 1.8);
+      glow.addColorStop(0, "rgba(190, 152, 255, 0.22)");
+      glow.addColorStop(0.5, "rgba(116, 91, 200, 0.14)");
+      glow.addColorStop(1, "rgba(55, 42, 100, 0)");
+      targetCtx.fillStyle = glow;
+      targetCtx.beginPath();
+      targetCtx.arc(point.x, point.y, radius * 1.8, 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+    targetCtx.restore();
+  }
+
+  function drawWaterStreamTrailOn(targetCtx, livePuffs, time) {
+    const centerPoints = smoothedTrailPoints(trailCenterlinePoints(livePuffs, 14), 4);
+    if (centerPoints.length < 2) {
+      return;
+    }
+    const nozzleGroups = trailPuffGroupsByNozzle(livePuffs);
+    const streamGroups = nozzleGroups.length > 0 ? nozzleGroups : [orderedTrailPuffs(livePuffs, 0.02)];
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = "lighter";
+
+    for (let index = 0; index < centerPoints.length; index += 1) {
+      const point = centerPoints[index];
+      const t = clamp(trailPointT(point), 0, 1);
+      const normal = trailNormalAtPoint(centerPoints, index);
+      const side = Math.sin(time * 0.006 + index * 1.4) * (1.8 + t * 4.5);
+      const radius = 10 + Math.sin(time * 0.004 + index) * 1.8 + Math.sin(t * Math.PI) * 14;
+      const fade = clamp((1 - t) * 1.2, 0, 1);
+      const x = trailPointX(point) + normal.x * side;
+      const y = trailPointY(point) + normal.y * side;
+      const mist = targetCtx.createRadialGradient(x, y, 0, x, y, radius);
+      mist.addColorStop(0, "rgba(194, 252, 255, " + (0.12 * fade) + ")");
+      mist.addColorStop(0.48, "rgba(66, 207, 255, " + (0.13 * fade) + ")");
+      mist.addColorStop(1, "rgba(10, 112, 200, 0)");
+      targetCtx.fillStyle = mist;
+      targetCtx.beginPath();
+      targetCtx.arc(x, y, radius, 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+
+    for (let groupIndex = 0; groupIndex < streamGroups.length; groupIndex += 1) {
+      const points = smoothedTrailPoints(trailCenterlinePoints(streamGroups[groupIndex], 12), 4);
+      if (points.length < 2) {
+        continue;
+      }
+      const lanePhase = groupIndex * Math.PI + time * 0.001;
+      drawWaterStreamStrokeOn(targetCtx, points, time, {
+        sourceWidth: 8.5,
+        midWidth: 8.2,
+        tailWidth: 2.2,
+        wave: 1.6,
+        phase: lanePhase,
+        colorFn: function (t, fade) {
+          return rgbaColor(20, 120, 205, (0.18 + Math.sin(t * Math.PI) * 0.1) * fade);
+        }
+      });
+      drawWaterStreamStrokeOn(targetCtx, points, time, {
+        sourceWidth: 5.8,
+        midWidth: 5.2,
+        tailWidth: 1.3,
+        wave: 1.05,
+        phase: lanePhase + 0.9,
+        colorFn: function (t, fade) {
+          return rgbaColor(58, 205, 255, (0.44 + Math.sin(t * Math.PI) * 0.16) * fade);
+        }
+      });
+      drawWaterStreamStrokeOn(targetCtx, points, time, {
+        sourceWidth: 2.2,
+        midWidth: 2.1,
+        tailWidth: 0.6,
+        wave: 0.74,
+        offset: groupIndex % 2 === 0 ? -2.4 : 2.4,
+        phase: lanePhase + 2.3,
+        colorFn: function (t, fade) {
+          return rgbaColor(235, 255, 255, (0.52 + Math.sin(t * Math.PI * 2 - time * 0.016) * 0.08) * fade);
+        }
+      });
+      drawWaterStreamStrokeOn(targetCtx, points, time, {
+        sourceWidth: 1.2,
+        midWidth: 1.1,
+        tailWidth: 0.4,
+        wave: 1.2,
+        offset: groupIndex % 2 === 0 ? 2.7 : -2.7,
+        phase: lanePhase + 4.1,
+        colorFn: function (t, fade) {
+          return rgbaColor(156, 239, 255, (0.34 + trailSeedNoise(groupIndex + 3, t * 7) * 0.16) * fade);
+        }
+      });
+    }
+
+    drawWaterStreamStrokeOn(targetCtx, centerPoints, time, {
+      sourceWidth: 3.2,
+      midWidth: 3,
+      tailWidth: 0.8,
+      wave: 2.8,
+      phase: time * 0.004 + 1.6,
+      colorFn: function (t, fade) {
+        return rgbaColor(182, 248, 255, 0.22 * fade);
+      }
+    });
+
+    for (let index = 1; index < centerPoints.length; index += 2) {
+      const point = centerPoints[index];
+      const normal = trailNormalAtPoint(centerPoints, index);
+      const t = clamp(trailPointT(point), 0, 1);
+      const fade = clamp((1 - t) * 1.18, 0, 1);
+      if (fade <= 0.02) {
+        continue;
+      }
+      const foamSize = 1.6 + Math.sin(t * Math.PI) * 2.8 + trailSeedNoise(index, time * 0.001) * 2.2;
+      const side = (trailSeedNoise(index, 3.2) - 0.5) * (8 + Math.sin(t * Math.PI) * 12);
+      const foamX = trailPointX(point) + normal.x * side + Math.sin(time * 0.01 + index) * 1.2;
+      const foamY = trailPointY(point) + normal.y * side;
+      targetCtx.fillStyle = "rgba(231, 255, 255, " + (0.32 * fade) + ")";
+      targetCtx.beginPath();
+      targetCtx.arc(foamX, foamY, foamSize, 0, Math.PI * 2);
+      targetCtx.fill();
+      if (trailSeedNoise(index, 7.9) > 0.58) {
+        targetCtx.strokeStyle = "rgba(235, 255, 255, " + (0.24 * fade) + ")";
+        targetCtx.lineWidth = 0.9;
+        targetCtx.beginPath();
+        targetCtx.arc(foamX, foamY, foamSize * (1.7 + trailSeedNoise(index, 8.8)), time * 0.004, time * 0.004 + Math.PI * 1.35);
+        targetCtx.stroke();
+      }
+    }
+    targetCtx.restore();
+  }
+
+  function drawRainbowRibbonTrailOn(targetCtx, livePuffs, time) {
+    const points = trailCenterlinePoints(livePuffs, 12);
+    if (points.length < 2) {
+      return;
+    }
+    const colors = [
+      "rgba(255, 39, 32, 0.9)",
+      "rgba(255, 143, 32, 0.9)",
+      "rgba(255, 232, 54, 0.92)",
+      "rgba(84, 240, 70, 0.9)",
+      "rgba(53, 168, 255, 0.9)",
+      "rgba(142, 84, 255, 0.9)"
+    ];
+    const bandWidth = 4.6;
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = "source-over";
+    drawTrailCurveOn(targetCtx, points, bandWidth * 7.2, "rgba(5, 10, 32, 0.18)", { lineCap: "butt", lineJoin: "miter" });
+    for (let band = 0; band < colors.length; band += 1) {
+      drawTrailCurveOn(targetCtx, points, bandWidth, colors[band], {
+        offset: (band - (colors.length - 1) / 2) * bandWidth,
+        lineCap: "butt",
+        lineJoin: "miter"
+      });
+    }
+    targetCtx.globalCompositeOperation = "lighter";
+    for (let index = 1; index < points.length; index += 4) {
+      const point = points[index];
+      const normal = trailNormalAtPoint(points, index);
+      const side = (trailSeedNoise(index, 4.2) > 0.5 ? 1 : -1) * (22 + trailSeedNoise(index, 5.1) * 18);
+      drawPixelSparkOn(
+        targetCtx,
+        point.x + normal.x * side + Math.sin(time * 0.002 + index) * 3,
+        point.y + normal.y * side,
+        2.2 + trailSeedNoise(index, 6.4) * 1.4,
+        0.5
+      );
+    }
+    targetCtx.restore();
+  }
+
+  function drawPlasmaWaveTrailOn(targetCtx, livePuffs, time) {
+    const points = trailCenterlinePoints(livePuffs, 13);
+    if (points.length < 2) {
+      return;
+    }
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = "lighter";
+    drawTrailCurveOn(targetCtx, points, 18, "rgba(80, 230, 255, 0.16)", { wave: 8, phase: time * 0.008 });
+    drawTrailCurveOn(targetCtx, points, 5.4, "rgba(118, 245, 255, 0.66)", { wave: 8.5, phase: time * 0.011 });
+    drawTrailCurveOn(targetCtx, points, 4.4, "rgba(255, 112, 255, 0.58)", { wave: -7, phase: time * 0.012 + Math.PI });
+    drawTrailCurveOn(targetCtx, points, 2.1, "rgba(255, 255, 255, 0.74)", { wave: 4.5, phase: time * 0.018 + 0.7 });
+    for (let index = 1; index < points.length; index += 3) {
+      const point = points[index];
+      const normal = trailNormalAtPoint(points, index);
+      const ringRadius = 5 + trailSeedNoise(index, time * 0.001) * 7;
+      targetCtx.strokeStyle = "rgba(255, 140, 255, 0.28)";
+      targetCtx.lineWidth = 1.2;
+      targetCtx.beginPath();
+      targetCtx.ellipse(point.x + normal.x * ringRadius * 0.8, point.y + normal.y * ringRadius * 0.8, ringRadius * 1.2, ringRadius * 0.52, time * 0.006 + index, 0, Math.PI * 2);
+      targetCtx.stroke();
+    }
+    targetCtx.restore();
+  }
+
+  function drawMagicSparkTrailOn(targetCtx, livePuffs, time) {
+    const points = trailCenterlinePoints(livePuffs, 12);
+    if (points.length < 2) {
+      return;
+    }
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = "lighter";
+    drawTrailCurveOn(targetCtx, points, 14, "rgba(169, 133, 255, 0.12)", { wave: 6, phase: time * 0.004 });
+    drawTrailCurveOn(targetCtx, points, 2.6, "rgba(255, 228, 255, 0.36)", { wave: 3, phase: time * 0.009 + 1.1 });
+    for (let index = 0; index < points.length; index += 2) {
+      const point = points[index];
+      const normal = trailNormalAtPoint(points, index);
+      const side = (trailSeedNoise(index, 2.4) - 0.5) * 28;
+      const hue = 268 + trailSeedNoise(index, 8.4) * 88;
+      drawMagicLightSparkOn(
+        targetCtx,
+        point.x + normal.x * side,
+        point.y + normal.y * side,
+        2.4 + trailSeedNoise(index, 9.7) * 4.6,
+        0.45 + trailSeedNoise(index, time * 0.001) * 0.36,
+        hue
+      );
+    }
+    targetCtx.restore();
+  }
+
+  function drawDecorativeTrailLayerOn(targetCtx, style, livePuffs, time) {
+    if (!style || !Array.isArray(livePuffs) || livePuffs.length < 2) {
+      return;
+    }
+    switch (style.type) {
+      case "water":
+        drawWaterStreamTrailOn(targetCtx, livePuffs, time);
+        break;
+      case "magic":
+        drawMagicSparkTrailOn(targetCtx, livePuffs, time);
+        break;
+      case "rainbow":
+        drawRainbowRibbonTrailOn(targetCtx, livePuffs, time);
+        break;
+      case "plasma":
+        drawPlasmaWaveTrailOn(targetCtx, livePuffs, time);
+        break;
+      case "bats":
+        drawBatBackdropTrailOn(targetCtx, livePuffs, time);
+        break;
+      default:
+        break;
+    }
+  }
+
+  function drawDecorativeTrailParticleOn(targetCtx, style, puff, time) {
+    const x = finiteOr(puff.renderX, 0);
+    const y = finiteOr(puff.renderY, 0);
+    const size = Math.max(1, finiteOr(puff.renderRadius, 5));
+    const alpha = clamp(finiteOr(puff.renderAlpha, 0), 0, 1);
+    if (alpha <= 0) {
+      return;
+    }
+
+    targetCtx.save();
+    targetCtx.translate(x, y);
+    targetCtx.rotate(finiteOr(puff.rotation, 0) + finiteOr(puff.spinSpeed, 0) * time * 0.001);
+    switch (style.type) {
+      case "water":
+        drawWaterTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+      case "magic":
+        drawMagicTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+      case "rainbow":
+        drawRainbowTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+      case "plasma":
+        drawPlasmaTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+      case "snow":
+        drawSnowTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+      case "bats":
+        drawBatTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+      case "hearts":
+        drawHeartTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+      case "flowers":
+        drawFlowerTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+      default:
+        drawRainbowTrailParticleOn(targetCtx, size, alpha, finiteOr(puff.seed, 0), time, puff);
+        break;
+    }
+    targetCtx.restore();
+  }
+
+  function emitDecorativeTrailParticle(state, style, nozzleX, nozzleY, dirAngle, boostAmount, birthTime) {
+    const seed = state.nextSeed || 1;
+    state.nextSeed = seed + 1;
+    const dirX = Math.cos(dirAngle);
+    const dirY = Math.sin(dirAngle);
+    const normalX = -dirY;
+    const normalY = dirX;
+    const baseRadius = finiteOr(style.radius, 6);
+    const seedA = Math.sin(seed * 12.9898);
+    const seedB = Math.sin(seed * 7.233);
+    const scaleMin = finiteOr(style.scaleMin, 0.5);
+    const scaleMax = Math.max(scaleMin, finiteOr(style.scaleMax, 1.55));
+    const scaleNoise = trailSeedNoise(seed, 0.43);
+    const particleScale = scaleMin + (scaleMax - scaleMin) * scaleNoise;
+    const sideOffset = (seedA * 0.5 + Math.sin(seed * 4.1414) * 0.5) * (5 + boostAmount * 4);
+    const forwardOffset = 6 + boostAmount * 4 + Math.abs(Math.sin(seed * 1.97)) * 5;
+    const sideBias = nozzleX < 0 ? -5 : 5;
+
+    state.puffs.push({
+      birthTime,
+      life: finiteOr(style.life, 840) * (0.88 + Math.abs(Math.sin(seed * 3.712)) * 0.28),
+      nozzleX,
+      x: nozzleX + dirX * forwardOffset + normalX * sideOffset,
+      y: nozzleY + dirY * forwardOffset + normalY * sideOffset,
+      dirX,
+      dirY,
+      normalX,
+      normalY,
+      sideSpeed: seedB * finiteOr(style.sideSpeed, 26) + sideBias,
+      speed: finiteOr(style.speed, 88) + boostAmount * 42 + Math.abs(Math.sin(seed * 5.31)) * 24,
+      radius: baseRadius * particleScale * (0.92 + Math.abs(Math.sin(seed * 2.57)) * 0.22),
+      boostAmount,
+      rotation: dirAngle + Math.PI / 2 + Math.sin(seed * 5.71) * 0.65,
+      spinSpeed: Math.sin(seed * 3.47) * (style.type === "bats" ? 2.6 : 1.8),
+      variant: Math.floor(trailSeedNoise(seed, 1.92) * 4),
+      particleScale,
+      seed
+    });
+
+    if (state.puffs.length > 190) {
+      state.puffs.splice(0, state.puffs.length - 190);
+    }
+  }
+
+  function emitDecorativeTrailParticles(state, style, time, exhaust, boostAmount) {
+    const emitInterval = Math.max(34, finiteOr(style.emitInterval, 54));
+    const nozzleY = 43;
+    const exhaustDir = Math.atan2(finiteOr(exhaust.y, 1), finiteOr(exhaust.x, 0));
+    let emittedSteps = 0;
+
+    while (state.lastEmitTime + emitInterval <= time && emittedSteps < 7) {
+      state.lastEmitTime += emitInterval;
+      for (const nozzleX of [-17, 17]) {
+        const splay = nozzleX < 0 ? -0.13 : 0.13;
+        emitDecorativeTrailParticle(state, style, nozzleX, nozzleY, exhaustDir + splay, boostAmount, state.lastEmitTime);
+      }
+      emittedSteps += 1;
+    }
+
+    if (emittedSteps >= 7 && state.lastEmitTime + emitInterval < time) {
+      state.lastEmitTime = time;
+    }
+  }
+
+  function drawDecorativeTrailParticlesOn(targetCtx, state, style, time, boostAmount) {
+    const livePuffs = [];
+    for (const puff of state.puffs) {
+      const age = time - finiteOr(puff.birthTime, time);
+      const life = Math.max(1, finiteOr(puff.life, finiteOr(style.life, 850)));
+      const t = clamp(age / life, 0, 1);
+      const puffBoost = clamp(finiteOr(puff.boostAmount, boostAmount), 0, 1);
+      if (t >= 1) {
+        continue;
+      }
+      const ageSeconds = Math.max(0, age) / 1000;
+      const fadeIn = clamp(t * 6.4, 0, 1);
+      const fadeOut = clamp((1 - t) * 1.34, 0, 1);
+      const alpha = finiteOr(style.alpha, 0.82) * (0.74 + puffBoost * 0.2) * fadeIn * Math.pow(fadeOut, style.type === "bats" ? 0.88 : 0.62);
+      if (alpha < 0.018) {
+        puff.renderAlpha = 0;
+        livePuffs.push(puff);
+        continue;
+      }
+      const seed = finiteOr(puff.seed, 0);
+      const wave = Math.sin(time * 0.0034 + seed * 1.77);
+      const curlBase = style.type === "water" ? 4 : style.type === "bats" ? 24 : style.type === "snow" ? 17 : style.type === "flowers" ? 19 : 13;
+      let curl = wave * (2 + t * curlBase);
+      let distance = 4 + finiteOr(puff.speed, 86) * ageSeconds + t * t * (22 + puffBoost * 16);
+      let side = finiteOr(puff.sideSpeed, 0) * ageSeconds + curl;
+      let lift = 0;
+
+      if (style.type === "water") {
+        side = side * 0.76 + Math.sin(ageSeconds * 10 + seed) * (0.7 + t * 1.7);
+        distance += Math.sin(ageSeconds * 9 + seed * 0.7) * (0.45 + t * 0.75);
+      } else if (style.type === "magic") {
+        side += Math.sin(ageSeconds * 7 + seed * 1.4) * (7 + t * 8);
+        lift = Math.cos(ageSeconds * 5 + seed) * (2 + t * 5);
+      } else if (style.type === "rainbow") {
+        side += Math.sin(ageSeconds * 8 + seed) * (5 + t * 9);
+      } else if (style.type === "plasma") {
+        side += Math.sin(ageSeconds * 18 + seed * 2) * (3 + t * 7);
+        distance += Math.sin(ageSeconds * 22 + seed) * (2 + t * 6);
+      } else if (style.type === "snow") {
+        distance *= 0.88;
+        side += Math.sin(ageSeconds * 4.2 + seed) * (8 + t * 14);
+        lift = -t * t * 10;
+      } else if (style.type === "bats") {
+        side += Math.sin(ageSeconds * 15 + seed) * (12 + t * 20);
+        lift = Math.cos(ageSeconds * 11 + seed) * (4 + t * 10);
+      } else if (style.type === "hearts") {
+        side += Math.sin(ageSeconds * 5 + seed) * (8 + t * 12);
+        lift = -t * t * (10 + finiteOr(puff.particleScale, 1) * 4);
+      } else if (style.type === "flowers") {
+        side += Math.sin(ageSeconds * 6.5 + seed) * (9 + t * 15);
+        lift = Math.cos(ageSeconds * 5 + seed) * (3 + t * 7);
+      }
+
+      livePuffs.push(puff);
+      puff.renderT = t;
+      puff.renderX = finiteOr(puff.x, 0) + finiteOr(puff.dirX, 0) * distance + finiteOr(puff.normalX, 0) * side;
+      puff.renderY = finiteOr(puff.y, 0) + finiteOr(puff.dirY, 0) * distance + finiteOr(puff.normalY, 0) * side + lift;
+      puff.renderRadius = finiteOr(puff.radius, 6) * (1 + t * finiteOr(style.growth, 0.2));
+      puff.renderAlpha = alpha;
+    }
+
+    state.puffs = livePuffs;
+    drawDecorativeTrailLayerOn(targetCtx, style, livePuffs, time);
+    livePuffs.sort(function (a, b) {
+      return finiteOr(b.renderT, 0) - finiteOr(a.renderT, 0);
+    });
+    for (const puff of livePuffs) {
+      drawDecorativeTrailParticleOn(targetCtx, style, puff, time);
+    }
+  }
+
+  function drawSmokeJetpackTrailOn(targetCtx, time, exhaust, boost, ownerKey, options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldEmit = config.emit !== false;
+    const shouldDrawFlame = config.drawFlame !== false;
+    const boostAmount = clamp(finiteOr(boost, 0), 0, 1);
+    const state = smokeTrailStateForKey(ownerKey, time, "trail-smoke");
+    if (shouldEmit) {
+      emitSmokeTrailPuffs(state, time, exhaust, boostAmount);
+    } else {
+      state.lastEmitTime = time - 62;
+    }
+
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = "source-over";
+    drawSmokeTrailPuffsOn(targetCtx, state, time, boostAmount);
+    targetCtx.restore();
+    pruneSmokeTrailStates(time);
+    if (shouldDrawFlame) {
+      drawClassicJetpackFlamePlumesOn(targetCtx, time, exhaust, 0.24 + boostAmount * 0.16);
+    }
+  }
+
+  function drawDecorativeJetpackTrailOn(targetCtx, time, exhaust, boost, trailId, ownerKey, options) {
+    const style = decorativeBoostTrailStyleForId(trailId);
+    if (!style) {
+      drawClassicJetpackFlamePlumesOn(targetCtx, time, exhaust, boost);
+      return;
+    }
+
+    const config = options && typeof options === "object" ? options : {};
+    const shouldEmit = config.emit !== false;
+    const shouldDrawFlame = config.drawFlame !== false;
+    const boostAmount = clamp(finiteOr(boost, 0), 0, 1);
+    const state = smokeTrailStateForKey(ownerKey, time, trailId);
+    if (shouldEmit) {
+      emitDecorativeTrailParticles(state, style, time, exhaust, boostAmount);
+    } else {
+      state.lastEmitTime = time - Math.max(34, finiteOr(style.emitInterval, 54));
+    }
+
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = "source-over";
+    drawDecorativeTrailParticlesOn(targetCtx, state, style, time, boostAmount);
+    targetCtx.restore();
+    pruneSmokeTrailStates(time);
+    if (shouldDrawFlame) {
+      drawClassicJetpackFlamePlumesOn(
+        targetCtx,
+        time,
+        exhaust,
+        finiteOr(style.flameBase, 0.14) + boostAmount * finiteOr(style.flameScale, 0.1)
+      );
+    }
+  }
+
+  function drawJetpackFlamePlumesOn(targetCtx, time, exhaust, boost, trailId, ownerKey, options) {
+    const cleanTrailId = normalizedBoostTrailId(trailId);
+    if (cleanTrailId === "trail-smoke") {
+      drawSmokeJetpackTrailOn(targetCtx, time, exhaust, boost, ownerKey, options);
+      return;
+    }
+    if (decorativeBoostTrailStyleForId(cleanTrailId)) {
+      drawDecorativeJetpackTrailOn(targetCtx, time, exhaust, boost, cleanTrailId, ownerKey, options);
+      return;
+    }
+    drawClassicJetpackFlamePlumesOn(targetCtx, time, exhaust, boost);
+  }
+
+  function drawJetpackFlamePlumes(time, exhaust, boost, trailId, ownerKey, options) {
+    drawJetpackFlamePlumesOn(ctx, time, exhaust, boost, trailId, ownerKey, options);
+  }
+
+  function drawJetFlames(time) {
+    const trailId = activeTrailId();
+    const boosting = isJetpackBoostFlameActive(renderPerformance.lastFrameDt || 1 / 60);
+    if (!boosting) {
+      if (isStatefulBoostTrailId(trailId) && smokeTrailHasLivePuffs("local", time, trailId)) {
+        drawJetpackFlamePlumes(
+          time,
+          { x: localJetpackExhaust.x, y: localJetpackExhaust.y },
+          0,
+          trailId,
+          "local",
+          { emit: false, drawFlame: false }
+        );
+      }
+      return;
+    }
+
+    drawJetpackFlamePlumes(time, smoothedLocalJetpackExhaust(time), 1, trailId, "local");
   }
 
   function playerSurfaceRotation() {
@@ -37663,6 +46861,7 @@
   }
 
   function drawGripArm(startX, startY, bendX, bendY, handX, handY, handAngle) {
+    const suit = activeSkinPalette();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#171b2c";
@@ -37672,14 +46871,14 @@
     ctx.quadraticCurveTo(bendX, bendY, handX, handY);
     ctx.stroke();
 
-    ctx.strokeStyle = "#f8f5ec";
+    ctx.strokeStyle = suit.arm || "#f8f5ec";
     ctx.lineWidth = 7.5;
     ctx.stroke();
 
     ctx.save();
     ctx.translate(handX, handY);
     ctx.rotate(handAngle);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = suit.helmet || "#ffffff";
     ctx.strokeStyle = "#171b2c";
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -37738,33 +46937,37 @@
     drawHeldArm(24, 32, lowerHand, 18, aim.angle + 0.18, time, bodyRotation);
   }
 
-  function drawAstronautLeg(x, hipY, footX, footY, bendX, bendY, suitColor, bootColor) {
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(23, 27, 44, 0.68)";
-    ctx.lineWidth = 18;
-    ctx.beginPath();
-    ctx.moveTo(x, hipY);
-    ctx.quadraticCurveTo(bendX, bendY, footX, footY - 6);
-    ctx.stroke();
+  function drawAstronautLegOn(targetCtx, x, hipY, footX, footY, bendX, bendY, suitColor, bootColor) {
+    targetCtx.lineCap = "round";
+    targetCtx.lineJoin = "round";
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.68)";
+    targetCtx.lineWidth = 18;
+    targetCtx.beginPath();
+    targetCtx.moveTo(x, hipY);
+    targetCtx.quadraticCurveTo(bendX, bendY, footX, footY - 6);
+    targetCtx.stroke();
 
-    ctx.strokeStyle = suitColor;
-    ctx.lineWidth = 12;
-    ctx.stroke();
+    targetCtx.strokeStyle = suitColor;
+    targetCtx.lineWidth = 12;
+    targetCtx.stroke();
 
-    ctx.save();
-    ctx.translate(footX, footY);
-    ctx.rotate((footX - x) * 0.012);
-    ctx.fillStyle = bootColor;
-    roundRectPath(-11, -5, 22, 11, 5);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(23, 27, 44, 0.68)";
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.restore();
+    targetCtx.save();
+    targetCtx.translate(footX, footY);
+    targetCtx.rotate((footX - x) * 0.012);
+    targetCtx.fillStyle = bootColor;
+    roundRectPathOn(targetCtx, -11, -5, 22, 11, 5);
+    targetCtx.fill();
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.68)";
+    targetCtx.lineWidth = 4;
+    targetCtx.stroke();
+    targetCtx.restore();
   }
 
-  function drawAstronautLegs(walkCycle, walkSpeed, crouching, suitColor) {
+  function drawAstronautLeg(x, hipY, footX, footY, bendX, bendY, suitColor, bootColor) {
+    drawAstronautLegOn(ctx, x, hipY, footX, footY, bendX, bendY, suitColor, bootColor);
+  }
+
+  function drawAstronautLegsOn(targetCtx, walkCycle, walkSpeed, crouching, suitColor) {
     const walking = !crouching && Math.abs(walkSpeed || 0) > 1;
     const stride = walking ? clamp(Math.abs(walkSpeed) / 128, 0, 1) : 0;
     const phase = finiteOr(walkCycle, 0);
@@ -37774,7 +46977,8 @@
     const rightLift = walking ? Math.max(0, Math.cos(phase + Math.PI)) * 7 * stride : 0;
     const bootColor = "#f6f2e9";
 
-    drawAstronautLeg(
+    drawAstronautLegOn(
+      targetCtx,
       -13,
       55,
       -13 + leftStep * 10 * stride,
@@ -37784,7 +46988,8 @@
       suitColor,
       bootColor
     );
-    drawAstronautLeg(
+    drawAstronautLegOn(
+      targetCtx,
       13,
       55,
       13 + rightStep * 10 * stride,
@@ -37796,108 +47001,724 @@
     );
   }
 
-  function drawAstronautBody(time, localVelocity, bodyRotation) {
-    const onFoot = playerIsOnFoot();
-    const crouching = player.landed && isMovementKeyPressed("down");
-    const walkSpeed = player.landed
-      ? player.landed.walkSpeed || 0
-      : (player.spacecraftInterior ? player.spacecraftInterior.walkSpeed || 0 : 0);
+  function drawAstronautLegs(walkCycle, walkSpeed, crouching, suitColor) {
+    drawAstronautLegsOn(ctx, walkCycle, walkSpeed, crouching, suitColor);
+  }
+
+  function drawAstronautBodyOn(targetCtx, targetWidth, targetHeight, time, localVelocity, bodyRotation, options) {
+    const config = options && typeof options === "object" ? options : {};
+    const onFoot = config.onFoot !== undefined ? Boolean(config.onFoot) : playerIsOnFoot();
+    const crouching = Boolean(config.crouching);
+    const suit = config.suit || activeSkinPalette();
+    const walkSpeed = finiteOr(config.walkSpeed, 0);
+    const walkCycle = finiteOr(config.walkCycle, 0);
     const bob = onFoot ? 0 : Math.sin(time * 0.004) * 2.4;
     const lean = onFoot ? 0 : clamp(localVelocity.x / 460, -1, 1) * 0.14;
     const walkBounce = onFoot && !crouching && Math.abs(walkSpeed) > 1
-      ? Math.max(0, Math.sin(player.walkCycle * 2)) * 3
+      ? Math.max(0, Math.sin(walkCycle * 2)) * 3
       : 0;
+    const centerX = Number.isFinite(Number(config.centerX)) ? Number(config.centerX) : targetWidth / 2;
+    const centerY = Number.isFinite(Number(config.centerY)) ? Number(config.centerY) : targetHeight / 2;
 
-    ctx.save();
-    ctx.translate(width / 2, height / 2 + bob);
-    ctx.rotate(bodyRotation);
-    ctx.translate(0, -walkBounce);
-    ctx.rotate(lean);
+    targetCtx.save();
+    targetCtx.translate(centerX, centerY + bob);
+    targetCtx.rotate(bodyRotation);
+    targetCtx.translate(0, -walkBounce);
+    targetCtx.rotate(lean);
     if (crouching) {
-      ctx.translate(0, playerFootOffset);
-      ctx.scale(1.08, 0.84);
-      ctx.translate(0, -playerFootOffset);
+      targetCtx.translate(0, playerFootOffset);
+      targetCtx.scale(1.08, 0.84);
+      targetCtx.translate(0, -playerFootOffset);
     }
-    drawJetFlames(time);
+    if (typeof config.drawJetFlames === "function") {
+      config.drawJetFlames(time);
+    }
 
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(23, 27, 44, 0.68)";
-    ctx.lineWidth = 4;
+    targetCtx.lineJoin = "round";
+    targetCtx.lineCap = "round";
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.68)";
+    targetCtx.lineWidth = 4;
 
-    ctx.fillStyle = "#f4f2ea";
-    roundRectPath(-22, 18, 44, 58, 13);
-    ctx.fill();
-    ctx.stroke();
+    targetCtx.fillStyle = suit.torso || "#f4f2ea";
+    roundRectPathOn(targetCtx, -22, 18, 44, 58, 13);
+    targetCtx.fill();
+    targetCtx.stroke();
 
-    drawAstronautLegs(player.walkCycle, walkSpeed, crouching, "#d9dee8");
+    drawAstronautLegsOn(targetCtx, walkCycle, walkSpeed, crouching, suit.limb || "#d9dee8");
 
-    ctx.fillStyle = "#f8f5ec";
-    roundRectPath(-35, 22, 13, 28, 7);
-    ctx.fill();
-    ctx.stroke();
-    roundRectPath(22, 22, 13, 28, 7);
-    ctx.fill();
-    ctx.stroke();
+    targetCtx.fillStyle = suit.arm || "#f8f5ec";
+    roundRectPathOn(targetCtx, -35, 22, 13, 28, 7);
+    targetCtx.fill();
+    targetCtx.stroke();
+    roundRectPathOn(targetCtx, 22, 22, 13, 28, 7);
+    targetCtx.fill();
+    targetCtx.stroke();
 
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.ellipse(0, -23, 38, 40, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    targetCtx.fillStyle = suit.helmet || "#ffffff";
+    targetCtx.beginPath();
+    targetCtx.ellipse(0, -23, 38, 40, 0, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.stroke();
 
-    ctx.fillStyle = "#ffffff";
-    roundRectPath(-45, -29, 10, 25, 6);
-    ctx.fill();
-    ctx.stroke();
-    roundRectPath(35, -29, 10, 25, 6);
-    ctx.fill();
-    ctx.stroke();
+    targetCtx.fillStyle = suit.helmet || "#ffffff";
+    roundRectPathOn(targetCtx, -45, -29, 10, 25, 6);
+    targetCtx.fill();
+    targetCtx.stroke();
+    roundRectPathOn(targetCtx, 35, -29, 10, 25, 6);
+    targetCtx.fill();
+    targetCtx.stroke();
 
-    const visorGradient = ctx.createLinearGradient(-27, -48, 29, 8);
+    const visorGradient = targetCtx.createLinearGradient(-27, -48, 29, 8);
     visorGradient.addColorStop(0, "#172847");
     visorGradient.addColorStop(0.45, "#050a18");
     visorGradient.addColorStop(1, "#0d3f6a");
-    ctx.fillStyle = visorGradient;
-    ctx.beginPath();
-    ctx.ellipse(0, -24, 28, 22, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    targetCtx.fillStyle = visorGradient;
+    targetCtx.beginPath();
+    targetCtx.ellipse(0, -24, 28, 22, 0, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.stroke();
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.74)";
-    ctx.beginPath();
-    ctx.ellipse(-15, -34, 7, 4, -0.55, 0, Math.PI * 2);
-    ctx.fill();
+    targetCtx.fillStyle = "rgba(255, 255, 255, 0.74)";
+    targetCtx.beginPath();
+    targetCtx.ellipse(-15, -34, 7, 4, -0.55, 0, Math.PI * 2);
+    targetCtx.fill();
 
-    ctx.fillStyle = "rgba(54, 184, 255, 0.18)";
-    ctx.beginPath();
-    ctx.ellipse(12, -18, 11, 7, -0.35, 0, Math.PI * 2);
-    ctx.fill();
+    targetCtx.fillStyle = "rgba(54, 184, 255, 0.18)";
+    targetCtx.beginPath();
+    targetCtx.ellipse(12, -18, 11, 7, -0.35, 0, Math.PI * 2);
+    targetCtx.fill();
 
-    ctx.fillStyle = "#cfd7e7";
-    roundRectPath(-19, 27, 38, 26, 6);
-    ctx.fill();
-    ctx.stroke();
+    targetCtx.fillStyle = suit.panel || "#cfd7e7";
+    roundRectPathOn(targetCtx, -19, 27, 38, 26, 6);
+    targetCtx.fill();
+    targetCtx.stroke();
 
-    ctx.fillStyle = "#172033";
-    roundRectPath(-11, 33, 9, 7, 3);
-    ctx.fill();
-    roundRectPath(2, 33, 9, 7, 3);
-    ctx.fill();
+    targetCtx.fillStyle = "#172033";
+    roundRectPathOn(targetCtx, -11, 33, 9, 7, 3);
+    targetCtx.fill();
+    roundRectPathOn(targetCtx, 2, 33, 9, 7, 3);
+    targetCtx.fill();
 
-    ctx.fillStyle = "#ef6262";
-    ctx.beginPath();
-    ctx.arc(-7, 47, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#64e3ff";
-    ctx.beginPath();
-    ctx.arc(7, 47, 2.5, 0, Math.PI * 2);
-    ctx.fill();
+    targetCtx.fillStyle = "#ef6262";
+    targetCtx.beginPath();
+    targetCtx.arc(-7, 47, 2.5, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.fillStyle = suit.accent || "#64e3ff";
+    targetCtx.beginPath();
+    targetCtx.arc(7, 47, 2.5, 0, Math.PI * 2);
+    targetCtx.fill();
 
-    ctx.restore();
+    targetCtx.restore();
+  }
+
+  function drawMedievalKnightBodyOn(targetCtx, targetWidth, targetHeight, time, localVelocity, bodyRotation, options) {
+    const config = options && typeof options === "object" ? options : {};
+    const suit = config.suit || activeSkinPalette();
+    const onFoot = config.onFoot !== undefined ? Boolean(config.onFoot) : playerIsOnFoot();
+    const crouching = Boolean(config.crouching);
+    const walkSpeed = finiteOr(config.walkSpeed, 0);
+    const walkCycle = finiteOr(config.walkCycle, 0);
+    const bob = onFoot ? 0 : Math.sin(time * 0.004) * 2.4;
+    const lean = onFoot ? 0 : clamp(localVelocity.x / 460, -1, 1) * 0.14;
+    const walking = !crouching && Math.abs(walkSpeed) > 1;
+    const stride = walking ? clamp(Math.abs(walkSpeed) / 128, 0, 1) : 0;
+    const leftStep = Math.sin(walkCycle) * 9 * stride;
+    const rightStep = Math.sin(walkCycle + Math.PI) * 9 * stride;
+    const walkBounce = walking ? Math.max(0, Math.sin(walkCycle * 2)) * 3 : 0;
+    const centerX = Number.isFinite(Number(config.centerX)) ? Number(config.centerX) : targetWidth / 2;
+    const centerY = Number.isFinite(Number(config.centerY)) ? Number(config.centerY) : targetHeight / 2;
+    const metal = suit.torso || "#9aa6b6";
+    const brightMetal = suit.helmet || "#d9dee8";
+    const darkMetal = suit.limb || "#7d8998";
+    const leather = suit.panel || "#6b3f2a";
+    const tabard = suit.accent || "#d94b4b";
+
+    targetCtx.save();
+    targetCtx.translate(centerX, centerY + bob);
+    targetCtx.rotate(bodyRotation);
+    targetCtx.translate(0, -walkBounce);
+    targetCtx.rotate(lean);
+    if (crouching) {
+      targetCtx.translate(0, playerFootOffset);
+      targetCtx.scale(1.08, 0.84);
+      targetCtx.translate(0, -playerFootOffset);
+    }
+    if (typeof config.drawJetFlames === "function") {
+      config.drawJetFlames(time);
+    }
+
+    targetCtx.lineJoin = "round";
+    targetCtx.lineCap = "round";
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    targetCtx.lineWidth = 4;
+
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    targetCtx.lineWidth = 16;
+    targetCtx.beginPath();
+    targetCtx.moveTo(-13, 53);
+    targetCtx.lineTo(-14 + leftStep, 95);
+    targetCtx.moveTo(13, 53);
+    targetCtx.lineTo(14 + rightStep, 95);
+    targetCtx.stroke();
+
+    targetCtx.strokeStyle = darkMetal;
+    targetCtx.lineWidth = 10;
+    targetCtx.beginPath();
+    targetCtx.moveTo(-13, 53);
+    targetCtx.lineTo(-14 + leftStep, 91);
+    targetCtx.moveTo(13, 53);
+    targetCtx.lineTo(14 + rightStep, 91);
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = "#2a3140";
+    roundRectPathOn(targetCtx, -27 + leftStep, 88, 23, 11, 4);
+    targetCtx.fill();
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    targetCtx.lineWidth = 3;
+    targetCtx.stroke();
+    roundRectPathOn(targetCtx, 4 + rightStep, 88, 23, 11, 4);
+    targetCtx.fill();
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = metal;
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    targetCtx.lineWidth = 4;
+    roundRectPathOn(targetCtx, -27, 9, 54, 65, 9);
+    targetCtx.fill();
+    targetCtx.stroke();
+
+    const breastplate = targetCtx.createLinearGradient(-25, 10, 25, 70);
+    breastplate.addColorStop(0, brightMetal);
+    breastplate.addColorStop(0.48, metal);
+    breastplate.addColorStop(1, darkMetal);
+    targetCtx.fillStyle = breastplate;
+    roundRectPathOn(targetCtx, -22, 13, 44, 54, 7);
+    targetCtx.fill();
+
+    targetCtx.fillStyle = tabard;
+    targetCtx.beginPath();
+    targetCtx.moveTo(-12, 17);
+    targetCtx.lineTo(12, 17);
+    targetCtx.lineTo(16, 72);
+    targetCtx.lineTo(0, 63);
+    targetCtx.lineTo(-16, 72);
+    targetCtx.closePath();
+    targetCtx.fill();
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.55)";
+    targetCtx.lineWidth = 2;
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = colorString({ r: 255, g: 229, b: 111 }, 0.82);
+    roundRectPathOn(targetCtx, -3, 21, 6, 38, 2);
+    targetCtx.fill();
+    roundRectPathOn(targetCtx, -10, 34, 20, 6, 2);
+    targetCtx.fill();
+
+    targetCtx.fillStyle = leather;
+    roundRectPathOn(targetCtx, -31, 58, 62, 10, 4);
+    targetCtx.fill();
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.6)";
+    targetCtx.lineWidth = 2;
+    targetCtx.stroke();
+
+    const helmetGradient = targetCtx.createLinearGradient(-34, -62, 34, 4);
+    helmetGradient.addColorStop(0, "#f3f5f8");
+    helmetGradient.addColorStop(0.48, brightMetal);
+    helmetGradient.addColorStop(1, darkMetal);
+    targetCtx.fillStyle = helmetGradient;
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    targetCtx.lineWidth = 4;
+    targetCtx.beginPath();
+    targetCtx.ellipse(0, -25, 34, 38, 0, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = brightMetal;
+    roundRectPathOn(targetCtx, -27, -56, 54, 28, 12);
+    targetCtx.fill();
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = "rgba(5, 10, 18, 0.92)";
+    roundRectPathOn(targetCtx, -21, -33, 42, 13, 5);
+    targetCtx.fill();
+
+    targetCtx.strokeStyle = "rgba(223, 252, 255, 0.26)";
+    targetCtx.lineWidth = 2;
+    for (let slit = -12; slit <= 12; slit += 8) {
+      targetCtx.beginPath();
+      targetCtx.moveTo(slit, -32);
+      targetCtx.lineTo(slit + 2, -22);
+      targetCtx.stroke();
+    }
+
+    targetCtx.fillStyle = tabard;
+    targetCtx.beginPath();
+    targetCtx.moveTo(24, -58);
+    targetCtx.quadraticCurveTo(41, -66, 36, -42);
+    targetCtx.quadraticCurveTo(30, -49, 21, -44);
+    targetCtx.closePath();
+    targetCtx.fill();
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.58)";
+    targetCtx.lineWidth = 2;
+    targetCtx.stroke();
+
+    targetCtx.restore();
+  }
+
+  function costumeThemeForModel(model, suit) {
+    const base = {
+      body: suit.torso || "#f4f2ea",
+      leg: suit.limb || "#d9dee8",
+      head: suit.helmet || "#ffffff",
+      trim: suit.panel || "#cfd7e7",
+      accent: suit.accent || "#64e3ff",
+      boot: "#20283a"
+    };
+    const themes = {
+      pirate: { body: "#2c2238", leg: "#181827", head: "#f0d4b2", trim: "#7b3e24", accent: "#d94b4b", boot: "#11131c" },
+      wizard: { body: "#3d318f", leg: "#27205f", head: "#e6ddff", trim: "#f0d275", accent: "#ffd166", boot: "#18142f" },
+      cowboy: { body: "#8b4e29", leg: "#2f5c91", head: "#f0c899", trim: "#b6783d", accent: "#d94b4b", boot: "#3a2518" },
+      ninja: { body: "#111827", leg: "#05070c", head: "#0b0f18", trim: "#3b4458", accent: "#66e0b8", boot: "#05070c" },
+      viking: { body: "#6f442d", leg: "#4b2d20", head: "#efdbc3", trim: "#f2eadb", accent: "#58e2ff", boot: "#281b14" },
+      samurai: { body: "#7f1d2d", leg: "#2f1f24", head: "#2b2630", trim: "#d0a64f", accent: "#ff6262", boot: "#161116" },
+      diver: { body: "#7c4f2b", leg: "#4b3628", head: "#d0a64f", trim: "#2d6cdf", accent: "#58e2ff", boot: "#2b2119" },
+      firefighter: { body: "#9f1f2e", leg: "#5d1f24", head: "#e5484d", trim: "#ffd166", accent: "#ffd166", boot: "#151922" },
+      doctor: { body: "#f1f5f9", leg: "#58e2ff", head: "#f3d4bd", trim: "#58e2ff", accent: "#ef6262", boot: "#d8dee8" },
+      clown: { body: "#f8fbff", leg: "#3578ff", head: "#ffffff", trim: "#a985ff", accent: "#ef6262", boot: "#ffdc7a" },
+      santa: { body: "#c52835", leg: "#6b1d22", head: "#f2d0a2", trim: "#f8fbff", accent: "#f8fbff", boot: "#111827" },
+      skeleton: { body: "#111827", leg: "#0b0f18", head: "#efe7d4", trim: "#f1ead8", accent: "#f1ead8", boot: "#05070c" },
+      teddy: { body: "#a86b35", leg: "#7b4b2a", head: "#b8793d", trim: "#f2d0a2", accent: "#ffd166", boot: "#6b3f2a" }
+    };
+    return Object.assign(base, themes[model] || {});
+  }
+
+  function drawThemedCostumeBodyOn(targetCtx, targetWidth, targetHeight, time, localVelocity, bodyRotation, options) {
+    const config = options && typeof options === "object" ? options : {};
+    const model = config.model || "pirate";
+    const suit = config.suit || activeSkinPalette();
+    const theme = costumeThemeForModel(model, suit);
+    const onFoot = config.onFoot !== undefined ? Boolean(config.onFoot) : playerIsOnFoot();
+    const crouching = Boolean(config.crouching);
+    const walkSpeed = finiteOr(config.walkSpeed, 0);
+    const walkCycle = finiteOr(config.walkCycle, 0);
+    const centerX = Number.isFinite(Number(config.centerX)) ? Number(config.centerX) : targetWidth / 2;
+    const centerY = Number.isFinite(Number(config.centerY)) ? Number(config.centerY) : targetHeight / 2;
+    const bob = onFoot ? 0 : Math.sin(time * 0.004) * 2.4;
+    const lean = onFoot ? 0 : clamp(localVelocity.x / 460, -1, 1) * 0.14;
+    const walking = !crouching && Math.abs(walkSpeed) > 1;
+    const stride = walking ? clamp(Math.abs(walkSpeed) / 128, 0, 1) : 0;
+    const leftStep = Math.sin(walkCycle) * 9 * stride;
+    const rightStep = Math.sin(walkCycle + Math.PI) * 9 * stride;
+    const walkBounce = walking ? Math.max(0, Math.sin(walkCycle * 2)) * 3 : 0;
+
+    targetCtx.save();
+    targetCtx.translate(centerX, centerY + bob);
+    targetCtx.rotate(bodyRotation);
+    targetCtx.translate(0, -walkBounce);
+    targetCtx.rotate(lean);
+    if (crouching) {
+      targetCtx.translate(0, playerFootOffset);
+      targetCtx.scale(1.08, 0.84);
+      targetCtx.translate(0, -playerFootOffset);
+    }
+    if (typeof config.drawJetFlames === "function") {
+      config.drawJetFlames(time);
+    }
+
+    targetCtx.lineJoin = "round";
+    targetCtx.lineCap = "round";
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+
+    targetCtx.lineWidth = 16;
+    targetCtx.beginPath();
+    targetCtx.moveTo(-13, 54);
+    targetCtx.lineTo(-14 + leftStep, 95);
+    targetCtx.moveTo(13, 54);
+    targetCtx.lineTo(14 + rightStep, 95);
+    targetCtx.stroke();
+
+    targetCtx.strokeStyle = theme.leg;
+    targetCtx.lineWidth = 10;
+    targetCtx.beginPath();
+    targetCtx.moveTo(-13, 54);
+    targetCtx.lineTo(-14 + leftStep, 91);
+    targetCtx.moveTo(13, 54);
+    targetCtx.lineTo(14 + rightStep, 91);
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = theme.boot;
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    targetCtx.lineWidth = 3;
+    roundRectPathOn(targetCtx, -27 + leftStep, 88, 23, 11, 4);
+    targetCtx.fill();
+    targetCtx.stroke();
+    roundRectPathOn(targetCtx, 4 + rightStep, 88, 23, 11, 4);
+    targetCtx.fill();
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = theme.body;
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    targetCtx.lineWidth = 4;
+    roundRectPathOn(targetCtx, -27, 7, 54, 69, model === "teddy" ? 18 : 10);
+    targetCtx.fill();
+    targetCtx.stroke();
+
+    drawCostumeBodyDetails(targetCtx, model, theme);
+
+    targetCtx.fillStyle = theme.head;
+    targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+    targetCtx.lineWidth = 4;
+    if (model === "teddy") {
+      targetCtx.beginPath();
+      targetCtx.arc(-23, -53, 13, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.stroke();
+      targetCtx.beginPath();
+      targetCtx.arc(23, -53, 13, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.stroke();
+    }
+    targetCtx.beginPath();
+    targetCtx.ellipse(0, -25, model === "teddy" ? 36 : 32, model === "skeleton" ? 35 : 37, 0, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.stroke();
+
+    drawCostumeHeadDetails(targetCtx, model, theme);
+    targetCtx.restore();
+  }
+
+  function drawCostumeBodyDetails(targetCtx, model, theme) {
+    targetCtx.save();
+    if (model === "skeleton") {
+      targetCtx.strokeStyle = theme.accent;
+      targetCtx.lineWidth = 4;
+      targetCtx.beginPath();
+      targetCtx.moveTo(0, 18);
+      targetCtx.lineTo(0, 58);
+      targetCtx.moveTo(-13, 30);
+      targetCtx.lineTo(13, 30);
+      targetCtx.moveTo(-15, 42);
+      targetCtx.lineTo(15, 42);
+      targetCtx.moveTo(-11, 56);
+      targetCtx.lineTo(11, 56);
+      targetCtx.stroke();
+      targetCtx.restore();
+      return;
+    }
+
+    if (model === "doctor") {
+      targetCtx.fillStyle = "#ffffff";
+      roundRectPathOn(targetCtx, -24, 11, 48, 64, 8);
+      targetCtx.fill();
+      targetCtx.strokeStyle = "rgba(23, 27, 44, 0.5)";
+      targetCtx.lineWidth = 2;
+      targetCtx.stroke();
+      targetCtx.strokeStyle = theme.trim;
+      targetCtx.lineWidth = 3;
+      targetCtx.beginPath();
+      targetCtx.moveTo(0, 15);
+      targetCtx.lineTo(0, 72);
+      targetCtx.stroke();
+    } else if (model === "firefighter") {
+      targetCtx.strokeStyle = theme.trim;
+      targetCtx.lineWidth = 5;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-22, 33);
+      targetCtx.lineTo(22, 33);
+      targetCtx.moveTo(-22, 58);
+      targetCtx.lineTo(22, 58);
+      targetCtx.stroke();
+    } else if (model === "samurai") {
+      targetCtx.strokeStyle = theme.trim;
+      targetCtx.lineWidth = 5;
+      for (let y = 20; y <= 56; y += 12) {
+        targetCtx.beginPath();
+        targetCtx.moveTo(-21, y);
+        targetCtx.lineTo(21, y);
+        targetCtx.stroke();
+      }
+    } else if (model === "clown") {
+      targetCtx.fillStyle = theme.trim;
+      targetCtx.beginPath();
+      targetCtx.arc(-8, 31, 4, 0, Math.PI * 2);
+      targetCtx.arc(8, 47, 4, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.fillStyle = theme.accent;
+      targetCtx.beginPath();
+      targetCtx.arc(8, 31, 4, 0, Math.PI * 2);
+      targetCtx.arc(-8, 47, 4, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else if (model === "santa") {
+      targetCtx.fillStyle = theme.trim;
+      roundRectPathOn(targetCtx, -5, 12, 10, 59, 3);
+      targetCtx.fill();
+      roundRectPathOn(targetCtx, -24, 66, 48, 8, 4);
+      targetCtx.fill();
+    } else if (model === "wizard") {
+      targetCtx.fillStyle = theme.accent;
+      for (const star of [[-10, 26], [11, 39], [-3, 55]]) {
+        targetCtx.beginPath();
+        targetCtx.arc(star[0], star[1], 3, 0, Math.PI * 2);
+        targetCtx.fill();
+      }
+    } else if (model === "pirate" || model === "cowboy") {
+      targetCtx.fillStyle = theme.accent;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-24, 22);
+      targetCtx.lineTo(24, 52);
+      targetCtx.lineTo(18, 60);
+      targetCtx.lineTo(-24, 30);
+      targetCtx.closePath();
+      targetCtx.fill();
+    } else if (model === "diver") {
+      targetCtx.fillStyle = theme.trim;
+      roundRectPathOn(targetCtx, -18, 20, 36, 36, 8);
+      targetCtx.fill();
+      targetCtx.fillStyle = theme.accent;
+      targetCtx.beginPath();
+      targetCtx.arc(0, 38, 8, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else if (model === "teddy") {
+      targetCtx.fillStyle = theme.trim;
+      targetCtx.beginPath();
+      targetCtx.ellipse(0, 42, 16, 22, 0, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else {
+      targetCtx.fillStyle = theme.trim;
+      roundRectPathOn(targetCtx, -17, 24, 34, 34, 7);
+      targetCtx.fill();
+    }
+    targetCtx.restore();
+  }
+
+  function drawCostumeHeadDetails(targetCtx, model, theme) {
+    targetCtx.save();
+    if (model === "pirate") {
+      targetCtx.fillStyle = theme.head;
+      targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+      targetCtx.lineWidth = 4;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-36, -58);
+      targetCtx.quadraticCurveTo(0, -79, 36, -58);
+      targetCtx.quadraticCurveTo(18, -50, -18, -50);
+      targetCtx.closePath();
+      targetCtx.fill();
+      targetCtx.stroke();
+      targetCtx.fillStyle = "rgba(5, 10, 18, 0.9)";
+      targetCtx.beginPath();
+      targetCtx.ellipse(9, -24, 12, 8, 0, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else if (model === "wizard") {
+      targetCtx.fillStyle = theme.body;
+      targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+      targetCtx.lineWidth = 4;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-26, -55);
+      targetCtx.lineTo(0, -105);
+      targetCtx.lineTo(27, -55);
+      targetCtx.closePath();
+      targetCtx.fill();
+      targetCtx.stroke();
+      targetCtx.fillStyle = theme.accent;
+      targetCtx.beginPath();
+      targetCtx.arc(0, -76, 4, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else if (model === "cowboy") {
+      targetCtx.fillStyle = theme.trim;
+      targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+      targetCtx.lineWidth = 4;
+      roundRectPathOn(targetCtx, -22, -74, 44, 22, 8);
+      targetCtx.fill();
+      targetCtx.stroke();
+      targetCtx.beginPath();
+      targetCtx.ellipse(0, -53, 43, 10, 0, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.stroke();
+    } else if (model === "ninja") {
+      targetCtx.fillStyle = "rgba(5, 10, 18, 0.92)";
+      roundRectPathOn(targetCtx, -23, -34, 46, 18, 6);
+      targetCtx.fill();
+      targetCtx.fillStyle = theme.accent;
+      targetCtx.beginPath();
+      targetCtx.ellipse(0, -25, 13, 5, 0, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else if (model === "viking") {
+      targetCtx.strokeStyle = theme.trim;
+      targetCtx.lineWidth = 7;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-26, -52);
+      targetCtx.quadraticCurveTo(-55, -70, -47, -32);
+      targetCtx.moveTo(26, -52);
+      targetCtx.quadraticCurveTo(55, -70, 47, -32);
+      targetCtx.stroke();
+      targetCtx.fillStyle = "#9aa6b6";
+      roundRectPathOn(targetCtx, -24, -63, 48, 19, 8);
+      targetCtx.fill();
+      targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+      targetCtx.lineWidth = 3;
+      targetCtx.stroke();
+    } else if (model === "samurai") {
+      targetCtx.fillStyle = theme.head;
+      targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+      targetCtx.lineWidth = 4;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-31, -55);
+      targetCtx.quadraticCurveTo(0, -83, 31, -55);
+      targetCtx.lineTo(22, -42);
+      targetCtx.lineTo(-22, -42);
+      targetCtx.closePath();
+      targetCtx.fill();
+      targetCtx.stroke();
+      targetCtx.fillStyle = theme.trim;
+      roundRectPathOn(targetCtx, -4, -81, 8, 28, 3);
+      targetCtx.fill();
+    } else if (model === "diver") {
+      targetCtx.strokeStyle = theme.trim;
+      targetCtx.lineWidth = 7;
+      targetCtx.beginPath();
+      targetCtx.arc(0, -25, 24, 0, Math.PI * 2);
+      targetCtx.stroke();
+      targetCtx.fillStyle = "rgba(5, 20, 32, 0.86)";
+      targetCtx.beginPath();
+      targetCtx.arc(0, -25, 16, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.fillStyle = "rgba(88, 226, 255, 0.28)";
+      targetCtx.beginPath();
+      targetCtx.arc(6, -30, 7, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else if (model === "firefighter") {
+      targetCtx.fillStyle = theme.head;
+      targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+      targetCtx.lineWidth = 4;
+      targetCtx.beginPath();
+      targetCtx.ellipse(0, -56, 35, 14, 0, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.stroke();
+      targetCtx.fillStyle = theme.trim;
+      roundRectPathOn(targetCtx, -7, -69, 14, 18, 4);
+      targetCtx.fill();
+    } else if (model === "doctor") {
+      targetCtx.fillStyle = "#dffcff";
+      roundRectPathOn(targetCtx, -25, -60, 50, 12, 5);
+      targetCtx.fill();
+      targetCtx.fillStyle = theme.accent;
+      roundRectPathOn(targetCtx, -3, -62, 6, 16, 2);
+      targetCtx.fill();
+      roundRectPathOn(targetCtx, -8, -57, 16, 6, 2);
+      targetCtx.fill();
+    } else if (model === "clown") {
+      for (const tuft of [[-24, -50, "#58e2ff"], [0, -62, "#ffd166"], [24, -50, "#ff73ad"]]) {
+        targetCtx.fillStyle = tuft[2];
+        targetCtx.beginPath();
+        targetCtx.arc(tuft[0], tuft[1], 13, 0, Math.PI * 2);
+        targetCtx.fill();
+      }
+      targetCtx.fillStyle = theme.accent;
+      targetCtx.beginPath();
+      targetCtx.arc(0, -21, 6, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else if (model === "santa") {
+      targetCtx.fillStyle = theme.helmet || "#c52835";
+      targetCtx.strokeStyle = "rgba(23, 27, 44, 0.72)";
+      targetCtx.lineWidth = 4;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-23, -54);
+      targetCtx.quadraticCurveTo(-4, -96, 22, -62);
+      targetCtx.lineTo(16, -48);
+      targetCtx.closePath();
+      targetCtx.fill();
+      targetCtx.stroke();
+      targetCtx.fillStyle = theme.trim;
+      roundRectPathOn(targetCtx, -28, -56, 52, 10, 5);
+      targetCtx.fill();
+      targetCtx.beginPath();
+      targetCtx.arc(25, -62, 8, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.beginPath();
+      targetCtx.ellipse(0, -4, 22, 16, 0, 0, Math.PI * 2);
+      targetCtx.fill();
+    } else if (model === "skeleton") {
+      targetCtx.fillStyle = "rgba(5, 10, 18, 0.86)";
+      targetCtx.beginPath();
+      targetCtx.ellipse(-10, -31, 6, 8, 0, 0, Math.PI * 2);
+      targetCtx.ellipse(10, -31, 6, 8, 0, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.strokeStyle = "rgba(5, 10, 18, 0.7)";
+      targetCtx.lineWidth = 3;
+      targetCtx.beginPath();
+      targetCtx.moveTo(-10, -11);
+      targetCtx.lineTo(10, -11);
+      targetCtx.stroke();
+    } else if (model === "teddy") {
+      targetCtx.fillStyle = theme.trim;
+      targetCtx.beginPath();
+      targetCtx.ellipse(0, -21, 18, 13, 0, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.fillStyle = "rgba(5, 10, 18, 0.78)";
+      targetCtx.beginPath();
+      targetCtx.arc(-10, -34, 3, 0, Math.PI * 2);
+      targetCtx.arc(10, -34, 3, 0, Math.PI * 2);
+      targetCtx.arc(0, -22, 4, 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+    targetCtx.restore();
+  }
+
+  function drawCharacterBodyOn(targetCtx, targetWidth, targetHeight, time, localVelocity, bodyRotation, options) {
+    const model = options && options.model ? options.model : "astronaut";
+    if (model === "medieval-knight") {
+      drawMedievalKnightBodyOn(targetCtx, targetWidth, targetHeight, time, localVelocity, bodyRotation, options);
+      return;
+    }
+    if (model !== "astronaut") {
+      drawThemedCostumeBodyOn(targetCtx, targetWidth, targetHeight, time, localVelocity, bodyRotation, options);
+      return;
+    }
+    drawAstronautBodyOn(targetCtx, targetWidth, targetHeight, time, localVelocity, bodyRotation, options);
+  }
+
+  function drawAstronautBody(time, localVelocity, bodyRotation) {
+    const walkSpeed = player.landed
+      ? player.landed.walkSpeed || 0
+      : (player.spacecraftInterior ? player.spacecraftInterior.walkSpeed || 0 : 0);
+    drawCharacterBodyOn(ctx, width, height, time, localVelocity, bodyRotation, {
+      suit: activeSkinPalette(),
+      model: activeSkinModel(),
+      onFoot: playerIsOnFoot(),
+      crouching: player.landed && isMovementKeyPressed("down"),
+      walkCycle: player.walkCycle,
+      walkSpeed,
+      drawJetFlames
+    });
+  }
+
+  function drawSkinPreviewAstronaut(targetCtx, targetWidth, targetHeight, skinId, options) {
+    const config = options && typeof options === "object" ? options : {};
+    const trailId = normalizeTrailId(config.trailId);
+    const bodyRotation = Number.isFinite(Number(config.bodyRotation)) ? Number(config.bodyRotation) : 0;
+    const centerX = Number.isFinite(Number(config.centerX)) ? Number(config.centerX) : targetWidth / 2;
+    const centerY = Number.isFinite(Number(config.centerY)) ? Number(config.centerY) : targetHeight / 2;
+    const onFoot = config.onFoot !== undefined ? Boolean(config.onFoot) : true;
+    const exhaust = config.exhaust && typeof config.exhaust === "object" ? config.exhaust : { x: -0.24, y: 0.97 };
+    drawCharacterBodyOn(targetCtx, targetWidth, targetHeight, performance.now(), { x: 0, y: 0 }, bodyRotation, {
+      suit: skinPaletteForId(skinId),
+      model: skinModelForId(skinId),
+      onFoot,
+      crouching: false,
+      walkCycle: 0,
+      walkSpeed: 0,
+      centerX,
+      centerY,
+      drawJetFlames: trailId
+        ? function (time) {
+            drawJetpackFlamePlumesOn(targetCtx, time, exhaust, 1, trailId, "preview:" + trailId);
+          }
+        : null
+    });
   }
 
   function drawRocketSuitBody(time, localVelocity, aim) {
+    const suit = activeSkinPalette();
     const charge = clamp(finiteOr(player.rocketSuitCharge, 0), 0, 1);
     const speed = Math.hypot(finiteOr(player.vx, 0), finiteOr(player.vy, 0));
     const flameScale = clamp(speed / 760 + charge * 0.65, 0.35, 1.65);
@@ -37927,9 +47748,9 @@
     ctx.strokeStyle = "rgba(23, 27, 44, 0.72)";
     ctx.lineWidth = 5;
     const hull = ctx.createLinearGradient(-34, -74, 34, 70);
-    hull.addColorStop(0, "#ffffff");
-    hull.addColorStop(0.48, "#dfe6f1");
-    hull.addColorStop(1, "#a985ff");
+    hull.addColorStop(0, suit.helmet || "#ffffff");
+    hull.addColorStop(0.48, suit.panel || "#dfe6f1");
+    hull.addColorStop(1, suit.torso || "#a985ff");
     ctx.fillStyle = hull;
     ctx.beginPath();
     ctx.moveTo(0, -86);
@@ -37941,7 +47762,7 @@
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#f8f5ec";
+    ctx.fillStyle = suit.arm || "#f8f5ec";
     ctx.strokeStyle = "rgba(23, 27, 44, 0.72)";
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -37974,12 +47795,12 @@
     ctx.ellipse(-10, -42, 6, 3, -0.55, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#cfd7e7";
+    ctx.fillStyle = suit.panel || "#cfd7e7";
     roundRectPath(-17, 17, 34, 25, 6);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#64e3ff";
+    ctx.fillStyle = suit.accent || "#64e3ff";
     ctx.beginPath();
     ctx.arc(-6, 32, 2.6 + charge * 1.2, 0, Math.PI * 2);
     ctx.fill();
@@ -38444,6 +48265,10 @@
       drawEmpRemoteControl(aim, time);
       return;
     }
+    if (equippedToolId === personalTetherToolId) {
+      drawPersonalTetherEmitter(aim, time);
+      return;
+    }
 
     const centerX = width / 2;
     const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
@@ -38553,6 +48378,77 @@
         const offset = Math.sin(time * 0.008 + i) * 4;
         ctx.beginPath();
         ctx.arc(funnelShape.rimX + offset, 0, 22 + i * 7, -Math.PI / 2, Math.PI / 2);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    ctx.restore();
+  }
+
+  function drawPersonalTetherEmitter(aim, time) {
+    const centerX = width / 2;
+    const centerY = height / 2 + (player.landed ? 0 : Math.sin(time * 0.004) * 2.4);
+    const attached = hasPersonalTether();
+    const accent = attached ? "#a985ff" : "#dffcff";
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(aim.angle);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(7, 14);
+    ctx.lineTo(43, 20);
+    ctx.stroke();
+    ctx.strokeStyle = "#f8fbff";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    const bodyGradient = ctx.createLinearGradient(14, -21, 78, 20);
+    bodyGradient.addColorStop(0, "#f8fbff");
+    bodyGradient.addColorStop(0.46, attached ? "#cbb8ff" : "#9aa4b8");
+    bodyGradient.addColorStop(1, "#29324c");
+    ctx.fillStyle = bodyGradient;
+    roundRectPath(12, -20, 68, 40, 12);
+    ctx.fill();
+    ctx.strokeStyle = "#171b2c";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#20283d";
+    roundRectPath(24, 15, 28, 18, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(70, 0);
+    ctx.lineTo(112, 0);
+    ctx.stroke();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 6;
+    ctx.stroke();
+
+    ctx.fillStyle = attached ? "#a985ff" : "#dffcff";
+    ctx.beginPath();
+    ctx.arc(116, 0, 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#151829";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    if (attached) {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "rgba(169, 133, 255, 0.62)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i += 1) {
+        ctx.beginPath();
+        ctx.arc(116, 0, 18 + i * 8 + Math.sin(time * 0.014 + i) * 2, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.globalCompositeOperation = "source-over";
@@ -38868,7 +48764,11 @@
       asteroid: 7.5,
       "dwarf moon": 8,
       moon: 8.5,
-      planet: 9.5
+      planet: 9.5,
+      star: 11,
+      "white dwarf": 10.5,
+      "neutron star": 10.5,
+      "black hole": 11.5
     };
     return sizes[tierName] || 6.5;
   }
@@ -38880,9 +48780,20 @@
       asteroid: "A",
       "dwarf moon": "D",
       moon: "M",
-      planet: "P"
+      planet: "P",
+      star: "S",
+      "white dwarf": "W",
+      "neutron star": "N",
+      "black hole": "B"
     };
     return labels[tierName] || "";
+  }
+
+  function mapTitleLabel(value) {
+    return String(value || "")
+      .split(" ")
+      .map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : "")
+      .join(" ");
   }
 
   function formatMapDistance(distance) {
@@ -38893,6 +48804,14 @@
       return (distance / 1000).toFixed(distance >= 5000 ? 0 : 1) + "k";
     }
     return Math.round(distance).toString();
+  }
+
+  function formatMapNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return "n/a";
+    }
+    return Math.round(number).toLocaleString("en-US");
   }
 
   function projectMapPoint(worldX, worldY, centerX, centerY, mapRadius, range) {
@@ -38945,12 +48864,87 @@
         contacts.players.push({
           player: transformedRemoteEntity(snapshot.player, transform),
           alpha,
-          publicName: remote.publicName
+          publicName: remote.publicName,
+          teamId: remote.teamId || snapshot.player.teamId || ""
         });
       }
     }
 
     return contacts;
+  }
+
+  function collectMapCampContacts() {
+    const camps = [];
+    for (const beacon of mobBeacons) {
+      if (!beacon || beacon.health <= 0) {
+        continue;
+      }
+      camps.push(beacon);
+    }
+    return camps;
+  }
+
+  function mapCampDifficultyScore(beacon) {
+    const tier = mobTierOrder.indexOf(mobEntityKind(beacon));
+    return clamp(tier + 1, 1, mobTierOrder.length);
+  }
+
+  function mapCampDifficultyLabel(score) {
+    if (score <= 2) {
+      return "Low";
+    }
+    if (score <= 4) {
+      return "Medium";
+    }
+    if (score <= 6) {
+      return "High";
+    }
+    return "Extreme";
+  }
+
+  function drawMapCampMarker(beacon, marker) {
+    const kind = mobEntityKind(beacon);
+    const visual = mobBeaconVisual(kind);
+    const color = visual.color || beacon.color || { r: 255, g: 115, b: 173 };
+    const score = mapCampDifficultyScore(beacon);
+    const radius = 7.5 + score * 0.45;
+    const pulse = 1 + Math.sin(performance.now() * 0.006 + finiteOr(beacon.wobble, 0)) * 0.08;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = colorString(color, marker.clamped ? 0.18 : 0.24);
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, radius * 2.05 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.translate(marker.x, marker.y);
+    ctx.rotate(Math.PI / 6 + finiteOr(beacon.rotation, 0) * 0.18);
+    ctx.fillStyle = colorString(shadeColor(color, -36), 0.94);
+    ctx.strokeStyle = marker.clamped ? "rgba(255, 255, 255, 0.9)" : colorString(color, 0.92);
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i += 1) {
+      const angle = i * Math.PI / 3;
+      const px = Math.cos(angle) * radius;
+      const py = Math.sin(angle) * radius;
+      if (i === 0) {
+        ctx.moveTo(px, py);
+      } else {
+        ctx.lineTo(px, py);
+      }
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.rotate(-Math.PI / 6 - finiteOr(beacon.rotation, 0) * 0.18);
+    ctx.fillStyle = colorString(visual.accent || shadeColor(color, 56), 0.96);
+    ctx.font = "950 " + Math.max(9, Math.round(radius * 1.12)) + "px Inter, ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(score), 0, 0.4);
+    ctx.restore();
   }
 
   function drawMapBodyMarker(body, marker, options) {
@@ -38994,16 +48988,18 @@
   function drawMapPlayerMarker(contact, marker) {
     const alpha = clamp(contact.alpha, 0, 1);
     const pulse = 1 + Math.sin(performance.now() * 0.006) * 0.12;
+    const teammate = Boolean(isSharedPublicWorldActive() && multiplayer.sharedTeamId && contact.teamId === multiplayer.sharedTeamId);
+    const markerColor = teammate ? "157, 255, 122" : "255, 115, 173";
 
     ctx.globalCompositeOperation = "lighter";
-    ctx.fillStyle = "rgba(255, 115, 173, " + 0.22 * alpha + ")";
+    ctx.fillStyle = "rgba(" + markerColor + ", " + 0.22 * alpha + ")";
     ctx.beginPath();
     ctx.arc(marker.x, marker.y, 15 * pulse, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = "source-over";
 
     ctx.fillStyle = "rgba(255, 245, 251, " + 0.96 * alpha + ")";
-    ctx.strokeStyle = "rgba(255, 115, 173, " + 0.96 * alpha + ")";
+    ctx.strokeStyle = "rgba(" + markerColor + ", " + 0.96 * alpha + ")";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(marker.x, marker.y - 8);
@@ -39015,7 +49011,7 @@
     ctx.stroke();
 
     if (marker.clamped) {
-      ctx.fillStyle = "rgba(255, 115, 173, " + 0.92 * alpha + ")";
+      ctx.fillStyle = "rgba(" + markerColor + ", " + 0.92 * alpha + ")";
       ctx.beginPath();
       ctx.arc(marker.x, marker.y, 2.2, 0, Math.PI * 2);
       ctx.fill();
@@ -39081,6 +49077,346 @@
     ctx.fill();
     ctx.fillStyle = colorString(color, 0.95 * alpha);
     ctx.fillText(label, marker.x, marker.y - regionRadius - 9.2, labelWidth - 5);
+    ctx.restore();
+  }
+
+  function collectSpacecraftMapContacts() {
+    const contacts = [];
+    for (const craft of spacecrafts) {
+      if (!craft || craft.eventId !== rogueTraderEventId) {
+        continue;
+      }
+      contacts.push({
+        craft,
+        label: "Trader",
+        color: rogueTraderMapColor
+      });
+    }
+    return contacts;
+  }
+
+  function drawMapSpacecraftMarker(contact, marker) {
+    if (!contact || !contact.craft) {
+      return;
+    }
+    const color = contact.color || rogueTraderMapColor;
+    const pulse = 1 + Math.sin(performance.now() * 0.008) * 0.08;
+    const label = marker.clamped
+      ? String(contact.label || "Craft").toUpperCase() + " " + formatMapDistance(marker.distance)
+      : String(contact.label || "Craft").toUpperCase();
+    const labelWidth = Math.min(78, ctx.measureText(label).width + 12);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = colorString(color, 0.18);
+    ctx.strokeStyle = colorString(color, 0.9);
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, 8.5 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.fillStyle = colorString(color, 0.96);
+    ctx.beginPath();
+    ctx.moveTo(marker.x, marker.y - 6);
+    ctx.lineTo(marker.x + 6, marker.y + 5);
+    ctx.lineTo(marker.x - 6, marker.y + 5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.font = "850 8px Inter, ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(3, 8, 24, 0.74)";
+    roundRectPath(marker.x - labelWidth / 2, marker.y + 11, labelWidth, 13, 5);
+    ctx.fill();
+    ctx.fillStyle = colorString(color, 0.95);
+    ctx.fillText(label, marker.x, marker.y + 17.8, labelWidth - 5);
+    ctx.restore();
+  }
+
+  function mapHoverCandidate(type, entity, marker, options) {
+    const markerRadius = options && Number.isFinite(options.radius) ? options.radius : 12;
+    return {
+      type,
+      entity,
+      marker,
+      label: options && options.label ? options.label : "",
+      owner: options && options.owner ? options.owner : "",
+      color: options && options.color ? options.color : null,
+      hitRadius: Math.max(12, markerRadius + 7),
+      priority: options && Number.isFinite(options.priority) ? options.priority : 0
+    };
+  }
+
+  function selectMapHoverTarget(candidates, mapX, mapY, size) {
+    if (!mouse.seen || mouse.x < mapX || mouse.y < mapY || mouse.x > mapX + size || mouse.y > mapY + size) {
+      return null;
+    }
+
+    let best = null;
+    for (const candidate of candidates) {
+      if (!candidate || !candidate.marker) {
+        continue;
+      }
+      const screenDistance = Math.hypot(mouse.x - candidate.marker.x, mouse.y - candidate.marker.y);
+      if (screenDistance > candidate.hitRadius) {
+        continue;
+      }
+      if (
+        !best ||
+        screenDistance < best.screenDistance - 0.001 ||
+        (Math.abs(screenDistance - best.screenDistance) <= 0.001 && candidate.priority > best.priority)
+      ) {
+        best = {
+          ...candidate,
+          screenDistance
+        };
+      }
+    }
+    return best;
+  }
+
+  function drawMapHoverHighlight(target) {
+    if (!target || !target.marker) {
+      return;
+    }
+    const color = target.color || (target.entity && target.entity.color) || { r: 88, g: 226, b: 255 };
+    const pulse = 1 + Math.sin(performance.now() * 0.011) * 0.08;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = colorString(color, 0.94);
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(target.marker.x, target.marker.y, Math.max(target.hitRadius - 2, 12) * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(target.marker.x, target.marker.y, Math.max(target.hitRadius + 3, 15) * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawMapBodyPreview(body, x, y, radius, time) {
+    if (!body || !body.tier) {
+      return;
+    }
+    const preview = {
+      ...body,
+      x,
+      y,
+      radius,
+      spawnAge: particleSpawnTransitionDuration,
+      promotionStartedAt: null,
+      starBirthAge: starBirthTransitionDuration,
+      pulse: finiteOr(body.pulse, 1),
+      textureSeed: finiteOr(body.textureSeed, body.id || 1)
+    };
+    const tierName = preview.tier.name;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 1.65, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.globalCompositeOperation = "lighter";
+    drawGlow(preview, radius, 0.45);
+    ctx.globalCompositeOperation = "source-over";
+    if (tierName === "star") {
+      drawStarBody(preview, radius * 0.72, time);
+    } else if (stellarOutcomeTierNames.includes(tierName)) {
+      drawStellarRemnantBody(preview, radius * 0.82, time);
+    } else if (tierName === "rock" || tierName === "boulder" || tierName === "asteroid") {
+      drawRockBody(preview, radius, tierName);
+    } else if (tierName === "dwarf moon" || tierName === "moon") {
+      drawMoonBody(preview, radius, tierName);
+    } else {
+      drawPlanetBody(preview, radius);
+    }
+    ctx.restore();
+  }
+
+  function drawMapCampPreview(beacon, x, y, radius, time) {
+    const kind = mobEntityKind(beacon);
+    const visual = mobBeaconVisual(kind);
+    const color = visual.color || beacon.color || { r: 255, g: 115, b: 173 };
+    const accent = visual.accent || shadeColor(color, 52);
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(finiteOr(beacon && beacon.rotation, 0) + time * 0.0004);
+    ctx.globalCompositeOperation = "lighter";
+    const glow = ctx.createRadialGradient(0, 0, radius * 0.16, 0, 0, radius * 2.2);
+    glow.addColorStop(0, colorString(color, 0.34));
+    glow.addColorStop(1, colorString(color, 0));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 2.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 4;
+    ctx.fillStyle = colorString(shadeColor(color, -42), 0.95);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i += 1) {
+      const angle = -Math.PI / 2 + i * Math.PI / 3;
+      const pointRadius = radius * (i % 2 ? 0.78 : 1);
+      const px = Math.cos(angle) * pointRadius;
+      const py = Math.sin(angle) * pointRadius;
+      if (i === 0) {
+        ctx.moveTo(px, py);
+      } else {
+        ctx.lineTo(px, py);
+      }
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = colorString(color, 0.9);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.56, 0, Math.PI * 2);
+    ctx.fill();
+    drawMobBeaconGlyph(beacon || { wobble: 0 }, visual, accent, radius * 0.52, time);
+    ctx.restore();
+  }
+
+  function mapHoverRows(target) {
+    if (!target) {
+      return [];
+    }
+    if (target.type === "body" || target.type === "remote-body") {
+      const body = target.entity;
+      return [
+        ["Distance", formatMapDistance(target.marker.distance) + " u"],
+        ["Mass", formatMapNumber(body && body.mass)],
+        ["Radius", formatMapNumber(body && body.radius) + " u"]
+      ];
+    }
+    if (target.type === "camp") {
+      const beacon = target.entity;
+      const score = mapCampDifficultyScore(beacon);
+      const healthPct = beacon && beacon.maxHealth > 0 ? Math.round(clamp(beacon.health / beacon.maxHealth, 0, 1) * 100) : 0;
+      const warmupPct = Math.round(clamp(finiteOr(beacon && beacon.age, 0) / mobBeaconWarmupDuration, 0, 1) * 100);
+      return [
+        ["Difficulty", mapCampDifficultyLabel(score) + " " + score + "/" + mobTierOrder.length],
+        ["Distance", formatMapDistance(target.marker.distance) + " u"],
+        ["Integrity", healthPct + "%"],
+        ["Activity", warmupPct >= 100 ? "Active" : warmupPct + "%"]
+      ];
+    }
+    return [
+      ["Distance", formatMapDistance(target.marker.distance) + " u"]
+    ];
+  }
+
+  function mapHoverTitle(target) {
+    if (!target) {
+      return "";
+    }
+    if (target.type === "body" || target.type === "remote-body") {
+      const body = target.entity;
+      const prefix = target.owner ? target.owner + "'s " : "";
+      return prefix + mapTitleLabel(body && body.tier && body.tier.name || "Body");
+    }
+    if (target.type === "camp") {
+      return mobName(target.entity);
+    }
+    return target.label || "Map contact";
+  }
+
+  function drawMapHoverPreview(target, x, y, radius, time) {
+    if (!target) {
+      return;
+    }
+    if (target.type === "body" || target.type === "remote-body") {
+      drawMapBodyPreview(target.entity, x, y, radius, time);
+      return;
+    }
+    if (target.type === "camp") {
+      drawMapCampPreview(target.entity, x, y, radius, time);
+      return;
+    }
+
+    const color = target.color || (target.entity && target.entity.color) || { r: 88, g: 226, b: 255 };
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = colorString(color, 0.2);
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 1.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = colorString(color, 0.94);
+    ctx.strokeStyle = "rgba(248, 251, 255, 0.82)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (target.type === "player" || target.type === "spacecraft") {
+      ctx.moveTo(x, y - radius * 0.72);
+      ctx.lineTo(x + radius * 0.72, y + radius * 0.64);
+      ctx.lineTo(x, y + radius * 0.24);
+      ctx.lineTo(x - radius * 0.72, y + radius * 0.64);
+      ctx.closePath();
+    } else {
+      ctx.arc(x, y, radius * 0.72, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawMapHoverPanel(target, time) {
+    if (!target) {
+      return;
+    }
+
+    const rows = mapHoverRows(target);
+    const panelWidth = 226;
+    const panelHeight = 64 + rows.length * 17;
+    let panelX = mouse.x + 16;
+    let panelY = mouse.y + 16;
+    if (panelX + panelWidth > width - 8) {
+      panelX = mouse.x - panelWidth - 16;
+    }
+    if (panelY + panelHeight > height - 8) {
+      panelY = mouse.y - panelHeight - 16;
+    }
+    panelX = clamp(panelX, 8, Math.max(8, width - panelWidth - 8));
+    panelY = clamp(panelY, 8, Math.max(8, height - panelHeight - 8));
+
+    const previewX = panelX + 34;
+    const previewY = panelY + 38;
+    const textX = panelX + 70;
+    const title = mapHoverTitle(target);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(3, 8, 24, 0.9)";
+    ctx.strokeStyle = "rgba(88, 226, 255, 0.34)";
+    ctx.lineWidth = 1;
+    roundRectPath(panelX, panelY, panelWidth, panelHeight, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.045)";
+    roundRectPath(panelX + 10, panelY + 13, 48, 50, 7);
+    ctx.fill();
+    drawMapHoverPreview(target, previewX, previewY, 18, time);
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.font = "950 13px Inter, ui-sans-serif, system-ui, sans-serif";
+    ctx.fillStyle = "#f8fbff";
+    ctx.fillText(title, textX, panelY + 24, panelWidth - 80);
+
+    ctx.font = "850 10px Inter, ui-sans-serif, system-ui, sans-serif";
+    for (let i = 0; i < rows.length; i += 1) {
+      const rowY = panelY + 45 + i * 17;
+      ctx.fillStyle = "rgba(232, 241, 255, 0.62)";
+      ctx.fillText(rows[i][0], textX, rowY, 72);
+      ctx.fillStyle = rows[i][0] === "Difficulty" ? "#ffe56f" : "rgba(223, 252, 255, 0.95)";
+      ctx.fillText(rows[i][1], panelX + panelWidth - 88, rowY, 78);
+    }
     ctx.restore();
   }
 
@@ -39201,10 +49537,16 @@
       return;
     }
 
+    if (!developerMetricsState.open && developerOverlay.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+
     developerOverlay.classList.toggle("is-open", developerMetricsState.open);
     developerOverlay.setAttribute("aria-hidden", developerMetricsState.open ? "false" : "true");
     if (developerMetricsState.open) {
       updateDeveloperOverlay(true);
+    } else {
+      setDeveloperMetricsCopyStatus("");
     }
   }
 
@@ -39263,7 +49605,8 @@
       ["engineer", engineers],
       ["tesla", teslas],
       ["rocket", rockets],
-      ["fighter", fighters]
+      ["fighter", fighters],
+      ["beacon", mobBeacons]
     ];
     let total = 0;
     let bosses = 0;
@@ -39334,6 +49677,7 @@
     addDeveloperListBounds(bounds, teslas, 34);
     addDeveloperListBounds(bounds, rockets, 34);
     addDeveloperListBounds(bounds, fighters, 34);
+    addDeveloperListBounds(bounds, mobBeacons, 48);
     addDeveloperListBounds(bounds, rivalProjectiles, 8);
     addDeveloperListBounds(bounds, playerLasers, 8);
     addDeveloperListBounds(bounds, launcherMissiles, 8);
@@ -39341,6 +49685,7 @@
     return {
       width: bounds.maxX - bounds.minX,
       height: bounds.maxY - bounds.minY,
+      area: Math.max(0, (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY)),
       radiusFromPlayer: bounds.maxDistanceFromPlayer
     };
   }
@@ -39364,6 +49709,70 @@
       largestMass,
       majorBodies
     };
+  }
+
+  function developerBodySummary() {
+    const summary = {
+      particle: 0,
+      rock: 0,
+      boulder: 0,
+      asteroid: 0,
+      dwarfMoon: 0,
+      moon: 0,
+      planet: 0,
+      stellar: 0,
+      mapped: 0,
+      largestTier: "none"
+    };
+    let largestMass = -1;
+
+    for (const body of particles) {
+      const tierName = developerBodyTierName(body);
+      if (tierName === "particle") {
+        summary.particle += 1;
+      } else if (tierName === "rock") {
+        summary.rock += 1;
+      } else if (tierName === "boulder") {
+        summary.boulder += 1;
+      } else if (tierName === "asteroid") {
+        summary.asteroid += 1;
+      } else if (tierName === "dwarf moon") {
+        summary.dwarfMoon += 1;
+      } else if (tierName === "moon") {
+        summary.moon += 1;
+      } else if (tierName === "planet") {
+        summary.planet += 1;
+      } else if (tierName === "star" || stellarOutcomeTierNames.includes(tierName)) {
+        summary.stellar += 1;
+      }
+      if (finiteOr(body && body.mass, 0) >= mappedBodyThreshold) {
+        summary.mapped += 1;
+      }
+      const mass = finiteOr(body && body.mass, 0);
+      if (mass > largestMass) {
+        largestMass = mass;
+        summary.largestTier = tierName || "unknown";
+      }
+    }
+
+    return summary;
+  }
+
+  function developerBodyTierName(body) {
+    if (!body) {
+      return "";
+    }
+    if (body.tier && body.tier.name) {
+      return String(body.tier.name);
+    }
+    const mass = finiteOr(body.mass, 0);
+    let tier = bodyTiers[0];
+    for (const candidate of bodyTiers) {
+      if (mass >= candidate.threshold) {
+        tier = candidate;
+      }
+    }
+    return tier && tier.name || "";
   }
 
   function developerSocketState() {
@@ -39390,6 +49799,32 @@
     return "solo";
   }
 
+  function developerPlayerCount() {
+    if (multiplayer.v2 && multiplayer.v2.state && multiplayer.v2.state.players) {
+      return Object.keys(multiplayer.v2.state.players).length;
+    }
+    if (multiplayer.partySession && Array.isArray(multiplayer.partySession.players)) {
+      return multiplayer.partySession.players.length;
+    }
+    return 1 + (multiplayer.remoteUniverses ? multiplayer.remoteUniverses.size : 0);
+  }
+
+  function developerNetworkSummary() {
+    const stats = multiplayer.networkStats || {};
+    return {
+      sentMessages: finiteOr(stats.sentMessages, 0),
+      sentBytes: finiteOr(stats.sentBytes, 0),
+      droppedMessages: finiteOr(stats.droppedMessages, 0),
+      compactedMessages: finiteOr(stats.compactedMessages, 0),
+      backpressureWarnings: finiteOr(stats.backpressureWarnings, 0),
+      lastMessageType: stats.lastMessageType || "none",
+      lastMessageBytes: finiteOr(stats.lastMessageBytes, 0),
+      largestMessageType: stats.largestMessageType || "none",
+      largestMessageBytes: finiteOr(stats.largestMessageBytes, 0),
+      bufferedAmount: finiteOr(stats.bufferedAmount, multiplayer.socket ? multiplayer.socket.bufferedAmount : 0)
+    };
+  }
+
   function developerV2EntityCount() {
     const state = multiplayer.v2 && multiplayer.v2.state ? multiplayer.v2.state : null;
     const world = state && state.world ? state.world : null;
@@ -39409,7 +49844,8 @@
       "engineers",
       "teslas",
       "rockets",
-      "fighters"
+      "fighters",
+      "mobBeacons"
     ].reduce(function (total, key) {
       return total + (Array.isArray(world[key]) ? world[key].length : 0);
     }, 0);
@@ -39421,8 +49857,22 @@
     const mobs = developerMobSummary();
     const world = developerWorldBounds();
     const mass = developerWorldMassSummary();
-    const randomEvent = randomEventState.active && randomEventState.active.id
-      ? randomEventState.active.id + " " + formatDeveloperNumber(randomEventState.active.timer || 0, 1) + "s"
+    const bodies = developerBodySummary();
+    const network = developerNetworkSummary();
+    const sharedStats = multiplayer.sharedWorldStats;
+    const sharedWorld = sharedStats && sharedStats.world ? sharedStats.world : null;
+    const sharedEvent = sharedWorld && sharedWorld.activeEvent && sharedWorld.activeEvent.id
+      ? sharedWorld.activeEvent.id + " " + formatDeveloperNumber(sharedWorld.activeEvent.timer || 0, 1) + "s"
+      : "none";
+    const sharedTopPlayer = sharedStats && sharedStats.topPlayer
+      ? sharedStats.topPlayer.publicName + " " + formatDeveloperNumber(sharedStats.topPlayer.score || 0) + " pts"
+      : "n/a";
+    const sharedMobBreakdown = sharedWorld && sharedWorld.mobBreakdown ? sharedWorld.mobBreakdown : {};
+    const randomEventTimer = randomEventState.active
+      ? Math.max(0, finiteOr(randomEventState.active.timer, finiteOr(randomEventState.active.duration, 0) - finiteOr(randomEventState.active.elapsed, 0)))
+      : 0;
+    const randomEvent = randomEventState.active && randomEventState.active.id && randomEventTimer > 0
+      ? randomEventState.active.id + " " + formatDeveloperNumber(randomEventTimer, 1) + "s"
       : "none";
     const playerSpeed = Math.hypot(finiteOr(player.vx, 0), finiteOr(player.vy, 0));
     const deviceMemory = Number(navigator.deviceMemory);
@@ -39432,7 +49882,7 @@
     return [
       "Runtime",
       "  mode: " + developerRunMode() + " | active " + runState.active + " | paused " + gamePaused + " | death " + deathState.active,
-      "  difficulty: " + runState.difficultyId + " | event: " + randomEvent,
+      "  difficulty: " + runState.difficultyId + " | game: " + runState.gameMode + " | event: " + randomEvent,
       "  score: " + formatDeveloperNumber(lifeStats.currentScore) + " current, " + formatDeveloperNumber(lifeStats.bestScore) + " best",
       "",
       "Frame",
@@ -39441,9 +49891,11 @@
       "  viewport: " + width + "x" + height + " @ " + formatDeveloperNumber(dpr, 2) + " dpr | zoom " + formatDeveloperNumber(cameraZoom * 100) + "%",
       "",
       "World",
-      "  extent: " + formatDeveloperNumber(world.width) + " x " + formatDeveloperNumber(world.height) + " | farthest " + formatDeveloperNumber(world.radiusFromPlayer),
-      "  particles: " + particles.length + " / target " + targetParticles + " | major bodies " + mass.majorBodies,
-      "  mass: total " + formatDeveloperNumber(mass.totalMass) + " | largest " + formatDeveloperNumber(mass.largestMass),
+      "  size: " + formatDeveloperNumber(world.width) + " x " + formatDeveloperNumber(world.height) + " | area " + formatDeveloperNumber(world.area) + " | farthest " + formatDeveloperNumber(world.radiusFromPlayer),
+      "  bodies: total " + particles.length + " / target " + targetParticles + " | major " + mass.majorBodies + " | mapped " + bodies.mapped,
+      "  by tier: particle " + bodies.particle + ", rock " + bodies.rock + ", boulder " + bodies.boulder + ", asteroid " + bodies.asteroid,
+      "  by tier: dwarf moon " + bodies.dwarfMoon + ", moon " + bodies.moon + ", planet " + bodies.planet + ", star+ " + bodies.stellar,
+      "  mass: total " + formatDeveloperNumber(mass.totalMass) + " | largest " + formatDeveloperNumber(mass.largestMass) + " (" + bodies.largestTier + ")",
       "  structures: " + structures.length + " | spacecraft: " + spacecrafts.length + " | pickups: health " + healthPickups.length + ", tech " + techPickups.length,
       "",
       "Combat",
@@ -39458,12 +49910,26 @@
       "  landed: " + (player.landed ? "body " + player.landed.bodyId : "no") + " | interior " + (player.spacecraftInterior ? player.spacecraftInterior.craftId : "no"),
       "",
       "Network",
-      "  socket: " + developerSocketState() + " | connected " + multiplayer.connected + " | room players " + multiplayer.roomPlayerCount + "/" + multiplayer.roomMaxPlayers,
+      "  socket: " + developerSocketState() + " | connected " + multiplayer.connected + " | players " + developerPlayerCount() + " | room " + multiplayer.roomPlayerCount + "/" + multiplayer.roomMaxPlayers,
+      "  sent: " + formatDeveloperNumber(network.sentMessages) + " msgs, " + formatDeveloperBytes(network.sentBytes) + " | last " + network.lastMessageType + " " + formatDeveloperBytes(network.lastMessageBytes),
+      "  largest: " + network.largestMessageType + " " + formatDeveloperBytes(network.largestMessageBytes) + " | compacted " + formatDeveloperNumber(network.compactedMessages) + " | dropped " + formatDeveloperNumber(network.droppedMessages),
+      "  buffered: " + formatDeveloperBytes(network.bufferedAmount) + " | backpressure " + formatDeveloperNumber(network.backpressureWarnings),
       "  remote universes: " + multiplayer.remoteUniverses.size + " | party snapshots " + multiplayer.partyPlayerSnapshots.size + " | online " + multiplayer.onlineCount,
       "  v2 active: " + Boolean(multiplayer.v2 && multiplayer.v2.active) + " | tick " + (multiplayer.v2 ? multiplayer.v2.clientTick : 0) + " | entities " + developerV2EntityCount(),
       "  v2 perf: step " + formatDeveloperNumber(v2Perf.clientStepMs, 1) + "ms | reconcile " + formatDeveloperNumber(v2Perf.reconcileMs, 1) + "ms | sync " + formatDeveloperNumber(v2Perf.syncMs, 1) + "ms",
       "  v2 queue: pending " + formatDeveloperNumber(v2Perf.pendingInputs) + " | replay " + formatDeveloperNumber(v2Perf.replayInputs) + " | snapshots dropped " + formatDeveloperNumber(v2Perf.droppedSnapshots) + " stale " + formatDeveloperNumber(v2Perf.skippedSnapshots),
       "  v2 server: step " + formatDeveloperNumber(v2Perf.serverStepMs, 1) + "ms | snapshot " + formatDeveloperBytes(v2Perf.serverSnapshotBytes) + " | input q " + formatDeveloperNumber(v2Perf.serverMaxInputQueue) + " | ack misses " + formatDeveloperNumber(v2Perf.ackMissing),
+      "",
+      "Shared World",
+      "  status: " + (sharedStats ? sharedStats.status : "unknown") + " | age " + (sharedStats ? formatSharedWorldDuration(sharedStats.runningSeconds) : "n/a") + " | tick " + formatDeveloperNumber(sharedStats && sharedStats.tick),
+      "  players: online " + formatDeveloperNumber(sharedStats && sharedStats.onlinePlayers) + "/" + formatDeveloperNumber(sharedStats && sharedStats.maxPlayers) + " | known " + formatDeveloperNumber(sharedStats && sharedStats.knownPlayers) + " | teams " + formatDeveloperNumber(sharedStats && sharedStats.teamCount),
+      "  leader: " + sharedTopPlayer,
+      "  world size: " + formatDeveloperNumber(sharedWorld && sharedWorld.width) + " x " + formatDeveloperNumber(sharedWorld && sharedWorld.height) + " | area " + formatDeveloperNumber(sharedWorld && sharedWorld.area) + " | radius " + formatDeveloperNumber(sharedWorld && sharedWorld.radiusFromOrigin),
+      "  entities: total " + formatDeveloperNumber(sharedWorld && sharedWorld.entityCount) + " | bodies " + formatDeveloperNumber(sharedWorld && sharedWorld.particles) + " | structures " + formatDeveloperNumber(sharedWorld && sharedWorld.structures) + " | ships " + formatDeveloperNumber(sharedWorld && sharedWorld.spacecrafts),
+      "  mobs: total " + formatDeveloperNumber(sharedWorld && sharedWorld.mobCount) + " | bosses " + formatDeveloperNumber(sharedWorld && sharedWorld.bosses) + " | beacons " + formatDeveloperNumber(sharedMobBreakdown.beacons),
+      "  mob detail: alien " + formatDeveloperNumber(sharedMobBreakdown.alienoids) + ", ufo " + formatDeveloperNumber(sharedMobBreakdown.ufos) + ", rambot " + formatDeveloperNumber(sharedMobBreakdown.rambots) + ", engineer " + formatDeveloperNumber(sharedMobBreakdown.engineers),
+      "  mob detail: tesla " + formatDeveloperNumber(sharedMobBreakdown.teslas) + ", rocket " + formatDeveloperNumber(sharedMobBreakdown.rockets) + ", fighter " + formatDeveloperNumber(sharedMobBreakdown.fighters),
+      "  events: " + sharedEvent + " | black holes " + formatDeveloperNumber(sharedWorld && sharedWorld.blackHoles) + " | projectiles " + formatDeveloperNumber(sharedWorld && sharedWorld.projectiles) + " | pickups " + formatDeveloperNumber((sharedWorld && sharedWorld.techPickups) + (sharedWorld && sharedWorld.healthPickups)),
       "",
       "Device",
       "  " + developerMemorySummary(),
@@ -39477,6 +49943,10 @@
     }
 
     const now = performance.now();
+    if (developerMetricsState.copyStatusClearAt && now >= developerMetricsState.copyStatusClearAt) {
+      setDeveloperMetricsCopyStatus("");
+    }
+
     if (!force && now - developerMetricsState.lastUpdateAt < developerMetricsRefreshMs) {
       return;
     }
@@ -39486,6 +49956,56 @@
     if (text !== developerMetricsState.lastText) {
       developerMetricsState.lastText = text;
       developerMetricsText.textContent = text;
+    }
+  }
+
+  function setDeveloperMetricsCopyStatus(text) {
+    if (!developerMetricsCopyStatus) {
+      return;
+    }
+
+    developerMetricsCopyStatus.textContent = text || "";
+    developerMetricsState.copyStatusClearAt = text ? performance.now() + 1800 : 0;
+  }
+
+  function copyDeveloperMetricsFallback(text) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.setAttribute("readonly", "");
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+    document.body.appendChild(textArea);
+    textArea.select();
+    const copied = document.execCommand("copy");
+    textArea.remove();
+    if (!copied) {
+      throw new Error("Copy command failed.");
+    }
+  }
+
+  async function copyDeveloperMetricsToClipboard() {
+    if (!developerMetricsText) {
+      return;
+    }
+
+    updateDeveloperOverlay(true);
+    const text = developerMetricsState.lastText || developerMetricsText.textContent || "";
+    if (!text.trim()) {
+      setDeveloperMetricsCopyStatus("No metrics to copy");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        copyDeveloperMetricsFallback(text);
+      }
+      setDeveloperMetricsCopyStatus("Copied metrics");
+    } catch (error) {
+      console.warn("[Clusternauts dev] clipboard copy failed", error);
+      setDeveloperMetricsCopyStatus("Copy failed");
     }
   }
 
@@ -39523,7 +50043,8 @@
     hudCache.progressEquippedToolId = equipped;
     hudCache.progressSnapshot = {
       mass: progressMass,
-      tier
+      tier,
+      body: progressBody
     };
     return hudCache.progressSnapshot;
   }
@@ -39560,7 +50081,10 @@
     const mapRadius = size * 0.41;
     const bodies = mappedBodiesForFrame();
     const remoteContacts = collectRemoteMapContacts();
+    const spacecraftContacts = collectSpacecraftMapContacts();
+    const campContacts = collectMapCampContacts();
     const eventRegions = activeRandomEventRegions();
+    const hoverCandidates = [];
     let farthest = 0;
 
     for (const body of bodies) {
@@ -39571,6 +50095,12 @@
     }
     for (const contact of remoteContacts.players) {
       farthest = Math.max(farthest, Math.hypot(contact.player.x - player.x, contact.player.y - player.y));
+    }
+    for (const contact of spacecraftContacts) {
+      farthest = Math.max(farthest, Math.hypot(contact.craft.x - player.x, contact.craft.y - player.y));
+    }
+    for (const camp of campContacts) {
+      farthest = Math.max(farthest, Math.hypot(camp.x - player.x, camp.y - player.y));
     }
     for (const region of eventRegions) {
       farthest = Math.max(farthest, Math.hypot(region.x - player.x, region.y - player.y) + finiteOr(region.radius, 0));
@@ -39612,11 +50142,43 @@
 
     for (const region of eventRegions) {
       drawMapEventRegion(region, centerX, centerY, mapRadius, range);
+      const marker = projectMapPoint(region.x, region.y, centerX, centerY, mapRadius, range);
+      hoverCandidates.push(mapHoverCandidate("event", region, marker, {
+        label: region.label || "Event region",
+        color: region.color || particleStormMapColor,
+        radius: clamp((finiteOr(region.radius, 0) / Math.max(1, range)) * (mapRadius - 14), 10, 22),
+        priority: -2
+      }));
+    }
+
+    for (const contact of spacecraftContacts) {
+      const marker = projectMapPoint(contact.craft.x, contact.craft.y, centerX, centerY, mapRadius, range);
+      drawMapSpacecraftMarker(contact, marker);
+      hoverCandidates.push(mapHoverCandidate("spacecraft", contact.craft, marker, {
+        label: contact.label || "Craft",
+        color: contact.color || rogueTraderMapColor,
+        radius: 12,
+        priority: 1
+      }));
     }
 
     for (const body of bodies) {
       const marker = projectMapPoint(body.x, body.y, centerX, centerY, mapRadius, range);
-      drawMapBodyMarker(body, marker, { showDistance: body.tier.name === "moon" || body.tier.name === "planet" || marker.clamped });
+      drawMapBodyMarker(body, marker, { showDistance: body.tier.name === "moon" || body.tier.name === "planet" || isStarBody(body) || marker.clamped });
+      hoverCandidates.push(mapHoverCandidate("body", body, marker, {
+        radius: mapMarkerRadius(body.tier.name),
+        priority: 2
+      }));
+    }
+
+    for (const camp of campContacts) {
+      const marker = projectMapPoint(camp.x, camp.y, centerX, centerY, mapRadius, range);
+      drawMapCampMarker(camp, marker);
+      hoverCandidates.push(mapHoverCandidate("camp", camp, marker, {
+        color: camp.color,
+        radius: 13,
+        priority: 3
+      }));
     }
 
     for (const contact of remoteContacts.bodies) {
@@ -39626,10 +50188,23 @@
         marker,
         { remote: true, alpha: contact.alpha, showDistance: true }
       );
+      hoverCandidates.push(mapHoverCandidate("remote-body", contact.body, marker, {
+        owner: contact.publicName || "Remote",
+        color: { r: 88, g: 226, b: 255 },
+        radius: mapMarkerRadius(contact.body.tier.name),
+        priority: 1
+      }));
     }
 
     for (const contact of remoteContacts.players) {
-      drawMapPlayerMarker(contact, projectMapPoint(contact.player.x, contact.player.y, centerX, centerY, mapRadius, range));
+      const marker = projectMapPoint(contact.player.x, contact.player.y, centerX, centerY, mapRadius, range);
+      drawMapPlayerMarker(contact, marker);
+      hoverCandidates.push(mapHoverCandidate("player", contact.player, marker, {
+        label: contact.publicName || "Remote player",
+        color: { r: 255, g: 115, b: 173 },
+        radius: 14,
+        priority: 1
+      }));
     }
 
     ctx.fillStyle = "#f8fbff";
@@ -39644,7 +50219,12 @@
     ctx.fill();
     ctx.stroke();
 
+    const hoverTarget = selectMapHoverTarget(hoverCandidates, x, y, size);
+    drawMapHoverHighlight(hoverTarget);
+
     ctx.restore();
+
+    drawMapHoverPanel(hoverTarget, performance.now());
   }
 
   function updateHud() {
@@ -39675,9 +50255,50 @@
     const progressSnapshot = hudProgressSnapshot();
     const progressMass = progressSnapshot.mass;
     const tier = progressSnapshot.tier;
+    const progressBody = progressSnapshot.body;
     const nextTier = nextTierAfter(tier);
     const roundedProgressMass = Math.max(0, Math.round(progressMass));
+    const planetThreshold = thresholdForTierName("planet");
+    const starThreshold = thresholdForTierName("star");
+    const terminalStellar = stellarOutcomeTierNames.includes(tier.name);
+    const stellarProgressActive = progressMass >= planetThreshold && (progressMass < stellarEvolutionEndThreshold || terminalStellar);
     setTextIfChanged(currentBodyLabel, formatTierName(tier.name).toUpperCase() + ":");
+    if (stellarProgressActive) {
+      const firstProgress = progressMass >= starThreshold
+        ? 1
+        : clamp((progressMass - planetThreshold) / Math.max(1, starThreshold - planetThreshold), 0, 1);
+      const secondProgress = progressMass >= stellarEvolutionEndThreshold
+        ? 1
+        : progressMass >= starThreshold
+          ? clamp((progressMass - starThreshold) / Math.max(1, stellarEvolutionEndThreshold - starThreshold), 0, 1)
+          : 0;
+      const growthRate = Math.max(0, finiteOr(progressBody && progressBody.stellarGrowthRate, 0));
+      const predictedOutcome = terminalStellar
+        ? tier.name
+        : progressMass >= starThreshold
+          ? stellarOutcomeForGrowthRate(growthRate)
+          : "star";
+      setTextIfChanged(nextMilestoneLabel, terminalStellar ? "MAX" : formatTierName(predictedOutcome).toUpperCase());
+      setTextIfChanged(nextMilestoneValue, roundedProgressMass + " / " + Math.round(stellarEvolutionEndThreshold));
+      setStyleWidthIfChanged(milestoneFill, Math.round(firstProgress * 50) + "%");
+      setStyleWidthIfChanged(milestoneStellarFill, Math.round(secondProgress * 50) + "%");
+      if (milestoneSplit) {
+        milestoneSplit.classList.toggle("is-visible", true);
+      }
+      if (stellarRateLabel) {
+        stellarRateLabel.hidden = progressMass < starThreshold || terminalStellar;
+        setTextIfChanged(stellarRateLabel, "Rate " + growthRate.toFixed(growthRate >= 10 ? 0 : 1) + "/s -> " + formatTierName(predictedOutcome));
+      }
+      maybeRenderOpenLeaderboard();
+      return;
+    }
+    setStyleWidthIfChanged(milestoneStellarFill, "0%");
+    if (milestoneSplit) {
+      milestoneSplit.classList.toggle("is-visible", false);
+    }
+    if (stellarRateLabel) {
+      stellarRateLabel.hidden = true;
+    }
     if (!nextTier) {
       setTextIfChanged(nextMilestoneLabel, "MAX");
       setTextIfChanged(nextMilestoneValue, roundedProgressMass + " / " + Math.round(tier.threshold) + "+");
@@ -39711,12 +50332,14 @@
     updateEnergySystems(dt);
     updateToolEnergyUsage(dt);
     updatePlayer(dt);
+    updatePersonalTether(dt);
     updateGadgetAim(dt);
     updateEquippedTool(dt);
     updateLandedGadgetThrust(dt);
     updatePartyLandedGadgetThrusts(dt);
     updateRandomEvents(dt);
     updateMobSpawns(dt);
+    updateMobBeaconGadgetForces(dt);
     updateParticles(dt);
     updateVisciousVacuumMobs(dt);
     updateSpacecrafts(dt);
@@ -39752,6 +50375,7 @@
     updatePlayerEnergySystems(dt);
     updateToolEnergyUsage(dt);
     updatePlayer(dt);
+    updatePersonalTether(dt);
     updateGadgetAim(dt);
     updateEquippedTool(dt);
     updatePlayerLasers(dt, { relaySharedWorldHits: joinedPlayerIsolationAllows("relayHostEntityEffects") });
@@ -40298,6 +50922,15 @@
       setInput: function (input) {
         configureClusternautsTestInput(input);
       },
+      warmMobBeacon: function (kind, age) {
+        const beaconKind = mobTierOrder.includes(String(kind || "")) ? String(kind || "") : "alienoid";
+        const beacon = ensureMobBeacon(beaconKind, activeMobSpawnAnchors());
+        beacon.health = Math.max(1, finiteOr(beacon.health, beacon.maxHealth));
+        beacon.respawnTimer = 0;
+        beacon.age = Math.max(finiteOr(beacon.age, 0), finiteOr(age, mobBeaconWarmupDuration));
+        mobWaveTimer = 0;
+        return createClusternautsFrameRateSnapshot();
+      },
       setSettingsOpen: function (open) {
         setSettingsOpen(Boolean(open));
         return {
@@ -40730,6 +51363,7 @@
         return {
           enabled: persistence.enabled,
           online: persistence.online,
+
           storage: persistence.storage,
           crazyGamesDataModuleAvailable: progressSaveAdapter.dataModuleAvailable,
           crazyGamesLastLoadSource: progressSaveAdapter.lastLoadSource,
@@ -41134,6 +51768,13 @@
       const targetPlayerId = button.dataset.playerId || "";
       if (button.dataset.action === "invite") {
         inviteFriend(targetPlayerId);
+      } else if (button.dataset.action === "team") {
+        sendMultiplayer({
+          type: "interaction.choice",
+          targetPlayerId,
+          choice: "team"
+        });
+        maybeNotifyText("Team up request sent.");
       }
     });
   }
@@ -41156,6 +51797,28 @@
       if (action && action.dataset.menuAction) {
         event.preventDefault();
         handleStartMenuAction(action.dataset.menuAction, action);
+        return;
+      }
+
+      const controlButton = closestEventTarget(event, "button[data-control-action]");
+      if (controlButton) {
+        event.preventDefault();
+        pendingControlRemap = controlButton.dataset.controlAction || null;
+        renderControlBindings();
+        return;
+      }
+
+      const storeFilterButton = closestEventTarget(event, "[data-store-filter]");
+      if (storeFilterButton && storeFilterButton.dataset.storeFilter) {
+        event.preventDefault();
+        toggleStoreFilter(storeFilterButton.dataset.storeFilter);
+        return;
+      }
+
+      const storeSkinCard = closestEventTarget(event, "[data-store-skin-id]");
+      if (storeSkinCard && storeSkinCard.dataset.storeSkinId) {
+        event.preventDefault();
+        setStorePreviewSkin(storeSkinCard.dataset.storeSkinId);
         return;
       }
 
@@ -41201,6 +51864,25 @@
         return;
       }
       void beginRunWithDifficulty(button.dataset.difficulty);
+    });
+
+    difficultyScreen.addEventListener("focusin", function (event) {
+      const storeSkinCard = closestEventTarget(event, "[data-store-skin-id]");
+      if (storeSkinCard && storeSkinCard.dataset.storeSkinId) {
+        setStorePreviewSkin(storeSkinCard.dataset.storeSkinId);
+      }
+    });
+
+    difficultyScreen.addEventListener("keydown", function (event) {
+      if (event.code !== "Enter" && event.code !== "Space") {
+        return;
+      }
+      const storeSkinCard = closestEventTarget(event, "[data-store-skin-id]");
+      if (!storeSkinCard || !storeSkinCard.dataset.storeSkinId || closestEventTarget(event, "[data-menu-action]")) {
+        return;
+      }
+      event.preventDefault();
+      setStorePreviewSkin(storeSkinCard.dataset.storeSkinId);
     });
   }
 
@@ -41381,6 +52063,10 @@
     tradeClose.addEventListener("click", closeTradeSession);
   }
 
+  if (containerClose) {
+    containerClose.addEventListener("click", closeContainerSession);
+  }
+
   if (tradeOfferList) {
     tradeOfferList.addEventListener("click", function (event) {
       const npcOffer = closestEventTarget(event, "button[data-npc-offer]");
@@ -41405,15 +52091,75 @@
     tradeAccept.addEventListener("click", acceptTradeOffer);
   }
 
-  window.addEventListener("keydown", function (event) {
-    if (!settingsOpen) {
-      return;
-    }
+  if (tradePortClose) {
+    tradePortClose.addEventListener("click", closeTradePortSession);
+  }
 
+  if (tradePortPanel) {
+    tradePortPanel.addEventListener("click", function (event) {
+      const offerButton = closestEventTarget(event, "button[data-trade-port-offer]");
+      if (offerButton) {
+        acceptTradePortOffer(offerButton.dataset.tradePortOffer);
+        return;
+      }
+
+      const storageButton = closestEventTarget(event, "button[data-trade-port-storage-key]");
+      if (storageButton) {
+        transferTradePortTech(
+          storageButton.dataset.tradePortStorageKey,
+          storageButton.dataset.tradePortStorageMode,
+          Number(storageButton.dataset.tradePortStorageAmount) || 1
+        );
+        return;
+      }
+
+      const resourceButton = closestEventTarget(event, "button[data-trade-port-key]");
+      if (resourceButton) {
+        adjustTradingPortOfferResource(
+          resourceButton.dataset.tradePortKey,
+          resourceButton.dataset.tradePortSide,
+          Number(resourceButton.dataset.tradePortDelta) || 0
+        );
+      }
+    });
+  }
+
+  if (tradePortAddOffer) {
+    tradePortAddOffer.addEventListener("click", addTradePortOffer);
+  }
+
+  if (tradePortRemoveOffer) {
+    tradePortRemoveOffer.addEventListener("click", removeSelectedTradePortOffer);
+  }
+
+  if (containerPanel) {
+    containerPanel.addEventListener("click", function (event) {
+      const button = closestEventTarget(event, "button[data-container-key]");
+      if (!button) {
+        return;
+      }
+
+      transferContainerTech(button.dataset.containerKey, button.dataset.containerMode, Number(button.dataset.containerAmount) || 1);
+    });
+  }
+
+  if (developerMetricsCopy) {
+    developerMetricsCopy.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      copyDeveloperMetricsToClipboard();
+    });
+  }
+
+  window.addEventListener("keydown", function (event) {
     if (pendingControlRemap) {
       event.preventDefault();
       event.stopImmediatePropagation();
       remapControl(pendingControlRemap, event.code);
+      return;
+    }
+
+    if (!settingsOpen) {
       return;
     }
 
@@ -41429,7 +52175,7 @@
       event.preventDefault();
     }
 
-    if (event.code === "F10" && !event.repeat) {
+    if ((event.code === "F10" || (event.ctrlKey && event.code === "Backquote")) && !event.repeat) {
       event.preventDefault();
       toggleDeveloperOverlay();
       return;
@@ -41505,6 +52251,18 @@
         choosePlayerInteraction(selected && selected.key);
         return;
       }
+    }
+
+    if (containerPanel && containerPanel.classList.contains("is-open") && event.code === "Escape") {
+      event.preventDefault();
+      closeContainerSession();
+      return;
+    }
+
+    if (tradePortPanel && tradePortPanel.classList.contains("is-open") && event.code === "Escape") {
+      event.preventDefault();
+      closeTradePortSession();
+      return;
     }
 
     if (event.code === "Enter" && !event.repeat && !buildMenuOpen && !leaderboard.open && !isEditableEventTarget(event)) {
@@ -41707,9 +52465,26 @@
       return;
     }
 
+    if (event.button === 0 && handleTradePortClick()) {
+      event.preventDefault();
+      mouse.left = false;
+      return;
+    }
+
+    if (event.button === 0 && handleContainerClick()) {
+      event.preventDefault();
+      mouse.left = false;
+      return;
+    }
+
     if (areToolsDisabled()) {
       event.preventDefault();
       resetMouseButtons();
+      return;
+    }
+
+    if (handlePersonalTetherMouseDown(event.button)) {
+      event.preventDefault();
       return;
     }
 
@@ -41796,6 +52571,10 @@
       return;
     }
 
+    if (isScrollableWheelEventTarget(event)) {
+      return;
+    }
+
     if (deathState.active || !runState.active) {
       event.preventDefault();
       return;
@@ -41815,6 +52594,7 @@
   async function startGame() {
     initializeNetworkIdentity();
     await bootstrapAccountSession();
+    await handleSkinCheckoutReturn();
     applyUiScale(gameSettings.uiScale);
     setCameraZoom(gameSettings.zoom);
     updateDynamicLightingUi();

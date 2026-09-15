@@ -24,7 +24,8 @@
     "test:crazygames:package": "node tests/crazygames-package-smoke.test.js",
     "test:itch:package": "node tests/itch-package-smoke.test.js",
     "test:gamepix:package": "node tests/gamepix-package-smoke.test.js",
-    "test:physics:framerate": "node tests/crazygames-framerate-consistency.test.js"
+    "test:physics:framerate": "node tests/crazygames-framerate-consistency.test.js",
+    "check:file-sizes": "node scripts/check-editable-file-sizes.js"
   },
   "dependencies": {
     "pg": "^8.21.0"
