@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Battery">
+  <defs>
+    <linearGradient id="shell" x1="18" y1="18" x2="78" y2="78" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="0.48" stop-color="#8e9aae"/>
+      <stop offset="1" stop-color="#30384d"/>
+    </linearGradient>
+    <linearGradient id="charge" x1="48" y1="72" x2="48" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#66e0b8"/>
+      <stop offset="1" stop-color="#9dff7a"/>
+    </linearGradient>
+  </defs>
+  <path fill="#07101f" stroke="#dffcff" stroke-opacity=".4" stroke-width="4" d="M29 18h38a9 9 0 0 1 9 9v44a9 9 0 0 1-9 9H29a9 9 0 0 1-9-9V27a9 9 0 0 1 9-9Z"/>
+  <path fill="#dffcff" d="M38 8h20a6 6 0 0 1 6 6v6H32v-6a6 6 0 0 1 6-6Z"/>
+  <path fill="url(#shell)" d="M31 24h34a6 6 0 0 1 6 6v38a6 6 0 0 1-6 6H31a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6Z"/>
+  <path fill="url(#charge)" d="M32 43h32v23H32z"/>
+  <path fill="#f8fbff" d="m52 28-21 27h13l-7 19 27-32H49z"/>
+</svg>

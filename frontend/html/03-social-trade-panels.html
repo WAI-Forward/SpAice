@@ -1,0 +1,107 @@
+    <section class="social-panel" id="socialPanel" aria-label="Online players" aria-hidden="true">
+      <div class="social-panel__header">
+        <strong id="publicNameValue">Player</strong>
+        <button class="social-panel__close" id="socialPanelClose" type="button" aria-label="Close online players">x</button>
+      </div>
+      <div class="social-panel__tools">
+        <input id="playerSearch" type="search" autocomplete="off" placeholder="Search name">
+        <label class="social-panel__filter">
+          <input id="friendsOnlyFilter" type="checkbox">
+          <span>Friends</span>
+        </label>
+      </div>
+      <div class="social-panel__list" id="playerSearchList"></div>
+    </section>
+    <section class="signal-panel" id="signalPanel" aria-label="Signal detected" aria-hidden="true">
+      <strong>! Signal detected</strong>
+      <span id="signalName">Unknown contact</span>
+      <div class="signal-panel__actions">
+        <button id="investigateSignal" type="button">Investigate</button>
+        <button id="avoidSignal" type="button">Avoid</button>
+      </div>
+    </section>
+    <section class="command-panel" id="commandPanel" aria-label="Command console" aria-hidden="true">
+      <input id="commandInput" type="password" autocomplete="off" spellcheck="false" placeholder="Password">
+      <div class="command-panel__hint" id="commandHint">Type password to unlock commands</div>
+    </section>
+    <section class="player-interaction" id="playerInteractionPanel" aria-label="Player interaction choices" aria-hidden="true">
+      <div class="player-interaction__name" id="playerInteractionName">Contact</div>
+      <div class="player-interaction__choices" id="playerInteractionChoices"></div>
+    </section>
+    <section class="trade-panel" id="tradePanel" aria-label="Trade technology resources" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="tradePeerName">Trade</strong>
+        <button class="trade-panel__close" id="tradeClose" type="button" aria-label="Close trade">x</button>
+      </div>
+      <div class="trade-panel__columns">
+        <div>
+          <span class="trade-panel__column-title">You offer</span>
+          <div class="trade-panel__list" id="tradeOfferList"></div>
+        </div>
+        <div>
+          <span class="trade-panel__column-title">They offer</span>
+          <div class="trade-panel__list" id="tradeReceiveList"></div>
+        </div>
+      </div>
+      <div class="trade-panel__actions">
+        <button id="tradeSendOffer" type="button">Send Offer</button>
+        <button id="tradeAccept" type="button">Accept</button>
+      </div>
+      <p class="trade-panel__status" id="tradeStatus">Choose resources to trade.</p>
+    </section>
+    <section class="container-panel" id="containerPanel" aria-label="Container technology storage" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="containerName">Container</strong>
+        <button class="trade-panel__close" id="containerClose" type="button" aria-label="Close container">x</button>
+      </div>
+      <div class="trade-panel__columns">
+        <div>
+          <span class="trade-panel__column-title">Backpack</span>
+          <div class="trade-panel__list" id="containerPlayerList"></div>
+        </div>
+        <div>
+          <span class="trade-panel__column-title">Container</span>
+          <div class="trade-panel__list" id="containerStoredList"></div>
+        </div>
+      </div>
+      <p class="trade-panel__status" id="containerStatus">Move tech in or out.</p>
+    </section>
+    <section class="trade-port-panel" id="tradePortPanel" aria-label="Trading port" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="tradePortName">Trading Port</strong>
+        <button class="trade-panel__close" id="tradePortClose" type="button" aria-label="Close trading port">x</button>
+      </div>
+      <div class="trade-port-panel__main">
+        <div>
+          <div class="trade-port-panel__section-header">
+            <span class="trade-panel__column-title">Posted Trades</span>
+            <button id="tradePortAddOffer" type="button">New</button>
+          </div>
+          <div class="trade-panel__list trade-port-panel__offers" id="tradePortOfferList"></div>
+        </div>
+        <div class="trade-port-panel__editor">
+          <div>
+            <div class="trade-port-panel__section-header">
+              <span class="trade-panel__column-title">Will Buy</span>
+              <button id="tradePortRemoveOffer" type="button">Remove</button>
+            </div>
+            <div class="trade-panel__list" id="tradePortBuyList"></div>
+          </div>
+          <div>
+            <span class="trade-panel__column-title">Will Pay</span>
+            <div class="trade-panel__list" id="tradePortPayList"></div>
+          </div>
+        </div>
+        <div class="trade-port-panel__storage">
+          <div>
+            <span class="trade-panel__column-title">Backpack</span>
+            <div class="trade-panel__list" id="tradePortPlayerList"></div>
+          </div>
+          <div>
+            <span class="trade-panel__column-title">Port Stock</span>
+            <div class="trade-panel__list" id="tradePortStoredList"></div>
+          </div>
+        </div>
+      </div>
+      <p class="trade-panel__status" id="tradePortStatus">Post trades and stock the port.</p>
+    </section>

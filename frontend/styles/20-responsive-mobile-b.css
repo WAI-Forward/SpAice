@@ -1,0 +1,286 @@
+    padding: 12px;
+  }
+
+  .settings-panel__body {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-panel__group--controls {
+    grid-row: auto;
+  }
+
+  .social-panel {
+    top: auto;
+    left: 10px;
+    right: auto;
+    bottom: 64px;
+    width: calc(100vw - 20px);
+    max-height: min(420px, calc(100vh - 120px));
+  }
+
+  .signal-panel {
+    top: 14px;
+    width: calc(100vw - 20px);
+  }
+
+  .command-panel {
+    bottom: 70px;
+    width: calc(100vw - 20px);
+  }
+
+  .difficulty-screen,
+  .death-screen {
+    padding: 10px;
+  }
+
+  .difficulty-screen__panel,
+  .death-screen__panel {
+    padding: 18px;
+  }
+
+  .death-screen__panel {
+    width: min(100%, calc((100vw - 20px) / var(--ui-scale)));
+    max-height: calc((100vh - 20px) / var(--ui-scale));
+    max-height: calc((100dvh - 20px) / var(--ui-scale));
+    padding: 14px;
+  }
+
+  .difficulty-screen h1,
+  .death-screen h1 {
+    font-size: 36px;
+  }
+
+  .start-menu {
+    gap: 12px;
+    max-height: calc((100vh - 20px) / var(--ui-scale));
+    max-height: calc((100dvh - 20px) / var(--ui-scale));
+  }
+
+  .start-menu[data-active-menu-view="main"] {
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  .start-menu__top {
+    grid-template-columns: 64px 1fr 64px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__top {
+    gap: 6px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__back[hidden] {
+    display: none;
+  }
+
+  .start-menu[data-active-menu-view="main"] .difficulty-screen__eyebrow {
+    margin-bottom: 5px;
+    font-size: 10px;
+  }
+
+  .start-menu[data-active-menu-view="main"] h1 {
+    margin-bottom: 8px;
+    font-size: clamp(28px, 9vw, 36px);
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account {
+    gap: 1px;
+    width: min(320px, 100%);
+    padding: 7px 9px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account span {
+    font-size: 9px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account strong {
+    font-size: 13px;
+  }
+
+  .start-menu__back {
+    min-height: 32px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .start-menu__join,
+  .lobby-panel__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .start-menu__actions {
+    gap: 8px;
+  }
+
+  .shared-world-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .start-store {
+    gap: 10px;
+  }
+
+  .start-store__content {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .start-store__preview {
+    min-height: 150px;
+    grid-template-columns: 96px minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    justify-items: start;
+    align-items: center;
+    padding: 10px;
+  }
+
+  .start-store__preview-canvas {
+    grid-row: 1 / span 2;
+    max-width: 96px;
+  }
+
+  .start-store__preview-name,
+  .start-store__preview-meta {
+    text-align: left;
+  }
+
+  .start-store__preview-name {
+    align-self: end;
+  }
+
+  .start-store__preview-meta {
+    align-self: start;
+  }
+
+  .start-store__grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    max-height: clamp(180px, calc((100vh - 390px) / var(--ui-scale)), 280px);
+    max-height: clamp(180px, calc((100dvh - 390px) / var(--ui-scale)), 280px);
+    padding: 2px 3px 8px 2px;
+  }
+
+  .start-store__card {
+    min-height: 110px;
+    grid-template-columns: 50px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 9px 10px;
+    padding: 10px;
+  }
+
+  .start-store__summary {
+    padding-right: 44px;
+  }
+
+  .start-store__status-pill {
+    top: 9px;
+    right: 9px;
+  }
+
+  .start-store__swatch {
+    width: 50px;
+    height: 50px;
+  }
+
+  .start-store__action {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .start-menu__button,
+  .start-menu__join input,
+  .lobby-panel__invite input {
+    min-height: 46px;
+    font-size: 14px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__button {
+    min-height: 42px;
+  }
+
+  .start-menu__row {
+    grid-template-columns: 1fr;
+  }
+
+  .start-menu__row-actions {
+    justify-content: stretch;
+  }
+
+  .start-menu__row-actions .settings-panel__save-action {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .lobby-panel__difficulty,
+  .lobby-panel__players,
+  .start-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .lobby-panel__summary {
+    grid-template-columns: 60px minmax(0, 1fr) auto;
+  }
+
+  .death-screen__eyebrow {
+    margin-bottom: 6px;
+    font-size: 10px;
+  }
+
+  .death-screen h1 {
+    margin-bottom: 12px;
+    font-size: 32px;
+  }
+
+  .difficulty-screen__options {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .difficulty-card {
+    min-height: 92px;
+    padding: 12px;
+  }
+
+  .death-screen__stats {
+    grid-template-columns: 1fr;
+    flex-basis: 180px;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding-right: 2px;
+  }
+
+  .death-screen__stat {
+    min-height: 0;
+    padding: 9px 10px;
+  }
+
+  .death-screen__stat dt {
+    margin-bottom: 5px;
+    font-size: 10px;
+  }
+
+  .death-screen__stat dd {
+    font-size: 16px;
+  }
+
+  .death-screen__leaderboard {
+    gap: 7px;
+    margin-bottom: 8px;
+  }
+
+  .death-screen__leaderboard input,
+  .death-screen__button {
+    min-height: 42px;
+  }
+
+  .death-screen__leaderboard input {
+    height: 42px;
+  }
+
+  .death-screen__leaderboard-status {
+    min-height: 14px;
+    font-size: 11px;
+  }
+}
+

@@ -1,0 +1,17 @@
+@media (max-height: 360px) and (min-width: 480px) {
+  .difficulty-screen__panel.start-menu[data-active-menu-view="main"] {
+    padding: 8px 10px;
+  }
+
+  .start-menu[data-active-menu-view="main"] h1 {
+    font-size: 24px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__account {
+    padding: 5px 7px;
+  }
+
+  .start-menu[data-active-menu-view="main"] .start-menu__button {
+    min-height: 34px;
+  }
+}

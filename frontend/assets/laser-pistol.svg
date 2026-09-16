@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Laser pistol">
+  <defs>
+    <linearGradient id="metal" x1="22" x2="106" y1="44" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8fbff"/>
+      <stop offset=".44" stop-color="#9fabbd"/>
+      <stop offset="1" stop-color="#30384d"/>
+    </linearGradient>
+    <linearGradient id="pink" x1="68" x2="116" y1="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffddea"/>
+      <stop offset="1" stop-color="#ff73ad"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g transform="translate(64 64) scale(1.24) translate(-64 -64)">
+    <path d="M20 72c0-15 11-27 26-27h26c5 0 9 4 9 9v3h19c5 0 9 4 9 9v8c0 4-3 7-7 7H75l-7 28c-1 5-6 8-11 6l-12-4c-4-1-6-6-5-10l5-20H29c-5 0-9-4-9-9Z" fill="#101524"/>
+    <path d="M28 66c0-8 6-14 14-14h34v20H28v-6Z" fill="url(#metal)" stroke="#e9f6ff" stroke-opacity=".35" stroke-width="2"/>
+    <path d="M75 55h31c3 0 6 3 6 6v6H75V55Z" fill="url(#pink)" filter="url(#glow)"/>
+    <path d="M49 75h22l-7 29c-.5 2-3 4-5 3l-10-3c-2-.5-3-3-3-5l3-24Z" fill="#465064" stroke="#dce8f8" stroke-opacity=".32" stroke-width="2"/>
+    <path d="M34 62h31" stroke="#f8fbff" stroke-opacity=".6" stroke-width="4" stroke-linecap="round"/>
+    <path d="M89 61h19" stroke="#fff" stroke-opacity=".82" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="68" cy="62" r="6" fill="#58e2ff" filter="url(#glow)"/>
+  </g>
+</svg>

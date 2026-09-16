@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Clusternauts Particle Collector</title>
+    <link rel="stylesheet" href="styles.css?v=__CLUSTERNAUTS_CLIENT_BUILD__">
+  </head>
+  <body>
+    <canvas id="game" aria-label="Clusternauts particle collector game"></canvas>
+
+    <div class="hud" id="gameVitalsHud" aria-live="polite">
+      <button class="hud__land-action" id="touchLandButton" type="button" aria-label="Land on nearby body">Land</button>
+      <div class="hud__progress hud__health">
+        <div class="hud__progress-row">
+          <span>Health</span>
+          <strong id="healthValue">HP: 100%</strong>
+        </div>
+        <div class="hud__progress-track" aria-hidden="true">
+          <div class="hud__progress-fill hud__health-fill" id="healthFill"></div>
+        </div>
+      </div>
+      <div class="hud__progress hud__energy">
+        <div class="hud__progress-row">
+          <span>Energy</span>
+          <strong id="energyValue">EP: 100/100</strong>
+        </div>
+        <div class="hud__progress-track" aria-hidden="true">
+          <div class="hud__progress-fill hud__energy-fill" id="energyFill"></div>
+        </div>
+      </div>
+      <button class="hud__score hud__leaderboard-toggle" id="leaderboardToggle" type="button" aria-label="Show leaderboard" aria-controls="leaderboardPanel" aria-expanded="false">
+        <span id="difficultyValue">Medium</span>
+        <strong id="scoreValue">0 pts</strong>
+      </button>
+      <div class="hud__body" aria-label="Body mass milestone">
+        <span class="hud__body-label" id="currentBodyLabel">PARTICLE:</span>
+        <div class="hud__body-meter">
+          <div class="hud__progress-track" aria-hidden="true">
+            <div class="hud__progress-fill" id="milestoneFill"></div>
+            <div class="hud__progress-fill hud__progress-fill--stellar" id="milestoneStellarFill"></div>
+            <div class="hud__progress-split" id="milestoneSplit"></div>
+          </div>
+          <strong id="nextMilestoneValue">1 / 10</strong>
+        </div>
+        <span class="hud__body-rate" id="stellarRateLabel" hidden>Rate 0/s -> White Dwarf</span>
+        <span class="hud__body-label hud__body-label--next" id="nextMilestoneLabel">ROCK</span>
+      </div>
+      <div class="hud__status-effects" id="playerStatusEffects" aria-label="Player status effects"></div>
+      <section class="leaderboard-panel" id="leaderboardPanel" aria-label="Leaderboard" aria-hidden="true">
+        <div class="leaderboard-panel__header">
+          <strong>Leaderboard</strong>
+          <span>Score</span>
+        </div>
+        <div class="leaderboard-filters" aria-label="Leaderboard filters">
+          <label>
+            <span>Mode</span>
+            <select id="leaderboardModeFilter">
+              <option value="all">All</option>
+              <option value="singleplayer">Singleplayer</option>
+              <option value="multiplayer">Multiplayer</option>
+            </select>
+          </label>
+          <label>
+            <span>Difficulty</span>
+            <select id="leaderboardDifficultyFilter">
+              <option value="all">All</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+        </div>
+        <div class="leaderboard-panel__list" id="leaderboardList"></div>
+      </section>
+    </div>
+
+    <section class="developer-overlay" id="developerOverlay" aria-label="Developer metrics" aria-hidden="true">
+        <div class="developer-overlay__header">
+          <strong>Developer Metrics</strong>
+          <div class="developer-overlay__actions">
+            <button class="developer-overlay__copy" id="developerMetricsCopy" type="button">Copy</button>
+            <span class="developer-overlay__shortcut">Ctrl+`</span>
+          </div>
+        </div>
+      <div class="developer-overlay__copy-status" id="developerMetricsCopyStatus" aria-live="polite"></div>
+      <pre class="developer-overlay__metrics" id="developerMetricsText">Metrics paused</pre>
+    </section>
+
+    <div class="reticle" aria-hidden="true"></div>
+    <div class="compact-hud-toggles" aria-label="Compact HUD controls">
+      <button class="compact-hud-toggle" id="vitalsToggle" type="button" aria-label="Toggle vitals" aria-controls="gameVitalsHud" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 20.4 4.9 13.8C1.4 10.5 2.9 4.5 7.7 4.1c1.7-.1 3.2.6 4.3 1.9 1.1-1.3 2.6-2 4.3-1.9 4.8.4 6.3 6.4 2.8 9.7L12 20.4Zm-4.6-8.5h2.3l1.1-3.1 2.4 6.6 1.3-3.5h2.2v-1.8h-3.5l-.8 2.2L10.8 7 8.4 10.1h-1v1.8Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="resourcesToggle" type="button" aria-label="Toggle technology resources" aria-controls="techLedger" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3 3.5 7.2 12 11.4l8.5-4.2L12 3Zm-6.2 8.1-2.3 1.1L12 16.6l8.5-4.4-2.3-1.1-6.2 3.1-6.2-3.1Zm0 5.2-2.3 1.1L12 21.8l8.5-4.4-2.3-1.1-6.2 3.1-6.2-3.1Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="buildToggle" type="button" aria-label="Open build menu" aria-controls="buildMenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9.7 3.5 4.1 9.1l2.4 2.4 1.5-1.5 2.1 2.1-6.8 6.8 2.7 2.7 6.8-6.8 2.1 2.1-1.5 1.5 2.4 2.4 5.6-5.6-2.4-2.4-1.5 1.5-2.1-2.1 2.1-2.1 1.4 1.4 2.2-2.2-6.7-6.7-2.2 2.2 1.4 1.4-2.1 2.1-2.1-2.1 1.5-1.5-2.2-2.2Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="objectiveToggle" type="button" aria-label="Toggle objective tree" aria-controls="objectiveTree" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 4.5h4.5V9H5V4.5Zm1.6 1.6v1.3h1.3V6.1H6.6Zm7.4-.7h5v1.8h-5V5.4Zm-9 5.9h4.5v4.5H5v-4.5Zm1.6 1.6v1.3h1.3v-1.3H6.6Zm5.2-3.5h1.8v3.1H19v1.8h-5.4v3.2h-1.8V9.4Zm2.2 7.2h5v1.8h-5v-1.8Zm-9 1.5h4.5v4.5H5v-4.5Zm1.6 1.6V21h1.3v-1.3H6.6Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="mapToggle" type="button" aria-label="Toggle map" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 2.8a9.2 9.2 0 1 0 0 18.4 9.2 9.2 0 0 0 0-18.4Zm0 1.8a7.4 7.4 0 1 1 0 14.8 7.4 7.4 0 0 1 0-14.8Zm4.6 3.2-6.1 2.6-2.7 6 6.1-2.6 2.7-6Zm-4 4.8-1.7.7.7-1.7 1.7-.7-.7 1.7Z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="map-filter" id="mapMinimumBodyControl" aria-hidden="true">
+      <label class="map-filter__row">
+        <span>Min body</span>
+        <select id="mapMinimumBodyFilter" aria-label="Minimum body shown on map">
+          <option value="auto">Auto</option>
+          <option value="rock">Rock</option>
+          <option value="boulder">Boulder</option>
+          <option value="asteroid">Asteroid</option>
+          <option value="moon">Moon</option>
+          <option value="planet">Planet</option>
+          <option value="star">Star</option>
+        </select>
+      </label>
+      <label class="map-filter__row">
+        <span>Max body</span>
+        <select id="mapMaximumBodyFilter" aria-label="Maximum body shown on map">
+          <option value="auto">Auto</option>
+          <option value="rock">Rock</option>
+          <option value="boulder">Boulder</option>
+          <option value="asteroid">Asteroid</option>
+          <option value="moon">Moon</option>
+          <option value="planet">Planet</option>
+          <option value="star">Star</option>
+        </select>
+      </label>
+    </div>
+    <div class="map-speedometer" id="mapSpeedometer" aria-hidden="true" aria-label="Travel speed">
+      <span>Speed</span>
+      <strong id="mapSpeedValue">0</strong>
+      <em>u/s</em>
+    </div>
+    <div class="touch-joystick touch-joystick--move" id="touchJoystick" aria-hidden="true">
+      <div class="touch-joystick__base">
+        <div class="touch-joystick__stick" id="touchJoystickStick"></div>
+      </div>
+    </div>
+    <div class="touch-joystick touch-joystick--fire" id="touchFireJoystick" aria-hidden="true">
+      <div class="touch-joystick__base touch-joystick__base--fire">
+        <div class="touch-joystick__stick touch-joystick__stick--fire" id="touchFireJoystickStick"></div>
+      </div>
+    </div>
+    <aside class="tech-ledger" id="techLedger" aria-label="Technology resources" aria-hidden="true">
+      <div class="tech-ledger__title">Tech</div>
+      <div class="tech-ledger__list" id="techLedgerList"></div>
+    </aside>

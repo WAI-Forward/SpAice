@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Bridge">
+  <defs>
+    <linearGradient id="deck" x1="18" x2="110" y1="40" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8fbff"/>
+      <stop offset=".42" stop-color="#a9b5c9"/>
+      <stop offset="1" stop-color="#3a4258"/>
+    </linearGradient>
+    <radialGradient id="bolt" cx="50%" cy="45%" r="55%">
+      <stop stop-color="#fff8d8"/>
+      <stop offset=".48" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#8b5d18"/>
+    </radialGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M17 47h94c5 0 9 4 9 9v16c0 5-4 9-9 9H17c-5 0-9-4-9-9V56c0-5 4-9 9-9Z" fill="#080d19" stroke="#eaf6ff" stroke-opacity=".28" stroke-width="3"/>
+    <path d="M21 52h86c4 0 7 3 7 7v10c0 4-3 7-7 7H21c-4 0-7-3-7-7V59c0-4 3-7 7-7Z" fill="url(#deck)"/>
+    <path d="M25 56l18 16m0-16L25 72m25-16l18 16m0-16L50 72m25-16l18 16m0-16L75 72m25-16l14 13" stroke="#ffd166" stroke-opacity=".84" stroke-width="5"/>
+    <path d="M23 44v40M105 44v40" stroke="#101524" stroke-width="8"/>
+    <path d="M23 44v40M105 44v40" stroke="#58e2ff" stroke-opacity=".58" stroke-width="3"/>
+    <circle cx="23" cy="64" r="13" fill="url(#bolt)" stroke="#f8fbff" stroke-opacity=".45" stroke-width="2" filter="url(#glow)"/>
+    <circle cx="105" cy="64" r="13" fill="url(#bolt)" stroke="#f8fbff" stroke-opacity=".45" stroke-width="2" filter="url(#glow)"/>
+    <path d="M18 94h28M82 94h28" stroke="#ffd166" stroke-opacity=".8" stroke-width="6"/>
+  </g>
+</svg>

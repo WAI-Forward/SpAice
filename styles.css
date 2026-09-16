@@ -47,6 +47,7 @@ body.hud-hidden .objective-tree,
 body.hud-hidden .online-toggle,
 body.hud-hidden .settings-toggle,
 body.hud-hidden .map-filter,
+body.hud-hidden .map-speedometer,
 body.hud-hidden .social-panel,
 body.hud-hidden .signal-panel,
 body.hud-hidden .command-panel,
@@ -68,6 +69,7 @@ canvas,
 .tech-ledger,
 .objective-tree,
 .map-filter,
+.map-speedometer,
 .build-menu,
 .social-panel,
 .signal-panel,
@@ -865,11 +867,11 @@ select {
   z-index: 12;
   zoom: var(--ui-scale);
   display: none;
-  grid-template-columns: auto minmax(112px, 1fr);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
   gap: 8px;
   min-width: 184px;
-  height: 34px;
+  height: auto;
   padding: 5px 7px 5px 10px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
@@ -880,7 +882,41 @@ select {
   pointer-events: auto;
 }
 
+.map-speedometer {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + clamp(190px, 31vmin, 292px) + 82px);
+  z-index: 12;
+  zoom: var(--ui-scale);
+  display: none;
+  grid-template-columns: auto auto auto;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 184px;
+  height: 48px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.76);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+  color: #f8fbff;
+  pointer-events: none;
+}
+
 .map-filter.is-open {
+  display: grid;
+}
+
+.map-filter__row {
+  display: grid;
+  grid-template-columns: auto minmax(112px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.map-speedometer.is-open {
   display: grid;
 }
 
@@ -890,6 +926,33 @@ select {
   font-weight: 950;
   line-height: 1;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.map-speedometer span {
+  color: rgba(232, 241, 255, 0.72);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.map-speedometer strong {
+  color: #ffe56f;
+  font-size: 26px;
+  font-weight: 950;
+  line-height: 0.9;
+  letter-spacing: 0;
+  text-shadow: 0 0 16px rgba(255, 229, 111, 0.28), 0 1px 12px rgba(0, 0, 0, 0.6);
+}
+
+.map-speedometer em {
+  color: rgba(223, 252, 255, 0.86);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -4587,7 +4650,18 @@ select {
     min-width: min(184px, calc(100vw - 20px));
   }
 
+  .map-speedometer {
+    right: 10px;
+    bottom: calc(10px + 58px + clamp(160px, 34vmin, 228px) + 82px);
+    display: none;
+    min-width: min(184px, calc(100vw - 20px));
+  }
+
   .map-filter.is-open {
+    display: grid;
+  }
+
+  .map-speedometer.is-open {
     display: grid;
   }
 
@@ -4733,9 +4807,12 @@ select {
   }
 
   .map-filter {
-    grid-template-columns: auto minmax(92px, 1fr);
-    height: 32px;
+    grid-template-columns: minmax(0, 1fr);
     min-width: min(176px, calc(100vw - 20px));
+  }
+
+  .map-filter__row {
+    grid-template-columns: auto minmax(92px, 1fr);
   }
 
   .hud__score {

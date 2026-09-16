@@ -1,0 +1,102 @@
+:root {
+  --ui-scale: 1;
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #030612;
+  color: #f8fbff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  background: #030612;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.hud-hidden {
+  cursor: none;
+}
+
+body.hud-hidden.hud-menu-open {
+  cursor: default;
+}
+
+body.hud-hidden .hud,
+body.hud-hidden .reticle,
+body.hud-hidden .compact-hud-toggles,
+body.hud-hidden .touch-joystick,
+body.hud-hidden .tool-hotbar,
+body.hud-hidden .tech-ledger,
+body.hud-hidden .objective-tree,
+body.hud-hidden .online-toggle,
+body.hud-hidden .settings-toggle,
+body.hud-hidden .map-filter,
+body.hud-hidden .map-speedometer,
+body.hud-hidden .social-panel,
+body.hud-hidden .signal-panel,
+body.hud-hidden .command-panel,
+body.hud-hidden .player-interaction,
+body.hud-hidden .trade-panel,
+body.hud-hidden .container-panel,
+body.hud-hidden .trade-port-panel,
+body.hud-hidden .notifications {
+  display: none !important;
+}
+
+button,
+canvas,
+.hud,
+.developer-overlay,
+.compact-hud-toggles,
+.touch-joystick,
+.tool-hotbar,
+.tech-ledger,
+.objective-tree,
+.map-filter,
+.map-speedometer,
+.build-menu,
+.social-panel,
+.signal-panel,
+.command-panel,
+.player-interaction,
+.trade-panel,
+.container-panel,
+.trade-port-panel,
+.difficulty-screen,
+.death-screen {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea,
+select {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+#game {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  touch-action: none;
+}

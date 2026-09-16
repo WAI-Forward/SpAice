@@ -1,0 +1,263 @@
+.compact-hud-toggles {
+  position: fixed;
+  right: 12px;
+  top: 16px;
+  z-index: 11;
+  zoom: var(--ui-scale);
+  display: grid;
+  grid-template-columns: 46px;
+  gap: 8px;
+}
+
+#mapToggle {
+  display: none;
+}
+
+#vitalsToggle {
+  display: none;
+}
+
+.compact-hud-toggle {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.72);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+  color: #dffcff;
+  cursor: pointer;
+}
+
+.compact-hud-toggle svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: currentColor;
+}
+
+.compact-hud-toggle:hover,
+.compact-hud-toggle.is-active {
+  border-color: rgba(88, 226, 255, 0.5);
+  background: rgba(88, 226, 255, 0.14);
+}
+
+.compact-hud-toggle.is-unclaimed {
+  border-color: rgba(255, 220, 122, 0.74);
+  background: rgba(255, 220, 122, 0.14);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.3), 0 0 22px rgba(255, 220, 122, 0.28);
+  animation: objective-unclaimed-pulse 1.25s ease-in-out infinite;
+}
+
+.map-filter {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + clamp(190px, 31vmin, 292px) + 8px);
+  z-index: 12;
+  zoom: var(--ui-scale);
+  display: none;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+  min-width: 184px;
+  height: auto;
+  padding: 5px 7px 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.72);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+  color: #f8fbff;
+  pointer-events: auto;
+}
+
+.map-speedometer {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + clamp(190px, 31vmin, 292px) + 82px);
+  z-index: 12;
+  zoom: var(--ui-scale);
+  display: none;
+  grid-template-columns: auto auto auto;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 184px;
+  height: 48px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.76);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+  color: #f8fbff;
+  pointer-events: none;
+}
+
+.map-filter.is-open {
+  display: grid;
+}
+
+.map-filter__row {
+  display: grid;
+  grid-template-columns: auto minmax(112px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.map-speedometer.is-open {
+  display: grid;
+}
+
+.map-filter span {
+  color: rgba(232, 241, 255, 0.72);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.map-speedometer span {
+  color: rgba(232, 241, 255, 0.72);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.map-speedometer strong {
+  color: #ffe56f;
+  font-size: 26px;
+  font-weight: 950;
+  line-height: 0.9;
+  letter-spacing: 0;
+  text-shadow: 0 0 16px rgba(255, 229, 111, 0.28), 0 1px 12px rgba(0, 0, 0, 0.6);
+}
+
+.map-speedometer em {
+  color: rgba(223, 252, 255, 0.86);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.map-filter select {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 24px 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fbff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.map-filter select:focus-visible {
+  outline: 2px solid rgba(88, 226, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.map-filter select option {
+  background: #071025;
+  color: #f8fbff;
+}
+
+.map-filter select option:checked {
+  background: #1d5c99;
+  color: #ffffff;
+}
+
+.touch-joystick {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 18;
+  zoom: var(--ui-scale);
+  display: none;
+  width: 132px;
+  height: 132px;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.touch-joystick--fire {
+  left: auto;
+  right: 12px;
+}
+
+.touch-joystick__base {
+  position: absolute;
+  inset: 0;
+  border: 3px solid rgba(223, 252, 255, 0.42);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(88, 226, 255, 0.1) 0 31%, transparent 32% 100%),
+    rgba(3, 8, 24, 0.74);
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 2px rgba(88, 226, 255, 0.18),
+    inset 0 0 32px rgba(88, 226, 255, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.touch-joystick__stick {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  margin: -29px 0 0 -29px;
+  border: 3px solid rgba(255, 245, 190, 0.72);
+  border-radius: 50%;
+  background: rgba(255, 229, 111, 0.32);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    0 0 22px rgba(255, 229, 111, 0.24);
+  transition: transform 90ms ease-out;
+}
+
+.touch-joystick__base--fire {
+  background:
+    radial-gradient(circle at center, rgba(255, 115, 173, 0.12) 0 31%, transparent 32% 100%),
+    rgba(3, 8, 24, 0.74);
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 2px rgba(255, 115, 173, 0.18),
+    inset 0 0 32px rgba(255, 115, 173, 0.1);
+}
+
+.touch-joystick__stick--fire {
+  border-color: rgba(255, 210, 232, 0.74);
+  background: rgba(255, 115, 173, 0.32);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    0 0 22px rgba(255, 115, 173, 0.24);
+}
+
+.touch-joystick.is-active .touch-joystick__stick {
+  transition: none;
+}
+
+.touch-joystick.is-boosting .touch-joystick__stick {
+  border-color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 229, 111, 0.48);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    0 0 30px rgba(255, 229, 111, 0.52);
+}
+
+@media (pointer: coarse) {
+  .touch-joystick.is-enabled {
+    display: block;
+  }
+}

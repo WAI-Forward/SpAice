@@ -1,0 +1,31 @@
+  const progressionTree = {
+    nodes: [
+      { id: "create_rock", label: "Create a rock", category: "celestial_body", prerequisites: [] },
+      { id: "create_boulder", label: "Create a boulder", category: "celestial_body", prerequisites: ["create_rock"] },
+      { id: "create_asteroid", label: "Create an asteroid", category: "celestial_body", prerequisites: ["create_boulder"] },
+      { id: "create_moon", label: "Create a moon", category: "celestial_body", prerequisites: ["create_asteroid"] },
+      { id: "create_planet", label: "Create a planet", category: "celestial_body", prerequisites: ["create_moon"] },
+      { id: "create_star", label: "Create a star", category: "celestial_body", prerequisites: ["create_planet"] },
+      { id: "kill_3_alienoids", label: "Kill 3 alienoids", category: "mob", prerequisites: ["create_rock"] },
+      { id: "kill_3_ufos", label: "Kill 4 UFOs", category: "mob", prerequisites: ["kill_3_alienoids"] },
+      { id: "kill_3_rambots", label: "Kill 5 rambots", category: "mob", prerequisites: ["kill_3_ufos"] },
+      { id: "kill_3_engineers", label: "Kill 6 engineers", category: "mob", prerequisites: ["kill_3_rambots"] },
+      { id: "kill_3_teslas", label: "Kill 7 teslas", category: "mob", prerequisites: ["kill_3_engineers"] },
+      { id: "kill_3_satellites", label: "Kill 8 satellites", category: "mob", prerequisites: ["kill_3_teslas"] },
+      { id: "kill_3_rockets", label: "Kill 9 rockets", category: "mob", prerequisites: ["kill_3_satellites"] },
+      { id: "kill_3_fighters", label: "Kill 10 fighters", category: "mob", prerequisites: ["kill_3_rockets"] },
+      { id: "kill_alienoid_boss", label: "Kill alienoid boss", category: "boss", prerequisites: ["kill_3_alienoids"] },
+      { id: "kill_ufo_boss", label: "Kill UFO boss", category: "boss", prerequisites: ["kill_3_ufos", "kill_alienoid_boss"] },
+      { id: "kill_rambot_boss", label: "Kill rambot boss", category: "boss", prerequisites: ["kill_3_rambots", "kill_ufo_boss"] },
+      { id: "kill_engineer_boss", label: "Kill engineer boss", category: "boss", prerequisites: ["kill_3_engineers", "kill_rambot_boss"] },
+      { id: "kill_tesla_boss", label: "Kill tesla boss", category: "boss", prerequisites: ["kill_3_teslas", "kill_engineer_boss"] },
+      { id: "kill_satellite_boss", label: "Kill satellite boss", category: "boss", prerequisites: ["kill_3_satellites", "kill_tesla_boss"] },
+      { id: "kill_rocket_boss", label: "Kill rocket boss", category: "boss", prerequisites: ["kill_3_rockets", "kill_satellite_boss"] },
+      { id: "kill_fighter_boss", label: "Kill fighter boss", category: "boss", prerequisites: ["kill_3_fighters", "kill_rocket_boss"] },
+      { id: "make_laser_pistol", label: "Make a laser pistol", category: "tool", prerequisites: ["kill_3_rambots"] },
+      { id: "create_spanner", label: "Create a spanner", category: "tool", prerequisites: ["kill_3_engineers"] },
+      { id: "create_rifle", label: "Create a rifle", category: "tool", prerequisites: ["kill_3_satellites"] },
+      { id: "create_turret", label: "Create a turret", category: "structure", prerequisites: ["kill_3_teslas"] },
+      { id: "create_accumulator", label: "Create an accumulator", category: "structure", prerequisites: ["kill_3_teslas"] }
+    ]
+  };

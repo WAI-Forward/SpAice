@@ -1,0 +1,224 @@
+.trade-panel,
+.container-panel,
+.trade-port-panel {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 12;
+  zoom: var(--ui-scale);
+  width: min(620px, calc(100vw - 32px));
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(10px);
+  border: 1px solid rgba(88, 226, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.88);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+  color: #f8fbff;
+  pointer-events: none;
+  transition: opacity 140ms ease-out, visibility 140ms ease-out, transform 140ms ease-out;
+}
+
+.trade-panel.is-open,
+.container-panel.is-open,
+.trade-port-panel.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.container-panel {
+  width: min(470px, calc(100vw - 32px));
+}
+
+.trade-port-panel {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.trade-port-panel__main {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(170px, 0.76fr) minmax(260px, 1.24fr);
+  gap: 12px;
+}
+
+.trade-port-panel__editor,
+.trade-port-panel__storage {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.trade-port-panel__storage {
+  grid-column: 1 / -1;
+}
+
+.trade-port-panel__section-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trade-port-panel__section-header button {
+  min-height: 24px;
+  padding: 4px 9px;
+  font-size: 11px;
+}
+
+.trade-panel__header,
+.trade-panel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.trade-panel__header strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 950;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-panel__close {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
+
+.trade-panel__columns {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.trade-panel__column-title {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(223, 252, 255, 0.74);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trade-panel__list {
+  max-height: min(310px, 42vh);
+  display: grid;
+  gap: 7px;
+  overflow-y: auto;
+}
+
+.trade-row {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.trade-row__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tech-color);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tech-color) 70%, transparent);
+}
+
+.trade-row__name {
+  overflow: hidden;
+  color: rgba(240, 247, 255, 0.84);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-row.is-selected {
+  border-color: rgba(88, 226, 255, 0.48);
+  background: rgba(88, 226, 255, 0.11);
+}
+
+.trade-row__stack {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.trade-row__sub {
+  overflow: hidden;
+  color: rgba(223, 252, 255, 0.58);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-row__controls {
+  display: grid;
+  grid-template-columns: 24px 36px 24px;
+  align-items: center;
+  gap: 4px;
+}
+
+.container-panel .trade-row__controls {
+  grid-template-columns: 36px 24px 24px;
+}
+
+.trade-port-panel .trade-row__controls {
+  grid-template-columns: 24px 34px 24px;
+}
+
+.trade-port-panel__storage .trade-row__controls {
+  grid-template-columns: 36px 24px 24px;
+}
+
+.trade-row__controls button {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.trade-row__amount {
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+
+.trade-panel__actions button {
+  flex: 1 1 0;
+}
+
+.trade-panel__status {
+  min-height: 16px;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(223, 252, 255, 0.72);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

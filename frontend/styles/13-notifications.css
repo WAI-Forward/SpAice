@@ -1,0 +1,72 @@
+.notifications {
+  position: fixed;
+  top: 72px;
+  left: 18px;
+  bottom: 74px;
+  z-index: 13;
+  zoom: var(--ui-scale);
+  width: min(260px, calc(100vw - 36px));
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.notification {
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0 3px 10px;
+  border-left: 2px solid rgba(88, 226, 255, 0.46);
+  color: rgba(232, 241, 255, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: left;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.78);
+  pointer-events: auto;
+  animation: notify-in 180ms ease-out both;
+}
+
+.notification__message {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.notification__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.notification__action {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #58e2ff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.25;
+  text-shadow: 0 0 10px rgba(88, 226, 255, 0.32), 0 1px 8px rgba(0, 0, 0, 0.78);
+  cursor: pointer;
+}
+
+.notification__action:hover,
+.notification__action:focus-visible {
+  color: #fff4c8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.notification.is-leaving {
+  animation: notify-out 220ms ease-in both;
+}
+

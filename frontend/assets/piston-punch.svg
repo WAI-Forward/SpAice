@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Piston Punch">
+  <defs>
+    <linearGradient id="piston" x1="15" y1="58" x2="82" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6f7785"/>
+      <stop offset=".45" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#ffd166"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="18" fill="#07101f"/>
+  <circle cx="31" cy="54" r="16" fill="#151829" stroke="#d9e3e8" stroke-width="4"/>
+  <circle cx="31" cy="54" r="7" fill="#ffd166"/>
+  <path d="M38 50h31" stroke="#151829" stroke-width="14" stroke-linecap="round"/>
+  <path d="M38 50h31" stroke="url(#piston)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M65 29h15c5 0 9 4 9 9v20c0 5-4 9-9 9H65c-4 0-8-4-8-8V37c0-4 4-8 8-8Z" fill="#151829"/>
+  <path d="M65 32h13c4 0 7 3 7 7v18c0 4-3 7-7 7H65c-3 0-6-3-6-6V38c0-3 3-6 6-6Z" fill="url(#piston)" stroke="#f8fbff" stroke-width="2"/>
+  <path d="M67 39h10M67 48h12M67 57h8" stroke="#07101f" stroke-width="3" stroke-linecap="round" opacity=".55"/>
+</svg>

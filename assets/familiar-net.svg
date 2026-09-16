@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Familiar Net">
+  <defs>
+    <linearGradient id="handle" x1="28" y1="98" x2="84" y2="42" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#29324c"/>
+      <stop offset=".45" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#66e0b8"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="50" y1="18" x2="118" y2="86" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8fbff"/>
+      <stop offset=".5" stop-color="#66e0b8"/>
+      <stop offset="1" stop-color="#58e2ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="22" fill="#101829"/>
+  <path d="M28 104 76 56" fill="none" stroke="#151829" stroke-width="18" stroke-linecap="round"/>
+  <path d="M28 104 76 56" fill="none" stroke="url(#handle)" stroke-width="10" stroke-linecap="round"/>
+  <ellipse cx="83" cy="47" rx="36" ry="29" transform="rotate(-24 83 47)" fill="rgba(102,224,184,.12)" stroke="#151829" stroke-width="10"/>
+  <ellipse cx="83" cy="47" rx="36" ry="29" transform="rotate(-24 83 47)" fill="none" stroke="url(#rim)" stroke-width="6"/>
+  <g fill="none" stroke="#dffcff" stroke-width="3" stroke-linecap="round" opacity=".82">
+    <path d="M52 51c17 4 34 0 50-12"/>
+    <path d="M60 67c16 2 32-2 48-13"/>
+    <path d="M62 31c6 17 16 29 31 39"/>
+    <path d="M79 23c4 18 13 32 28 42"/>
+  </g>
+  <circle cx="83" cy="47" r="10" fill="#66e0b8" opacity=".28"/>
+</svg>

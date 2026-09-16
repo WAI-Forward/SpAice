@@ -1,0 +1,177 @@
+@media (max-width: 900px), (max-height: 560px) {
+  .hud {
+    top: 70px;
+    left: 12px;
+    max-width: calc(100vw - 24px);
+    gap: 6px;
+  }
+
+  .developer-overlay {
+    top: 70px;
+    right: 12px;
+    width: min(420px, calc((100vw - 24px) / var(--ui-scale)));
+    max-height: min(560px, calc((100vh - 82px) / var(--ui-scale)));
+    max-height: min(560px, calc((100dvh - 82px) / var(--ui-scale)));
+  }
+
+  .hud.is-compact:not(.is-compact-open) .hud__progress,
+  .hud.is-compact:not(.is-compact-open) .hud__score,
+  .hud.is-compact:not(.is-compact-open) .hud__body,
+  .hud.is-compact:not(.is-compact-open) .hud__status-effects,
+  .hud.is-compact:not(.is-compact-open) .leaderboard-panel {
+    display: none;
+  }
+
+  .hud__land-action.is-visible {
+    display: inline-flex;
+  }
+
+  .hud__health {
+    width: 148px;
+  }
+
+  .hud__energy {
+    width: 148px;
+  }
+
+  .hud__score {
+    min-width: 112px;
+  }
+
+  .hud__body {
+    width: clamp(216px, calc(100vw - 458px), 360px);
+    grid-template-columns: minmax(60px, max-content) minmax(64px, 1fr) minmax(44px, max-content);
+    gap: 7px;
+    padding: 7px 9px;
+  }
+
+  .hud__status-effects {
+    height: 38px;
+  }
+
+  .hud-status-effect {
+    width: 50px;
+  }
+
+  .compact-hud-toggles {
+    top: 12px;
+    left: 118px;
+    right: auto;
+    bottom: auto;
+    grid-template-columns: repeat(5, 46px);
+  }
+
+  #vitalsToggle {
+    display: grid;
+  }
+
+  #mapToggle {
+    display: grid;
+  }
+
+  .map-filter {
+    right: 10px;
+    bottom: calc(10px + 58px + clamp(160px, 34vmin, 228px) + 8px);
+    display: none;
+    min-width: min(184px, calc(100vw - 20px));
+  }
+
+  .map-speedometer {
+    right: 10px;
+    bottom: calc(10px + 58px + clamp(160px, 34vmin, 228px) + 82px);
+    display: none;
+    min-width: min(184px, calc(100vw - 20px));
+  }
+
+  .map-filter.is-open {
+    display: grid;
+  }
+
+  .map-speedometer.is-open {
+    display: grid;
+  }
+
+  .touch-joystick.is-enabled {
+    display: block;
+  }
+
+  .online-toggle {
+    left: 12px;
+    right: auto;
+    top: 12px;
+    bottom: auto;
+    min-width: 96px;
+    height: 46px;
+  }
+
+  .tech-ledger {
+    top: auto;
+    right: 12px;
+    bottom: 70px;
+    width: min(220px, calc(100vw - 24px));
+    padding: 10px;
+  }
+
+  .settings-toggle {
+    right: 12px;
+    top: 12px;
+    bottom: auto;
+    width: 46px;
+    height: 46px;
+  }
+
+  .build-menu {
+    padding: 14px;
+  }
+
+  .objective-tree {
+    padding: 14px;
+  }
+
+  .build-menu__panel {
+    width: min(760px, calc((100vw - 28px) / var(--ui-scale)));
+    height: min(700px, calc((100vh - 28px) / var(--ui-scale)));
+    height: min(700px, calc((100dvh - 28px) / var(--ui-scale)));
+    max-height: calc((100vh - 28px) / var(--ui-scale));
+    max-height: calc((100dvh - 28px) / var(--ui-scale));
+    padding: 12px;
+  }
+
+  .build-menu__body {
+    grid-template-columns: minmax(150px, 190px) minmax(240px, 1fr);
+    overflow-y: auto;
+  }
+
+  .build-menu__details {
+    grid-column: 1 / -1;
+    min-height: 0;
+  }
+
+  .objective-tree__panel {
+    width: min(760px, calc((100vw - 28px) / var(--ui-scale)));
+    height: min(700px, calc((100vh - 28px) / var(--ui-scale)));
+    height: min(700px, calc((100dvh - 28px) / var(--ui-scale)));
+    max-height: calc((100vh - 28px) / var(--ui-scale));
+    max-height: calc((100dvh - 28px) / var(--ui-scale));
+    padding: 12px;
+  }
+
+  .objective-tree__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(330px, 1fr) auto;
+    overflow-y: auto;
+  }
+
+  .objective-tree__map {
+    min-height: 330px;
+  }
+
+  .objective-tree__viewport {
+    width: 900px;
+    height: 1000px;
+  }
+
+  .objective-tree__detail {
+    min-height: 0;
+  }
+}

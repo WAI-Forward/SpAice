@@ -1,0 +1,42 @@
+    <section class="death-screen" id="deathScreen" aria-label="You died" aria-hidden="true">
+      <div class="death-screen__panel">
+        <p class="death-screen__eyebrow">Life support offline</p>
+        <h1>You died</h1>
+        <dl class="death-screen__stats" id="deathStatsList"></dl>
+        <form class="death-screen__leaderboard" id="deathLeaderboardForm">
+          <label for="deathRunNameInput">Name this run</label>
+          <input id="deathRunNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Run name">
+          <button class="death-screen__button" id="deathLeaderboardButton" type="submit">Save run</button>
+          <p class="death-screen__leaderboard-status" id="deathLeaderboardStatus" aria-live="polite"></p>
+        </form>
+        <button class="death-screen__button" id="playAgainButton" type="button">Play again</button>
+        <button class="death-screen__button death-screen__button--secondary" id="deathMainMenuButton" type="button">Exit to main menu</button>
+      </div>
+    </section>
+    <div class="notifications" id="notifications" aria-live="polite"></div>
+
+    <!-- build:crazygames:start -->
+    <script>
+      window.CLUSTERNAUTS_CRAZYGAMES_BUILD = true;
+      window.CLUSTERNAUTS_BACKEND_ORIGIN = "__CLUSTERNAUTS_BACKEND_ORIGIN__";
+    </script>
+    <!-- build:crazygames:end -->
+    <!-- build:itch:start -->
+    <script>
+      window.CLUSTERNAUTS_ITCH_BUILD = true;
+      // __CLUSTERNAUTS_ITCH_BACKEND_ORIGIN__
+    </script>
+    <!-- build:itch:end -->
+    <!-- build:gamepix:start -->
+    <script>
+      window.CLUSTERNAUTS_GAMEPIX_BUILD = true;
+      window.CLUSTERNAUTS_BACKEND_ORIGIN = "__CLUSTERNAUTS_BACKEND_ORIGIN__";
+    </script>
+    <!-- build:gamepix:end -->
+    <script>
+      window.CLUSTERNAUTS_CLIENT_BUILD = "__CLUSTERNAUTS_CLIENT_BUILD__";
+    </script>
+    <script src="src/mp-v2-sim.js?v=__CLUSTERNAUTS_CLIENT_BUILD__" defer></script>
+    <script src="src/game.js?v=__CLUSTERNAUTS_CLIENT_BUILD__" defer></script>
+  </body>
+</html>

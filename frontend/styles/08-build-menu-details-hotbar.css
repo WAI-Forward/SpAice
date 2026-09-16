@@ -1,0 +1,308 @@
+.build-menu__details {
+  min-height: 100%;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.build-detail__empty {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  color: rgba(232, 241, 255, 0.64);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.build-detail__icon {
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.16), transparent 34%),
+    rgba(2, 6, 18, 0.64);
+}
+
+.build-detail__icon img {
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 18px rgba(88, 226, 255, 0.24));
+}
+
+.build-detail__category,
+.build-detail__section-title {
+  color: rgba(223, 252, 255, 0.76);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.build-detail__title {
+  color: #f8fbff;
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1.08;
+}
+
+.build-detail__description {
+  margin: 0;
+  color: rgba(232, 241, 255, 0.73);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.build-detail__cost {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.build-detail__cost-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.build-detail__cost-row dt {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(240, 247, 255, 0.82);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.build-detail__cost-row dt::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--tech-color);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tech-color) 70%, transparent);
+}
+
+.build-detail__cost-row dd {
+  margin: 0;
+  color: #f8fbff;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.build-detail__cost-row dd.is-short {
+  color: #ffddea;
+}
+
+.build-detail__status {
+  min-height: 30px;
+  display: grid;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(94, 245, 154, 0.11);
+  color: rgba(220, 255, 235, 0.88);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.build-detail__action {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 2px;
+  border: 1px solid rgba(88, 226, 255, 0.42);
+  border-radius: 8px;
+  background: rgba(88, 226, 255, 0.16);
+  color: #dffcff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.build-detail__action:disabled {
+  border-color: rgba(255, 115, 173, 0.28);
+  background: rgba(255, 115, 173, 0.12);
+  color: rgba(255, 221, 234, 0.72);
+  cursor: not-allowed;
+}
+
+.build-detail__upgrades {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.build-upgrade {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.build-upgrade.is-disabled {
+  opacity: 0.62;
+}
+
+.build-upgrade__summary {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.build-upgrade__name {
+  min-width: 0;
+  overflow: hidden;
+  color: #f8fbff;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.build-upgrade__meta {
+  color: rgba(232, 241, 255, 0.66);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.build-upgrade__cost {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.build-upgrade__action {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(94, 245, 154, 0.42);
+  border-radius: 8px;
+  background: rgba(94, 245, 154, 0.15);
+  color: #dcffeb;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.build-upgrade__action:disabled {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.065);
+  color: rgba(232, 241, 255, 0.48);
+  cursor: not-allowed;
+}
+
+.build-menu__empty {
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  color: rgba(232, 241, 255, 0.64);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tool-hotbar {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  zoom: var(--ui-scale);
+  display: none;
+  grid-auto-flow: column;
+  grid-auto-columns: 92px;
+  gap: 8px;
+  transform: translateX(-50%);
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.68);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(14px);
+}
+
+.tool-hotbar.is-visible {
+  display: grid;
+}
+
+.tool-slot {
+  position: relative;
+  height: 48px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #f8fbff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tool-slot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tool-color) 26%, transparent);
+  pointer-events: none;
+}
+
+.tool-slot.is-equipped {
+  border-color: color-mix(in srgb, var(--tool-color) 62%, white 10%);
+  background: color-mix(in srgb, var(--tool-color) 20%, rgba(255, 255, 255, 0.06));
+}
+
+.tool-slot__key {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(248, 251, 255, 0.82);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.tool-slot__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

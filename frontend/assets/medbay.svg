@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Medbay</title>
+  <desc id="desc">A compact planetary healing structure with a green medical cross.</desc>
+  <defs>
+    <linearGradient id="shell" x1="20" y1="18" x2="106" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="0.5" stop-color="#9fb1c4"/>
+      <stop offset="1" stop-color="#283446"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="64" cy="58" r="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7bffad" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#7bffad" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path d="M24 86h80c8 0 14 6 14 14v2c0 6-5 11-11 11H21c-6 0-11-5-11-11v-2c0-8 6-14 14-14Z" fill="#060a18" opacity=".86"/>
+  <rect x="24" y="22" width="80" height="72" rx="17" fill="url(#shell)" stroke="#0b1020" stroke-width="6"/>
+  <circle cx="64" cy="58" r="48" fill="url(#glow)"/>
+  <rect x="56" y="36" width="16" height="45" rx="5" fill="#7bffad"/>
+  <rect x="42" y="50" width="44" height="17" rx="5" fill="#7bffad"/>
+  <path d="M33 92h62" stroke="#f8fbff" stroke-opacity=".55" stroke-width="5" stroke-linecap="round"/>
+</svg>

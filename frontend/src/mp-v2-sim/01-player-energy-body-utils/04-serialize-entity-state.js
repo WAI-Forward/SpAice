@@ -1,0 +1,187 @@
+  function serializeEntityState(entity) {
+    if (!entity) {
+      return null;
+    }
+    const result = {
+      kind: entity.kind,
+      id: entity.id,
+      x: entity.x,
+      y: entity.y,
+      vx: entity.vx,
+      vy: entity.vy,
+      radius: entity.radius,
+      health: entity.health,
+      maxHealth: entity.maxHealth,
+      hitCooldown: entity.hitCooldown,
+      disabledTimer: entity.disabledTimer,
+      flash: entity.flash,
+      color: cloneColor(entity.color),
+      shootCooldown: entity.shootCooldown,
+      strafeSign: entity.strafeSign,
+      rotation: entity.rotation,
+      wobble: entity.wobble
+    };
+    for (const key of [
+      "beamAngle",
+      "beamPulse",
+      "tractorDisabledTimer",
+      "bossBeamMode",
+      "bossBeamTimer",
+      "chargeCooldown",
+      "chargeTimer",
+      "recoverTimer",
+      "chargeDirX",
+      "chargeDirY",
+      "chargePower",
+      "impactCooldown",
+      "headAngle",
+      "pistonTimer",
+      "pistonDuration",
+      "pistonHit",
+      "healCooldown",
+      "healPulse",
+      "repairBeamAngle",
+      "targetKind",
+      "targetId",
+      "lightningWarmup",
+      "lightningFlash",
+      "lightningAngle",
+      "scannerAngle",
+      "scanProgress",
+      "lockTimer",
+      "blastTimer",
+      "lockX",
+      "lockY",
+      "blastDirX",
+      "blastDirY",
+      "volleyTimer",
+      "volleyShots",
+      "machineGunShots",
+      "machineGunTimer",
+      "shieldCharge",
+      "shieldRecharge",
+      "shieldActive",
+      "isBoss",
+      "bossBaseKind",
+      "bossStars",
+      "eliteStars",
+      "eliteGroupSize",
+      "minionCooldown",
+      "altAttackCooldown",
+      "bossBodyEvadeTimer",
+      "bossBodyEvadeSpeedCap",
+      "team",
+      "familiarOwnerPlayerId",
+      "familiarCommandX",
+      "familiarCommandY",
+      "familiarCommandTimer",
+      "summonAge",
+      "summonDuration",
+      "summonBaseRadius",
+      "summonSpinSpeed",
+      "survivalCampId",
+      "survivalCampX",
+      "survivalCampY",
+      "survivalCampHomeX",
+      "survivalCampHomeY",
+      "survivalCampMovedByPlayer",
+      "survivalCampBodyMovedWakeSent",
+      "survivalCampLastMoverPlayerId",
+      "survivalCampLeashRadius",
+      "survivalCampAggroTimer",
+      "survivalCampReturning",
+      "survivalCampSlotAngle",
+      "survivalCampSlotRadius",
+      "survivalMigrationCampId",
+      "survivalMigrationCampX",
+      "survivalMigrationCampY",
+      "survivalEncounterType",
+      "survivalEncounterId",
+      "survivalTargetPlayerId",
+      "survivalCampBudget",
+      "survivalCampBand",
+      "length",
+      "life",
+      "maxLife",
+      "damage",
+      "toolDisable",
+      "cause",
+      "sourcePlayerId",
+      "sourceStructureId",
+      "sourceMobId",
+      "weaponLabel",
+      "knockback",
+      "piercesMobs",
+      "hitMobIds",
+      "ignoredBodyId",
+      "targetPlayerId",
+      "targetStructureId",
+      "lightning",
+      "rocket",
+      "heatSeeking",
+      "targetSpeed",
+      "turnRate",
+      "isBeacon",
+      "beaconKind",
+      "age",
+      "respawnTimer",
+      "driftAngle",
+      "gadgetForceTimer"
+    ]) {
+      if (entity[key] !== undefined) {
+        result[key] = entity[key];
+      }
+    }
+    return result;
+  }
+
+  function serializeLiveMobState(mob) {
+    if (!mob || finiteOr(mob.health, 0) <= 0) {
+      return null;
+    }
+    return serializeEntityState(mob);
+  }
+
+  function normalizeSpacecraftNpcState(source) {
+    const snapshot = source && typeof source === "object" ? source : {};
+    return {
+      id: String(snapshot.id || "rogue-trader"),
+      name: String(snapshot.name || "Rogue Trader"),
+      x: finiteOr(snapshot.x, 24),
+      y: finiteOr(snapshot.y, 22),
+      targetX: finiteOr(snapshot.targetX, finiteOr(snapshot.x, 24)),
+      targetY: finiteOr(snapshot.targetY, finiteOr(snapshot.y, 22)),
+      speed: Math.max(20, finiteOr(snapshot.speed, 70)),
+      walkCycle: finiteOr(snapshot.walkCycle, 0),
+      wanderIndex: Math.max(0, Math.floor(finiteOr(snapshot.wanderIndex, 0))),
+      aimAngle: finiteOr(snapshot.aimAngle, 0),
+      crouching: Boolean(snapshot.crouching),
+      combatTarget: Boolean(snapshot.combatTarget),
+      sniperCooldown: Math.max(0, finiteOr(snapshot.sniperCooldown, 1.2)),
+      sniperShotIndex: Math.max(0, Math.floor(finiteOr(snapshot.sniperShotIndex, 0)))
+    };
+  }
+
+  function normalizeSpacecraftComponentState(source) {
+    const snapshot = source && typeof source === "object" ? source : {};
+    const maxHealth = Math.max(1, finiteOr(snapshot.maxHealth, 100));
+    const radius = Math.max(1, finiteOr(snapshot.radius, Math.max(finiteOr(snapshot.w, 40), finiteOr(snapshot.h, 40)) * 0.5));
+    return {
+      id: String(snapshot.id || "component"),
+      kind: String(snapshot.kind || "room"),
+      label: String(snapshot.label || snapshot.kind || "Component"),
+      x: finiteOr(snapshot.x, 0),
+      y: finiteOr(snapshot.y, 0),
+      w: Math.max(1, finiteOr(snapshot.w, radius * 2)),
+      h: Math.max(1, finiteOr(snapshot.h, radius * 2)),
+      floorInset: Math.max(0, finiteOr(snapshot.floorInset, 24)),
+      radius,
+      angle: finiteOr(snapshot.angle, 0),
+      aimAngle: finiteOr(snapshot.aimAngle, finiteOr(snapshot.angle, 0)),
+      shootCooldown: Math.max(0, finiteOr(snapshot.shootCooldown, 0.4)),
+      disabledTimer: Math.max(0, finiteOr(snapshot.disabledTimer, 0)),
+      flash: Math.max(0, finiteOr(snapshot.flash, 0)),
+      maxHealth,
+      health: clamp(Number.isFinite(Number(snapshot.health)) ? snapshot.health : maxHealth, 0, maxHealth)
+    };
+  }

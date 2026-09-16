@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Clusternauts Particle Collector</title>
+    <link rel="stylesheet" href="styles.css?v=__CLUSTERNAUTS_CLIENT_BUILD__">
+  </head>
+  <body>
+    <canvas id="game" aria-label="Clusternauts particle collector game"></canvas>
+
+    <div class="hud" id="gameVitalsHud" aria-live="polite">
+      <button class="hud__land-action" id="touchLandButton" type="button" aria-label="Land on nearby body">Land</button>
+      <div class="hud__progress hud__health">
+        <div class="hud__progress-row">
+          <span>Health</span>
+          <strong id="healthValue">HP: 100%</strong>
+        </div>
+        <div class="hud__progress-track" aria-hidden="true">
+          <div class="hud__progress-fill hud__health-fill" id="healthFill"></div>
+        </div>
+      </div>
+      <div class="hud__progress hud__energy">
+        <div class="hud__progress-row">
+          <span>Energy</span>
+          <strong id="energyValue">EP: 100/100</strong>
+        </div>
+        <div class="hud__progress-track" aria-hidden="true">
+          <div class="hud__progress-fill hud__energy-fill" id="energyFill"></div>
+        </div>
+      </div>
+      <button class="hud__score hud__leaderboard-toggle" id="leaderboardToggle" type="button" aria-label="Show leaderboard" aria-controls="leaderboardPanel" aria-expanded="false">
+        <span id="difficultyValue">Medium</span>
+        <strong id="scoreValue">0 pts</strong>
+      </button>
+      <div class="hud__body" aria-label="Body mass milestone">
+        <span class="hud__body-label" id="currentBodyLabel">PARTICLE:</span>
+        <div class="hud__body-meter">
+          <div class="hud__progress-track" aria-hidden="true">
+            <div class="hud__progress-fill" id="milestoneFill"></div>
+            <div class="hud__progress-fill hud__progress-fill--stellar" id="milestoneStellarFill"></div>
+            <div class="hud__progress-split" id="milestoneSplit"></div>
+          </div>
+          <strong id="nextMilestoneValue">1 / 10</strong>
+        </div>
+        <span class="hud__body-rate" id="stellarRateLabel" hidden>Rate 0/s -> White Dwarf</span>
+        <span class="hud__body-label hud__body-label--next" id="nextMilestoneLabel">ROCK</span>
+      </div>
+      <div class="hud__status-effects" id="playerStatusEffects" aria-label="Player status effects"></div>
+      <section class="leaderboard-panel" id="leaderboardPanel" aria-label="Leaderboard" aria-hidden="true">
+        <div class="leaderboard-panel__header">
+          <strong>Leaderboard</strong>
+          <span>Score</span>
+        </div>
+        <div class="leaderboard-filters" aria-label="Leaderboard filters">
+          <label>
+            <span>Mode</span>
+            <select id="leaderboardModeFilter">
+              <option value="all">All</option>
+              <option value="singleplayer">Singleplayer</option>
+              <option value="multiplayer">Multiplayer</option>
+            </select>
+          </label>
+          <label>
+            <span>Difficulty</span>
+            <select id="leaderboardDifficultyFilter">
+              <option value="all">All</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+        </div>
+        <div class="leaderboard-panel__list" id="leaderboardList"></div>
+      </section>
+    </div>
+
+    <section class="developer-overlay" id="developerOverlay" aria-label="Developer metrics" aria-hidden="true">
+        <div class="developer-overlay__header">
+          <strong>Developer Metrics</strong>
+          <div class="developer-overlay__actions">
+            <button class="developer-overlay__copy" id="developerMetricsCopy" type="button">Copy</button>
+            <span class="developer-overlay__shortcut">Ctrl+`</span>
+          </div>
+        </div>
+      <div class="developer-overlay__copy-status" id="developerMetricsCopyStatus" aria-live="polite"></div>
+      <pre class="developer-overlay__metrics" id="developerMetricsText">Metrics paused</pre>
+    </section>
+
+    <div class="reticle" aria-hidden="true"></div>
+    <div class="compact-hud-toggles" aria-label="Compact HUD controls">
+      <button class="compact-hud-toggle" id="vitalsToggle" type="button" aria-label="Toggle vitals" aria-controls="gameVitalsHud" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 20.4 4.9 13.8C1.4 10.5 2.9 4.5 7.7 4.1c1.7-.1 3.2.6 4.3 1.9 1.1-1.3 2.6-2 4.3-1.9 4.8.4 6.3 6.4 2.8 9.7L12 20.4Zm-4.6-8.5h2.3l1.1-3.1 2.4 6.6 1.3-3.5h2.2v-1.8h-3.5l-.8 2.2L10.8 7 8.4 10.1h-1v1.8Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="resourcesToggle" type="button" aria-label="Toggle technology resources" aria-controls="techLedger" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3 3.5 7.2 12 11.4l8.5-4.2L12 3Zm-6.2 8.1-2.3 1.1L12 16.6l8.5-4.4-2.3-1.1-6.2 3.1-6.2-3.1Zm0 5.2-2.3 1.1L12 21.8l8.5-4.4-2.3-1.1-6.2 3.1-6.2-3.1Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="buildToggle" type="button" aria-label="Open build menu" aria-controls="buildMenu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9.7 3.5 4.1 9.1l2.4 2.4 1.5-1.5 2.1 2.1-6.8 6.8 2.7 2.7 6.8-6.8 2.1 2.1-1.5 1.5 2.4 2.4 5.6-5.6-2.4-2.4-1.5 1.5-2.1-2.1 2.1-2.1 1.4 1.4 2.2-2.2-6.7-6.7-2.2 2.2 1.4 1.4-2.1 2.1-2.1-2.1 1.5-1.5-2.2-2.2Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="objectiveToggle" type="button" aria-label="Toggle objective tree" aria-controls="objectiveTree" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 4.5h4.5V9H5V4.5Zm1.6 1.6v1.3h1.3V6.1H6.6Zm7.4-.7h5v1.8h-5V5.4Zm-9 5.9h4.5v4.5H5v-4.5Zm1.6 1.6v1.3h1.3v-1.3H6.6Zm5.2-3.5h1.8v3.1H19v1.8h-5.4v3.2h-1.8V9.4Zm2.2 7.2h5v1.8h-5v-1.8Zm-9 1.5h4.5v4.5H5v-4.5Zm1.6 1.6V21h1.3v-1.3H6.6Z"/>
+        </svg>
+      </button>
+      <button class="compact-hud-toggle" id="mapToggle" type="button" aria-label="Toggle map" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 2.8a9.2 9.2 0 1 0 0 18.4 9.2 9.2 0 0 0 0-18.4Zm0 1.8a7.4 7.4 0 1 1 0 14.8 7.4 7.4 0 0 1 0-14.8Zm4.6 3.2-6.1 2.6-2.7 6 6.1-2.6 2.7-6Zm-4 4.8-1.7.7.7-1.7 1.7-.7-.7 1.7Z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="map-filter" id="mapMinimumBodyControl" aria-hidden="true">
+      <label class="map-filter__row">
+        <span>Min body</span>
+        <select id="mapMinimumBodyFilter" aria-label="Minimum body shown on map">
+          <option value="auto">Auto</option>
+          <option value="rock">Rock</option>
+          <option value="boulder">Boulder</option>
+          <option value="asteroid">Asteroid</option>
+          <option value="moon">Moon</option>
+          <option value="planet">Planet</option>
+          <option value="star">Star</option>
+        </select>
+      </label>
+      <label class="map-filter__row">
+        <span>Max body</span>
+        <select id="mapMaximumBodyFilter" aria-label="Maximum body shown on map">
+          <option value="auto">Auto</option>
+          <option value="rock">Rock</option>
+          <option value="boulder">Boulder</option>
+          <option value="asteroid">Asteroid</option>
+          <option value="moon">Moon</option>
+          <option value="planet">Planet</option>
+          <option value="star">Star</option>
+        </select>
+      </label>
+    </div>
+    <div class="map-speedometer" id="mapSpeedometer" aria-hidden="true" aria-label="Travel speed">
+      <span>Speed</span>
+      <strong id="mapSpeedValue">0</strong>
+      <em>u/s</em>
+    </div>
+    <div class="touch-joystick touch-joystick--move" id="touchJoystick" aria-hidden="true">
+      <div class="touch-joystick__base">
+        <div class="touch-joystick__stick" id="touchJoystickStick"></div>
+      </div>
+    </div>
+    <div class="touch-joystick touch-joystick--fire" id="touchFireJoystick" aria-hidden="true">
+      <div class="touch-joystick__base touch-joystick__base--fire">
+        <div class="touch-joystick__stick touch-joystick__stick--fire" id="touchFireJoystickStick"></div>
+      </div>
+    </div>
+    <aside class="tech-ledger" id="techLedger" aria-label="Technology resources" aria-hidden="true">
+      <div class="tech-ledger__title">Tech</div>
+      <div class="tech-ledger__list" id="techLedgerList"></div>
+    </aside>
+
+    <section class="objective-tree" id="objectiveTree" aria-label="Objective tree" aria-hidden="true">
+      <div class="objective-tree__panel">
+        <div class="objective-tree__header">
+          <span>Objectives</span>
+          <div class="objective-tree__header-actions">
+            <strong id="objectiveSummary">Find matter, grow, and survive.</strong>
+            <button class="objective-tree__claim-all" id="objectiveClaimAll" type="button" disabled>Claim All</button>
+            <button class="objective-tree__close" id="objectiveTreeClose" type="button" aria-label="Close objective tree">x</button>
+          </div>
+        </div>
+        <div class="objective-tree__body">
+          <div class="objective-tree__map" id="objectiveTreeList"></div>
+          <aside class="objective-tree__detail" id="objectiveTreeDetail" aria-live="polite"></aside>
+        </div>
+      </div>
+    </section>
+    <section class="build-menu" id="buildMenu" aria-label="Build menu" aria-hidden="true">
+      <div class="build-menu__panel">
+        <div class="build-menu__header">
+          <span>Build Menu</span>
+          <div class="build-menu__header-actions">
+            <strong id="buildMenuStatus">Systems</strong>
+            <button class="build-menu__close" id="buildMenuClose" type="button" aria-label="Close build menu">x</button>
+          </div>
+        </div>
+        <div class="build-menu__tabs" id="buildMenuTabs" role="tablist" aria-label="Build filters"></div>
+        <div class="build-menu__body">
+          <aside class="build-menu__resources" aria-label="Build menu technology resources">
+            <div class="build-menu__resources-title">Tech Stores</div>
+            <div class="build-menu__resources-list" id="buildMenuTech"></div>
+          </aside>
+          <div class="build-menu__grid" id="buildMenuList"></div>
+          <aside class="build-menu__details" id="buildMenuDetail" aria-live="polite"></aside>
+        </div>
+      </div>
+    </section>
+    <div class="tool-hotbar" id="toolHotbar" aria-label="Tool hotbar"></div>
+    <button class="online-toggle" id="onlineToggle" type="button" aria-label="Open online players">
+      <strong id="onlineCount">0</strong>
+      <span>online</span>
+    </button>
+    <button class="settings-toggle" id="settingsToggle" type="button" aria-label="Open settings" aria-controls="settingsPanel" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.5 4.9v-2.8l-2.1-.5a7.3 7.3 0 0 0-.7-1.6l1.1-1.9-2-2-1.9 1.1c-.5-.3-1-.5-1.6-.7L12.8 3h-2.8l-.5 2.1c-.6.2-1.1.4-1.6.7L6 4.7l-2 2 1.1 1.9c-.3.5-.5 1-.7 1.6l-2.1.5v2.8l2.1.5c.2.6.4 1.1.7 1.6L4 17.5l2 2 1.9-1.1c.5.3 1 .5 1.6.7l.5 2.1h2.8l.5-2.1c.6-.2 1.1-.4 1.6-.7l1.9 1.1 2-2-1.1-1.9c.3-.5.5-1 .7-1.6l2.1-.6Z"/>
+      </svg>
+    </button>
+    <section class="settings-panel" id="settingsPanel" aria-label="Settings" aria-hidden="true">
+      <div class="settings-panel__panel">
+        <div class="settings-panel__header">
+          <strong>Settings</strong>
+          <button class="settings-panel__close" id="settingsClose" type="button" aria-label="Close settings">x</button>
+        </div>
+        <div class="settings-panel__body" data-settings-accordion>
+          <section class="settings-panel__section" data-settings-section="preferences">
+            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsPreferencesSection" data-settings-section-toggle="preferences">
+              <span>Preferences</span>
+              <span class="settings-panel__section-summary">Audio, display, player bars</span>
+            </button>
+            <div class="settings-panel__section-body" id="settingsPreferencesSection" hidden>
+              <div class="settings-panel__group">
+                <div class="settings-panel__section-title">Audio</div>
+                <button class="sound-toggle" id="soundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__range" for="uiScaleInput">
+                  <span>UI scale</span>
+                  <output id="uiScaleValue" for="uiScaleInput">100%</output>
+                </label>
+                <input id="uiScaleInput" type="range" min="80" max="130" step="5" value="100">
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__range" for="zoomInput">
+                  <span>Zoom level</span>
+                  <output id="zoomValue" for="zoomInput">62%</output>
+                </label>
+                <input id="zoomInput" type="range" min="0" max="200" step="1" value="100">
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="dynamicLightingInput">
+                  <span>Dynamic lighting</span>
+                  <input id="dynamicLightingInput" type="checkbox" checked>
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="surfaceCameraRotationInput">
+                  <span>Rotate camera on surfaces</span>
+                  <input id="surfaceCameraRotationInput" type="checkbox">
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="touchScreenInput">
+                  <span>Touch screen controls</span>
+                  <input id="touchScreenInput" type="checkbox">
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="hudEnabledInput">
+                  <span>HUD</span>
+                  <input id="hudEnabledInput" type="checkbox" checked>
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <div class="settings-panel__section-title">Player bars</div>
+                <label class="settings-panel__check" for="playerHealthBarInput">
+                  <span>Health bar</span>
+                  <input id="playerHealthBarInput" type="checkbox" checked>
+                </label>
+                <label class="settings-panel__check" for="playerEnergyBarInput">
+                  <span>Energy bar</span>
+                  <input id="playerEnergyBarInput" type="checkbox" checked>
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <div class="settings-panel__section-title">Multiplayer</div>
+                <div class="settings-panel__join-code">
+                  <span>World code</span>
+                  <strong id="settingsJoinCodeValue">----</strong>
+                  <button class="settings-panel__save-action" id="copySettingsJoinCodeButton" type="button" disabled>Copy</button>
+                </div>
+                <p class="settings-panel__save-status multiplayer-status" id="multiplayerStatus">Multiplayer Off</p>
+              </div>
+            </div>
+          </section>
+          <section class="settings-panel__section" data-settings-section="controls">
+            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsControlsSection" data-settings-section-toggle="controls">
+              <span>Controls</span>
+              <span class="settings-panel__section-summary">Key, mouse, wheel bindings</span>
+            </button>
+            <div class="settings-panel__section-body" id="settingsControlsSection" hidden>
+              <div class="settings-panel__group settings-panel__group--controls">
+                <div class="settings-panel__controls" id="controlBindingsList"></div>
+                <button class="settings-panel__reset" id="resetControlsButton" type="button">Reset controls</button>
+              </div>
+            </div>
+          </section>
+          <section class="settings-panel__section" data-settings-section="saves">
+            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsSavesSection" data-settings-section-toggle="saves">
+              <span>Saves</span>
+              <span class="settings-panel__section-summary">Accounts, save slots</span>
+            </button>
+            <div class="settings-panel__section-body" id="settingsSavesSection" hidden>
+              <div class="settings-panel__group settings-panel__group--saves">
+                <!-- build:backend:start -->
+                <form class="settings-panel__auth-form" id="accountLoginForm">
+                  <input id="accountUsernameInput" type="text" autocomplete="username" maxlength="24" placeholder="Username" hidden>
+                  <input id="accountPasswordInput" type="password" autocomplete="current-password" maxlength="72" placeholder="Password" hidden>
+                  <div class="settings-panel__auth-actions">
+                    <button class="settings-panel__save-action" id="accountLoginButton" type="submit">Log in</button>
+                    <button class="settings-panel__save-action" id="accountSignupButton" type="button" hidden>Sign up</button>
+                  </div>
+                </form>
+                <!-- build:backend:end -->
+                <div class="settings-panel__crazy-account" id="crazyGamesAccount" hidden>
+                  <span id="crazyGamesAccountStatus">Playing as guest</span>
+                  <div class="settings-panel__crazy-actions">
+                    <button class="settings-panel__save-action" id="crazyGamesLoginButton" type="button">Log in with CrazyGames</button>
+                  </div>
+                </div>
+                <!-- build:backend:start -->
+                <div class="settings-panel__account" id="accountSignedIn" hidden>
+                  <span id="accountNameValue">Signed in</span>
+                  <button class="settings-panel__save-action" id="accountLogoutButton" type="button">Log out</button>
+                </div>
+                <!-- build:backend:end -->
+                <form class="settings-panel__save-form" id="saveGameForm">
+                  <input id="saveGameNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Save name">
+                  <button class="settings-panel__save-action" id="saveGameButton" type="submit">Save</button>
+                </form>
+                <div class="settings-panel__save-list" id="savedGameList" aria-label="Saved games"></div>
+                <p class="settings-panel__save-status" id="saveGameStatus" aria-live="polite"></p>
+              </div>
+            </div>
+          </section>
+          <div class="settings-panel__exit">
+            <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameButton" type="button">Exit to main menu</button>
+            <div class="settings-panel__restart-confirm" id="restartGameConfirm" hidden>
+              <p id="restartGamePrompt">Save your current game before exiting to the main menu?</p>
+              <div class="settings-panel__restart-actions">
+                <button class="settings-panel__save-action" id="restartGameSaveFirstButton" type="button">Save first</button>
+                <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameAnywayButton" type="button">Exit</button>
+                <button class="settings-panel__save-action" id="restartGameCancelButton" type="button">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="social-panel" id="socialPanel" aria-label="Online players" aria-hidden="true">
+      <div class="social-panel__header">
+        <strong id="publicNameValue">Player</strong>
+        <button class="social-panel__close" id="socialPanelClose" type="button" aria-label="Close online players">x</button>
+      </div>
+      <div class="social-panel__tools">
+        <input id="playerSearch" type="search" autocomplete="off" placeholder="Search name">
+        <label class="social-panel__filter">
+          <input id="friendsOnlyFilter" type="checkbox">
+          <span>Friends</span>
+        </label>
+      </div>
+      <div class="social-panel__list" id="playerSearchList"></div>
+    </section>
+    <section class="signal-panel" id="signalPanel" aria-label="Signal detected" aria-hidden="true">
+      <strong>! Signal detected</strong>
+      <span id="signalName">Unknown contact</span>
+      <div class="signal-panel__actions">
+        <button id="investigateSignal" type="button">Investigate</button>
+        <button id="avoidSignal" type="button">Avoid</button>
+      </div>
+    </section>
+    <section class="command-panel" id="commandPanel" aria-label="Command console" aria-hidden="true">
+      <input id="commandInput" type="password" autocomplete="off" spellcheck="false" placeholder="Password">
+      <div class="command-panel__hint" id="commandHint">Type password to unlock commands</div>
+    </section>
+    <section class="player-interaction" id="playerInteractionPanel" aria-label="Player interaction choices" aria-hidden="true">
+      <div class="player-interaction__name" id="playerInteractionName">Contact</div>
+      <div class="player-interaction__choices" id="playerInteractionChoices"></div>
+    </section>
+    <section class="trade-panel" id="tradePanel" aria-label="Trade technology resources" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="tradePeerName">Trade</strong>
+        <button class="trade-panel__close" id="tradeClose" type="button" aria-label="Close trade">x</button>
+      </div>
+      <div class="trade-panel__columns">
+        <div>
+          <span class="trade-panel__column-title">You offer</span>
+          <div class="trade-panel__list" id="tradeOfferList"></div>
+        </div>
+        <div>
+          <span class="trade-panel__column-title">They offer</span>
+          <div class="trade-panel__list" id="tradeReceiveList"></div>
+        </div>
+      </div>
+      <div class="trade-panel__actions">
+        <button id="tradeSendOffer" type="button">Send Offer</button>
+        <button id="tradeAccept" type="button">Accept</button>
+      </div>
+      <p class="trade-panel__status" id="tradeStatus">Choose resources to trade.</p>
+    </section>
+    <section class="container-panel" id="containerPanel" aria-label="Container technology storage" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="containerName">Container</strong>
+        <button class="trade-panel__close" id="containerClose" type="button" aria-label="Close container">x</button>
+      </div>
+      <div class="trade-panel__columns">
+        <div>
+          <span class="trade-panel__column-title">Backpack</span>
+          <div class="trade-panel__list" id="containerPlayerList"></div>
+        </div>
+        <div>
+          <span class="trade-panel__column-title">Container</span>
+          <div class="trade-panel__list" id="containerStoredList"></div>
+        </div>
+      </div>
+      <p class="trade-panel__status" id="containerStatus">Move tech in or out.</p>
+    </section>
+    <section class="trade-port-panel" id="tradePortPanel" aria-label="Trading port" aria-hidden="true">
+      <div class="trade-panel__header">
+        <strong id="tradePortName">Trading Port</strong>
+        <button class="trade-panel__close" id="tradePortClose" type="button" aria-label="Close trading port">x</button>
+      </div>
+      <div class="trade-port-panel__main">
+        <div>
+          <div class="trade-port-panel__section-header">
+            <span class="trade-panel__column-title">Posted Trades</span>
+            <button id="tradePortAddOffer" type="button">New</button>
+          </div>
+          <div class="trade-panel__list trade-port-panel__offers" id="tradePortOfferList"></div>
+        </div>
+        <div class="trade-port-panel__editor">
+          <div>
+            <div class="trade-port-panel__section-header">
+              <span class="trade-panel__column-title">Will Buy</span>
+              <button id="tradePortRemoveOffer" type="button">Remove</button>
+            </div>
+            <div class="trade-panel__list" id="tradePortBuyList"></div>
+          </div>
+          <div>
+            <span class="trade-panel__column-title">Will Pay</span>
+            <div class="trade-panel__list" id="tradePortPayList"></div>
+          </div>
+        </div>
+        <div class="trade-port-panel__storage">
+          <div>
+            <span class="trade-panel__column-title">Backpack</span>
+            <div class="trade-panel__list" id="tradePortPlayerList"></div>
+          </div>
+          <div>
+            <span class="trade-panel__column-title">Port Stock</span>
+            <div class="trade-panel__list" id="tradePortStoredList"></div>
+          </div>
+        </div>
+      </div>
+      <p class="trade-panel__status" id="tradePortStatus">Post trades and stock the port.</p>
+    </section>
+
+    <section class="difficulty-screen is-open" id="difficultyScreen" aria-label="Clusternauts menu">
+      <div class="difficulty-screen__panel start-menu">
+        <div class="start-menu__top">
+          <button class="start-menu__back" id="startMenuBack" type="button" data-menu-action="back">Back</button>
+          <h1 id="startMenuTitle">Clusternauts</h1>
+          <!-- build:backend:start -->
+          <div class="start-menu__account is-loading" id="startMenuAccount">
+            <span id="startMenuAccountLabel">Login</span>
+            <strong id="startMenuAccountName">Checking session...</strong>
+            <button class="start-menu__account-logout" id="startMenuAccountLogoutButton" type="button" hidden>Log out</button>
+          </div>
+          <!-- build:backend:end -->
+        </div>
+
+        <div class="start-menu__view is-active" data-menu-view="main">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single">Single Player</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer">Multiplayer</button>
+            <!-- build:render:start -->
+            <button class="start-menu__button" type="button" data-menu-action="store">Store</button>
+            <!-- build:render:end -->
+            <button class="start-menu__button" type="button" data-menu-action="leaderboard">Leaderboard</button>
+            <button class="start-menu__button" type="button" data-menu-action="settings">Settings</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="single">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single-survival">Survival</button>
+            <button class="start-menu__button" type="button" data-menu-action="single-horde">Horde Mode</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="single-options">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="new-game">New Game</button>
+            <button class="start-menu__button" type="button" data-menu-action="load-game">Load Existing Save</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="load">
+          <div class="start-menu__list" id="startSavedGameList" aria-label="Saved games"></div>
+        </div>
+
+        <!-- build:render:start -->
+        <div class="start-menu__view" data-menu-view="store">
+          <div class="start-store">
+            <div class="start-store__status" id="startStoreStatus" aria-live="polite"></div>
+            <div class="start-store__filters" id="startStoreFilters" aria-label="Store categories">
+              <button class="start-store__filter" type="button" data-store-filter="suit" aria-pressed="true">Colours</button>
+              <button class="start-store__filter" type="button" data-store-filter="costume" aria-pressed="true">Costumes</button>
+              <button class="start-store__filter" type="button" data-store-filter="trail" aria-pressed="true">Trails</button>
+            </div>
+            <div class="start-store__content">
+              <aside class="start-store__preview" aria-label="Skin preview">
+                <canvas class="start-store__preview-canvas" id="startStorePreviewCanvas" width="180" height="220"></canvas>
+                <strong class="start-store__preview-name" id="startStorePreviewName">Classic Suit</strong>
+                <span class="start-store__preview-meta" id="startStorePreviewMeta">White suit recolour</span>
+              </aside>
+              <div class="start-store__grid" id="startStoreList" aria-label="Store skins"></div>
+            </div>
+          </div>
+        </div>
+        <!-- build:render:end -->
+
+        <div class="start-menu__view" data-menu-view="difficulty">
+          <div class="difficulty-screen__options">
+            <button class="difficulty-card" type="button" data-difficulty="easy">
+              <strong>Easy</strong>
+              <span>Relaxed growth with forgiving enemies</span>
+              <small>Softer hits, more recovery drops, and smaller score rewards.</small>
+            </button>
+            <button class="difficulty-card is-recommended" type="button" data-difficulty="medium">
+              <strong>Medium</strong>
+              <span>Balanced pressure and score rewards</span>
+              <small>Regular attacks, fair damage, and the standard score target.</small>
+            </button>
+            <button class="difficulty-card" type="button" data-difficulty="hard">
+              <strong>Hard</strong>
+              <span>Hostile space with bigger score payouts</span>
+              <small>More enemies, fewer safety drops, and stronger mob-point rewards.</small>
+            </button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="multiplayer-survival">Survival</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer-horde">Horde Mode</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer-horde">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="create-lobby">New Horde Lobby</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer-load-game">Load Existing Save</button>
+            <div class="start-menu__join">
+              <input id="lobbyCodeInput" type="text" autocomplete="off" maxlength="12" placeholder="Lobby code">
+              <button class="start-menu__button" id="joinLobbyButton" type="button" data-menu-action="join-lobby">Join Lobby</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer-survival">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="join-shared-world">Join Shared World</button>
+            <div class="shared-world-stats" id="sharedWorldStats" aria-live="polite"></div>
+            <p class="settings-panel__save-status" id="sharedWorldStatus" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="lobby">
+          <div class="lobby-panel">
+            <div class="lobby-panel__summary">
+              <span>Lobby</span>
+              <strong id="lobbyCodeValue">----</strong>
+              <button class="settings-panel__save-action" id="copyLobbyCodeButton" type="button">Copy</button>
+            </div>
+            <div class="lobby-panel__difficulty" id="lobbyDifficultyOptions">
+              <span id="lobbyDifficultyLabel">Difficulty</span>
+              <div class="lobby-difficulty-select" id="lobbyDifficultySelect">
+                <button class="lobby-difficulty-select__toggle" id="lobbyDifficultyToggle" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="lobbyDifficultyLabel lobbyDifficultyToggle">Medium - Balanced pressure</button>
+                <div class="lobby-difficulty-select__menu" id="lobbyDifficultyMenu" role="listbox" aria-labelledby="lobbyDifficultyLabel" hidden>
+                  <button type="button" role="option" data-lobby-difficulty="easy">Easy - Relaxed growth</button>
+                  <button type="button" role="option" data-lobby-difficulty="medium">Medium - Balanced pressure</button>
+                  <button type="button" role="option" data-lobby-difficulty="hard">Hard - Hostile space</button>
+                </div>
+              </div>
+            </div>
+            <div class="lobby-panel__players" id="lobbyPlayerSlots" aria-label="Lobby players"></div>
+            <div class="lobby-panel__invite">
+              <input id="lobbyPlayerSearch" type="search" autocomplete="off" placeholder="Search player">
+              <div class="start-menu__list" id="lobbyPlayerSearchList" aria-label="Invite players"></div>
+            </div>
+            <div class="lobby-panel__actions">
+              <button class="start-menu__button start-menu__button--primary" id="startLobbyButton" type="button" data-menu-action="start-lobby">Start</button>
+              <button class="start-menu__button" id="lobbyLoadSaveButton" type="button" data-menu-action="lobby-load-game">Load Save</button>
+              <button class="start-menu__button" id="leaveLobbyButton" type="button" data-menu-action="leave-lobby">Leave</button>
+            </div>
+            <p class="settings-panel__save-status" id="lobbyStatus" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="leaderboard">
+          <div class="start-menu__leaderboard">
+            <div class="leaderboard-panel__header">
+              <strong>Top Runs</strong>
+              <span>Score</span>
+            </div>
+            <div class="leaderboard-filters" aria-label="Leaderboard filters">
+              <label>
+                <span>Mode</span>
+                <select id="menuLeaderboardModeFilter">
+                  <option value="all">All</option>
+                  <option value="singleplayer">Singleplayer</option>
+                  <option value="multiplayer">Multiplayer</option>
+                </select>
+              </label>
+              <label>
+                <span>Difficulty</span>
+                <select id="menuLeaderboardDifficultyFilter">
+                  <option value="all">All</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </label>
+            </div>
+            <div class="leaderboard-panel__list" id="menuLeaderboardList" aria-label="Leaderboard entries"></div>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="settings">
+          <div class="start-settings">
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Audio</div>
+              <button class="sound-toggle" id="menuSoundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__range" for="menuUiScaleInput">
+                <span>UI scale</span>
+                <output id="menuUiScaleValue" for="menuUiScaleInput">100%</output>
+              </label>
+              <input id="menuUiScaleInput" type="range" min="80" max="130" step="5" value="100">
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__range" for="menuZoomInput">
+                <span>Zoom level</span>
+                <output id="menuZoomValue" for="menuZoomInput">62%</output>
+              </label>
+              <input id="menuZoomInput" type="range" min="0" max="200" step="1" value="100">
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__check" for="menuDynamicLightingInput">
+                <span>Dynamic lighting</span>
+                <input id="menuDynamicLightingInput" type="checkbox" checked>
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__check" for="menuSurfaceCameraRotationInput">
+                <span>Rotate camera on surfaces</span>
+                <input id="menuSurfaceCameraRotationInput" type="checkbox">
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__check" for="menuTouchScreenInput">
+                <span>Touch screen controls</span>
+                <input id="menuTouchScreenInput" type="checkbox">
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Player bars</div>
+              <label class="settings-panel__check" for="menuPlayerHealthBarInput">
+                <span>Health bar</span>
+                <input id="menuPlayerHealthBarInput" type="checkbox" checked>
+              </label>
+              <label class="settings-panel__check" for="menuPlayerEnergyBarInput">
+                <span>Energy bar</span>
+                <input id="menuPlayerEnergyBarInput" type="checkbox" checked>
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Controls</div>
+              <div class="settings-panel__controls" id="menuControlBindingsList"></div>
+              <button class="settings-panel__reset" id="menuResetControlsButton" type="button">Reset controls</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="death-screen" id="deathScreen" aria-label="You died" aria-hidden="true">
+      <div class="death-screen__panel">
+        <p class="death-screen__eyebrow">Life support offline</p>
+        <h1>You died</h1>
+        <dl class="death-screen__stats" id="deathStatsList"></dl>
+        <form class="death-screen__leaderboard" id="deathLeaderboardForm">
+          <label for="deathRunNameInput">Name this run</label>
+          <input id="deathRunNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Run name">
+          <button class="death-screen__button" id="deathLeaderboardButton" type="submit">Save run</button>
+          <p class="death-screen__leaderboard-status" id="deathLeaderboardStatus" aria-live="polite"></p>
+        </form>
+        <button class="death-screen__button" id="playAgainButton" type="button">Play again</button>
+        <button class="death-screen__button death-screen__button--secondary" id="deathMainMenuButton" type="button">Exit to main menu</button>
+      </div>
+    </section>
+    <div class="notifications" id="notifications" aria-live="polite"></div>
+
+    <!-- build:crazygames:start -->
+    <script>
+      window.CLUSTERNAUTS_CRAZYGAMES_BUILD = true;
+      window.CLUSTERNAUTS_BACKEND_ORIGIN = "__CLUSTERNAUTS_BACKEND_ORIGIN__";
+    </script>
+    <!-- build:crazygames:end -->
+    <!-- build:itch:start -->
+    <script>
+      window.CLUSTERNAUTS_ITCH_BUILD = true;
+      // __CLUSTERNAUTS_ITCH_BACKEND_ORIGIN__
+    </script>
+    <!-- build:itch:end -->
+    <!-- build:gamepix:start -->
+    <script>
+      window.CLUSTERNAUTS_GAMEPIX_BUILD = true;
+      window.CLUSTERNAUTS_BACKEND_ORIGIN = "__CLUSTERNAUTS_BACKEND_ORIGIN__";
+    </script>
+    <!-- build:gamepix:end -->
+    <script>
+      window.CLUSTERNAUTS_CLIENT_BUILD = "__CLUSTERNAUTS_CLIENT_BUILD__";
+    </script>
+    <script src="src/mp-v2-sim.js?v=__CLUSTERNAUTS_CLIENT_BUILD__" defer></script>
+    <script src="src/game.js?v=__CLUSTERNAUTS_CLIENT_BUILD__" defer></script>
+  </body>
+</html>

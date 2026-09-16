@@ -1,0 +1,61 @@
+function createDefaultWorldState() {
+  return {
+    version: 1,
+    elapsed: 0,
+    particles: [],
+    alienoids: [],
+    ufos: [],
+    rambots: [],
+    engineers: [],
+    teslas: [],
+    rockets: [],
+    fighters: [],
+    structures: [],
+    rivalProjectiles: [],
+    techPickups: [],
+    healthPickups: [],
+    starDust: [],
+    nextParticleId: 1,
+    nextAlienoidId: 1,
+    nextUfoId: 1,
+    nextRambotId: 1,
+    nextEngineerId: 1,
+    nextTeslaId: 1,
+    nextRocketId: 1,
+    nextFighterId: 1,
+    nextStructureId: 1,
+    nextRivalProjectileId: 1,
+    nextTechPickupId: 1,
+    nextHealthPickupId: 1,
+    mobSpawnTimers: {
+      alienoid: 120,
+      ufo: 180,
+      rambot: 300,
+      tesla: 420,
+      engineer: 660,
+      satellite: 780,
+      rocket: 840,
+      fighter: 960
+    },
+    mobSpawnRestTimer: 0,
+    mobSpawnRestDrainTimer: 0,
+    mobSpawnRestCooldownTimer: 150,
+    mobDefeatsByKind: {
+      alienoid: 0,
+      ufo: 0,
+      rambot: 0,
+      tesla: 0,
+      engineer: 0,
+      satellite: 0,
+      rocket: 0,
+      fighter: 0
+    },
+    mobBossWarnings: Object.fromEntries(mobTierOrder.map((kind) => [kind, {
+      active: false,
+      timer: 0,
+      lastNoticeSecond: -1
+    }])),
+    lastEvolvedAt: Date.now()
+  };
+}
+

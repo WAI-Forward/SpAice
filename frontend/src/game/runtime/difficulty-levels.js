@@ -1,0 +1,51 @@
+  const difficultyDefinitions = {
+    easy: {
+      id: "easy",
+      label: "Easy",
+      summary: "Relaxed growth",
+      description: "Softer hits, more recovery drops, and smaller score rewards.",
+      mobIntervalScale: 0.82,
+      mobFirstWaveDelay: 28,
+      mobBatchScale: 1.12,
+      mobBonusChanceScale: 1.1,
+      mobStartingBatchBonusChances: [0, 0],
+      mobDamageMultiplier: 0.62,
+      healthDropMultiplier: 1.1,
+      techDropMultiplier: 1.45,
+      bodyScoreMultiplier: 0.75,
+      mobScoreMultiplier: 0.65
+    },
+    medium: {
+      id: "medium",
+      label: "Medium",
+      summary: "Balanced pressure",
+      description: "Regular attacks, fair damage, and the standard score target.",
+      mobIntervalScale: 0.72,
+      mobFirstWaveDelay: 18,
+      mobBatchScale: 1.24,
+      mobBonusChanceScale: 1.22,
+      mobStartingBatchBonusChances: [0.75, 0.2, 0.09],
+      mobDamageMultiplier: 0.82,
+      healthDropMultiplier: 0.9,
+      techDropMultiplier: 1.15,
+      bodyScoreMultiplier: 1,
+      mobScoreMultiplier: 1
+    },
+    hard: {
+      id: "hard",
+      label: "Hard",
+      summary: "Hostile space",
+      description: "More enemies, fewer safety drops, and stronger mob-point rewards.",
+      mobIntervalScale: 0.62,
+      mobFirstWaveDelay: 9,
+      mobBatchScale: 1.38,
+      mobBonusChanceScale: 1.35,
+      mobStartingBatchBonusChances: [0.9, 0.75, 0.34],
+      mobDamageMultiplier: 1,
+      healthDropMultiplier: 0.7,
+      techDropMultiplier: 1,
+      bodyScoreMultiplier: 1.25,
+      mobScoreMultiplier: 1.65
+    }
+  };
+  const defaultDifficultyId = "medium";

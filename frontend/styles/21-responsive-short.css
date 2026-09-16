@@ -1,0 +1,57 @@
+@media (max-height: 460px) {
+  .death-screen {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .death-screen__panel {
+    max-height: calc((100vh - 16px) / var(--ui-scale));
+    max-height: calc((100dvh - 16px) / var(--ui-scale));
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .death-screen__eyebrow {
+    margin-bottom: 5px;
+    font-size: 10px;
+  }
+
+  .death-screen h1 {
+    margin-bottom: 10px;
+    font-size: 30px;
+  }
+
+  .death-screen__stats {
+    flex-basis: 120px;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .death-screen__stat {
+    min-height: 0;
+    padding: 8px 10px;
+  }
+
+  .death-screen__stat dt {
+    margin-bottom: 4px;
+  }
+
+  .death-screen__stat dd {
+    font-size: 16px;
+  }
+
+  .death-screen__leaderboard {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .death-screen__leaderboard input,
+  .death-screen__button {
+    min-height: 40px;
+  }
+
+  .death-screen__leaderboard input {
+    height: 40px;
+  }
+}
+

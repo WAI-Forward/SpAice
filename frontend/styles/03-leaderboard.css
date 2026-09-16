@@ -1,0 +1,133 @@
+.leaderboard-panel {
+  position: absolute;
+  top: 50px;
+  left: 0;
+  z-index: 12;
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 88px));
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 8px;
+  padding: 10px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  border: 1px solid rgba(88, 226, 255, 0.24);
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.84);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(16px);
+  transition: opacity 150ms ease-out, visibility 150ms ease-out, transform 150ms ease-out;
+}
+
+.leaderboard-panel.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.leaderboard-panel__header,
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.leaderboard-panel__header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0 2px 4px;
+  color: rgba(232, 241, 255, 0.7);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.leaderboard-panel__header strong {
+  color: #f8fbff;
+  font-size: 13px;
+}
+
+.leaderboard-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.leaderboard-filters label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.leaderboard-filters span {
+  color: rgba(232, 241, 255, 0.62);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.leaderboard-filters select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 28px 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fbff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.leaderboard-panel__list {
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.leaderboard-row {
+  min-height: 42px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.leaderboard-row.is-local {
+  border-color: rgba(88, 226, 255, 0.38);
+  background: rgba(88, 226, 255, 0.12);
+}
+
+.leaderboard-row__rank,
+.leaderboard-row__score,
+.leaderboard-row__name {
+  overflow: hidden;
+  line-height: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.leaderboard-row__rank {
+  color: rgba(223, 252, 255, 0.88);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.leaderboard-row__name {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.leaderboard-row__score {
+  color: #ffe56f;
+  font-size: 12px;
+  font-weight: 950;
+  text-align: right;
+}
+

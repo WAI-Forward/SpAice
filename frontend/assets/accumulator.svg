@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Accumulator">
+  <defs>
+    <linearGradient id="shell" x1="34" x2="94" y1="26" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8fbff"/>
+      <stop offset=".48" stop-color="#9fabbd"/>
+      <stop offset="1" stop-color="#30384d"/>
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="45%" r="50%">
+      <stop stop-color="#ffffff"/>
+      <stop offset=".38" stop-color="#58e2ff"/>
+      <stop offset="1" stop-color="#255a78"/>
+    </radialGradient>
+    <filter id="accGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g transform="translate(64 64) scale(1.05) translate(-64 -64)">
+    <path d="M32 92h64l8 16H24l8-16Z" fill="#101524"/>
+    <path d="M35 35c0-9 7-16 16-16h26c9 0 16 7 16 16v45c0 9-7 16-16 16H51c-9 0-16-7-16-16V35Z" fill="url(#shell)" stroke="#eaf6ff" stroke-opacity=".35" stroke-width="3"/>
+    <circle cx="64" cy="56" r="25" fill="#101524"/>
+    <circle cx="64" cy="56" r="18" fill="url(#core)" filter="url(#accGlow)"/>
+    <path d="M46 56c0-10 8-18 18-18M82 56c0 10-8 18-18 18M52 56c0-7 5-12 12-12M76 56c0 7-5 12-12 12" fill="none" stroke="#dff8ff" stroke-opacity=".86" stroke-width="4" stroke-linecap="round" filter="url(#accGlow)"/>
+    <path d="M42 88h44" stroke="#ffd166" stroke-opacity=".74" stroke-width="5" stroke-linecap="round"/>
+    <path d="M26 34c11-15 25-23 38-23s27 8 38 23" fill="none" stroke="#58e2ff" stroke-opacity=".34" stroke-width="6" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,187 @@
+    <section class="objective-tree" id="objectiveTree" aria-label="Objective tree" aria-hidden="true">
+      <div class="objective-tree__panel">
+        <div class="objective-tree__header">
+          <span>Objectives</span>
+          <div class="objective-tree__header-actions">
+            <strong id="objectiveSummary">Find matter, grow, and survive.</strong>
+            <button class="objective-tree__claim-all" id="objectiveClaimAll" type="button" disabled>Claim All</button>
+            <button class="objective-tree__close" id="objectiveTreeClose" type="button" aria-label="Close objective tree">x</button>
+          </div>
+        </div>
+        <div class="objective-tree__body">
+          <div class="objective-tree__map" id="objectiveTreeList"></div>
+          <aside class="objective-tree__detail" id="objectiveTreeDetail" aria-live="polite"></aside>
+        </div>
+      </div>
+    </section>
+    <section class="build-menu" id="buildMenu" aria-label="Build menu" aria-hidden="true">
+      <div class="build-menu__panel">
+        <div class="build-menu__header">
+          <span>Build Menu</span>
+          <div class="build-menu__header-actions">
+            <strong id="buildMenuStatus">Systems</strong>
+            <button class="build-menu__close" id="buildMenuClose" type="button" aria-label="Close build menu">x</button>
+          </div>
+        </div>
+        <div class="build-menu__tabs" id="buildMenuTabs" role="tablist" aria-label="Build filters"></div>
+        <div class="build-menu__body">
+          <aside class="build-menu__resources" aria-label="Build menu technology resources">
+            <div class="build-menu__resources-title">Tech Stores</div>
+            <div class="build-menu__resources-list" id="buildMenuTech"></div>
+          </aside>
+          <div class="build-menu__grid" id="buildMenuList"></div>
+          <aside class="build-menu__details" id="buildMenuDetail" aria-live="polite"></aside>
+        </div>
+      </div>
+    </section>
+    <div class="tool-hotbar" id="toolHotbar" aria-label="Tool hotbar"></div>
+    <button class="online-toggle" id="onlineToggle" type="button" aria-label="Open online players">
+      <strong id="onlineCount">0</strong>
+      <span>online</span>
+    </button>
+    <button class="settings-toggle" id="settingsToggle" type="button" aria-label="Open settings" aria-controls="settingsPanel" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.5 4.9v-2.8l-2.1-.5a7.3 7.3 0 0 0-.7-1.6l1.1-1.9-2-2-1.9 1.1c-.5-.3-1-.5-1.6-.7L12.8 3h-2.8l-.5 2.1c-.6.2-1.1.4-1.6.7L6 4.7l-2 2 1.1 1.9c-.3.5-.5 1-.7 1.6l-2.1.5v2.8l2.1.5c.2.6.4 1.1.7 1.6L4 17.5l2 2 1.9-1.1c.5.3 1 .5 1.6.7l.5 2.1h2.8l.5-2.1c.6-.2 1.1-.4 1.6-.7l1.9 1.1 2-2-1.1-1.9c.3-.5.5-1 .7-1.6l2.1-.6Z"/>
+      </svg>
+    </button>
+    <section class="settings-panel" id="settingsPanel" aria-label="Settings" aria-hidden="true">
+      <div class="settings-panel__panel">
+        <div class="settings-panel__header">
+          <strong>Settings</strong>
+          <button class="settings-panel__close" id="settingsClose" type="button" aria-label="Close settings">x</button>
+        </div>
+        <div class="settings-panel__body" data-settings-accordion>
+          <section class="settings-panel__section" data-settings-section="preferences">
+            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsPreferencesSection" data-settings-section-toggle="preferences">
+              <span>Preferences</span>
+              <span class="settings-panel__section-summary">Audio, display, player bars</span>
+            </button>
+            <div class="settings-panel__section-body" id="settingsPreferencesSection" hidden>
+              <div class="settings-panel__group">
+                <div class="settings-panel__section-title">Audio</div>
+                <button class="sound-toggle" id="soundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__range" for="uiScaleInput">
+                  <span>UI scale</span>
+                  <output id="uiScaleValue" for="uiScaleInput">100%</output>
+                </label>
+                <input id="uiScaleInput" type="range" min="80" max="130" step="5" value="100">
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__range" for="zoomInput">
+                  <span>Zoom level</span>
+                  <output id="zoomValue" for="zoomInput">62%</output>
+                </label>
+                <input id="zoomInput" type="range" min="0" max="200" step="1" value="100">
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="dynamicLightingInput">
+                  <span>Dynamic lighting</span>
+                  <input id="dynamicLightingInput" type="checkbox" checked>
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="surfaceCameraRotationInput">
+                  <span>Rotate camera on surfaces</span>
+                  <input id="surfaceCameraRotationInput" type="checkbox">
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="touchScreenInput">
+                  <span>Touch screen controls</span>
+                  <input id="touchScreenInput" type="checkbox">
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <label class="settings-panel__check" for="hudEnabledInput">
+                  <span>HUD</span>
+                  <input id="hudEnabledInput" type="checkbox" checked>
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <div class="settings-panel__section-title">Player bars</div>
+                <label class="settings-panel__check" for="playerHealthBarInput">
+                  <span>Health bar</span>
+                  <input id="playerHealthBarInput" type="checkbox" checked>
+                </label>
+                <label class="settings-panel__check" for="playerEnergyBarInput">
+                  <span>Energy bar</span>
+                  <input id="playerEnergyBarInput" type="checkbox" checked>
+                </label>
+              </div>
+              <div class="settings-panel__group">
+                <div class="settings-panel__section-title">Multiplayer</div>
+                <div class="settings-panel__join-code">
+                  <span>World code</span>
+                  <strong id="settingsJoinCodeValue">----</strong>
+                  <button class="settings-panel__save-action" id="copySettingsJoinCodeButton" type="button" disabled>Copy</button>
+                </div>
+                <p class="settings-panel__save-status multiplayer-status" id="multiplayerStatus">Multiplayer Off</p>
+              </div>
+            </div>
+          </section>
+          <section class="settings-panel__section" data-settings-section="controls">
+            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsControlsSection" data-settings-section-toggle="controls">
+              <span>Controls</span>
+              <span class="settings-panel__section-summary">Key, mouse, wheel bindings</span>
+            </button>
+            <div class="settings-panel__section-body" id="settingsControlsSection" hidden>
+              <div class="settings-panel__group settings-panel__group--controls">
+                <div class="settings-panel__controls" id="controlBindingsList"></div>
+                <button class="settings-panel__reset" id="resetControlsButton" type="button">Reset controls</button>
+              </div>
+            </div>
+          </section>
+          <section class="settings-panel__section" data-settings-section="saves">
+            <button class="settings-panel__section-toggle" type="button" aria-expanded="false" aria-controls="settingsSavesSection" data-settings-section-toggle="saves">
+              <span>Saves</span>
+              <span class="settings-panel__section-summary">Accounts, save slots</span>
+            </button>
+            <div class="settings-panel__section-body" id="settingsSavesSection" hidden>
+              <div class="settings-panel__group settings-panel__group--saves">
+                <!-- build:backend:start -->
+                <form class="settings-panel__auth-form" id="accountLoginForm">
+                  <input id="accountUsernameInput" type="text" autocomplete="username" maxlength="24" placeholder="Username" hidden>
+                  <input id="accountPasswordInput" type="password" autocomplete="current-password" maxlength="72" placeholder="Password" hidden>
+                  <div class="settings-panel__auth-actions">
+                    <button class="settings-panel__save-action" id="accountLoginButton" type="submit">Log in</button>
+                    <button class="settings-panel__save-action" id="accountSignupButton" type="button" hidden>Sign up</button>
+                  </div>
+                </form>
+                <!-- build:backend:end -->
+                <div class="settings-panel__crazy-account" id="crazyGamesAccount" hidden>
+                  <span id="crazyGamesAccountStatus">Playing as guest</span>
+                  <div class="settings-panel__crazy-actions">
+                    <button class="settings-panel__save-action" id="crazyGamesLoginButton" type="button">Log in with CrazyGames</button>
+                  </div>
+                </div>
+                <!-- build:backend:start -->
+                <div class="settings-panel__account" id="accountSignedIn" hidden>
+                  <span id="accountNameValue">Signed in</span>
+                  <button class="settings-panel__save-action" id="accountLogoutButton" type="button">Log out</button>
+                </div>
+                <!-- build:backend:end -->
+                <form class="settings-panel__save-form" id="saveGameForm">
+                  <input id="saveGameNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Save name">
+                  <button class="settings-panel__save-action" id="saveGameButton" type="submit">Save</button>
+                </form>
+                <div class="settings-panel__save-list" id="savedGameList" aria-label="Saved games"></div>
+                <p class="settings-panel__save-status" id="saveGameStatus" aria-live="polite"></p>
+              </div>
+            </div>
+          </section>
+          <div class="settings-panel__exit">
+            <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameButton" type="button">Exit to main menu</button>
+            <div class="settings-panel__restart-confirm" id="restartGameConfirm" hidden>
+              <p id="restartGamePrompt">Save your current game before exiting to the main menu?</p>
+              <div class="settings-panel__restart-actions">
+                <button class="settings-panel__save-action" id="restartGameSaveFirstButton" type="button">Save first</button>
+                <button class="settings-panel__save-action settings-panel__save-action--danger" id="restartGameAnywayButton" type="button">Exit</button>
+                <button class="settings-panel__save-action" id="restartGameCancelButton" type="button">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

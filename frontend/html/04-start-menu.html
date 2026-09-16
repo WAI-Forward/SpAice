@@ -1,0 +1,230 @@
+    <section class="difficulty-screen is-open" id="difficultyScreen" aria-label="Clusternauts menu">
+      <div class="difficulty-screen__panel start-menu">
+        <div class="start-menu__top">
+          <button class="start-menu__back" id="startMenuBack" type="button" data-menu-action="back">Back</button>
+          <h1 id="startMenuTitle">Clusternauts</h1>
+          <!-- build:backend:start -->
+          <div class="start-menu__account is-loading" id="startMenuAccount">
+            <span id="startMenuAccountLabel">Login</span>
+            <strong id="startMenuAccountName">Checking session...</strong>
+            <button class="start-menu__account-logout" id="startMenuAccountLogoutButton" type="button" hidden>Log out</button>
+          </div>
+          <!-- build:backend:end -->
+        </div>
+
+        <div class="start-menu__view is-active" data-menu-view="main">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single">Single Player</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer">Multiplayer</button>
+            <!-- build:render:start -->
+            <button class="start-menu__button" type="button" data-menu-action="store">Store</button>
+            <!-- build:render:end -->
+            <button class="start-menu__button" type="button" data-menu-action="leaderboard">Leaderboard</button>
+            <button class="start-menu__button" type="button" data-menu-action="settings">Settings</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="single">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single-survival">Survival</button>
+            <button class="start-menu__button" type="button" data-menu-action="single-horde">Horde Mode</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="single-options">
+          <div class="start-menu__actions">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="new-game">New Game</button>
+            <button class="start-menu__button" type="button" data-menu-action="load-game">Load Existing Save</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="load">
+          <div class="start-menu__list" id="startSavedGameList" aria-label="Saved games"></div>
+        </div>
+
+        <!-- build:render:start -->
+        <div class="start-menu__view" data-menu-view="store">
+          <div class="start-store">
+            <div class="start-store__status" id="startStoreStatus" aria-live="polite"></div>
+            <div class="start-store__filters" id="startStoreFilters" aria-label="Store categories">
+              <button class="start-store__filter" type="button" data-store-filter="suit" aria-pressed="true">Colours</button>
+              <button class="start-store__filter" type="button" data-store-filter="costume" aria-pressed="true">Costumes</button>
+              <button class="start-store__filter" type="button" data-store-filter="trail" aria-pressed="true">Trails</button>
+            </div>
+            <div class="start-store__content">
+              <aside class="start-store__preview" aria-label="Skin preview">
+                <canvas class="start-store__preview-canvas" id="startStorePreviewCanvas" width="180" height="220"></canvas>
+                <strong class="start-store__preview-name" id="startStorePreviewName">Classic Suit</strong>
+                <span class="start-store__preview-meta" id="startStorePreviewMeta">White suit recolour</span>
+              </aside>
+              <div class="start-store__grid" id="startStoreList" aria-label="Store skins"></div>
+            </div>
+          </div>
+        </div>
+        <!-- build:render:end -->
+
+        <div class="start-menu__view" data-menu-view="difficulty">
+          <div class="difficulty-screen__options">
+            <button class="difficulty-card" type="button" data-difficulty="easy">
+              <strong>Easy</strong>
+              <span>Relaxed growth with forgiving enemies</span>
+              <small>Softer hits, more recovery drops, and smaller score rewards.</small>
+            </button>
+            <button class="difficulty-card is-recommended" type="button" data-difficulty="medium">
+              <strong>Medium</strong>
+              <span>Balanced pressure and score rewards</span>
+              <small>Regular attacks, fair damage, and the standard score target.</small>
+            </button>
+            <button class="difficulty-card" type="button" data-difficulty="hard">
+              <strong>Hard</strong>
+              <span>Hostile space with bigger score payouts</span>
+              <small>More enemies, fewer safety drops, and stronger mob-point rewards.</small>
+            </button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="multiplayer-survival">Survival</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer-horde">Horde Mode</button>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer-horde">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="create-lobby">New Horde Lobby</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer-load-game">Load Existing Save</button>
+            <div class="start-menu__join">
+              <input id="lobbyCodeInput" type="text" autocomplete="off" maxlength="12" placeholder="Lobby code">
+              <button class="start-menu__button" id="joinLobbyButton" type="button" data-menu-action="join-lobby">Join Lobby</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="multiplayer-survival">
+          <div class="start-menu__actions start-menu__actions--split">
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="join-shared-world">Join Shared World</button>
+            <div class="shared-world-stats" id="sharedWorldStats" aria-live="polite"></div>
+            <p class="settings-panel__save-status" id="sharedWorldStatus" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="lobby">
+          <div class="lobby-panel">
+            <div class="lobby-panel__summary">
+              <span>Lobby</span>
+              <strong id="lobbyCodeValue">----</strong>
+              <button class="settings-panel__save-action" id="copyLobbyCodeButton" type="button">Copy</button>
+            </div>
+            <div class="lobby-panel__difficulty" id="lobbyDifficultyOptions">
+              <span id="lobbyDifficultyLabel">Difficulty</span>
+              <div class="lobby-difficulty-select" id="lobbyDifficultySelect">
+                <button class="lobby-difficulty-select__toggle" id="lobbyDifficultyToggle" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="lobbyDifficultyLabel lobbyDifficultyToggle">Medium - Balanced pressure</button>
+                <div class="lobby-difficulty-select__menu" id="lobbyDifficultyMenu" role="listbox" aria-labelledby="lobbyDifficultyLabel" hidden>
+                  <button type="button" role="option" data-lobby-difficulty="easy">Easy - Relaxed growth</button>
+                  <button type="button" role="option" data-lobby-difficulty="medium">Medium - Balanced pressure</button>
+                  <button type="button" role="option" data-lobby-difficulty="hard">Hard - Hostile space</button>
+                </div>
+              </div>
+            </div>
+            <div class="lobby-panel__players" id="lobbyPlayerSlots" aria-label="Lobby players"></div>
+            <div class="lobby-panel__invite">
+              <input id="lobbyPlayerSearch" type="search" autocomplete="off" placeholder="Search player">
+              <div class="start-menu__list" id="lobbyPlayerSearchList" aria-label="Invite players"></div>
+            </div>
+            <div class="lobby-panel__actions">
+              <button class="start-menu__button start-menu__button--primary" id="startLobbyButton" type="button" data-menu-action="start-lobby">Start</button>
+              <button class="start-menu__button" id="lobbyLoadSaveButton" type="button" data-menu-action="lobby-load-game">Load Save</button>
+              <button class="start-menu__button" id="leaveLobbyButton" type="button" data-menu-action="leave-lobby">Leave</button>
+            </div>
+            <p class="settings-panel__save-status" id="lobbyStatus" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="leaderboard">
+          <div class="start-menu__leaderboard">
+            <div class="leaderboard-panel__header">
+              <strong>Top Runs</strong>
+              <span>Score</span>
+            </div>
+            <div class="leaderboard-filters" aria-label="Leaderboard filters">
+              <label>
+                <span>Mode</span>
+                <select id="menuLeaderboardModeFilter">
+                  <option value="all">All</option>
+                  <option value="singleplayer">Singleplayer</option>
+                  <option value="multiplayer">Multiplayer</option>
+                </select>
+              </label>
+              <label>
+                <span>Difficulty</span>
+                <select id="menuLeaderboardDifficultyFilter">
+                  <option value="all">All</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </label>
+            </div>
+            <div class="leaderboard-panel__list" id="menuLeaderboardList" aria-label="Leaderboard entries"></div>
+          </div>
+        </div>
+
+        <div class="start-menu__view" data-menu-view="settings">
+          <div class="start-settings">
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Audio</div>
+              <button class="sound-toggle" id="menuSoundToggle" type="button" aria-label="Toggle sound effects">SFX</button>
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__range" for="menuUiScaleInput">
+                <span>UI scale</span>
+                <output id="menuUiScaleValue" for="menuUiScaleInput">100%</output>
+              </label>
+              <input id="menuUiScaleInput" type="range" min="80" max="130" step="5" value="100">
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__range" for="menuZoomInput">
+                <span>Zoom level</span>
+                <output id="menuZoomValue" for="menuZoomInput">62%</output>
+              </label>
+              <input id="menuZoomInput" type="range" min="0" max="200" step="1" value="100">
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__check" for="menuDynamicLightingInput">
+                <span>Dynamic lighting</span>
+                <input id="menuDynamicLightingInput" type="checkbox" checked>
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__check" for="menuSurfaceCameraRotationInput">
+                <span>Rotate camera on surfaces</span>
+                <input id="menuSurfaceCameraRotationInput" type="checkbox">
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <label class="settings-panel__check" for="menuTouchScreenInput">
+                <span>Touch screen controls</span>
+                <input id="menuTouchScreenInput" type="checkbox">
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Player bars</div>
+              <label class="settings-panel__check" for="menuPlayerHealthBarInput">
+                <span>Health bar</span>
+                <input id="menuPlayerHealthBarInput" type="checkbox" checked>
+              </label>
+              <label class="settings-panel__check" for="menuPlayerEnergyBarInput">
+                <span>Energy bar</span>
+                <input id="menuPlayerEnergyBarInput" type="checkbox" checked>
+              </label>
+            </div>
+            <div class="settings-panel__group">
+              <div class="settings-panel__section-title">Controls</div>
+              <div class="settings-panel__controls" id="menuControlBindingsList"></div>
+              <button class="settings-panel__reset" id="menuResetControlsButton" type="button">Reset controls</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

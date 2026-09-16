@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Clusternauts Particle Collector</title>
-    <link rel="stylesheet" href="styles.css?v=766be566bf1e">
+    <link rel="stylesheet" href="styles.css?v=5a8c01a976ff">
   </head>
   <body>
     <canvas id="game" aria-label="Clusternauts particle collector game"></canvas>
@@ -115,18 +115,37 @@
         </svg>
       </button>
     </div>
-    <label class="map-filter" id="mapMinimumBodyControl" aria-hidden="true">
-      <span>Min body</span>
-      <select id="mapMinimumBodyFilter" aria-label="Minimum body shown on map">
-        <option value="rock">Rock</option>
-        <option value="boulder">Boulder</option>
-        <option value="asteroid">Asteroid</option>
-        <option value="dwarf moon">Dwarf Moon</option>
-        <option value="moon">Moon</option>
-        <option value="planet">Planet</option>
-        <option value="star">Star</option>
-      </select>
-    </label>
+    <div class="map-filter" id="mapMinimumBodyControl" aria-hidden="true">
+      <label class="map-filter__row">
+        <span>Min body</span>
+        <select id="mapMinimumBodyFilter" aria-label="Minimum body shown on map">
+          <option value="auto">Auto</option>
+          <option value="rock">Rock</option>
+          <option value="boulder">Boulder</option>
+          <option value="asteroid">Asteroid</option>
+          <option value="moon">Moon</option>
+          <option value="planet">Planet</option>
+          <option value="star">Star</option>
+        </select>
+      </label>
+      <label class="map-filter__row">
+        <span>Max body</span>
+        <select id="mapMaximumBodyFilter" aria-label="Maximum body shown on map">
+          <option value="auto">Auto</option>
+          <option value="rock">Rock</option>
+          <option value="boulder">Boulder</option>
+          <option value="asteroid">Asteroid</option>
+          <option value="moon">Moon</option>
+          <option value="planet">Planet</option>
+          <option value="star">Star</option>
+        </select>
+      </label>
+    </div>
+    <div class="map-speedometer" id="mapSpeedometer" aria-hidden="true" aria-label="Travel speed">
+      <span>Speed</span>
+      <strong id="mapSpeedValue">0</strong>
+      <em>u/s</em>
+    </div>
     <div class="touch-joystick touch-joystick--move" id="touchJoystick" aria-hidden="true">
       <div class="touch-joystick__base">
         <div class="touch-joystick__stick" id="touchJoystickStick"></div>
@@ -458,8 +477,8 @@
 
         <div class="start-menu__view" data-menu-view="single">
           <div class="start-menu__actions">
-            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single-horde">Horde Mode</button>
-            <button class="start-menu__button" type="button" data-menu-action="single-survival">Survival</button>
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="single-survival">Survival</button>
+            <button class="start-menu__button" type="button" data-menu-action="single-horde">Horde Mode</button>
           </div>
         </div>
 
@@ -515,8 +534,8 @@
 
         <div class="start-menu__view" data-menu-view="multiplayer">
           <div class="start-menu__actions start-menu__actions--split">
-            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="multiplayer-horde">Horde Mode</button>
-            <button class="start-menu__button" type="button" data-menu-action="multiplayer-survival">Survival</button>
+            <button class="start-menu__button start-menu__button--primary" type="button" data-menu-action="multiplayer-survival">Survival</button>
+            <button class="start-menu__button" type="button" data-menu-action="multiplayer-horde">Horde Mode</button>
           </div>
         </div>
 
@@ -677,9 +696,9 @@
     <div class="notifications" id="notifications" aria-live="polite"></div>
 
     <script>
-      window.CLUSTERNAUTS_CLIENT_BUILD = "766be566bf1e";
+      window.CLUSTERNAUTS_CLIENT_BUILD = "5a8c01a976ff";
     </script>
-    <script src="src/mp-v2-sim.js?v=766be566bf1e" defer></script>
-    <script src="src/game.js?v=766be566bf1e" defer></script>
+    <script src="src/mp-v2-sim.js?v=5a8c01a976ff" defer></script>
+    <script src="src/game.js?v=5a8c01a976ff" defer></script>
   </body>
 </html>

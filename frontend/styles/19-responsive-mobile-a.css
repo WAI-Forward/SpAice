@@ -1,0 +1,332 @@
+@media (max-width: 560px) {
+  .hud {
+    top: 118px;
+    left: 10px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
+    gap: 6px;
+  }
+
+  .hud__group,
+  .hud__mode,
+  .hud__progress,
+  .hud__score,
+  .hud__body,
+  .hud__status-effects,
+  .hud__leaderboard-toggle {
+    min-width: 0;
+    flex: 1 1 0;
+    height: 38px;
+  }
+
+  .hud__status-effects {
+    flex: 0 0 auto;
+  }
+
+  .hud-status-effect {
+    width: 48px;
+    height: 30px;
+  }
+
+  .hud__group {
+    gap: 8px;
+    padding: 7px 8px;
+  }
+
+  .hud__group strong {
+    font-size: 17px;
+  }
+
+  .hud__progress {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .compact-hud-toggles {
+    top: 64px;
+    left: 12px;
+    grid-template-columns: repeat(5, 42px);
+    gap: 6px;
+  }
+
+  .compact-hud-toggle {
+    width: 42px;
+    height: 42px;
+  }
+
+  .map-filter {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: min(176px, calc(100vw - 20px));
+  }
+
+  .map-filter__row {
+    grid-template-columns: auto minmax(92px, 1fr);
+  }
+
+  .hud__score {
+    min-width: 112px;
+  }
+
+  .hud__energy {
+    min-width: 118px;
+  }
+
+  .hud__body {
+    flex-basis: 100%;
+    width: 100%;
+    grid-template-columns: minmax(62px, auto) minmax(88px, 1fr) minmax(64px, auto);
+    gap: 7px;
+    padding: 7px 8px;
+  }
+
+  .hud__body-label {
+    font-size: 11px;
+  }
+
+  .hud__body-meter strong {
+    padding: 0 6px;
+    font-size: 10px;
+  }
+
+  .hud__leaderboard-toggle:not(.hud__score) {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .leaderboard-panel {
+    top: 122px;
+    width: calc(100vw - 20px);
+    max-height: min(360px, calc(100vh - 146px));
+  }
+
+  .notifications {
+    top: 96px;
+    left: 10px;
+    bottom: 66px;
+    width: min(220px, calc(100vw - 20px));
+  }
+
+  .player-interaction {
+    width: min(210px, calc(100vw - 20px));
+    transform: translate(-50%, calc(-50% - 104px));
+  }
+
+  .player-interaction.is-open {
+    transform: translate(-50%, calc(-50% - 112px));
+  }
+
+  .trade-panel,
+  .container-panel {
+    bottom: 10px;
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
+  }
+
+  .trade-panel__columns {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-panel__list {
+    max-height: 34vh;
+  }
+
+  .tech-row,
+  .build-row {
+    gap: 7px;
+  }
+
+  .build-menu {
+    padding: 12px;
+  }
+
+  .objective-tree {
+    padding: 12px;
+  }
+
+  .build-menu__panel {
+    width: calc((100vw - 24px) / var(--ui-scale));
+    height: calc((100vh - 24px) / var(--ui-scale));
+    height: calc((100dvh - 24px) / var(--ui-scale));
+    max-height: calc((100vh - 24px) / var(--ui-scale));
+    max-height: calc((100dvh - 24px) / var(--ui-scale));
+    grid-template-rows: auto auto minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .build-menu__header {
+    gap: 10px;
+  }
+
+  .build-menu__header span {
+    font-size: 16px;
+  }
+
+  .build-menu__header strong {
+    max-width: 92px;
+    overflow: hidden;
+    text-align: right;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .build-menu__body {
+    min-height: 0;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(190px, 0.95fr) minmax(180px, 1fr);
+    gap: 10px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .build-menu__resources {
+    min-height: 0;
+    padding: 10px;
+  }
+
+  .build-menu__tabs {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .build-menu__tab {
+    flex: 0 0 auto;
+  }
+
+  .build-menu__grid {
+    overflow-y: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-right: 4px;
+  }
+
+  .build-menu__details {
+    grid-column: auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .objective-tree__panel {
+    width: calc((100vw - 24px) / var(--ui-scale));
+    height: calc((100vh - 24px) / var(--ui-scale));
+    height: calc((100dvh - 24px) / var(--ui-scale));
+    max-height: calc((100vh - 24px) / var(--ui-scale));
+    max-height: calc((100dvh - 24px) / var(--ui-scale));
+    padding: 12px;
+  }
+
+  .objective-tree__header {
+    gap: 10px;
+  }
+
+  .objective-tree__header span {
+    font-size: 16px;
+  }
+
+  .objective-tree__header strong {
+    max-width: 140px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .objective-tree__header-actions {
+    gap: 6px;
+  }
+
+  .objective-tree__claim-all {
+    min-width: 74px;
+    padding: 0 9px;
+    font-size: 10px;
+  }
+
+  .objective-tree__body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(360px, 1fr) auto;
+    gap: 10px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .objective-tree__map {
+    min-width: 460px;
+    min-height: 360px;
+    padding: 16px;
+  }
+
+  .objective-node {
+    --objective-node-size: 56px;
+  }
+
+  .objective-node__icon {
+    font-size: 18px;
+  }
+
+  .objective-tree__viewport {
+    width: 820px;
+    height: 940px;
+  }
+
+  .objective-tree__detail {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .tool-hotbar {
+    bottom: 10px;
+    max-width: calc(100vw - 20px);
+    grid-auto-columns: minmax(78px, 1fr);
+    overflow-x: auto;
+  }
+
+  .tool-slot {
+    height: 44px;
+  }
+
+  .online-toggle {
+    left: 10px;
+    right: auto;
+    top: 10px;
+    bottom: auto;
+    min-width: 96px;
+    height: 46px;
+  }
+
+  .touch-joystick {
+    left: 10px;
+    bottom: 10px;
+    width: 118px;
+    height: 118px;
+  }
+
+  .touch-joystick--fire {
+    left: auto;
+    right: 10px;
+  }
+
+  .compact-hud-toggles {
+    left: 10px;
+    right: auto;
+    top: 64px;
+    bottom: auto;
+  }
+
+  .tech-ledger {
+    right: 10px;
+    bottom: 64px;
+  }
+
+  .settings-toggle {
+    right: 10px;
+    top: 64px;
+    bottom: auto;
+    width: 46px;
+    height: 46px;
+  }
+
+  .settings-panel {
+    padding: 12px;
+  }
+
+  .settings-panel__panel {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Trading Port">
+  <defs>
+    <linearGradient id="dock" x1="18" y1="20" x2="78" y2="78" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="0.48" stop-color="#9fb1c4"/>
+      <stop offset="1" stop-color="#273149"/>
+    </linearGradient>
+  </defs>
+  <rect x="17" y="59" width="62" height="18" rx="6" fill="#050a18" stroke="#dffcff" stroke-opacity=".42" stroke-width="4"/>
+  <path d="M25 58h46l-8-34H33l-8 34Z" fill="url(#dock)" stroke="#080c17" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M35 56V35m13 21V28m13 28V35" stroke="#080c17" stroke-opacity=".62" stroke-width="4" stroke-linecap="round"/>
+  <path d="M30 63h36" stroke="#ffd166" stroke-width="4" stroke-linecap="round"/>
+  <path d="M48 18 61 39H35l13-21Z" fill="#58e2ff" fill-opacity=".92" stroke="#102133" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="48" cy="47" r="7" fill="#ffb86b"/>
+</svg>
