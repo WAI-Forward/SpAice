@@ -257,6 +257,9 @@
       return;
     }
 
+    // Preserve speed carried away from a moving surface. The normal jetpack
+    // limit should cap new acceleration, not erase momentum on the next frame.
+    const carriedSpeed = Math.hypot(finiteOr(player.vx, 0), finiteOr(player.vy, 0));
     const rocketSuitActive = updateRocketSuitPlayer(state, player, safeInput, dt);
     let landedThisFrame = false;
     if (safeInput.buttons.land && !player.landed && safeInput.landAction !== "takeoff") {
@@ -302,13 +305,14 @@
 
     const speed = Math.hypot(player.vx, player.vy);
     const rocketSuitMaxSpeed = ROCKET_SUIT_BASE_MAX_SPEED + clamp(finiteOr(player.rocketSuitCharge, 0), 0, 1) * ROCKET_SUIT_CHARGE_MAX_SPEED;
-    const maxSpeed = vacuumHoldActive ? 0 : (rocketSuitActive ? rocketSuitMaxSpeed : (suctionActive ? 275 : 430 * (canBoost ? JETPACK_BOOST_SPEED_MULTIPLIER : 1)));
+    const controlledMaxSpeed = vacuumHoldActive ? 0 : (rocketSuitActive ? rocketSuitMaxSpeed : (suctionActive ? 275 : 430 * (canBoost ? JETPACK_BOOST_SPEED_MULTIPLIER : 1)));
+    const maxSpeed = vacuumHoldActive ? 0 : Math.max(controlledMaxSpeed, carriedSpeed);
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
     }
 
-    const drag = Math.pow(0.18, dt);
+    const drag = Math.pow(0.58, dt);
     player.vx *= drag;
     player.vy *= drag;
     player.x += player.vx * dt;

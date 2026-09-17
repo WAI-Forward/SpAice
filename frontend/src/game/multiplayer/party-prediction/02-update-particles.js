@@ -83,6 +83,8 @@
         particle.vy += Math.cos(particle.wobble * 1.7 + performance.now() * 0.0006) * 4 * dt;
         particle.vx *= Math.pow(0.82, dt);
         particle.vy *= Math.pow(0.82, dt);
+      } else {
+        applySolidBodyBackgroundDamping(particle, dt);
       }
       if (particle.gadgetStabilized && particle.tier.solid && length(particle.vx, particle.vy) <= gadgetStabilizedBreakSpeed) {
         particle.vx = 0;

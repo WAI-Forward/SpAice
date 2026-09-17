@@ -42,6 +42,19 @@
     merged.survivalCampBody = true;
   }
 
+  function wakeSurvivalCampFromPlayerBodyMerge(absorber, absorbed, scoredBodyIds) {
+    if (typeof wakeSurvivalCampFromBody !== "function") {
+      return false;
+    }
+    if (absorbed && absorbed.survivalCampBody && scoredBodyIds.has(absorber && absorber.id)) {
+      return wakeSurvivalCampFromBody(absorbed, player.id || "", { allowScoredBody: true });
+    }
+    if (absorber && absorber.survivalCampBody && scoredBodyIds.has(absorbed && absorbed.id)) {
+      return wakeSurvivalCampFromBody(absorber, player.id || "", { allowScoredBody: true });
+    }
+    return false;
+  }
+
   function mergeParticles() {
     let mergesThisFrame = 0;
     let restartScan = true;
@@ -103,13 +116,7 @@
 
           const scoredBodyIds = connectedScoredBodyIds();
           const absorberIsScoredBody = scoredBodyIds.has(absorbingPair.absorber.id);
-          if (
-            absorbingPair.absorbed.survivalCampBody &&
-            absorberIsScoredBody &&
-            typeof wakeSurvivalCampFromBody === "function"
-          ) {
-            wakeSurvivalCampFromBody(absorbingPair.absorbed, player.id || "");
-          }
+          wakeSurvivalCampFromPlayerBodyMerge(absorbingPair.absorber, absorbingPair.absorbed, scoredBodyIds);
           recordPlayerAbsorption(absorbingPair.absorber, absorbingPair.absorbed);
           const mass = absorbingPair.absorber.mass + absorbingPair.absorbed.mass;
           const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;

@@ -202,7 +202,8 @@
     }
 
     for (const structure of structures) {
-      if (!structure || structure.health <= 0) {
+      const ownerPlayerId = String(structure && structure.ownerPlayerId || "");
+      if (!structure || structure.health <= 0 || (ownerPlayerId && ownerPlayerId !== String(player.id || ""))) {
         continue;
       }
       if (structure.bodyId && bodyById(structure.bodyId)) {
@@ -224,7 +225,8 @@
     while (changed) {
       changed = false;
       for (const structure of structures) {
-        if (!structure || !isLinkedStructureType(structure.type) || structure.health <= 0 || !structure.bodyId || !structure.linkedBodyId) {
+        const ownerPlayerId = String(structure && structure.ownerPlayerId || "");
+        if (!structure || (ownerPlayerId && ownerPlayerId !== String(player.id || "")) || !isLinkedStructureType(structure.type) || structure.health <= 0 || !structure.bodyId || !structure.linkedBodyId) {
           continue;
         }
         const firstKnown = ids.has(structure.bodyId);

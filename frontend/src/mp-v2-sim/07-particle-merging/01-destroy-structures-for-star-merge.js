@@ -221,13 +221,23 @@
     return "";
   }
 
-  function wakeSurvivalCampFromAbsorbedBody(state, absorber, absorbed) {
-    const playerId = playerIdForScoredBody(state, absorber);
-    if (!absorbed || !absorbed.survivalCampBody || !playerId) {
+  function wakeSurvivalCampFromPlayerBodyMerge(state, absorber, absorbed) {
+    const absorberPlayerId = playerIdForScoredBody(state, absorber);
+    const absorbedPlayerId = playerIdForScoredBody(state, absorbed);
+    let campBody = null;
+    let playerId = "";
+    if (absorbed && absorbed.survivalCampBody && absorberPlayerId) {
+      campBody = absorbed;
+      playerId = absorberPlayerId;
+    } else if (absorber && absorber.survivalCampBody && absorbedPlayerId) {
+      campBody = absorber;
+      playerId = absorbedPlayerId;
+    }
+    if (!campBody || !playerId) {
       return false;
     }
     if (typeof wakeSurvivalCampFromBody === "function") {
-      return wakeSurvivalCampFromBody(state, absorbed, playerId);
+      return wakeSurvivalCampFromBody(state, campBody, playerId, { allowScoredBody: true });
     }
     return false;
   }
@@ -395,7 +405,7 @@
     const keep = absorbingPair.absorber;
     const absorb = absorbingPair.absorbed;
     const keepIsScoredBody = Boolean(playerIdForScoredBody(state, keep));
-    wakeSurvivalCampFromAbsorbedBody(state, keep, absorb);
+    wakeSurvivalCampFromPlayerBodyMerge(state, keep, absorb);
     const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;
     const stellarSource = stellarGrowthSourceForMerge(a, b, keep);
     const previousStellarMass = Math.max(0, finiteOr(stellarSource && stellarSource.mass, 0));
@@ -662,6 +672,10 @@
   function difficultyHealthDropChance(state, kind) {
     const baseChance = kind === "ufo" ? HEALTH_DROP_BASE_CHANCES.ufo : HEALTH_DROP_BASE_CHANCES.default;
     return clamp(baseChance * finiteOr(difficultyMobSettings(state).healthDropMultiplier, 1), 0, 0.96);
+  }
+
+  function difficultyMobDamage(state, damage) {
+    return Math.max(0, finiteOr(damage, 0) * finiteOr(difficultyMobSettings(state).damageMultiplier, 1));
   }
 
   function difficultyMobSpawnInterval(state, kind) {

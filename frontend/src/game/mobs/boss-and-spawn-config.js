@@ -59,6 +59,14 @@
   const survivalCampSpawnDistancePadding = 1200;
   const survivalCampSpawnDistanceSpread = 9000;
   const survivalCampAllowancePreferredSeparation = 4200;
+  const survivalCampActiveRadius = 42000;
+  const survivalCampExpansionDistance = 32000;
+  const survivalCampMaxExpansion = 8;
+  const survivalMigrationAggroRadius = 1450;
+  const survivalMigrationAggroDuration = 14;
+  const survivalMigrationMaxSpeed = 760;
+  const survivalSalvageMaxUfos = 3;
+  const survivalSalvageArrivalRadius = 620;
   const mobSpawnEdgePaddingBonus = 320;
   const mobSpawnSpreadMultiplier = 1.25;
   const mobRelocationEdgePaddingBonus = 560;

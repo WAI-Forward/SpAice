@@ -12,6 +12,7 @@
   .hud__progress,
   .hud__score,
   .hud__body,
+  .hud__growth-rate,
   .hud__status-effects,
   .hud__leaderboard-toggle {
     min-width: 0;
@@ -77,6 +78,10 @@
     grid-template-columns: minmax(62px, auto) minmax(88px, 1fr) minmax(64px, auto);
     gap: 7px;
     padding: 7px 8px;
+  }
+
+  .hud__growth-rate {
+    min-width: 116px;
   }
 
   .hud__body-label {

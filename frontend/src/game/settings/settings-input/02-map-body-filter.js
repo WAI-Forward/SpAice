@@ -1,7 +1,7 @@
   function normalizeMapBodyTierFilterName(name, fallback) {
     const raw = String(name || "").trim().toLowerCase();
     if (raw === "auto") {
-      return "auto";
+      return fallback;
     }
     const normalized = String(name || "")
       .trim()
@@ -13,38 +13,21 @@
   }
 
   function normalizeMapMinimumBodyTierName(name) {
-    return normalizeMapBodyTierFilterName(name, "auto");
+    return normalizeMapBodyTierFilterName(name, "rock");
   }
 
   function normalizeMapMaximumBodyTierName(name) {
-    return normalizeMapBodyTierFilterName(name, "auto");
+    return normalizeMapBodyTierFilterName(name, "star");
   }
 
   function mapMinimumBodyThreshold() {
     const tierName = normalizeMapMinimumBodyTierName(gameSettings.mapMinimumBodyTier);
-    if (tierName === "auto") {
-      return mappedBodyThreshold;
-    }
     const tier = bodyTiers.find((candidate) => candidate.name === tierName);
     return tier ? tier.threshold : mappedBodyThreshold;
   }
 
-  function currentPlayerBodyTierIndex() {
-    if (!player.landed || !player.landed.bodyId) {
-      return -1;
-    }
-    const body = bodyById(player.landed.bodyId);
-    const tierName = body && body.tier && body.tier.name;
-    return bodyTiers.findIndex((candidate) => candidate.name === tierName);
-  }
-
   function mapMaximumBodyThreshold() {
     const tierName = normalizeMapMaximumBodyTierName(gameSettings.mapMaximumBodyTier);
-    if (tierName === "auto") {
-      const bodyTierIndex = currentPlayerBodyTierIndex();
-      const previousTier = bodyTierIndex > 0 ? bodyTiers[bodyTierIndex - 1] : null;
-      return previousTier ? previousTier.threshold : Number.POSITIVE_INFINITY;
-    }
     const tier = bodyTiers.find((candidate) => candidate.name === tierName);
     return tier ? tier.threshold : Number.POSITIVE_INFINITY;
   }

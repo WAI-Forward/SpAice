@@ -65,6 +65,7 @@
         }
         pendingTetherAnchor = null;
         activePlacementRecipeId = null;
+        recordObjectiveBuiltStructure(recipe.structureType);
         playSound("place");
         maybeNotifyText(recipe.name + " placed.");
         return true;
@@ -72,6 +73,7 @@
 
       spendRecipeCost(recipe);
       structures.push(createStructure(recipe, firstPlacement, placement));
+      recordObjectiveBuiltStructure(recipe.structureType);
       pendingTetherAnchor = null;
     } else {
       if (isMultiplayerV2Active()) {
@@ -87,6 +89,7 @@
           return false;
         }
         activePlacementRecipeId = null;
+        recordObjectiveBuiltStructure(recipe.structureType);
         playSound("place");
         maybeNotifyText(recipe.name + " placed.");
         return true;
@@ -94,6 +97,7 @@
 
       spendRecipeCost(recipe);
       structures.push(createStructure(recipe, placement));
+      recordObjectiveBuiltStructure(recipe.structureType);
     }
     activePlacementRecipeId = null;
     updateTechUi();

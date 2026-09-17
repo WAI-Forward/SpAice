@@ -72,8 +72,8 @@
       hudEnabled: true,
       playerHealthBar: true,
       playerEnergyBar: true,
-      mapMinimumBodyTier: "auto",
-      mapMaximumBodyTier: "auto",
+      mapMinimumBodyTier: "rock",
+      mapMaximumBodyTier: "star",
       controls: Object.assign({}, defaultControlBindings)
     };
 

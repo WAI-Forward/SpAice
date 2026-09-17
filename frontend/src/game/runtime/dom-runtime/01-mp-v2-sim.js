@@ -23,6 +23,7 @@
   const milestoneStellarFill = document.getElementById("milestoneStellarFill");
   const milestoneSplit = document.getElementById("milestoneSplit");
   const stellarRateLabel = document.getElementById("stellarRateLabel");
+  const growthRateValue = document.getElementById("growthRateValue");
   const playerStatusEffectsHud = document.getElementById("playerStatusEffects");
   const leaderboardToggle = document.getElementById("leaderboardToggle");
   const leaderboardPanel = document.getElementById("leaderboardPanel");
@@ -360,6 +361,9 @@
     completed: Object.create(null),
     claimed: Object.create(null),
     createdBodyMass: 0,
+    maxTravelSpeed: 0,
+    maxGrowthRate: 0,
+    builtStructures: Object.create(null),
     renderSignature: "",
     selectedId: "",
     newlyCompleted: [],
@@ -370,35 +374,34 @@
     zoom: 1
   };
   const objectiveGraphLayout = Object.freeze({
-    create_rock: { x: 170, y: 90 },
-    create_boulder: { x: 170, y: 210 },
-    create_asteroid: { x: 170, y: 330 },
-    create_moon: { x: 170, y: 450 },
-    create_planet: { x: 170, y: 570 },
-    create_star: { x: 170, y: 690 },
-    kill_3_alienoids: { x: 520, y: 90 },
-    kill_3_ufos: { x: 520, y: 270 },
-    kill_3_rambots: { x: 520, y: 450 },
-    kill_3_engineers: { x: 520, y: 630 },
-    kill_3_teslas: { x: 520, y: 810 },
-    kill_3_satellites: { x: 520, y: 990 },
-    kill_3_rockets: { x: 520, y: 1170 },
-    kill_3_fighters: { x: 520, y: 1350 },
-    kill_alienoid_boss: { x: 950, y: 90 },
-    kill_ufo_boss: { x: 950, y: 270 },
-    kill_rambot_boss: { x: 950, y: 450 },
-    kill_engineer_boss: { x: 950, y: 630 },
-    kill_tesla_boss: { x: 950, y: 810 },
-    kill_satellite_boss: { x: 950, y: 990 },
-    kill_rocket_boss: { x: 950, y: 1170 },
-    kill_fighter_boss: { x: 950, y: 1350 },
-    make_laser_pistol: { x: 1280, y: 300 },
-    create_spanner: { x: 1280, y: 480 },
-    create_turret: { x: 1280, y: 780 },
-    create_accumulator: { x: 1280, y: 960 },
-    create_rifle: { x: 1280, y: 1140 }
+    rootId: "create_rock",
+    padding: 150,
+    firstOrbitRadius: 148,
+    orbitGap: 132,
+    minimumRadius: 300,
+    rootBranchAngles: Object.freeze({
+      celestial_body: -90,
+      speed: -156,
+      growth_rate: -124,
+      mob: -8,
+      boss: 28,
+      tool: 72,
+      structure: 118
+    }),
+    categoryArcOffsets: Object.freeze({
+      celestial_body: 0,
+      speed: 0,
+      growth_rate: 0,
+      mob: 0,
+      boss: 48,
+      tool: -58,
+      structure: 70
+    }),
+    categoryOrder: Object.freeze(["speed", "growth_rate", "celestial_body", "mob", "boss", "tool", "structure"]),
+    siblingArcStep: 82,
+    maxSiblingArcSpread: 248,
+    minimumNodeArcGap: 112
   });
-  const objectiveGraphPadding = 90;
   const techLedgerDrag = {
     active: false,
     pointerId: null,

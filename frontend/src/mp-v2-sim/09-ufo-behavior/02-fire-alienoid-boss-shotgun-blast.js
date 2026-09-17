@@ -151,7 +151,7 @@
     }
     target.vx += nx * impulse + finiteOr(mob.vx, 0) * 0.52;
     target.vy += ny * impulse + finiteOr(mob.vy, 0) * 0.52;
-    if (damagePlayer(state, target, damage, cause)) {
+    if (damagePlayer(state, target, difficultyMobDamage(state, damage), cause)) {
       state.events.push({ type: "player.hitByMob", playerId: target.id, mobId: mob.id, kind: mob.kind || cause || "mob", tick: state.tick });
     }
     mob.impactCooldown = 0.95;
@@ -305,7 +305,7 @@
       target.vy += dirY * RAMBOT_BOSS_PISTON_KNOCKBACK;
       if (isCombatMobEntity(target)) {
         damageMob(state, target, bossScaledDamage(rambot, RAMBOT_BOSS_PISTON_DAMAGE), "Rambot boss piston punch");
-      } else if (damagePlayer(state, target, bossScaledDamage(rambot, RAMBOT_BOSS_PISTON_DAMAGE), "Rambot boss piston punch")) {
+      } else if (damagePlayer(state, target, difficultyMobDamage(state, bossScaledDamage(rambot, RAMBOT_BOSS_PISTON_DAMAGE)), "Rambot boss piston punch")) {
         state.events.push({ type: "player.hitByMob", playerId: target.id, mobId: rambot.id, kind: "rambot", cause: "piston-punch", tick: state.tick });
       }
       rambot.pistonHit = true;

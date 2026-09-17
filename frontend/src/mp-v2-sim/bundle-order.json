@@ -25,6 +25,8 @@
   "07-particle-merging/04-create-mob.js",
   "gamemodes/horde/spawning.js",
   "gamemodes/survival/spawning/01-survival-allowance-mob-costs.js",
+  "gamemodes/survival/spawning/02-survival-camp-ecology.js",
+  "gamemodes/survival/spawning/03-survival-camp-creation.js",
   "gamemodes/survival/spawning/02-update-survival-camps.js",
   "08-ambient-pickups/01-count-ambient-particles-near-player.js",
   "08-ambient-pickups/02-boss-chase-max-speed.js",

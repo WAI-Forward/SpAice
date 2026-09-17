@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Clusternauts Particle Collector</title>
-    <link rel="stylesheet" href="styles.css?v=5a8c01a976ff">
+    <link rel="stylesheet" href="styles.css?v=ef6d3c0ef136">
   </head>
   <body>
     <canvas id="game" aria-label="Clusternauts particle collector game"></canvas>
@@ -45,6 +45,11 @@
         </div>
         <span class="hud__body-rate" id="stellarRateLabel" hidden>Rate 0/s -> White Dwarf</span>
         <span class="hud__body-label hud__body-label--next" id="nextMilestoneLabel">ROCK</span>
+      </div>
+      <div class="hud__growth-rate" aria-label="Growth rate">
+        <span>Growth</span>
+        <strong id="growthRateValue">0</strong>
+        <em>/s</em>
       </div>
       <div class="hud__status-effects" id="playerStatusEffects" aria-label="Player status effects"></div>
       <section class="leaderboard-panel" id="leaderboardPanel" aria-label="Leaderboard" aria-hidden="true">
@@ -119,7 +124,6 @@
       <label class="map-filter__row">
         <span>Min body</span>
         <select id="mapMinimumBodyFilter" aria-label="Minimum body shown on map">
-          <option value="auto">Auto</option>
           <option value="rock">Rock</option>
           <option value="boulder">Boulder</option>
           <option value="asteroid">Asteroid</option>
@@ -131,7 +135,6 @@
       <label class="map-filter__row">
         <span>Max body</span>
         <select id="mapMaximumBodyFilter" aria-label="Maximum body shown on map">
-          <option value="auto">Auto</option>
           <option value="rock">Rock</option>
           <option value="boulder">Boulder</option>
           <option value="asteroid">Asteroid</option>
@@ -696,9 +699,9 @@
     <div class="notifications" id="notifications" aria-live="polite"></div>
 
     <script>
-      window.CLUSTERNAUTS_CLIENT_BUILD = "5a8c01a976ff";
+      window.CLUSTERNAUTS_CLIENT_BUILD = "ef6d3c0ef136";
     </script>
-    <script src="src/mp-v2-sim.js?v=5a8c01a976ff" defer></script>
-    <script src="src/game.js?v=5a8c01a976ff" defer></script>
+    <script src="src/mp-v2-sim.js?v=ef6d3c0ef136" defer></script>
+    <script src="src/game.js?v=ef6d3c0ef136" defer></script>
   </body>
 </html>

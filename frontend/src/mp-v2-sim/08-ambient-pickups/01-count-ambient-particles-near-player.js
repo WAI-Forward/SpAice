@@ -1,19 +1,33 @@
-  const FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED = 180;
-  const FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED = 720;
+  const FAST_AMBIENT_BODY_ANCHOR_BASE_MASS = 150;
+  const FAST_AMBIENT_BODY_ANCHOR_BASE_SPEED = 700;
+  const FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED_FLOOR = 420;
+  const FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED_WINDOW = 420;
   const FAST_AMBIENT_BODY_ANCHOR_MAX_COUNT = 5;
 
   function ambientParticleAnchorWeight(anchor) {
-    return clamp(finiteOr(anchor && anchor.ambientAnchorWeight, 1), 0.18, 1);
+    if (anchor && Object.prototype.hasOwnProperty.call(anchor, "ambientAnchorWeight")) {
+      return clamp(finiteOr(anchor.ambientAnchorWeight, 0), 0.02, 1);
+    }
+    return 1;
   }
 
   function fastAmbientBodyAnchorWeight(body) {
+    const mass = Math.max(1, finiteOr(body && body.mass, 1));
+    if (mass < FAST_AMBIENT_BODY_ANCHOR_BASE_MASS) {
+      return 0;
+    }
     const speed = Math.hypot(finiteOr(body && body.vx, 0), finiteOr(body && body.vy, 0));
-    if (speed < FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED) {
+    const minSpeed = clamp(
+      FAST_AMBIENT_BODY_ANCHOR_BASE_SPEED - Math.log2(Math.max(1, mass / FAST_AMBIENT_BODY_ANCHOR_BASE_MASS)) * 50,
+      FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED_FLOOR,
+      FAST_AMBIENT_BODY_ANCHOR_BASE_SPEED
+    );
+    if (speed < minSpeed) {
       return 0;
     }
     return clamp(
-      (speed - FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED) / (FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED - FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED),
-      0.18,
+      (speed - minSpeed) / FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED_WINDOW,
+      0,
       1
     );
   }
@@ -57,10 +71,12 @@
         y: body.y,
         vx: finiteOr(body.vx, 0),
         vy: finiteOr(body.vy, 0),
+        radius: Math.max(0, finiteOr(body.radius, 0)),
         bodyId: body.id,
         ambientAnchorWeight: weight,
-        ambientAnchorTargetScale: 0.38 + weight * 0.72,
-        ambientAnchorType: "fast-body"
+        ambientAnchorTargetScale: 0.08 + weight * 0.72,
+        ambientAnchorType: "fast-body",
+        ambientAnchorBowWave: true
       });
       if (anchors.length - players.length >= FAST_AMBIENT_BODY_ANCHOR_MAX_COUNT) {
         break;
@@ -71,6 +87,11 @@
 
   function countAmbientParticlesNearPlayer(world, player, radius) {
     const radiusSq = radius * radius;
+    const bowWave = Boolean(player && player.ambientAnchorBowWave);
+    const speed = Math.hypot(finiteOr(player && player.vx, 0), finiteOr(player && player.vy, 0));
+    const travel = bowWave && speed > 0.001 ? normalize(player.vx, player.vy) : { x: 0, y: 0 };
+    const anchorRadius = Math.max(0, finiteOr(player && player.radius, 0));
+    const bowLateralLimit = Math.max(150, anchorRadius + 170);
     let count = 0;
     for (const body of world.particles) {
       if (!isAmbientParticle(body)) {
@@ -79,6 +100,13 @@
       const dx = body.x - player.x;
       const dy = body.y - player.y;
       if (dx * dx + dy * dy <= radiusSq) {
+        if (bowWave) {
+          const forward = dx * travel.x + dy * travel.y;
+          const lateral = Math.abs(dx * -travel.y + dy * travel.x);
+          if (forward < -anchorRadius * 0.35 || lateral > bowLateralLimit) {
+            continue;
+          }
+        }
         count += 1;
       }
     }
@@ -90,9 +118,10 @@
     for (const candidate of players) {
       const localCount = countAmbientParticlesNearPlayer(world, candidate, densityRadius);
       const speed = Math.hypot(finiteOr(candidate.vx, 0), finiteOr(candidate.vy, 0));
-      const targetScale = clamp(finiteOr(candidate.ambientAnchorTargetScale, ambientParticleAnchorWeight(candidate)), 0.18, 1.1);
-      const anchorLocalTarget = Math.max(6, Math.round(localTarget * targetScale));
-      const score = anchorLocalTarget - localCount + clamp(speed / 480, 0, 1.15) + ambientParticleAnchorWeight(candidate) * 0.35;
+      const bowWave = Boolean(candidate.ambientAnchorBowWave);
+      const targetScale = clamp(finiteOr(candidate.ambientAnchorTargetScale, ambientParticleAnchorWeight(candidate)), 0.02, 1.1);
+      const anchorLocalTarget = Math.max(bowWave ? 1 : 6, Math.round(localTarget * targetScale));
+      const score = anchorLocalTarget - localCount + clamp(speed / 480, 0, 1.15) * (bowWave ? ambientParticleAnchorWeight(candidate) : 1) + ambientParticleAnchorWeight(candidate) * 0.35;
       if (!best || score > best.score) {
         best = { player: candidate, anchor: candidate, localCount, localTarget: anchorLocalTarget, score };
       }

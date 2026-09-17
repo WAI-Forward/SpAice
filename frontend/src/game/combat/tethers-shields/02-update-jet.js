@@ -33,13 +33,6 @@
       1
     );
 
-    const maxSpeed = 150 + massDamping * 210;
-    const speed = Math.hypot(body.vx, body.vy);
-    if (speed > maxSpeed) {
-      body.vx = (body.vx / speed) * maxSpeed;
-      body.vy = (body.vy / speed) * maxSpeed;
-    }
-
     structure.thrustAmount += (1 - finiteOr(structure.thrustAmount, 0)) * (1 - Math.pow(0.02, dt));
     structure.thrustDirection = direction;
 

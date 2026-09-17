@@ -102,31 +102,30 @@
         continue;
       }
 
-      if (updateSurvivalCampMobHome(ufo, dt)) {
+      const salvageTarget = survivalSalvageTowTarget(ufo, dt);
+      if (!salvageTarget && updateSurvivalCampMobHome(ufo, dt)) {
         continue;
       }
 
       const target = combatTargetForMob(ufo);
-      if (!target) {
+      if (!target && !salvageTarget) {
         updateFamiliarMob(ufo, dt);
         continue;
       }
-      const targetPlayer = target.player;
-      const attackTarget = ufo.isBoss && beamMode === "drain" ? {
+      const targetPlayer = target && target.player ? target.player : null;
+      const attackTarget = salvageTarget || (ufo.isBoss && beamMode === "drain" && targetPlayer ? {
         kind: "player",
         target,
         x: targetPlayer.x,
         y: targetPlayer.y,
         radius: targetPlayer.radius || player.radius
-      } : ufoAttackTarget(ufo, target);
-      const toPlayerX = targetPlayer.x - ufo.x;
-      const toPlayerY = targetPlayer.y - ufo.y;
-      const playerDist = Math.hypot(toPlayerX, toPlayerY) || 1;
+      } : ufoAttackTarget(ufo, target));
+      const playerDist = targetPlayer ? Math.hypot(targetPlayer.x - ufo.x, targetPlayer.y - ufo.y) || 1 : 0;
       const toTargetX = attackTarget.x - ufo.x;
       const toTargetY = attackTarget.y - ufo.y;
       const dist = Math.hypot(toTargetX, toTargetY) || 1;
 
-      if (playerDist > Math.max(width, height) * 2.7 + 1800) {
+      if (!salvageTarget && targetPlayer && playerDist > Math.max(width, height) * 2.7 + 1800) {
         const spawn = relocatedMobOffscreenPoint(180, 560, targetPlayer);
         ufo.x = spawn.x;
         ufo.y = spawn.y;
@@ -139,7 +138,7 @@
       const ny = toTargetY / dist;
       const tangentX = -ny * ufo.strafeSign;
       const tangentY = nx * ufo.strafeSign;
-      const desiredDistance = attackTarget.kind === "body" ? clamp(attackTarget.radius + 350, 430, 660) : 430;
+      const desiredDistance = attackTarget.kind === "salvage" ? 0 : attackTarget.kind === "body" ? clamp(attackTarget.radius + 350, 430, 660) : 430;
       const noBeamBoost = ufo.isBoss && beamMode === "cooldown" ? 1.34 : 1;
       const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
       const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);
@@ -161,7 +160,7 @@
       ufo.x += ufo.vx * dt;
       ufo.y += ufo.vy * dt;
       applyUfoTractorBeam(ufo, dt);
-      applyUfoBossPlayerDrainBeam(ufo, target, dt);
+      if (target) applyUfoBossPlayerDrainBeam(ufo, target, dt);
       if (!isPlayerTeamMob(ufo)) {
         updateUfoUndersideImpact(ufo);
       }

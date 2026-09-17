@@ -168,120 +168,243 @@
     ctx.save();
     ctx.translate(npc.x, npc.y);
     const crouching = Boolean(npc.crouching);
+    const moving = !crouching && Math.hypot(npc.targetX - npc.x, npc.targetY - npc.y) > 4;
+
+    ctx.fillStyle = "rgba(5, 8, 13, 0.32)";
+    ctx.beginPath();
+    ctx.ellipse(0, 40, crouching ? 34 : 29, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(0, -34);
+    ctx.scale(0.78, 0.78);
     if (crouching) {
-      ctx.translate(0, 13);
-      ctx.scale(1, 0.86);
+      ctx.translate(0, playerFootOffset);
+      ctx.scale(1.08, 0.84);
+      ctx.translate(0, -playerFootOffset);
     }
-    const walk = crouching ? 0 : Math.sin(npc.walkCycle || 0) * 4;
-    const oppositeWalk = Math.cos(npc.walkCycle || 0) * 3.5;
-    const aimAngle = finiteOr(npc.aimAngle, 0);
-    const shoulderBob = (crouching ? 7 : 0) + Math.sin((npc.walkCycle || 0) * 0.5) * 1.8;
-    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
-    ctx.lineCap = "round";
-
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.moveTo(-12, -8);
-    ctx.lineTo(-17, 19 + walk);
-    ctx.lineTo(-18, 36 + walk * 0.3);
-    ctx.moveTo(12, -8);
-    ctx.lineTo(15, 19 - walk);
-    ctx.lineTo(18, 36 - walk * 0.3);
-    ctx.stroke();
-
-    ctx.fillStyle = "#302d2b";
-    roundRectPath(-25, 32 + walk * 0.3, 18, 10, 4);
-    ctx.fill();
-    roundRectPath(7, 32 - walk * 0.3, 18, 10, 4);
-    ctx.fill();
-
-    ctx.fillStyle = "#6d5845";
-    ctx.strokeStyle = "rgba(8, 10, 14, 0.84)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(-24, -39 + shoulderBob);
-    ctx.quadraticCurveTo(0, -52 + shoulderBob, 24, -39 + shoulderBob);
-    ctx.lineTo(19, 15);
-    ctx.quadraticCurveTo(0, 27, -19, 15);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#3e332b";
-    ctx.beginPath();
-    ctx.moveTo(-9, -42 + shoulderBob);
-    ctx.lineTo(0, 12);
-    ctx.lineTo(10, -42 + shoulderBob);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "#caa98a";
-    ctx.beginPath();
-    ctx.arc(0, -65 + shoulderBob, 20, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#42372f";
-    ctx.beginPath();
-    ctx.ellipse(0, -76 + shoulderBob, 24, 12, 0, Math.PI, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#172534";
-    roundRectPath(-15, -70 + shoulderBob, 30, 10, 5);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(113, 225, 236, 0.72)";
-    ctx.beginPath();
-    ctx.ellipse(-6, -65 + shoulderBob, 5.5, 3.5, -0.15, 0, Math.PI * 2);
-    ctx.ellipse(7, -65 + shoulderBob, 5.5, 3.5, 0.15, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(-18, -31 + shoulderBob);
-    ctx.quadraticCurveTo(-34, -16 + walk * 0.25, -27, -1 + walk * 0.2);
-    ctx.stroke();
-
-    ctx.save();
-    ctx.translate(18, -31 + shoulderBob);
-    ctx.rotate(aimAngle);
-    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(-4, 0);
-    ctx.lineTo(20, oppositeWalk * 0.08);
-    ctx.stroke();
-
-    ctx.fillStyle = "#caa98a";
-    ctx.beginPath();
-    ctx.arc(21, oppositeWalk * 0.08, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#27313a";
-    ctx.strokeStyle = "rgba(7, 9, 13, 0.86)";
-    ctx.lineWidth = 3;
-    roundRectPath(18, -7, 56, 12, 4);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#111821";
-    roundRectPath(64, -4, 22, 6, 3);
-    ctx.fill();
-    ctx.fillStyle = "#5c4a38";
-    roundRectPath(30, 5, 10, 13, 3);
-    ctx.fill();
-    ctx.restore();
+    drawTraderNpcBody(npc, time, moving ? npc.speed : 0);
+    drawTraderNpcRifle(npc, time);
     ctx.restore();
 
-    const screen = worldToScreen(npc.worldX, npc.worldY - 92);
+    const screen = worldToScreen(npc.worldX, npc.worldY - 104);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.font = "600 12px Inter, sans-serif";
     ctx.textAlign = "center";
     ctx.fillStyle = "rgba(245, 237, 221, 0.86)";
     ctx.fillText(npc.name, screen.x, screen.y);
+    ctx.restore();
+  }
+
+  function drawTraderNpcBody(npc, time, walkSpeed) {
+    const outline = "rgba(23, 27, 44, 0.76)";
+    const walkCycle = finiteOr(npc.walkCycle, 0);
+    const walkBounce = walkSpeed > 1 ? Math.max(0, Math.sin(walkCycle * 2)) * 3 : 0;
+    const coatGradient = ctx.createLinearGradient(-28, 12, 30, 84);
+    coatGradient.addColorStop(0, "#a77a4e");
+    coatGradient.addColorStop(0.48, "#765138");
+    coatGradient.addColorStop(1, "#49362f");
+
+    ctx.save();
+    ctx.translate(0, -walkBounce);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    ctx.fillStyle = "#49352f";
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-32, 10);
+    ctx.quadraticCurveTo(-44, 38, -35, 82);
+    ctx.lineTo(-9, 68);
+    ctx.lineTo(9, 68);
+    ctx.lineTo(35, 82);
+    ctx.quadraticCurveTo(44, 38, 32, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "#5d4438";
+    ctx.lineWidth = 15;
+    ctx.beginPath();
+    ctx.ellipse(0, -23, 40, 43, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
+
+    drawCharacterBodyOn(ctx, 0, 0, time, { x: 0, y: 0 }, 0, {
+      suit: {
+        torso: "#78604a",
+        limb: "#45505a",
+        arm: "#8d704f",
+        helmet: "#d2c39f",
+        panel: "#43515a",
+        accent: "#ffbd5d"
+      },
+      onFoot: true,
+      crouching: false,
+      walkCycle,
+      walkSpeed,
+      centerX: 0,
+      centerY: 0
+    });
+
+    ctx.save();
+    ctx.translate(0, -walkBounce);
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = outline;
+
+    ctx.fillStyle = coatGradient;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-27, 13);
+    ctx.quadraticCurveTo(0, 2, 27, 13);
+    ctx.lineTo(22, 59);
+    ctx.lineTo(31, 84);
+    ctx.lineTo(4, 72);
+    ctx.lineTo(0, 45);
+    ctx.lineTo(-5, 72);
+    ctx.lineTo(-31, 84);
+    ctx.lineTo(-22, 59);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#d7a45d";
+    ctx.beginPath();
+    ctx.moveTo(-25, 14);
+    ctx.lineTo(-13, 10);
+    ctx.lineTo(11, 56);
+    ctx.lineTo(3, 62);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(23, 27, 44, 0.58)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#303a42";
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 3;
+    roundRectPath(-31, 49, 61, 11, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffc467";
+    roundRectPath(-5, 49, 11, 11, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#69503e";
+    roundRectPath(-42, 30, 17, 32, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffbd5d";
+    roundRectPath(-38, 35, 9, 4, 2);
+    ctx.fill();
+
+    const visorGlow = ctx.createLinearGradient(-24, -42, 24, -5);
+    visorGlow.addColorStop(0, "rgba(255, 221, 150, 0.86)");
+    visorGlow.addColorStop(0.32, "rgba(255, 174, 70, 0.35)");
+    visorGlow.addColorStop(1, "rgba(255, 128, 38, 0.06)");
+    ctx.fillStyle = visorGlow;
+    ctx.beginPath();
+    ctx.ellipse(0, -24, 27, 21, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#2a3037";
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-11, -10);
+    ctx.lineTo(11, -10);
+    ctx.lineTo(8, 2);
+    ctx.lineTo(-8, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffbd5d";
+    roundRectPath(-5, -6, 10, 3, 1.5);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawTraderNpcRifle(npc, time) {
+    const aimAngle = finiteOr(npc.aimAngle, 0);
+    const outline = "rgba(12, 16, 25, 0.9)";
+    const pulse = 0.72 + Math.sin(time * 0.008) * 0.18;
+    const walking = !npc.crouching && Math.hypot(npc.targetX - npc.x, npc.targetY - npc.y) > 4;
+    const walkBounce = walking ? Math.max(0, Math.sin(finiteOr(npc.walkCycle, 0) * 2)) * 3 : 0;
+
+    ctx.save();
+    ctx.translate(25, 28 - walkBounce);
+    ctx.rotate(aimAngle);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 17;
+    ctx.beginPath();
+    ctx.moveTo(-3, 2);
+    ctx.quadraticCurveTo(15, 13, 35, 2);
+    ctx.stroke();
+    ctx.strokeStyle = "#8d704f";
+    ctx.lineWidth = 10;
+    ctx.stroke();
+
+    ctx.fillStyle = "#4b382f";
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(17, -8);
+    ctx.lineTo(38, -12);
+    ctx.lineTo(49, 7);
+    ctx.lineTo(24, 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    const rifleGradient = ctx.createLinearGradient(34, -10, 118, 10);
+    rifleGradient.addColorStop(0, "#71808a");
+    rifleGradient.addColorStop(0.45, "#34424c");
+    rifleGradient.addColorStop(1, "#18232d");
+    ctx.fillStyle = rifleGradient;
+    roundRectPath(34, -10, 71, 20, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#18222c";
+    roundRectPath(95, -6, 35, 12, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#d7a45d";
+    roundRectPath(127, -4, 13, 8, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#202b35";
+    roundRectPath(52, -22, 38, 9, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 183, 78, " + pulse + ")";
+    ctx.beginPath();
+    ctx.arc(84, -17.5, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#4b382f";
+    ctx.beginPath();
+    ctx.moveTo(48, 8);
+    ctx.lineTo(66, 8);
+    ctx.lineTo(60, 29);
+    ctx.lineTo(48, 25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#d2c39f";
+    ctx.beginPath();
+    ctx.arc(36, 2, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }

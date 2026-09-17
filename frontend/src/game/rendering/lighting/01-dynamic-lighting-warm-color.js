@@ -18,6 +18,10 @@
     progressLandedBodyId: null,
     progressEquippedToolId: "",
     progressSnapshot: null,
+    growthRateBodyId: null,
+    growthRateMass: 0,
+    growthRateSampleAt: 0,
+    growthRateValue: 0,
     leaderboardFrameId: -1000
   };
   let dynamicLightingPlayerBoost = 1;
@@ -41,6 +45,10 @@
     hudCache.progressLandedBodyId = null;
     hudCache.progressEquippedToolId = "";
     hudCache.progressSnapshot = null;
+    hudCache.growthRateBodyId = null;
+    hudCache.growthRateMass = 0;
+    hudCache.growthRateSampleAt = 0;
+    hudCache.growthRateValue = 0;
     hudCache.leaderboardFrameId = -1000;
     gadgetGatherCache.frameId = -1;
     gadgetGatherCache.limit = 0;

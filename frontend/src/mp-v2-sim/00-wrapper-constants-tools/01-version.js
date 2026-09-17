@@ -80,7 +80,7 @@
   ];
   const BODY_TIER_EVOLUTION_SIZE_SCALE = 1.2;
   const STELLAR_EVOLUTION_END_THRESHOLD = 60000;
-  const STELLAR_GROWTH_AVERAGE_WINDOW_SECONDS = 8;
+  const STELLAR_GROWTH_AVERAGE_WINDOW_SECONDS = 20;
   const STELLAR_GROWTH_RATE_NEUTRON_THRESHOLD = 80;
   const STELLAR_GROWTH_RATE_BLACK_HOLE_THRESHOLD = 220;
   const STELLAR_OUTCOME_TIER_NAMES = ["white dwarf", "neutron star", "black hole"];
@@ -179,9 +179,9 @@
   const MOB_BEACON_DROP_COUNT = 4;
   const MOB_TIER_ORDER = ["alienoid", "ufo", "rambot", "engineer", "tesla", "satellite", "rocket", "fighter"];
   const DIFFICULTY_MOB_SETTINGS = {
-    easy: { intervalScale: 0.82, firstWaveDelay: 28, batchScale: 1.12, bonusChanceScale: 1.1, startingBatchBonusChances: [0, 0], healthDropMultiplier: 1.1 },
-    medium: { intervalScale: 0.72, firstWaveDelay: 18, batchScale: 1.24, bonusChanceScale: 1.22, startingBatchBonusChances: [0.75, 0.2, 0.09], healthDropMultiplier: 0.9 },
-    hard: { intervalScale: 0.62, firstWaveDelay: 9, batchScale: 1.38, bonusChanceScale: 1.35, startingBatchBonusChances: [0.9, 0.75, 0.34], healthDropMultiplier: 0.7 }
+    easy: { intervalScale: 0.82, firstWaveDelay: 28, batchScale: 1.12, bonusChanceScale: 1.1, startingBatchBonusChances: [0, 0], damageMultiplier: 0.62, healthDropMultiplier: 1.1, survivalBudgetScale: 0.88, survivalCampScale: 0.9 },
+    medium: { intervalScale: 0.72, firstWaveDelay: 18, batchScale: 1.24, bonusChanceScale: 1.22, startingBatchBonusChances: [0.75, 0.2, 0.09], damageMultiplier: 0.82, healthDropMultiplier: 0.9, survivalBudgetScale: 1, survivalCampScale: 1 },
+    hard: { intervalScale: 0.62, firstWaveDelay: 9, batchScale: 1.38, bonusChanceScale: 1.35, startingBatchBonusChances: [0.9, 0.75, 0.34], damageMultiplier: 1, healthDropMultiplier: 0.7, survivalBudgetScale: 1.18, survivalCampScale: 1.15 }
   };
   const MOB_TIER_UNLOCK_BASE_DEFEATS = 3;
   const MOB_BOSS_DEFEATS_TO_UNLOCK = 30;
@@ -234,6 +234,14 @@
   const SURVIVAL_CAMP_SPAWN_DISTANCE_PADDING = 1200;
   const SURVIVAL_CAMP_SPAWN_DISTANCE_SPREAD = 9000;
   const SURVIVAL_CAMP_ALLOWANCE_PREFERRED_SEPARATION = 4200;
+  const SURVIVAL_CAMP_ACTIVE_RADIUS = 42000;
+  const SURVIVAL_CAMP_EXPANSION_DISTANCE = 32000;
+  const SURVIVAL_CAMP_MAX_EXPANSION = 8;
+  const SURVIVAL_MIGRATION_AGGRO_RADIUS = 1450;
+  const SURVIVAL_MIGRATION_AGGRO_DURATION = 14;
+  const SURVIVAL_MIGRATION_MAX_SPEED = 760;
+  const SURVIVAL_SALVAGE_MAX_UFOS = 3;
+  const SURVIVAL_SALVAGE_ARRIVAL_RADIUS = 620;
   const MOB_SPAWN_FULLY_ZOOMED_OUT_VIEW_RADIUS = Math.hypot(1280, 720) / (2 * 0.08);
   const MOB_SPAWN_DISTANCE_BONUS = 320;
   const MOB_SPAWN_SPREAD_MULTIPLIER = 1.25;

@@ -41,6 +41,34 @@
         return objectiveMassProgress("star");
       }
     },
+    reach_speed_520: {
+      icon: ">",
+      hint: "Break 520 speed on the map speedometer.",
+      progress: function () {
+        return objectiveSpeedProgress(520);
+      }
+    },
+    reach_speed_1000: {
+      icon: ">>",
+      hint: "Break 1000 speed with boost, jets, or a fast ride.",
+      progress: function () {
+        return objectiveSpeedProgress(1000);
+      }
+    },
+    reach_speed_2000: {
+      icon: ">>>",
+      hint: "Break 2000 speed with advanced propulsion.",
+      progress: function () {
+        return objectiveSpeedProgress(2000);
+      }
+    },
+    reach_growth_rate_10: {
+      icon: "+",
+      hint: "Raise the Growth tracker in the HUD above 10 per second.",
+      progress: function () {
+        return objectiveGrowthRateProgress(10);
+      }
+    },
     kill_3_alienoids: objectiveMobMetadata("alienoid"),
     kill_3_ufos: objectiveMobMetadata("ufo"),
     kill_3_rambots: objectiveMobMetadata("rambot"),
@@ -268,7 +296,12 @@
   let mobSpawnRestDrainTimer = 0;
   let mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
   const survivalSpawnState = {
-    nextCampCheckTick: 0
+    nextCampCheckTick: 0,
+    exploredInitialized: false,
+    exploredMinX: 0,
+    exploredMaxX: 0,
+    exploredMinY: 0,
+    exploredMaxY: 0
   };
   const mobDefeatsByKind = {
     alienoid: 0,

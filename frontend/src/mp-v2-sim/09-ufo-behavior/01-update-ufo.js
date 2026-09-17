@@ -1,12 +1,13 @@
   function updateUfo(state, ufo, players, dt, seedHolder) {
     const targetInfo = nearestCombatPlayer(players, ufo);
     const target = targetInfo.player;
+    const salvageTarget = survivalSalvageTowTarget(state, ufo, dt);
     const hostileSurvivalEncounter = ufo &&
       !isPlayerTeamMob(ufo) &&
       (ufo.survivalEncounterType === "camp" || isSurvivalCampMob(state, ufo));
-    const cleanupBody = isPlayerTeamMob(ufo) || hostileSurvivalEncounter ? null : ufoCleanupTarget(state, ufo);
+    const cleanupBody = salvageTarget || isPlayerTeamMob(ufo) || hostileSurvivalEncounter ? null : ufoCleanupTarget(state, ufo);
     const beamMode = updateUfoBossBeamState(ufo, dt);
-    const moveTarget = cleanupBody && !(ufo.isBoss && beamMode === "drain") ? cleanupBody : target;
+    const moveTarget = salvageTarget || (cleanupBody && !(ufo.isBoss && beamMode === "drain") ? cleanupBody : target);
     if (!moveTarget) {
       return;
     }
@@ -17,7 +18,7 @@
     const ny = toTargetY / dist;
     const tangentX = -ny * (Number(ufo.strafeSign) < 0 ? -1 : 1);
     const tangentY = nx * (Number(ufo.strafeSign) < 0 ? -1 : 1);
-    const desiredDistance = cleanupBody && moveTarget === cleanupBody ? clamp(finiteOr(cleanupBody.radius, 0) + 350, 430, 660) : 430;
+    const desiredDistance = salvageTarget ? 0 : cleanupBody && moveTarget === cleanupBody ? clamp(finiteOr(cleanupBody.radius, 0) + 350, 430, 660) : 430;
     const noBeamBoost = ufo.isBoss && beamMode === "cooldown" ? 1.34 : 1;
     const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
     const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);

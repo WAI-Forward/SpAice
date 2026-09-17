@@ -325,24 +325,48 @@
     const speed = Math.hypot(finiteOr(anchor.vx, 0), finiteOr(anchor.vy, 0));
     const moving = speed > 45;
     const travel = moving ? normalize(anchor.vx, anchor.vy) : { x: 0, y: 0 };
+    const bowWave = Boolean(anchor.ambientAnchorBowWave && moving);
+    const bowStrength = bowWave
+      ? clamp(Object.prototype.hasOwnProperty.call(anchor, "ambientAnchorWeight") ? finiteOr(anchor.ambientAnchorWeight, 0) : 1, 0.02, 1)
+      : 0;
+    const bodyRadius = Math.max(0, finiteOr(anchor.radius, 0));
     let best = null;
 
     for (let attempt = 0; attempt < 24; attempt += 1) {
-      const aheadBias = moving && nextRandom(seedHolder) < 0.58;
-      const angle = aheadBias
-        ? Math.atan2(travel.y, travel.x) + randomRange(seedHolder, -1.05, 1.05)
-        : randomRange(seedHolder, 0, Math.PI * 2);
-      const baseMinDist = AMBIENT_PARTICLE_MIN_PLAYER_DISTANCE * randomRange(seedHolder, 1, 1.12);
-      const minDist = localFill
+      const bowRoll = nextRandom(seedHolder);
+      const wakeBias = bowWave && bowRoll < 0.26 + bowStrength * 0.1;
+      const noseBias = bowWave && !wakeBias && bowRoll > 0.9 - bowStrength * 0.22;
+      const bowSpread = randomRange(seedHolder, 0.18, 1.22 - bowStrength * 0.32);
+      const bowSide = nextRandom(seedHolder) < 0.5 ? -1 : 1;
+      const aheadBias = moving && nextRandom(seedHolder) < (bowWave ? 0.48 + bowStrength * 0.32 : 0.58);
+      const angle = bowWave
+        ? Math.atan2(travel.y, travel.x) + (wakeBias ? Math.PI + randomRange(seedHolder, -0.72, 0.72) : noseBias ? randomRange(seedHolder, -0.22, 0.22) : bowSide * bowSpread)
+        : aheadBias
+          ? Math.atan2(travel.y, travel.x) + randomRange(seedHolder, -1.05, 1.05)
+          : randomRange(seedHolder, 0, Math.PI * 2);
+      const baseMinDist = bowWave
+        ? Math.max(bodyRadius + 46, 122)
+        : AMBIENT_PARTICLE_MIN_PLAYER_DISTANCE * randomRange(seedHolder, 1, 1.12);
+      const minDist = bowWave
+        ? baseMinDist
+        : localFill
         ? Math.min(baseMinDist, Math.max(120, AMBIENT_PARTICLE_DENSITY_RADIUS * 0.74))
         : baseMinDist;
-      const broadMaxDist = AMBIENT_PARTICLE_MAX_PLAYER_DISTANCE + clamp(speed * 0.82, 0, 620);
-      const maxDist = localFill
+      const broadMaxDist = bowWave
+        ? Math.min(Math.max(minDist + 100, bodyRadius + 210 + speed * (0.03 + bowStrength * 0.045)), 520)
+        : AMBIENT_PARTICLE_MAX_PLAYER_DISTANCE + clamp(speed * 0.82, 0, 620);
+      const maxDist = bowWave
+        ? broadMaxDist
+        : localFill
         ? Math.max(minDist + 60, Math.min(broadMaxDist, localFillRadius * 0.92))
         : broadMaxDist;
       const dist = randomRange(seedHolder, minDist, maxDist);
-      const ahead = moving ? clamp(speed * randomRange(seedHolder, 0.18, 1.2), 0, 820) : 0;
-      const driftRange = localFill ? 110 : 220;
+      const ahead = bowWave
+        ? wakeBias
+          ? -randomRange(seedHolder, bodyRadius * 0.25, bodyRadius * (0.95 + bowStrength * 0.7) + speed * 0.1)
+          : clamp(speed * randomRange(seedHolder, 0.005, 0.05 + bowStrength * 0.05), 0, 96)
+        : moving ? clamp(speed * randomRange(seedHolder, 0.18, 1.2), 0, 820) : 0;
+      const driftRange = bowWave ? Math.max(12, Math.min(58, bodyRadius * (0.09 + bowStrength * 0.08))) : localFill ? 110 : 220;
       const drift = rotatePoint(
         randomRange(seedHolder, -driftRange, driftRange),
         randomRange(seedHolder, -driftRange, driftRange),
@@ -365,21 +389,22 @@
       const density = ambientDensityAt(world, x, y);
       const patchAffinity = particlePatchAffinityAt(x, y);
       const voidAffinity = particleVoidAffinityAt(x, y) * (1 - patchAffinity * 0.55);
-      const tooCloseToPlayer = Math.max(0, AMBIENT_PARTICLE_MIN_PLAYER_DISTANCE - nearest);
+      const minAnchorDistance = bowWave ? Math.max(70, bodyRadius + 52) : AMBIENT_PARTICLE_MIN_PLAYER_DISTANCE;
+      const tooCloseToPlayer = Math.max(0, minAnchorDistance - nearest);
       const patchWeight = localFill ? 0.24 : 1;
       const preferredSpacing = AMBIENT_PARTICLE_PREFERRED_SPACING * (1 - patchAffinity * 0.16 + voidAffinity * 0.55);
       const spacingPenalty = Math.max(0, preferredSpacing - density.nearest);
       const score =
-        nearest * 0.16 +
+        nearest * (bowWave ? 0.015 : 0.16) +
         density.nearest * (1.08 - patchAffinity * 0.2 + voidAffinity * 0.22) +
         patchAffinity * 860 * patchWeight -
         voidAffinity * 560 * (localFill ? 0.48 : 1) -
         density.crowdCount * (135 - patchAffinity * 45 + voidAffinity * 72) -
         (1 - patchAffinity) * 105 * patchWeight -
-        tooCloseToPlayer * 7.5 -
+        tooCloseToPlayer * (bowWave ? 3.8 : 7.5) -
         spacingPenalty * (3.2 - patchAffinity * 1.25 + voidAffinity * 1.2);
       if (!best || score > best.score) {
-        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount };
+        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount, bowWave };
       }
     }
     return best || {
@@ -390,7 +415,8 @@
       voidAffinity: particleVoidAffinityAt(anchor.x, anchor.y),
       densityNearest: 480,
       crowdCount: 0,
-      score: 0
+      score: 0,
+      bowWave
     };
   }
 
@@ -433,23 +459,37 @@
     return 4;
   }
 
+  function randomBowWaveParticleColor(seedHolder) {
+    return hslToRgb(
+      randomRange(seedHolder, 24, 56),
+      randomRange(seedHolder, 0.84, 0.98),
+      randomRange(seedHolder, 0.56, 0.72)
+    );
+  }
+
   function createAmbientParticle(world, anchor, players, seedHolder, options) {
     const recycled = options && options.recycledBody;
     const spawnPoint = chooseAmbientParticleSpawnPoint(world, anchor, players, seedHolder, options);
+    const bowWave = Boolean(spawnPoint.bowWave);
     const mass = randomAmbientParticleMass(seedHolder, spawnPoint);
     const angle = randomRange(seedHolder, 0, Math.PI * 2);
     const speed = randomRange(seedHolder, 5, 36);
     const particleId = recycled ? recycled.id : world.nextParticleId++;
     const textureSeed = randomRange(seedHolder, 0, 1000);
+    const bowStrength = bowWave
+      ? clamp(Object.prototype.hasOwnProperty.call(anchor, "ambientAnchorWeight") ? finiteOr(anchor.ambientAnchorWeight, 0) : 1, 0.02, 1)
+      : 0;
+    const inheritScale = bowWave ? 0.01 + bowStrength * 0.018 : 0.08;
+    const inwardSpeed = bowWave ? randomRange(seedHolder, 14 + bowStrength * 18, 36 + bowStrength * 48) : randomRange(seedHolder, 6, 26);
     const particle = normalizeParticle(
       {
         id: particleId,
         x: spawnPoint.x,
         y: spawnPoint.y,
-        vx: Math.cos(angle) * speed + finiteOr(anchor.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(seedHolder, 6, 26),
-        vy: Math.sin(angle) * speed + finiteOr(anchor.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(seedHolder, 6, 26),
+        vx: Math.cos(angle) * speed + finiteOr(anchor.vx, 0) * inheritScale - Math.cos(spawnPoint.angle) * inwardSpeed,
+        vy: Math.sin(angle) * speed + finiteOr(anchor.vy, 0) * inheritScale - Math.sin(spawnPoint.angle) * inwardSpeed,
         mass,
-        color: randomParticleColor(seedHolder),
+        color: bowWave ? randomBowWaveParticleColor(seedHolder) : randomParticleColor(seedHolder),
         textureSeed,
         wobble: randomRange(seedHolder, 0, Math.PI * 2),
         pulse: randomRange(seedHolder, 0.8, 1.25),

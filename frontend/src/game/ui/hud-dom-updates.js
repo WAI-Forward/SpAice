@@ -119,11 +119,17 @@
     return String(Math.round(normalized));
   }
 
+  function formatGrowthRate(rate) {
+    const normalized = Math.max(0, finiteOr(rate, 0));
+    return String(Math.round(normalized));
+  }
+
   function updateMapSpeedometerHud() {
     if (!mapSpeedValue) {
       return;
     }
     const source = currentTravelVelocitySource();
     const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
+    recordObjectiveTravelSpeed(speed);
     setTextIfChanged(mapSpeedValue, formatTravelSpeed(speed));
   }

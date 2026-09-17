@@ -1,32 +1,65 @@
   function createObjectiveLinkElement(namespace, start, end, status, glow) {
-    const line = document.createElementNS(namespace, "line");
+    const path = document.createElementNS(namespace, "path");
     const points = objectiveEdgePoints(start, end);
-    line.classList.add(glow ? "objective-tree__link-glow" : "objective-tree__link");
-    line.classList.add("is-" + status);
-    line.setAttribute("x1", points.start.x.toFixed(1));
-    line.setAttribute("y1", points.start.y.toFixed(1));
-    line.setAttribute("x2", points.end.x.toFixed(1));
-    line.setAttribute("y2", points.end.y.toFixed(1));
-    return line;
+    const center = objectiveGraphCenter();
+    const startAngle = Math.atan2(points.start.y - center.y, points.start.x - center.x);
+    const endAngle = Math.atan2(points.end.y - center.y, points.end.x - center.x);
+    const startRadius = Math.hypot(points.start.x - center.x, points.start.y - center.y);
+    const endRadius = Math.hypot(points.end.x - center.x, points.end.y - center.y);
+    let delta = endAngle - startAngle;
+    if (delta > Math.PI) {
+      delta -= Math.PI * 2;
+    } else if (delta < -Math.PI) {
+      delta += Math.PI * 2;
+    }
+    const controlAngle = startAngle + delta * 0.5;
+    const controlRadius = (startRadius + endRadius) * 0.5;
+    const control = {
+      x: center.x + Math.cos(controlAngle) * controlRadius,
+      y: center.y + Math.sin(controlAngle) * controlRadius
+    };
+
+    path.classList.add(glow ? "objective-tree__link-glow" : "objective-tree__link");
+    path.classList.add("is-" + status);
+    path.setAttribute(
+      "d",
+      "M " + points.start.x.toFixed(1) + " " + points.start.y.toFixed(1) +
+        " Q " + control.x.toFixed(1) + " " + control.y.toFixed(1) +
+        " " + points.end.x.toFixed(1) + " " + points.end.y.toFixed(1)
+    );
+    return path;
+  }
+
+  function createObjectiveOrbitElement(namespace, center, orbit) {
+    const circle = document.createElementNS(namespace, "circle");
+    circle.classList.add("objective-tree__orbit");
+    circle.classList.add("objective-tree__orbit--tier-" + Math.min(8, Math.max(1, Math.floor(finiteOr(orbit.depth, 1)))));
+    circle.setAttribute("cx", center.x.toFixed(1));
+    circle.setAttribute("cy", center.y.toFixed(1));
+    circle.setAttribute("r", Math.max(1, finiteOr(orbit.radius, 1)).toFixed(1));
+    return circle;
   }
 
   function createObjectiveLinkLayer(snapshots, size) {
     const namespace = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(namespace, "svg");
     const byId = new Map();
+    const center = objectiveGraphCenter();
 
     svg.classList.add("objective-tree__links");
     svg.setAttribute("viewBox", "0 0 " + size.width + " " + size.height);
     svg.setAttribute("aria-hidden", "true");
+
+    for (const orbit of objectiveGraphOrbits()) {
+      svg.append(createObjectiveOrbitElement(namespace, center, orbit));
+    }
 
     for (const snapshot of snapshots) {
       byId.set(snapshot.definition.id, snapshot);
     }
 
     for (const snapshot of snapshots) {
-      const prerequisites = Array.isArray(snapshot.definition.prerequisites)
-        ? snapshot.definition.prerequisites
-        : (snapshot.definition.parent ? [snapshot.definition.parent] : []);
+      const prerequisites = objectivePrerequisiteIds(snapshot.definition);
       for (const prerequisiteId of prerequisites) {
         const parent = byId.get(prerequisiteId);
         if (!parent) {
@@ -62,7 +95,10 @@
     node.classList.add("is-" + objectiveVisualStatus(snapshot));
     node.classList.toggle("is-current", snapshot.current);
     node.classList.toggle("is-selected", selectedNode);
+    node.classList.toggle("is-root", definition.id === objectiveGraphLayout.rootId);
+    node.classList.add("objective-node--" + String(definition.category || "misc").replace(/[^a-z0-9_-]/gi, ""));
     node.dataset.objectiveId = definition.id;
+    node.dataset.objectiveCategory = definition.category || "";
     node.disabled = !selectable;
     node.title = definition.title + " - " + objectiveStatusText(snapshot);
     node.setAttribute("aria-label", definition.title + ". " + objectiveStatusText(snapshot) + ". " + objectiveHintText(definition));
@@ -253,6 +289,11 @@
       if (reward.blueprintId) {
         continue;
       }
+      if (reward.health) {
+        const healthAmount = Math.max(1, Math.floor(finiteOr(reward.health, 1)));
+        player.health = Math.min(Math.max(1, finiteOr(player.maxHealth, 100)), Math.max(0, finiteOr(player.health, 0)) + healthAmount);
+        continue;
+      }
       const techKey = reward.techKey;
       const amount = Math.max(1, Math.floor(finiteOr(reward.amount, 1)));
       if (techTypes.some((tech) => tech.key === techKey)) {
@@ -308,7 +349,16 @@
     return {
       completed: Object.keys(objectiveState.completed).filter((id) => objectiveState.completed[id] === true),
       claimed: Object.keys(objectiveState.claimed).filter((id) => objectiveState.claimed[id] === true),
-      createdBodyMass: Math.max(0, finiteOr(objectiveState.createdBodyMass, 0))
+      createdBodyMass: Math.max(0, finiteOr(objectiveState.createdBodyMass, 0)),
+      maxTravelSpeed: Math.max(0, finiteOr(objectiveState.maxTravelSpeed, 0)),
+      maxGrowthRate: Math.max(0, finiteOr(objectiveState.maxGrowthRate, 0)),
+      builtStructures: Object.keys(objectiveState.builtStructures || {}).reduce(function (result, type) {
+        const count = Math.max(0, Math.floor(finiteOr(objectiveState.builtStructures[type], 0)));
+        if (count > 0) {
+          result[type] = count;
+        }
+        return result;
+      }, {})
     };
   }
 
@@ -316,6 +366,9 @@
     objectiveState.completed = Object.create(null);
     objectiveState.claimed = Object.create(null);
     objectiveState.createdBodyMass = Math.max(0, finiteOr(snapshot && snapshot.createdBodyMass, 0));
+    objectiveState.maxTravelSpeed = Math.max(0, finiteOr(snapshot && snapshot.maxTravelSpeed, 0));
+    objectiveState.maxGrowthRate = Math.max(0, finiteOr(snapshot && snapshot.maxGrowthRate, 0));
+    objectiveState.builtStructures = Object.create(null);
     objectiveState.selectedId = "";
     const source = snapshot && typeof snapshot === "object" && Array.isArray(snapshot.completed) ? snapshot.completed : [];
     for (const id of source) {
@@ -329,13 +382,22 @@
         objectiveState.claimed[id] = true;
       }
     }
+    const builtStructures = snapshot && typeof snapshot === "object" && snapshot.builtStructures && typeof snapshot.builtStructures === "object"
+      ? snapshot.builtStructures
+      : {};
+    for (const type of Object.keys(builtStructures)) {
+      const count = Math.max(0, Math.floor(finiteOr(builtStructures[type], 0)));
+      if (count > 0) {
+        objectiveState.builtStructures[type] = count;
+      }
+    }
     objectiveState.renderSignature = "";
     objectiveState.lastUpdateFrameId = -1000;
     renderObjectiveTree(true);
   }
 
   function resetObjectiveState() {
-    applyObjectiveState({ completed: [], claimed: [], createdBodyMass: 0 });
+    applyObjectiveState({ completed: [], claimed: [], createdBodyMass: 0, maxTravelSpeed: 0, maxGrowthRate: 0, builtStructures: {} });
   }
 
   function serializeRandomEventState() {

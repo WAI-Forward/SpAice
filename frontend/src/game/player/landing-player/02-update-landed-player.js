@@ -209,6 +209,9 @@
       return;
     }
 
+    // Preserve speed carried away from a moving surface. The normal jetpack
+    // limit should cap new acceleration, not erase momentum on the next frame.
+    const carriedSpeed = length(player.vx, player.vy);
     let localX = 0;
     let localY = 0;
 
@@ -254,17 +257,18 @@
     const boostSpeed = canUseJetpackBoost(dt) ? jetpackBoostSpeedMultiplier : 1;
     const rocketSuitActive = isRocketSuitEquipped() && mouse.left && !buildMenuOpen;
     const rocketSuitMaxSpeed = rocketSuitBaseMaxSpeed + clamp(finiteOr(player.rocketSuitCharge, 0), 0, 1) * rocketSuitChargeMaxSpeed;
-    const maxSpeed = vacuumHoldActive
+    const controlledMaxSpeed = vacuumHoldActive
       ? 0
       : rocketSuitActive
         ? rocketSuitMaxSpeed
         : ((canUseSuctionControls() && isGadgetButtonPressed()) ? 275 : 430 * boostSpeed) * weaponSlowFactor;
+    const maxSpeed = vacuumHoldActive ? 0 : Math.max(controlledMaxSpeed, carriedSpeed);
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
     }
 
-    const drag = Math.pow(0.18, dt);
+    const drag = Math.pow(0.58, dt);
     player.vx *= drag;
     player.vy *= drag;
     player.x += player.vx * dt;

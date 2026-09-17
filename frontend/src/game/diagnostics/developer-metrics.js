@@ -259,6 +259,13 @@
     }
 
     const range = clamp(farthest * 1.08, 1400, 9000);
+    const activityCompass = collectMapActivityCompass({
+      range,
+      remoteContacts,
+      spacecraftContacts,
+      campContacts,
+      eventRegions
+    });
 
     ctx.save();
     ctx.fillStyle = "rgba(3, 8, 24, 0.72)";
@@ -291,6 +298,8 @@
     ctx.moveTo(centerX, centerY - mapRadius);
     ctx.lineTo(centerX, centerY + mapRadius);
     ctx.stroke();
+
+    drawMapActivityCompassLine(activityCompass, centerX, centerY, mapRadius, range);
 
     for (const region of eventRegions) {
       drawMapEventRegion(region, centerX, centerY, mapRadius, range);
@@ -425,6 +434,7 @@
     const starThreshold = thresholdForTierName("star");
     const terminalStellar = stellarOutcomeTierNames.includes(tier.name);
     const stellarProgressActive = progressMass >= planetThreshold && (progressMass < stellarEvolutionEndThreshold || terminalStellar);
+    const displayedGrowthRate = updateGrowthRateHud(progressBody, progressMass);
     setTextIfChanged(currentBodyLabel, formatTierName(tier.name).toUpperCase() + ":");
     if (stellarProgressActive) {
       const firstProgress = progressMass >= starThreshold
@@ -435,7 +445,9 @@
         : progressMass >= starThreshold
           ? clamp((progressMass - starThreshold) / Math.max(1, stellarEvolutionEndThreshold - starThreshold), 0, 1)
           : 0;
-      const growthRate = Math.max(0, finiteOr(progressBody && progressBody.stellarGrowthRate, 0));
+      const growthRate = progressBody && progressBody.stellarGrowthStarted
+        ? Math.max(0, finiteOr(progressBody.stellarGrowthRate, 0))
+        : displayedGrowthRate;
       const predictedOutcome = terminalStellar
         ? tier.name
         : progressMass >= starThreshold
@@ -450,7 +462,7 @@
       }
       if (stellarRateLabel) {
         stellarRateLabel.hidden = progressMass < starThreshold || terminalStellar;
-        setTextIfChanged(stellarRateLabel, "Rate " + growthRate.toFixed(growthRate >= 10 ? 0 : 1) + "/s -> " + formatTierName(predictedOutcome));
+        setTextIfChanged(stellarRateLabel, "Rate " + formatGrowthRate(growthRate) + "/s -> " + formatTierName(predictedOutcome));
       }
       maybeRenderOpenLeaderboard();
       return;

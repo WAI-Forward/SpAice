@@ -286,9 +286,10 @@
     }
 
     const world = state.world;
-    let bestBody = null;
+    const assignedSalvageBody = survivalSalvageBody(world, ufo);
+    let bestBody = assignedSalvageBody;
     let bestScore = Infinity;
-    for (const body of world.particles || []) {
+    for (const body of assignedSalvageBody ? [] : world.particles || []) {
       if (!canUfoTractorAffectParticle(body) || !canUfoPreferTractorTarget(ufo, body)) {
         continue;
       }
@@ -344,8 +345,9 @@
       const centerStrength = clamp(1 - Math.abs(side) / Math.max(1, beamHalf), 0, 1);
       const toOriginX = originX - body.x;
       const toOriginY = originY - body.y;
+      const isAssignedSalvageBody = body === assignedSalvageBody;
 
-      if (shouldUfoSiphonBody(ufo, body)) {
+      if (!isAssignedSalvageBody && shouldUfoSiphonBody(ufo, body)) {
         drainBodyWithUfoTractor(state, seedHolder, ufo, body, pullStrength, centerStrength, dt);
         continue;
       }
@@ -358,6 +360,10 @@
       body.vy += (toOrigin.y * force - normalY * side * 7.5) * dt;
 
       if (Math.hypot(toOriginX, toOriginY) >= ufo.radius + body.radius * 1.05) {
+        continue;
+      }
+
+      if (isAssignedSalvageBody) {
         continue;
       }
 
@@ -440,7 +446,7 @@
       target.vy += dirY * 210 + finiteOr(ufo.vy, 0) * 0.38;
       if (isCombatMobEntity(target)) {
         damageMob(state, target, bossScaledDamage(ufo, UFO_UNDERSIDE_DAMAGE), ufo.isBoss ? "UFO boss underside" : "UFO underside");
-      } else if (damagePlayer(state, target, bossScaledDamage(ufo, UFO_UNDERSIDE_DAMAGE), ufo.isBoss ? "UFO boss underside" : "UFO underside")) {
+      } else if (damagePlayer(state, target, difficultyMobDamage(state, bossScaledDamage(ufo, UFO_UNDERSIDE_DAMAGE)), ufo.isBoss ? "UFO boss underside" : "UFO underside")) {
         state.events.push({ type: "player.hitByMob", playerId: target.id, mobId: ufo.id, kind: "ufo", tick: state.tick });
       }
     }
@@ -465,7 +471,7 @@
 
     const dirX = Math.cos(finiteOr(ufo.beamAngle, Math.PI / 2));
     const dirY = Math.sin(finiteOr(ufo.beamAngle, Math.PI / 2));
-    const damage = bossScaledDamage(ufo, UFO_BOSS_PLAYER_DRAIN_RATE) * UFO_BOSS_PLAYER_DRAIN_TICK_INTERVAL * hitStrength;
+    const damage = difficultyMobDamage(state, bossScaledDamage(ufo, UFO_BOSS_PLAYER_DRAIN_RATE) * UFO_BOSS_PLAYER_DRAIN_TICK_INTERVAL * hitStrength);
     target.vx += -dirX * 105 * hitStrength + finiteOr(ufo.vx, 0) * 0.12;
     target.vy += -dirY * 105 * hitStrength + finiteOr(ufo.vy, 0) * 0.12;
     if (isCombatMobEntity(target)) {

@@ -1,11 +1,3 @@
-  function objectiveOwnedTechCount() {
-    let total = 0;
-    for (const tech of techTypes) {
-      total += Math.max(0, Math.floor(finiteOr(techInventory[tech.key], 0)));
-    }
-    return total;
-  }
-
   function objectiveMobTechKey(kind) {
     if (kind === "ufo") return "suction";
     if (kind === "rambot") return "plating";
@@ -39,9 +31,29 @@
     return mobKindsByObjective[id] || "";
   }
 
+  function objectiveMobRewardTier(kind) {
+    return Math.max(0, mobTierOrder.indexOf(kind));
+  }
+
+  function objectiveMobHealthRewardAmount(kind, boss) {
+    const tier = objectiveMobRewardTier(kind);
+    return (boss ? 24 : 10) + tier * (boss ? 4 : 2);
+  }
+
+  function objectiveMobRepairRewardAmount(kind, boss) {
+    const tier = objectiveMobRewardTier(kind);
+    if (tier < 2) {
+      return 0;
+    }
+    return boss ? Math.max(1, Math.floor(tier / 2)) + 1 : Math.max(1, Math.floor((tier - 1) / 2));
+  }
+
   function objectiveRewardEntries(definition) {
     const id = String(definition && definition.id || "");
     const fixedRewards = {
+      reach_speed_520: { propulsion: 2 },
+      reach_speed_1000: { propulsion: 4 },
+      reach_speed_2000: { propulsion: 6, energy: 1 },
       make_laser_pistol: { weapon: 1 },
       create_rifle: { weapon: 2 },
       create_spanner: { repair: 1 },
@@ -57,10 +69,16 @@
 
     const mobKind = objectiveRewardMobKind(id);
     if (mobKind) {
+      const boss = id.indexOf("_boss") >= 0;
       const rewards = [{
         techKey: objectiveMobTechKey(mobKind),
-        amount: id.indexOf("_boss") >= 0 ? 3 : 1
+        amount: boss ? 3 : 1
       }];
+      rewards.push({ health: objectiveMobHealthRewardAmount(mobKind, boss) });
+      const repairReward = objectiveMobRepairRewardAmount(mobKind, boss);
+      if (repairReward > 0) {
+        rewards.push({ techKey: "repair", amount: repairReward });
+      }
       if (id === "kill_alienoid_boss") {
         rewards.push({ blueprintId: "shotgun", label: "Shotgun Blueprint" });
       }
@@ -104,6 +122,9 @@
       if (entry.blueprintId) {
         return entry.label || "Blueprint";
       }
+      if (entry.health) {
+        return "+" + Math.max(1, Math.floor(finiteOr(entry.health, 1))) + " Health";
+      }
       return Math.max(1, Math.floor(finiteOr(entry.amount, 1))) + " " + objectiveTechLabel(entry.techKey);
     }).join(" + ");
   }
@@ -123,10 +144,6 @@
 
   function objectiveCanClaim(snapshot) {
     return objectiveIsAwaitingClaim(snapshot);
-  }
-
-  function objectiveHasUnclaimedObjectives(snapshots) {
-    return snapshots.some(objectiveIsAwaitingClaim);
   }
 
   function objectiveClaimableSnapshots(snapshots) {
@@ -164,6 +181,30 @@
     return Math.max(0, finiteOr(objectiveState.createdBodyMass, 0));
   }
 
+  function recordObjectiveTravelSpeed(speed) {
+    const value = Math.max(0, finiteOr(speed, 0));
+    if (value > finiteOr(objectiveState.maxTravelSpeed, 0)) {
+      objectiveState.maxTravelSpeed = value;
+      objectiveState.renderSignature = "";
+    }
+  }
+
+  function objectiveMaxTravelSpeed() {
+    return Math.max(0, finiteOr(objectiveState.maxTravelSpeed, 0));
+  }
+
+  function recordObjectiveBuiltStructure(type) {
+    const structureType = String(type || "");
+    if (!structureType) {
+      return;
+    }
+    const builtStructures = objectiveState.builtStructures && typeof objectiveState.builtStructures === "object"
+      ? objectiveState.builtStructures
+      : (objectiveState.builtStructures = Object.create(null));
+    builtStructures[structureType] = Math.max(0, Math.floor(finiteOr(builtStructures[structureType], 0))) + 1;
+    objectiveState.renderSignature = "";
+  }
+
   function objectiveMassProgress(tierName) {
     const tier = bodyTierForCommandToken(tierName);
     const target = tier ? tier.threshold : 1;
@@ -173,6 +214,17 @@
       value: mass,
       target,
       label: Math.max(0, Math.round(mass)) + " / " + Math.round(target) + "g created"
+    };
+  }
+
+  function objectiveSpeedProgress(targetSpeed) {
+    const target = Math.max(1, Math.floor(finiteOr(targetSpeed, 1)));
+    const speed = objectiveMaxTravelSpeed();
+    return {
+      complete: speed >= target,
+      value: speed,
+      target,
+      label: Math.min(Math.round(speed), target) + " / " + target + " speed"
     };
   }
 
@@ -269,7 +321,10 @@
   }
 
   function objectiveStructureProgress(type) {
-    const count = structures.filter((structure) => structure && structure.type === type).length;
+    const counts = objectiveState.builtStructures && typeof objectiveState.builtStructures === "object"
+      ? objectiveState.builtStructures
+      : {};
+    const count = Math.max(0, Math.floor(finiteOr(counts[type], 0)));
     return {
       complete: count > 0,
       value: count,
@@ -392,43 +447,6 @@
       objectiveState.selectedId = selected ? selected.definition.id : "";
     }
     return selected;
-  }
-
-  function objectiveGraphPosition(definition) {
-    if (!definition) {
-      return { x: objectiveGraphPadding, y: objectiveGraphPadding };
-    }
-
-    const fixed = objectiveGraphLayout[definition.id];
-    if (fixed) {
-      return fixed;
-    }
-
-    const bossPrefix = "boss-requirement-";
-    if (definition.id && definition.id.indexOf(bossPrefix) === 0) {
-      const kind = definition.id.slice(bossPrefix.length);
-      const index = Math.max(0, mobTierOrder.indexOf(kind));
-      return {
-        x: 585 + (index % 2) * 220,
-        y: 625 + Math.floor(index / 2) * 120
-      };
-    }
-
-    return {
-      x: objectiveGraphPadding + (Math.max(1, Math.round(finiteOr(definition.col, 1))) - 1) * 200,
-      y: objectiveGraphPadding + (Math.max(1, Math.round(finiteOr(definition.row, 1))) - 1) * 120
-    };
-  }
-
-  function objectiveGraphSize(snapshots) {
-    let width = 760;
-    let height = 620;
-    for (const snapshot of snapshots) {
-      const position = objectiveGraphPosition(snapshot.definition);
-      width = Math.max(width, position.x + objectiveGraphPadding);
-      height = Math.max(height, position.y + objectiveGraphPadding);
-    }
-    return { width, height };
   }
 
   function objectiveGraphZoom() {

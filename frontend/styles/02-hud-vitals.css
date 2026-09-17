@@ -23,6 +23,7 @@
 .hud__progress,
 .hud__score,
 .hud__body,
+.hud__growth-rate,
 .hud__leaderboard-toggle {
   min-width: 92px;
   height: 42px;
@@ -194,6 +195,46 @@
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
+}
+
+.hud__growth-rate {
+  min-width: 128px;
+  display: grid;
+  grid-template-columns: auto minmax(28px, 1fr) auto;
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 10px;
+}
+
+.hud__growth-rate span {
+  overflow: hidden;
+  color: rgba(232, 241, 255, 0.72);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hud__growth-rate strong {
+  color: #ffe56f;
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 0.9;
+  letter-spacing: 0;
+  text-align: right;
+  text-shadow: 0 0 16px rgba(255, 229, 111, 0.28), 0 1px 12px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+.hud__growth-rate em {
+  color: rgba(223, 252, 255, 0.86);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .hud__status-effects {
@@ -433,4 +474,3 @@
   outline: 2px solid rgba(255, 229, 111, 0.72);
   outline-offset: 2px;
 }
-

@@ -17,6 +17,7 @@
   .hud.is-compact:not(.is-compact-open) .hud__progress,
   .hud.is-compact:not(.is-compact-open) .hud__score,
   .hud.is-compact:not(.is-compact-open) .hud__body,
+  .hud.is-compact:not(.is-compact-open) .hud__growth-rate,
   .hud.is-compact:not(.is-compact-open) .hud__status-effects,
   .hud.is-compact:not(.is-compact-open) .leaderboard-panel {
     display: none;
@@ -42,6 +43,11 @@
     width: clamp(216px, calc(100vw - 458px), 360px);
     grid-template-columns: minmax(60px, max-content) minmax(64px, 1fr) minmax(44px, max-content);
     gap: 7px;
+    padding: 7px 9px;
+  }
+
+  .hud__growth-rate {
+    min-width: 116px;
     padding: 7px 9px;
   }
 

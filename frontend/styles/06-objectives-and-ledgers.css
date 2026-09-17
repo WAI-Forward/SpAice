@@ -182,7 +182,10 @@
   padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
+  background:
+    linear-gradient(135deg, rgba(88, 226, 255, 0.055), transparent 36%),
+    linear-gradient(315deg, rgba(255, 220, 122, 0.045), transparent 42%),
+    rgba(5, 9, 24, 0.72);
   cursor: grab;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -219,13 +222,14 @@
 }
 
 .objective-tree__link {
-  stroke: rgba(91, 101, 124, 0.36);
-  stroke-width: 4;
+  fill: none;
+  stroke: rgba(116, 130, 160, 0.34);
+  stroke-width: 3.5;
   stroke-linecap: round;
 }
 
 .objective-tree__link.is-unlocked {
-  stroke: rgba(213, 221, 232, 0.5);
+  stroke: rgba(213, 221, 232, 0.46);
 }
 
 .objective-tree__link.is-unclaimed {
@@ -238,7 +242,8 @@
 }
 
 .objective-tree__link-glow {
-  stroke: rgba(91, 101, 124, 0.16);
+  fill: none;
+  stroke: rgba(116, 130, 160, 0.14);
   stroke-width: 12;
   stroke-linecap: round;
 }
@@ -257,7 +262,8 @@
 }
 
 .objective-node {
-  --objective-node-size: 62px;
+  --objective-node-size: 58px;
+  --objective-accent: 213, 221, 232;
   position: absolute;
   z-index: 2;
   width: var(--objective-node-size);
@@ -269,8 +275,9 @@
   border-radius: 50%;
   background:
     radial-gradient(circle at 38% 30%, rgba(255, 255, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 62% 72%, rgba(var(--objective-accent), 0.18), transparent 44%),
     #101522;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22), 0 0 16px rgba(213, 221, 232, 0.08);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22), 0 0 16px rgba(var(--objective-accent), 0.11);
   color: #f4f7fb;
   font: inherit;
   cursor: pointer;
@@ -296,8 +303,9 @@
   border-color: rgba(244, 247, 251, 0.78);
   background:
     radial-gradient(circle at 38% 30%, rgba(255, 255, 255, 0.22), transparent 34%),
+    radial-gradient(circle at 62% 72%, rgba(var(--objective-accent), 0.24), transparent 44%),
     #151b2a;
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(213, 221, 232, 0.12);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(var(--objective-accent), 0.14);
   transform: translate(-50%, calc(-50% - 1px));
 }
 
@@ -307,11 +315,11 @@
 }
 
 .objective-node.is-current {
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22), inset 0 0 0 2px rgba(244, 247, 251, 0.18);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22), inset 0 0 0 2px rgba(var(--objective-accent), 0.25);
 }
 
 .objective-node.is-selected {
-  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.34), 0 0 0 5px rgba(244, 247, 251, 0.1);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.34), 0 0 0 5px rgba(var(--objective-accent), 0.16);
 }
 
 .objective-node.is-claimed {
@@ -362,7 +370,7 @@
 
 .objective-node__icon {
   color: inherit;
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 950;
   line-height: 1;
   text-align: center;
@@ -476,4 +484,3 @@
   cursor: default;
   opacity: 0.58;
 }
-

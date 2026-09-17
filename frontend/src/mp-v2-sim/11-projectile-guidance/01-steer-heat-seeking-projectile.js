@@ -202,7 +202,10 @@
         if (dist >= target.radius * PLAYER_PROJECTILE_HURTBOX_SCALE + projectile.radius) {
           continue;
         }
-        const projectileDamage = Math.max(0, finiteOr(projectile.damage, RIVAL_PROJECTILE_DAMAGE));
+        const rawProjectileDamage = Math.max(0, finiteOr(projectile.damage, RIVAL_PROJECTILE_DAMAGE));
+        const projectileDamage = ownerPlayerId || playerTeamMobProjectile
+          ? rawProjectileDamage
+          : difficultyMobDamage(state, rawProjectileDamage);
         const projectileToolDisable = Math.max(0, finiteOr(projectile.toolDisable, 0));
         const canDamageTarget = target.hitCooldown <= 0 && projectileDamage > 0;
         const damagedTarget = canDamageTarget && damagePlayer(state, target, projectileDamage, projectile.cause || "Alienoid laser");
@@ -431,12 +434,6 @@
       structure.y,
       1
     );
-    const maxSpeed = 150 + massDamping * 210;
-    const speed = Math.hypot(body.vx, body.vy);
-    if (speed > maxSpeed) {
-      body.vx = (body.vx / speed) * maxSpeed;
-      body.vy = (body.vy / speed) * maxSpeed;
-    }
     structure.thrustAmount += (1 - finiteOr(structure.thrustAmount, 0)) * (1 - Math.pow(0.02, dt));
     structure.thrustDirection = direction;
   }

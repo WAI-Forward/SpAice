@@ -80,7 +80,7 @@
   ];
   const BODY_TIER_EVOLUTION_SIZE_SCALE = 1.2;
   const STELLAR_EVOLUTION_END_THRESHOLD = 60000;
-  const STELLAR_GROWTH_AVERAGE_WINDOW_SECONDS = 8;
+  const STELLAR_GROWTH_AVERAGE_WINDOW_SECONDS = 20;
   const STELLAR_GROWTH_RATE_NEUTRON_THRESHOLD = 80;
   const STELLAR_GROWTH_RATE_BLACK_HOLE_THRESHOLD = 220;
   const STELLAR_OUTCOME_TIER_NAMES = ["white dwarf", "neutron star", "black hole"];
@@ -179,9 +179,9 @@
   const MOB_BEACON_DROP_COUNT = 4;
   const MOB_TIER_ORDER = ["alienoid", "ufo", "rambot", "engineer", "tesla", "satellite", "rocket", "fighter"];
   const DIFFICULTY_MOB_SETTINGS = {
-    easy: { intervalScale: 0.82, firstWaveDelay: 28, batchScale: 1.12, bonusChanceScale: 1.1, startingBatchBonusChances: [0, 0], healthDropMultiplier: 1.1 },
-    medium: { intervalScale: 0.72, firstWaveDelay: 18, batchScale: 1.24, bonusChanceScale: 1.22, startingBatchBonusChances: [0.75, 0.2, 0.09], healthDropMultiplier: 0.9 },
-    hard: { intervalScale: 0.62, firstWaveDelay: 9, batchScale: 1.38, bonusChanceScale: 1.35, startingBatchBonusChances: [0.9, 0.75, 0.34], healthDropMultiplier: 0.7 }
+    easy: { intervalScale: 0.82, firstWaveDelay: 28, batchScale: 1.12, bonusChanceScale: 1.1, startingBatchBonusChances: [0, 0], damageMultiplier: 0.62, healthDropMultiplier: 1.1, survivalBudgetScale: 0.88, survivalCampScale: 0.9 },
+    medium: { intervalScale: 0.72, firstWaveDelay: 18, batchScale: 1.24, bonusChanceScale: 1.22, startingBatchBonusChances: [0.75, 0.2, 0.09], damageMultiplier: 0.82, healthDropMultiplier: 0.9, survivalBudgetScale: 1, survivalCampScale: 1 },
+    hard: { intervalScale: 0.62, firstWaveDelay: 9, batchScale: 1.38, bonusChanceScale: 1.35, startingBatchBonusChances: [0.9, 0.75, 0.34], damageMultiplier: 1, healthDropMultiplier: 0.7, survivalBudgetScale: 1.18, survivalCampScale: 1.15 }
   };
   const MOB_TIER_UNLOCK_BASE_DEFEATS = 3;
   const MOB_BOSS_DEFEATS_TO_UNLOCK = 30;
@@ -234,6 +234,14 @@
   const SURVIVAL_CAMP_SPAWN_DISTANCE_PADDING = 1200;
   const SURVIVAL_CAMP_SPAWN_DISTANCE_SPREAD = 9000;
   const SURVIVAL_CAMP_ALLOWANCE_PREFERRED_SEPARATION = 4200;
+  const SURVIVAL_CAMP_ACTIVE_RADIUS = 42000;
+  const SURVIVAL_CAMP_EXPANSION_DISTANCE = 32000;
+  const SURVIVAL_CAMP_MAX_EXPANSION = 8;
+  const SURVIVAL_MIGRATION_AGGRO_RADIUS = 1450;
+  const SURVIVAL_MIGRATION_AGGRO_DURATION = 14;
+  const SURVIVAL_MIGRATION_MAX_SPEED = 760;
+  const SURVIVAL_SALVAGE_MAX_UFOS = 3;
+  const SURVIVAL_SALVAGE_ARRIVAL_RADIUS = 620;
   const MOB_SPAWN_FULLY_ZOOMED_OUT_VIEW_RADIUS = Math.hypot(1280, 720) / (2 * 0.08);
   const MOB_SPAWN_DISTANCE_BONUS = 320;
   const MOB_SPAWN_SPREAD_MULTIPLIER = 1.25;
@@ -2648,9 +2656,16 @@
       "survivalMigrationCampId",
       "survivalMigrationCampX",
       "survivalMigrationCampY",
+      "survivalMigrationStraightTime",
+      "survivalMigrationDirX",
+      "survivalMigrationDirY",
       "survivalEncounterType",
       "survivalEncounterId",
       "survivalTargetPlayerId",
+      "survivalSalvageBodyId",
+      "survivalSalvageSourceCampId",
+      "survivalSalvageTargetCampId",
+      "survivalSalvageAge",
       "survivalCampBudget",
       "survivalCampBand",
       "length",
@@ -3486,24 +3501,48 @@
     const speed = Math.hypot(finiteOr(anchor.vx, 0), finiteOr(anchor.vy, 0));
     const moving = speed > 45;
     const travel = moving ? normalize(anchor.vx, anchor.vy) : { x: 0, y: 0 };
+    const bowWave = Boolean(anchor.ambientAnchorBowWave && moving);
+    const bowStrength = bowWave
+      ? clamp(Object.prototype.hasOwnProperty.call(anchor, "ambientAnchorWeight") ? finiteOr(anchor.ambientAnchorWeight, 0) : 1, 0.02, 1)
+      : 0;
+    const bodyRadius = Math.max(0, finiteOr(anchor.radius, 0));
     let best = null;
 
     for (let attempt = 0; attempt < 24; attempt += 1) {
-      const aheadBias = moving && nextRandom(seedHolder) < 0.58;
-      const angle = aheadBias
-        ? Math.atan2(travel.y, travel.x) + randomRange(seedHolder, -1.05, 1.05)
-        : randomRange(seedHolder, 0, Math.PI * 2);
-      const baseMinDist = AMBIENT_PARTICLE_MIN_PLAYER_DISTANCE * randomRange(seedHolder, 1, 1.12);
-      const minDist = localFill
+      const bowRoll = nextRandom(seedHolder);
+      const wakeBias = bowWave && bowRoll < 0.26 + bowStrength * 0.1;
+      const noseBias = bowWave && !wakeBias && bowRoll > 0.9 - bowStrength * 0.22;
+      const bowSpread = randomRange(seedHolder, 0.18, 1.22 - bowStrength * 0.32);
+      const bowSide = nextRandom(seedHolder) < 0.5 ? -1 : 1;
+      const aheadBias = moving && nextRandom(seedHolder) < (bowWave ? 0.48 + bowStrength * 0.32 : 0.58);
+      const angle = bowWave
+        ? Math.atan2(travel.y, travel.x) + (wakeBias ? Math.PI + randomRange(seedHolder, -0.72, 0.72) : noseBias ? randomRange(seedHolder, -0.22, 0.22) : bowSide * bowSpread)
+        : aheadBias
+          ? Math.atan2(travel.y, travel.x) + randomRange(seedHolder, -1.05, 1.05)
+          : randomRange(seedHolder, 0, Math.PI * 2);
+      const baseMinDist = bowWave
+        ? Math.max(bodyRadius + 46, 122)
+        : AMBIENT_PARTICLE_MIN_PLAYER_DISTANCE * randomRange(seedHolder, 1, 1.12);
+      const minDist = bowWave
+        ? baseMinDist
+        : localFill
         ? Math.min(baseMinDist, Math.max(120, AMBIENT_PARTICLE_DENSITY_RADIUS * 0.74))
         : baseMinDist;
-      const broadMaxDist = AMBIENT_PARTICLE_MAX_PLAYER_DISTANCE + clamp(speed * 0.82, 0, 620);
-      const maxDist = localFill
+      const broadMaxDist = bowWave
+        ? Math.min(Math.max(minDist + 100, bodyRadius + 210 + speed * (0.03 + bowStrength * 0.045)), 520)
+        : AMBIENT_PARTICLE_MAX_PLAYER_DISTANCE + clamp(speed * 0.82, 0, 620);
+      const maxDist = bowWave
+        ? broadMaxDist
+        : localFill
         ? Math.max(minDist + 60, Math.min(broadMaxDist, localFillRadius * 0.92))
         : broadMaxDist;
       const dist = randomRange(seedHolder, minDist, maxDist);
-      const ahead = moving ? clamp(speed * randomRange(seedHolder, 0.18, 1.2), 0, 820) : 0;
-      const driftRange = localFill ? 110 : 220;
+      const ahead = bowWave
+        ? wakeBias
+          ? -randomRange(seedHolder, bodyRadius * 0.25, bodyRadius * (0.95 + bowStrength * 0.7) + speed * 0.1)
+          : clamp(speed * randomRange(seedHolder, 0.005, 0.05 + bowStrength * 0.05), 0, 96)
+        : moving ? clamp(speed * randomRange(seedHolder, 0.18, 1.2), 0, 820) : 0;
+      const driftRange = bowWave ? Math.max(12, Math.min(58, bodyRadius * (0.09 + bowStrength * 0.08))) : localFill ? 110 : 220;
       const drift = rotatePoint(
         randomRange(seedHolder, -driftRange, driftRange),
         randomRange(seedHolder, -driftRange, driftRange),
@@ -3526,21 +3565,22 @@
       const density = ambientDensityAt(world, x, y);
       const patchAffinity = particlePatchAffinityAt(x, y);
       const voidAffinity = particleVoidAffinityAt(x, y) * (1 - patchAffinity * 0.55);
-      const tooCloseToPlayer = Math.max(0, AMBIENT_PARTICLE_MIN_PLAYER_DISTANCE - nearest);
+      const minAnchorDistance = bowWave ? Math.max(70, bodyRadius + 52) : AMBIENT_PARTICLE_MIN_PLAYER_DISTANCE;
+      const tooCloseToPlayer = Math.max(0, minAnchorDistance - nearest);
       const patchWeight = localFill ? 0.24 : 1;
       const preferredSpacing = AMBIENT_PARTICLE_PREFERRED_SPACING * (1 - patchAffinity * 0.16 + voidAffinity * 0.55);
       const spacingPenalty = Math.max(0, preferredSpacing - density.nearest);
       const score =
-        nearest * 0.16 +
+        nearest * (bowWave ? 0.015 : 0.16) +
         density.nearest * (1.08 - patchAffinity * 0.2 + voidAffinity * 0.22) +
         patchAffinity * 860 * patchWeight -
         voidAffinity * 560 * (localFill ? 0.48 : 1) -
         density.crowdCount * (135 - patchAffinity * 45 + voidAffinity * 72) -
         (1 - patchAffinity) * 105 * patchWeight -
-        tooCloseToPlayer * 7.5 -
+        tooCloseToPlayer * (bowWave ? 3.8 : 7.5) -
         spacingPenalty * (3.2 - patchAffinity * 1.25 + voidAffinity * 1.2);
       if (!best || score > best.score) {
-        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount };
+        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount, bowWave };
       }
     }
     return best || {
@@ -3551,7 +3591,8 @@
       voidAffinity: particleVoidAffinityAt(anchor.x, anchor.y),
       densityNearest: 480,
       crowdCount: 0,
-      score: 0
+      score: 0,
+      bowWave
     };
   }
 
@@ -3594,23 +3635,37 @@
     return 4;
   }
 
+  function randomBowWaveParticleColor(seedHolder) {
+    return hslToRgb(
+      randomRange(seedHolder, 24, 56),
+      randomRange(seedHolder, 0.84, 0.98),
+      randomRange(seedHolder, 0.56, 0.72)
+    );
+  }
+
   function createAmbientParticle(world, anchor, players, seedHolder, options) {
     const recycled = options && options.recycledBody;
     const spawnPoint = chooseAmbientParticleSpawnPoint(world, anchor, players, seedHolder, options);
+    const bowWave = Boolean(spawnPoint.bowWave);
     const mass = randomAmbientParticleMass(seedHolder, spawnPoint);
     const angle = randomRange(seedHolder, 0, Math.PI * 2);
     const speed = randomRange(seedHolder, 5, 36);
     const particleId = recycled ? recycled.id : world.nextParticleId++;
     const textureSeed = randomRange(seedHolder, 0, 1000);
+    const bowStrength = bowWave
+      ? clamp(Object.prototype.hasOwnProperty.call(anchor, "ambientAnchorWeight") ? finiteOr(anchor.ambientAnchorWeight, 0) : 1, 0.02, 1)
+      : 0;
+    const inheritScale = bowWave ? 0.01 + bowStrength * 0.018 : 0.08;
+    const inwardSpeed = bowWave ? randomRange(seedHolder, 14 + bowStrength * 18, 36 + bowStrength * 48) : randomRange(seedHolder, 6, 26);
     const particle = normalizeParticle(
       {
         id: particleId,
         x: spawnPoint.x,
         y: spawnPoint.y,
-        vx: Math.cos(angle) * speed + finiteOr(anchor.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(seedHolder, 6, 26),
-        vy: Math.sin(angle) * speed + finiteOr(anchor.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(seedHolder, 6, 26),
+        vx: Math.cos(angle) * speed + finiteOr(anchor.vx, 0) * inheritScale - Math.cos(spawnPoint.angle) * inwardSpeed,
+        vy: Math.sin(angle) * speed + finiteOr(anchor.vy, 0) * inheritScale - Math.sin(spawnPoint.angle) * inwardSpeed,
         mass,
-        color: randomParticleColor(seedHolder),
+        color: bowWave ? randomBowWaveParticleColor(seedHolder) : randomParticleColor(seedHolder),
         textureSeed,
         wobble: randomRange(seedHolder, 0, Math.PI * 2),
         pulse: randomRange(seedHolder, 0.8, 1.25),
@@ -3801,9 +3856,16 @@
       survivalMigrationCampId: typeof snapshot.survivalMigrationCampId === "string" ? snapshot.survivalMigrationCampId : "",
       survivalMigrationCampX: finiteOr(snapshot.survivalMigrationCampX, Number.NaN),
       survivalMigrationCampY: finiteOr(snapshot.survivalMigrationCampY, Number.NaN),
-      survivalEncounterType: snapshot.survivalEncounterType === "camp" ? "camp" : "",
+      survivalMigrationStraightTime: Math.max(0, finiteOr(snapshot.survivalMigrationStraightTime, 0)),
+      survivalMigrationDirX: finiteOr(snapshot.survivalMigrationDirX, 0),
+      survivalMigrationDirY: finiteOr(snapshot.survivalMigrationDirY, 0),
+      survivalEncounterType: ["camp", "migration", "salvage"].includes(snapshot.survivalEncounterType) ? snapshot.survivalEncounterType : "",
       survivalEncounterId: typeof snapshot.survivalEncounterId === "string" ? snapshot.survivalEncounterId : "",
       survivalTargetPlayerId: typeof snapshot.survivalTargetPlayerId === "string" ? snapshot.survivalTargetPlayerId : "",
+      survivalSalvageBodyId: Math.max(0, Math.floor(finiteOr(snapshot.survivalSalvageBodyId, 0))),
+      survivalSalvageSourceCampId: typeof snapshot.survivalSalvageSourceCampId === "string" ? snapshot.survivalSalvageSourceCampId : "",
+      survivalSalvageTargetCampId: typeof snapshot.survivalSalvageTargetCampId === "string" ? snapshot.survivalSalvageTargetCampId : "",
+      survivalSalvageAge: Math.max(0, finiteOr(snapshot.survivalSalvageAge, 0)),
       survivalCampBudget: Math.max(0, finiteOr(snapshot.survivalCampBudget, 0)),
       survivalCampBand: typeof snapshot.survivalCampBand === "string" ? snapshot.survivalCampBand : "",
       eliteStars,
@@ -7476,6 +7538,9 @@
       return;
     }
 
+    // Preserve speed carried away from a moving surface. The normal jetpack
+    // limit should cap new acceleration, not erase momentum on the next frame.
+    const carriedSpeed = Math.hypot(finiteOr(player.vx, 0), finiteOr(player.vy, 0));
     const rocketSuitActive = updateRocketSuitPlayer(state, player, safeInput, dt);
     let landedThisFrame = false;
     if (safeInput.buttons.land && !player.landed && safeInput.landAction !== "takeoff") {
@@ -7521,13 +7586,14 @@
 
     const speed = Math.hypot(player.vx, player.vy);
     const rocketSuitMaxSpeed = ROCKET_SUIT_BASE_MAX_SPEED + clamp(finiteOr(player.rocketSuitCharge, 0), 0, 1) * ROCKET_SUIT_CHARGE_MAX_SPEED;
-    const maxSpeed = vacuumHoldActive ? 0 : (rocketSuitActive ? rocketSuitMaxSpeed : (suctionActive ? 275 : 430 * (canBoost ? JETPACK_BOOST_SPEED_MULTIPLIER : 1)));
+    const controlledMaxSpeed = vacuumHoldActive ? 0 : (rocketSuitActive ? rocketSuitMaxSpeed : (suctionActive ? 275 : 430 * (canBoost ? JETPACK_BOOST_SPEED_MULTIPLIER : 1)));
+    const maxSpeed = vacuumHoldActive ? 0 : Math.max(controlledMaxSpeed, carriedSpeed);
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
     }
 
-    const drag = Math.pow(0.18, dt);
+    const drag = Math.pow(0.58, dt);
     player.vx *= drag;
     player.vy *= drag;
     player.x += player.vx * dt;
@@ -7672,6 +7738,20 @@
     }
   }
 
+  const SOLID_BODY_BACKGROUND_DAMPING = 0.992;
+
+  function applySolidBodyBackgroundDamping(body, dt) {
+    if (!body || !body.tier || !body.tier.solid || body.gadgetStabilized) {
+      return;
+    }
+    body.vx *= Math.pow(SOLID_BODY_BACKGROUND_DAMPING, dt);
+    body.vy *= Math.pow(SOLID_BODY_BACKGROUND_DAMPING, dt);
+    if (Math.hypot(finiteOr(body.vx, 0), finiteOr(body.vy, 0)) < 0.08) {
+      body.vx = 0;
+      body.vy = 0;
+    }
+  }
+
   function integrateBody(state, body, dt, tick) {
     if (!body) {
       return;
@@ -7685,6 +7765,8 @@
       body.vy += Math.cos(body.wobble * 1.7 + tick * 0.009) * 4 * dt;
       body.vx *= Math.pow(0.82, dt);
       body.vy *= Math.pow(0.82, dt);
+    } else {
+      applySolidBodyBackgroundDamping(body, dt);
     }
     body.ufoSapTimer = Math.max(0, finiteOr(body.ufoSapTimer, 0) - dt);
     body.ufoSapSourceGraceTimer = Math.max(0, finiteOr(body.ufoSapSourceGraceTimer, 0) - dt);
@@ -8107,13 +8189,23 @@
     return "";
   }
 
-  function wakeSurvivalCampFromAbsorbedBody(state, absorber, absorbed) {
-    const playerId = playerIdForScoredBody(state, absorber);
-    if (!absorbed || !absorbed.survivalCampBody || !playerId) {
+  function wakeSurvivalCampFromPlayerBodyMerge(state, absorber, absorbed) {
+    const absorberPlayerId = playerIdForScoredBody(state, absorber);
+    const absorbedPlayerId = playerIdForScoredBody(state, absorbed);
+    let campBody = null;
+    let playerId = "";
+    if (absorbed && absorbed.survivalCampBody && absorberPlayerId) {
+      campBody = absorbed;
+      playerId = absorberPlayerId;
+    } else if (absorber && absorber.survivalCampBody && absorbedPlayerId) {
+      campBody = absorber;
+      playerId = absorbedPlayerId;
+    }
+    if (!campBody || !playerId) {
       return false;
     }
     if (typeof wakeSurvivalCampFromBody === "function") {
-      return wakeSurvivalCampFromBody(state, absorbed, playerId);
+      return wakeSurvivalCampFromBody(state, campBody, playerId, { allowScoredBody: true });
     }
     return false;
   }
@@ -8281,7 +8373,7 @@
     const keep = absorbingPair.absorber;
     const absorb = absorbingPair.absorbed;
     const keepIsScoredBody = Boolean(playerIdForScoredBody(state, keep));
-    wakeSurvivalCampFromAbsorbedBody(state, keep, absorb);
+    wakeSurvivalCampFromPlayerBodyMerge(state, keep, absorb);
     const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;
     const stellarSource = stellarGrowthSourceForMerge(a, b, keep);
     const previousStellarMass = Math.max(0, finiteOr(stellarSource && stellarSource.mass, 0));
@@ -8548,6 +8640,10 @@
   function difficultyHealthDropChance(state, kind) {
     const baseChance = kind === "ufo" ? HEALTH_DROP_BASE_CHANCES.ufo : HEALTH_DROP_BASE_CHANCES.default;
     return clamp(baseChance * finiteOr(difficultyMobSettings(state).healthDropMultiplier, 1), 0, 0.96);
+  }
+
+  function difficultyMobDamage(state, damage) {
+    return Math.max(0, finiteOr(damage, 0) * finiteOr(difficultyMobSettings(state).damageMultiplier, 1));
   }
 
   function difficultyMobSpawnInterval(state, kind) {
@@ -9550,7 +9646,12 @@
   function normalizeSurvivalSpawnState(source) {
     const snapshot = source && typeof source === "object" ? source : {};
     return {
-      nextCampCheckTick: Math.max(0, Math.floor(finiteOr(snapshot.nextCampCheckTick, snapshot.nextCampCheckAt || 0)))
+      nextCampCheckTick: Math.max(0, Math.floor(finiteOr(snapshot.nextCampCheckTick, snapshot.nextCampCheckAt || 0))),
+      exploredInitialized: Boolean(snapshot.exploredInitialized),
+      exploredMinX: finiteOr(snapshot.exploredMinX, 0),
+      exploredMaxX: finiteOr(snapshot.exploredMaxX, 0),
+      exploredMinY: finiteOr(snapshot.exploredMinY, 0),
+      exploredMaxY: finiteOr(snapshot.exploredMaxY, 0)
     };
   }
 
@@ -9582,22 +9683,31 @@
   function survivalAllowanceCandidateList(budget, options) {
     const settings = options && typeof options === "object" ? options : {};
     const allowBosses = settings.allowBosses !== false;
+    const threat = Math.max(0, finiteOr(settings.scoreThreat, 0));
+    const preferredCost = Math.max(
+      SURVIVAL_ALLOWANCE_MOB_COSTS.alienoid,
+      budget * clamp(0.24 + threat * 0.035, 0.24, 0.62)
+    );
     const candidates = [];
-    for (const kind of MOB_TIER_ORDER) {
+    for (let kindIndex = 0; kindIndex < MOB_TIER_ORDER.length; kindIndex += 1) {
+      const kind = MOB_TIER_ORDER[kindIndex];
       const baseCost = survivalMobAllowanceCost(kind);
+      const tierLift = Math.pow(kindIndex + 1, clamp(threat * 0.09, 0, 1));
       if (baseCost <= budget) {
-        candidates.push({ kind, cost: baseCost, eliteStars: 0, eliteGroupSize: 1, isBoss: false, weight: 1 / Math.pow(baseCost, 1.15) });
+        const fit = Math.exp(-Math.abs(Math.log(baseCost / preferredCost)) * 1.25);
+        candidates.push({ kind, cost: baseCost, eliteStars: 0, eliteGroupSize: 1, isBoss: false, weight: fit * tierLift });
       }
       for (let stars = 1; stars <= MOB_ELITE_MAX_STARS; stars += 1) {
         const cost = survivalMobAllowanceCost(kind, { eliteStars: stars });
         if (cost <= budget) {
+          const fit = Math.exp(-Math.abs(Math.log(cost / preferredCost)) * 1.12);
           candidates.push({
             kind,
             cost,
             eliteStars: stars,
             eliteGroupSize: stars * MOB_ELITE_COMPRESSION_SIZE,
             isBoss: false,
-            weight: 0.55 / Math.pow(cost, 1.1)
+            weight: (0.32 + Math.min(0.5, threat * 0.055)) * fit * tierLift
           });
         }
       }
@@ -9605,6 +9715,7 @@
         for (let bossStars = 0; bossStars <= 2; bossStars += 1) {
           const cost = survivalMobAllowanceCost(kind, { isBoss: true, bossStars });
           if (cost <= budget) {
+            const fit = Math.exp(-Math.abs(Math.log(cost / preferredCost)) * 0.95);
             candidates.push({
               kind,
               cost,
@@ -9612,7 +9723,7 @@
               eliteGroupSize: 1,
               isBoss: true,
               bossStars,
-              weight: 0.18 / Math.pow(cost, 1.04)
+              weight: (0.08 + Math.min(0.72, threat * 0.075)) * fit * tierLift
             });
           }
         }
@@ -9641,6 +9752,26 @@
     const seedHolder = settings.seedHolder || { seed: 1 };
     let remaining = Math.max(0, finiteOr(budget, 0));
     const entries = [];
+    if (settings.forceBoss) {
+      const bossCandidates = survivalAllowanceCandidateList(remaining, settings)
+        .filter((candidate) => candidate.isBoss)
+        .sort((a, b) => (
+          MOB_TIER_ORDER.indexOf(b.kind) - MOB_TIER_ORDER.indexOf(a.kind) ||
+          finiteOr(a.bossStars, 0) - finiteOr(b.bossStars, 0)
+        ));
+      const boss = bossCandidates[0];
+      if (boss) {
+        entries.push({
+          kind: boss.kind,
+          cost: boss.cost,
+          eliteStars: 0,
+          eliteGroupSize: 1,
+          isBoss: true,
+          bossStars: Math.max(0, Math.floor(finiteOr(boss.bossStars, 0)))
+        });
+        remaining -= boss.cost;
+      }
+    }
     while (remaining >= SURVIVAL_ALLOWANCE_MOB_COSTS.alienoid && entries.length < 18) {
       const candidates = survivalAllowanceCandidateList(remaining, settings);
       if (!candidates.length) {
@@ -9677,7 +9808,7 @@
     }));
   }
 
-  function activeSurvivalEncounterCounts(world) {
+  function activeSurvivalEncounterCounts(world, players) {
     const seen = new Set();
     const counts = { starter: 0, standard: 0, dangerous: 0, boss: 0, total: 0 };
     for (const mob of allCombatMobs(world)) {
@@ -9686,6 +9817,13 @@
       }
       const encounterId = mob.survivalEncounterId || mob.survivalCampId || "";
       if (!encounterId || seen.has(encounterId)) {
+        continue;
+      }
+      if (Array.isArray(players) && players.length && nearestPlayerDistance(
+        finiteOr(mob.survivalCampX, mob.x),
+        finiteOr(mob.survivalCampY, mob.y),
+        players
+      ) > SURVIVAL_CAMP_ACTIVE_RADIUS) {
         continue;
       }
       seen.add(encounterId);
@@ -9712,26 +9850,84 @@
     ));
   }
 
-  function survivalCampBands(world, combatProgress, playerCount) {
+  function updateSurvivalExploration(spawnState, players) {
+    if (!spawnState || !Array.isArray(players) || !players.length) {
+      return;
+    }
+    for (const player of players) {
+      const x = finiteOr(player && player.x, 0);
+      const y = finiteOr(player && player.y, 0);
+      if (!spawnState.exploredInitialized) {
+        Object.assign(spawnState, { exploredInitialized: true, exploredMinX: x, exploredMaxX: x, exploredMinY: y, exploredMaxY: y });
+        continue;
+      }
+      spawnState.exploredMinX = Math.min(spawnState.exploredMinX, x);
+      spawnState.exploredMaxX = Math.max(spawnState.exploredMaxX, x);
+      spawnState.exploredMinY = Math.min(spawnState.exploredMinY, y);
+      spawnState.exploredMaxY = Math.max(spawnState.exploredMaxY, y);
+    }
+  }
+
+  function survivalExploredSpan(spawnState) {
+    if (!spawnState || !spawnState.exploredInitialized) {
+      return 0;
+    }
+    return Math.hypot(
+      Math.max(0, finiteOr(spawnState.exploredMaxX, 0) - finiteOr(spawnState.exploredMinX, 0)),
+      Math.max(0, finiteOr(spawnState.exploredMaxY, 0) - finiteOr(spawnState.exploredMinY, 0))
+    );
+  }
+
+  function survivalScoreThreat(players) {
+    const totalScore = (players || []).reduce((total, player) => total + Math.max(0, finiteOr(player && player.score, 0)), 0);
+    return Math.max(0, Math.log2(1 + totalScore / 6000));
+  }
+
+  function survivalScoreBudgetScale(state, scoreThreat) {
+    const difficultyScale = finiteOr(difficultyMobSettings(state).survivalBudgetScale, 1);
+    return difficultyScale * (1 + 0.075 * Math.pow(Math.max(0, scoreThreat), 1.35));
+  }
+
+  function survivalCampBands(state, world, combatProgress, playerCount, scoreThreat, spawnState) {
     const playerBonus = Math.max(0, Math.min(MAX_PLAYERS - 1, Math.floor(finiteOr(playerCount, 1)) - 1));
-    const standardUnlocked = combatProgress >= survivalMobAllowanceCost("alienoid") * 3;
-    const dangerousUnlocked = combatProgress >= survivalMobAllowanceCost("ufo") * 4;
-    const bossUnlocked = combatProgress >= survivalMobAllowanceCost("rambot") * 8 || survivalCampBossProgressReady(world);
+    const effectiveProgress = combatProgress + Math.max(0, scoreThreat) * 300;
+    const standardUnlocked = effectiveProgress >= survivalMobAllowanceCost("alienoid") * 3;
+    const dangerousUnlocked = effectiveProgress >= survivalMobAllowanceCost("ufo") * 4;
+    const bossUnlocked = effectiveProgress >= survivalMobAllowanceCost("rambot") * 8 || survivalCampBossProgressReady(world);
+    const difficultySettings = difficultyMobSettings(state);
+    const difficultyExpansion = finiteOr(difficultySettings.survivalCampScale, 1) >= 1.1 ? 1 : 0;
+    const expansion = clamp(
+      Math.floor(survivalExploredSpan(spawnState) / SURVIVAL_CAMP_EXPANSION_DISTANCE) + difficultyExpansion,
+      0,
+      SURVIVAL_CAMP_MAX_EXPANSION
+    );
+    const extra = (index) => Math.floor((expansion + 3 - index) / 4);
+    const budgetScale = survivalScoreBudgetScale(state, scoreThreat);
+    const band = (id, target, minBudget, maxBudget, allowBosses, index) => ({
+      id,
+      target: target > 0 ? target + extra(index) : 0,
+      minBudget: Math.round(minBudget * budgetScale),
+      maxBudget: Math.round(maxBudget * budgetScale),
+      allowBosses,
+      scoreThreat,
+      forceBoss: id === "boss" && scoreThreat >= 3.2
+    });
     return [
-      { id: "starter", target: 2 + playerBonus, minBudget: 50, maxBudget: 170, allowBosses: false },
-      { id: "standard", target: standardUnlocked ? 1 + playerBonus : 0, minBudget: 150, maxBudget: 340, allowBosses: false },
-      { id: "dangerous", target: dangerousUnlocked ? 1 + Math.floor(playerBonus / 2) : 0, minBudget: 340, maxBudget: 760, allowBosses: false },
-      { id: "boss", target: bossUnlocked ? 1 : 0, minBudget: 700, maxBudget: 1600, allowBosses: true }
+      band("starter", 2 + playerBonus, 50, 180, false, 0),
+      band("standard", standardUnlocked ? 1 + playerBonus : 0, 150, 380, false, 1),
+      band("dangerous", dangerousUnlocked ? 1 + Math.floor(playerBonus / 2) : 0, 340, 900, false, 2),
+      band("boss", bossUnlocked ? 1 : 0, 850, 3000, true, 3)
     ];
   }
 
-  function chooseSurvivalCampBand(world, players, seedHolder) {
+  function chooseSurvivalCampBand(state, world, players, seedHolder, spawnState) {
     const combatProgress = survivalCampCombatProgress(world);
-    const counts = activeSurvivalEncounterCounts(world);
-    for (const band of survivalCampBands(world, combatProgress, players.length || 1)) {
+    const scoreThreat = survivalScoreThreat(players);
+    const counts = activeSurvivalEncounterCounts(world, players);
+    for (const band of survivalCampBands(state, world, combatProgress, players.length || 1, scoreThreat, spawnState)) {
       if (band.target > 0 && (counts[band.id] || 0) < band.target) {
         const budget = clamp(randomRange(seedHolder, band.minBudget, band.maxBudget), 50, Math.max(50, band.maxBudget));
-        return { ...band, budget: Math.max(50, Math.round(budget)), combatProgress };
+        return { ...band, budget: Math.max(50, Math.round(budget)), combatProgress, scoreThreat };
       }
     }
     return null;
@@ -9752,6 +9948,257 @@
       }
     }
     return nearest;
+  }
+
+  function collectSurvivalCampGroups(state) {
+    const world = state.world;
+    const groups = new Map();
+    const ensure = (campId) => {
+      const id = String(campId || "");
+      if (!id) {
+        return null;
+      }
+      if (!groups.has(id)) {
+        groups.set(id, { id, mobs: [], bodies: [], structures: [], x: 0, y: 0, weight: 0, band: "starter", budget: 0 });
+      }
+      return groups.get(id);
+    };
+    for (const mob of allCombatMobs(world)) {
+      if (!mob || mob.health <= 0 || isPlayerTeamMob(mob) || mob.survivalEncounterType !== "camp") {
+        continue;
+      }
+      const group = ensure(mob.survivalCampId || mob.survivalEncounterId);
+      if (!group) continue;
+      group.mobs.push(mob);
+      group.band = mob.survivalCampBand || group.band;
+      group.budget = Math.max(group.budget, finiteOr(mob.survivalCampBudget, 0));
+      group.x += finiteOr(mob.survivalCampX, mob.x) * 2;
+      group.y += finiteOr(mob.survivalCampY, mob.y) * 2;
+      group.weight += 2;
+    }
+    const scoredBodyIds = playerScoredSurvivalCampBodyIds(state);
+    for (const body of world.particles || []) {
+      if (!body || !body.survivalCampBody || !body.survivalCampId || isPlayerScoredSurvivalCampBody(state, body, scoredBodyIds)) {
+        continue;
+      }
+      const group = ensure(body.survivalCampId);
+      const weight = Math.max(1, Math.sqrt(Math.max(1, finiteOr(body.mass, 1))));
+      group.bodies.push(body);
+      group.x += finiteOr(body.x, 0) * weight;
+      group.y += finiteOr(body.y, 0) * weight;
+      group.weight += weight;
+    }
+    for (const structure of world.structures || []) {
+      if (!structure || !structure.survivalCampId || finiteOr(structure.health, 0) <= 0) continue;
+      const group = ensure(structure.survivalCampId);
+      group.structures.push(structure);
+    }
+    for (const group of groups.values()) {
+      if (group.weight > 0) {
+        group.x /= group.weight;
+        group.y /= group.weight;
+      }
+    }
+    return groups;
+  }
+
+  function setMobSurvivalMigration(mob, targetCamp) {
+    if (!mob) return;
+    mob.survivalCampId = "";
+    mob.survivalCampReturning = true;
+    mob.survivalCampAggroTimer = 0;
+    mob.survivalTargetPlayerId = "";
+    mob.survivalEncounterType = "migration";
+    mob.survivalEncounterId = "";
+    mob.survivalMigrationCampId = targetCamp && targetCamp.id || "";
+    mob.survivalMigrationCampX = targetCamp ? targetCamp.x : Number.NaN;
+    mob.survivalMigrationCampY = targetCamp ? targetCamp.y : Number.NaN;
+    mob.survivalMigrationStraightTime = 0;
+  }
+
+  function retireDistantSurvivalCamps(state, players) {
+    const groups = Array.from(collectSurvivalCampGroups(state).values()).filter((group) => group.mobs.length);
+    if (!groups.length || !players.length) return;
+    const active = groups.filter((group) => nearestPlayerDistance(group.x, group.y, players) <= SURVIVAL_CAMP_ACTIVE_RADIUS);
+    const keeper = active.length ? null : groups.slice().sort((a, b) => nearestPlayerDistance(a.x, a.y, players) - nearestPlayerDistance(b.x, b.y, players))[0];
+    for (const group of groups) {
+      if (active.includes(group) || group === keeper) continue;
+      const destinations = (active.length ? active : groups).filter((candidate) => candidate !== group && candidate.bodies.length);
+      let target = null;
+      let bestDistance = Infinity;
+      for (const candidate of destinations) {
+        const distance = Math.hypot(candidate.x - group.x, candidate.y - group.y);
+        if (distance < bestDistance) {
+          target = candidate;
+          bestDistance = distance;
+        }
+      }
+      for (const mob of group.mobs) {
+        if (mob.survivalSalvageBodyId) continue;
+        setMobSurvivalMigration(mob, target);
+      }
+    }
+  }
+
+  function beginSurvivalSalvageAssignment(ufo, body, sourceCamp, targetCamp) {
+    if (!ufo || !body || !targetCamp) return false;
+    setMobSurvivalMigration(ufo, targetCamp);
+    ufo.survivalEncounterType = "salvage";
+    ufo.survivalEncounterId = "salvage-body-" + body.id;
+    ufo.survivalSalvageBodyId = body.id;
+    ufo.survivalSalvageSourceCampId = sourceCamp && sourceCamp.id || body.survivalCampId || "";
+    ufo.survivalSalvageTargetCampId = targetCamp.id;
+    ufo.survivalSalvageAge = 0;
+    return true;
+  }
+
+  function spawnSurvivalSalvageUfo(state, players, seedHolder, body, sourceCamp, targetCamp) {
+    const world = state.world;
+    const offscreenDistance = MOB_SPAWN_FULLY_ZOOMED_OUT_VIEW_RADIUS + 720;
+    let x;
+    let y;
+    if (nearestPlayerDistance(body.x, body.y, players) > offscreenDistance) {
+      const angle = randomRange(seedHolder, 0, Math.PI * 2);
+      const distance = randomRange(seedHolder, 900, 1500);
+      x = body.x + Math.cos(angle) * distance;
+      y = body.y + Math.sin(angle) * distance;
+    } else {
+      const anchor = leastPopulatedMobAnchor(world, players);
+      const spawn = chooseMobSpawnPoint(world, "ufo", anchor, players, seedHolder);
+      x = spawn.x;
+      y = spawn.y;
+    }
+    const ufo = createMob(world, "ufo", x, y, seedHolder);
+    beginSurvivalSalvageAssignment(ufo, body, sourceCamp, targetCamp);
+    world.ufos.push(ufo);
+    state.events.push({ type: "mob.camp.salvagerSpawned", mobId: ufo.id, bodyId: body.id, targetCampId: targetCamp.id, tick: state.tick });
+    return ufo;
+  }
+
+  function manageSurvivalCampSalvage(state, players, seedHolder) {
+    const groups = collectSurvivalCampGroups(state);
+    const populated = Array.from(groups.values()).filter((group) => group.mobs.length && group.bodies.length);
+    if (!populated.length) return;
+    const assignedBodyIds = new Set((state.world.ufos || [])
+      .filter((ufo) => ufo && ufo.health > 0 && ufo.survivalSalvageBodyId)
+      .map((ufo) => Math.floor(finiteOr(ufo.survivalSalvageBodyId, 0))));
+    const orphaned = Array.from(groups.values()).filter((group) => !group.mobs.length && group.bodies.length);
+    let activeSalvagers = assignedBodyIds.size;
+    for (const source of orphaned) {
+      const bodies = source.bodies.slice().sort((a, b) => finiteOr(b.mass, 0) - finiteOr(a.mass, 0));
+      for (const body of bodies) {
+        if (assignedBodyIds.has(body.id) || activeSalvagers >= SURVIVAL_SALVAGE_MAX_UFOS) continue;
+        const target = populated.slice().sort((a, b) => Math.hypot(a.x - body.x, a.y - body.y) - Math.hypot(b.x - body.x, b.y - body.y))[0];
+        if (!target || target.id === source.id) continue;
+        const idleCampUfo = (state.world.ufos || []).find((ufo) => (
+          ufo &&
+          ufo.health > 0 &&
+          !ufo.survivalSalvageBodyId &&
+          ufo.survivalCampId &&
+          groups.has(ufo.survivalCampId) &&
+          groups.get(ufo.survivalCampId).mobs.length > 1
+        ));
+        if (idleCampUfo) {
+          beginSurvivalSalvageAssignment(idleCampUfo, body, source, target);
+          state.events.push({ type: "mob.camp.salvagerAssigned", mobId: idleCampUfo.id, bodyId: body.id, targetCampId: target.id, tick: state.tick });
+        } else {
+          spawnSurvivalSalvageUfo(state, players, seedHolder, body, source, target);
+        }
+        assignedBodyIds.add(body.id);
+        activeSalvagers += 1;
+      }
+    }
+  }
+
+  function survivalSalvageBody(world, ufo) {
+    const bodyId = Math.floor(finiteOr(ufo && ufo.survivalSalvageBodyId, 0));
+    return bodyId > 0 ? (world.particles || []).find((body) => body && body.id === bodyId) || null : null;
+  }
+
+  function clearSurvivalSalvageAssignment(ufo) {
+    if (!ufo) return;
+    ufo.survivalSalvageBodyId = 0;
+    ufo.survivalSalvageSourceCampId = "";
+    ufo.survivalSalvageTargetCampId = "";
+    ufo.survivalSalvageAge = 0;
+  }
+
+  function finishSurvivalSalvage(state, ufo, body, destination) {
+    const targetCampId = String(destination && destination.campId || ufo.survivalSalvageTargetCampId || "");
+    if (!targetCampId) return false;
+    const sourceCampId = String(body.survivalCampId || ufo.survivalSalvageSourceCampId || "");
+    body.survivalCampId = targetCampId;
+    body.survivalCampX = destination.x;
+    body.survivalCampY = destination.y;
+    body.survivalCampHomeX = finiteOr(body.x, destination.x);
+    body.survivalCampHomeY = finiteOr(body.y, destination.y);
+    body.survivalCampMovedByPlayer = false;
+    body.survivalCampBodyMovedWakeSent = false;
+    const pull = normalize(destination.x - body.x, destination.y - body.y);
+    body.vx += pull.x * 120;
+    body.vy += pull.y * 120;
+    for (const structure of state.world.structures || []) {
+      if (!structure || structure.bodyId !== body.id || structure.survivalCampId !== sourceCampId) continue;
+      structure.survivalCampId = targetCampId;
+      structure.survivalEncounterId = targetCampId;
+      structure.survivalCampX = destination.x;
+      structure.survivalCampY = destination.y;
+    }
+    ufo.survivalCampId = targetCampId;
+    ufo.survivalCampX = destination.x;
+    ufo.survivalCampY = destination.y;
+    ufo.survivalCampReturning = true;
+    ufo.survivalEncounterType = "camp";
+    ufo.survivalEncounterId = targetCampId;
+    ufo.survivalTargetPlayerId = "";
+    clearSurvivalCampMigrationState(ufo);
+    clearSurvivalSalvageAssignment(ufo);
+    state.events.push({ type: "mob.camp.salvageDelivered", mobId: ufo.id, bodyId: body.id, targetCampId, tick: state.tick });
+    return true;
+  }
+
+  function survivalSalvageTowTarget(state, ufo, dt) {
+    if (!ufo || !ufo.survivalSalvageBodyId) return null;
+    const body = survivalSalvageBody(state.world, ufo);
+    if (!body) {
+      clearSurvivalSalvageAssignment(ufo);
+      ufo.survivalEncounterType = "migration";
+      return null;
+    }
+    let destination = survivalCampAnchorPoint(
+      state,
+      ufo.survivalSalvageTargetCampId,
+      finiteOr(ufo.survivalMigrationCampX, body.x),
+      finiteOr(ufo.survivalMigrationCampY, body.y)
+    );
+    if (!destination.hasCampBody) {
+      const nearest = nearestSurvivalCampAnchor(state, body.survivalCampId, body.x, body.y);
+      if (!nearest) return null;
+      ufo.survivalSalvageTargetCampId = nearest.campId;
+      destination = { ...nearest, hasCampBody: true };
+    } else {
+      destination.campId = String(ufo.survivalSalvageTargetCampId || "");
+    }
+    const dx = destination.x - body.x;
+    const dy = destination.y - body.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    ufo.survivalSalvageAge = Math.max(0, finiteOr(ufo.survivalSalvageAge, 0) + dt);
+    if (distance <= SURVIVAL_SALVAGE_ARRIVAL_RADIUS + finiteOr(body.radius, 0)) {
+      finishSurvivalSalvage(state, ufo, body, destination);
+      return null;
+    }
+    const nx = dx / distance;
+    const ny = dy / distance;
+    const towOffset = clamp(finiteOr(body.radius, 0) + 310, 380, 620);
+    return {
+      kind: "salvage",
+      body,
+      x: body.x + nx * towOffset,
+      y: body.y + ny * towOffset,
+      radius: 0,
+      destinationX: destination.x,
+      destinationY: destination.y
+    };
   }
 
   function chooseSurvivalAllowanceSpawnPoint(world, players, seedHolder, options) {
@@ -10029,7 +10476,12 @@
   }
 
   function spawnSurvivalAllowanceCamp(state, band, players, seedHolder) {
-    const entries = planSurvivalAllowanceMobs(band.budget, { allowBosses: band.allowBosses, seedHolder });
+    const entries = planSurvivalAllowanceMobs(band.budget, {
+      allowBosses: band.allowBosses,
+      forceBoss: band.forceBoss,
+      scoreThreat: band.scoreThreat,
+      seedHolder
+    });
     if (!entries.length) {
       return false;
     }
@@ -10086,7 +10538,10 @@
       return;
     }
     spawnState.nextCampCheckTick = nowTick + Math.round(SURVIVAL_CAMP_CHECK_INTERVAL * TICK_RATE);
-    const band = chooseSurvivalCampBand(world, players, seedHolder);
+    updateSurvivalExploration(spawnState, players);
+    retireDistantSurvivalCamps(state, players);
+    manageSurvivalCampSalvage(state, players, seedHolder);
+    const band = chooseSurvivalCampBand(state, world, players, seedHolder, spawnState);
     if (band) {
       spawnSurvivalAllowanceCamp(state, band, players, seedHolder);
     }
@@ -10104,22 +10559,36 @@
     updateSurvivalAllowanceCamps(state, survivalPlayers, seedHolder);
   }
 
-  const FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED = 180;
-  const FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED = 720;
+  const FAST_AMBIENT_BODY_ANCHOR_BASE_MASS = 150;
+  const FAST_AMBIENT_BODY_ANCHOR_BASE_SPEED = 700;
+  const FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED_FLOOR = 420;
+  const FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED_WINDOW = 420;
   const FAST_AMBIENT_BODY_ANCHOR_MAX_COUNT = 5;
 
   function ambientParticleAnchorWeight(anchor) {
-    return clamp(finiteOr(anchor && anchor.ambientAnchorWeight, 1), 0.18, 1);
+    if (anchor && Object.prototype.hasOwnProperty.call(anchor, "ambientAnchorWeight")) {
+      return clamp(finiteOr(anchor.ambientAnchorWeight, 0), 0.02, 1);
+    }
+    return 1;
   }
 
   function fastAmbientBodyAnchorWeight(body) {
+    const mass = Math.max(1, finiteOr(body && body.mass, 1));
+    if (mass < FAST_AMBIENT_BODY_ANCHOR_BASE_MASS) {
+      return 0;
+    }
     const speed = Math.hypot(finiteOr(body && body.vx, 0), finiteOr(body && body.vy, 0));
-    if (speed < FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED) {
+    const minSpeed = clamp(
+      FAST_AMBIENT_BODY_ANCHOR_BASE_SPEED - Math.log2(Math.max(1, mass / FAST_AMBIENT_BODY_ANCHOR_BASE_MASS)) * 50,
+      FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED_FLOOR,
+      FAST_AMBIENT_BODY_ANCHOR_BASE_SPEED
+    );
+    if (speed < minSpeed) {
       return 0;
     }
     return clamp(
-      (speed - FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED) / (FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED - FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED),
-      0.18,
+      (speed - minSpeed) / FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED_WINDOW,
+      0,
       1
     );
   }
@@ -10163,10 +10632,12 @@
         y: body.y,
         vx: finiteOr(body.vx, 0),
         vy: finiteOr(body.vy, 0),
+        radius: Math.max(0, finiteOr(body.radius, 0)),
         bodyId: body.id,
         ambientAnchorWeight: weight,
-        ambientAnchorTargetScale: 0.38 + weight * 0.72,
-        ambientAnchorType: "fast-body"
+        ambientAnchorTargetScale: 0.08 + weight * 0.72,
+        ambientAnchorType: "fast-body",
+        ambientAnchorBowWave: true
       });
       if (anchors.length - players.length >= FAST_AMBIENT_BODY_ANCHOR_MAX_COUNT) {
         break;
@@ -10177,6 +10648,11 @@
 
   function countAmbientParticlesNearPlayer(world, player, radius) {
     const radiusSq = radius * radius;
+    const bowWave = Boolean(player && player.ambientAnchorBowWave);
+    const speed = Math.hypot(finiteOr(player && player.vx, 0), finiteOr(player && player.vy, 0));
+    const travel = bowWave && speed > 0.001 ? normalize(player.vx, player.vy) : { x: 0, y: 0 };
+    const anchorRadius = Math.max(0, finiteOr(player && player.radius, 0));
+    const bowLateralLimit = Math.max(150, anchorRadius + 170);
     let count = 0;
     for (const body of world.particles) {
       if (!isAmbientParticle(body)) {
@@ -10185,6 +10661,13 @@
       const dx = body.x - player.x;
       const dy = body.y - player.y;
       if (dx * dx + dy * dy <= radiusSq) {
+        if (bowWave) {
+          const forward = dx * travel.x + dy * travel.y;
+          const lateral = Math.abs(dx * -travel.y + dy * travel.x);
+          if (forward < -anchorRadius * 0.35 || lateral > bowLateralLimit) {
+            continue;
+          }
+        }
         count += 1;
       }
     }
@@ -10196,9 +10679,10 @@
     for (const candidate of players) {
       const localCount = countAmbientParticlesNearPlayer(world, candidate, densityRadius);
       const speed = Math.hypot(finiteOr(candidate.vx, 0), finiteOr(candidate.vy, 0));
-      const targetScale = clamp(finiteOr(candidate.ambientAnchorTargetScale, ambientParticleAnchorWeight(candidate)), 0.18, 1.1);
-      const anchorLocalTarget = Math.max(6, Math.round(localTarget * targetScale));
-      const score = anchorLocalTarget - localCount + clamp(speed / 480, 0, 1.15) + ambientParticleAnchorWeight(candidate) * 0.35;
+      const bowWave = Boolean(candidate.ambientAnchorBowWave);
+      const targetScale = clamp(finiteOr(candidate.ambientAnchorTargetScale, ambientParticleAnchorWeight(candidate)), 0.02, 1.1);
+      const anchorLocalTarget = Math.max(bowWave ? 1 : 6, Math.round(localTarget * targetScale));
+      const score = anchorLocalTarget - localCount + clamp(speed / 480, 0, 1.15) * (bowWave ? ambientParticleAnchorWeight(candidate) : 1) + ambientParticleAnchorWeight(candidate) * 0.35;
       if (!best || score > best.score) {
         best = { player: candidate, anchor: candidate, localCount, localTarget: anchorLocalTarget, score };
       }
@@ -10962,9 +11446,10 @@
     }
 
     const world = state.world;
-    let bestBody = null;
+    const assignedSalvageBody = survivalSalvageBody(world, ufo);
+    let bestBody = assignedSalvageBody;
     let bestScore = Infinity;
-    for (const body of world.particles || []) {
+    for (const body of assignedSalvageBody ? [] : world.particles || []) {
       if (!canUfoTractorAffectParticle(body) || !canUfoPreferTractorTarget(ufo, body)) {
         continue;
       }
@@ -11020,8 +11505,9 @@
       const centerStrength = clamp(1 - Math.abs(side) / Math.max(1, beamHalf), 0, 1);
       const toOriginX = originX - body.x;
       const toOriginY = originY - body.y;
+      const isAssignedSalvageBody = body === assignedSalvageBody;
 
-      if (shouldUfoSiphonBody(ufo, body)) {
+      if (!isAssignedSalvageBody && shouldUfoSiphonBody(ufo, body)) {
         drainBodyWithUfoTractor(state, seedHolder, ufo, body, pullStrength, centerStrength, dt);
         continue;
       }
@@ -11034,6 +11520,10 @@
       body.vy += (toOrigin.y * force - normalY * side * 7.5) * dt;
 
       if (Math.hypot(toOriginX, toOriginY) >= ufo.radius + body.radius * 1.05) {
+        continue;
+      }
+
+      if (isAssignedSalvageBody) {
         continue;
       }
 
@@ -11116,7 +11606,7 @@
       target.vy += dirY * 210 + finiteOr(ufo.vy, 0) * 0.38;
       if (isCombatMobEntity(target)) {
         damageMob(state, target, bossScaledDamage(ufo, UFO_UNDERSIDE_DAMAGE), ufo.isBoss ? "UFO boss underside" : "UFO underside");
-      } else if (damagePlayer(state, target, bossScaledDamage(ufo, UFO_UNDERSIDE_DAMAGE), ufo.isBoss ? "UFO boss underside" : "UFO underside")) {
+      } else if (damagePlayer(state, target, difficultyMobDamage(state, bossScaledDamage(ufo, UFO_UNDERSIDE_DAMAGE)), ufo.isBoss ? "UFO boss underside" : "UFO underside")) {
         state.events.push({ type: "player.hitByMob", playerId: target.id, mobId: ufo.id, kind: "ufo", tick: state.tick });
       }
     }
@@ -11141,7 +11631,7 @@
 
     const dirX = Math.cos(finiteOr(ufo.beamAngle, Math.PI / 2));
     const dirY = Math.sin(finiteOr(ufo.beamAngle, Math.PI / 2));
-    const damage = bossScaledDamage(ufo, UFO_BOSS_PLAYER_DRAIN_RATE) * UFO_BOSS_PLAYER_DRAIN_TICK_INTERVAL * hitStrength;
+    const damage = difficultyMobDamage(state, bossScaledDamage(ufo, UFO_BOSS_PLAYER_DRAIN_RATE) * UFO_BOSS_PLAYER_DRAIN_TICK_INTERVAL * hitStrength);
     target.vx += -dirX * 105 * hitStrength + finiteOr(ufo.vx, 0) * 0.12;
     target.vy += -dirY * 105 * hitStrength + finiteOr(ufo.vy, 0) * 0.12;
     if (isCombatMobEntity(target)) {
@@ -11154,12 +11644,13 @@
   function updateUfo(state, ufo, players, dt, seedHolder) {
     const targetInfo = nearestCombatPlayer(players, ufo);
     const target = targetInfo.player;
+    const salvageTarget = survivalSalvageTowTarget(state, ufo, dt);
     const hostileSurvivalEncounter = ufo &&
       !isPlayerTeamMob(ufo) &&
       (ufo.survivalEncounterType === "camp" || isSurvivalCampMob(state, ufo));
-    const cleanupBody = isPlayerTeamMob(ufo) || hostileSurvivalEncounter ? null : ufoCleanupTarget(state, ufo);
+    const cleanupBody = salvageTarget || isPlayerTeamMob(ufo) || hostileSurvivalEncounter ? null : ufoCleanupTarget(state, ufo);
     const beamMode = updateUfoBossBeamState(ufo, dt);
-    const moveTarget = cleanupBody && !(ufo.isBoss && beamMode === "drain") ? cleanupBody : target;
+    const moveTarget = salvageTarget || (cleanupBody && !(ufo.isBoss && beamMode === "drain") ? cleanupBody : target);
     if (!moveTarget) {
       return;
     }
@@ -11170,7 +11661,7 @@
     const ny = toTargetY / dist;
     const tangentX = -ny * (Number(ufo.strafeSign) < 0 ? -1 : 1);
     const tangentY = nx * (Number(ufo.strafeSign) < 0 ? -1 : 1);
-    const desiredDistance = cleanupBody && moveTarget === cleanupBody ? clamp(finiteOr(cleanupBody.radius, 0) + 350, 430, 660) : 430;
+    const desiredDistance = salvageTarget ? 0 : cleanupBody && moveTarget === cleanupBody ? clamp(finiteOr(cleanupBody.radius, 0) + 350, 430, 660) : 430;
     const noBeamBoost = ufo.isBoss && beamMode === "cooldown" ? 1.34 : 1;
     const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
     const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);
@@ -11746,7 +12237,7 @@
     }
     target.vx += nx * impulse + finiteOr(mob.vx, 0) * 0.52;
     target.vy += ny * impulse + finiteOr(mob.vy, 0) * 0.52;
-    if (damagePlayer(state, target, damage, cause)) {
+    if (damagePlayer(state, target, difficultyMobDamage(state, damage), cause)) {
       state.events.push({ type: "player.hitByMob", playerId: target.id, mobId: mob.id, kind: mob.kind || cause || "mob", tick: state.tick });
     }
     mob.impactCooldown = 0.95;
@@ -11900,7 +12391,7 @@
       target.vy += dirY * RAMBOT_BOSS_PISTON_KNOCKBACK;
       if (isCombatMobEntity(target)) {
         damageMob(state, target, bossScaledDamage(rambot, RAMBOT_BOSS_PISTON_DAMAGE), "Rambot boss piston punch");
-      } else if (damagePlayer(state, target, bossScaledDamage(rambot, RAMBOT_BOSS_PISTON_DAMAGE), "Rambot boss piston punch")) {
+      } else if (damagePlayer(state, target, difficultyMobDamage(state, bossScaledDamage(rambot, RAMBOT_BOSS_PISTON_DAMAGE)), "Rambot boss piston punch")) {
         state.events.push({ type: "player.hitByMob", playerId: target.id, mobId: rambot.id, kind: "rambot", cause: "piston-punch", tick: state.tick });
       }
       rambot.pistonHit = true;
@@ -13166,7 +13657,10 @@
         if (dist >= target.radius * PLAYER_PROJECTILE_HURTBOX_SCALE + projectile.radius) {
           continue;
         }
-        const projectileDamage = Math.max(0, finiteOr(projectile.damage, RIVAL_PROJECTILE_DAMAGE));
+        const rawProjectileDamage = Math.max(0, finiteOr(projectile.damage, RIVAL_PROJECTILE_DAMAGE));
+        const projectileDamage = ownerPlayerId || playerTeamMobProjectile
+          ? rawProjectileDamage
+          : difficultyMobDamage(state, rawProjectileDamage);
         const projectileToolDisable = Math.max(0, finiteOr(projectile.toolDisable, 0));
         const canDamageTarget = target.hitCooldown <= 0 && projectileDamage > 0;
         const damagedTarget = canDamageTarget && damagePlayer(state, target, projectileDamage, projectile.cause || "Alienoid laser");
@@ -13395,12 +13889,6 @@
       structure.y,
       1
     );
-    const maxSpeed = 150 + massDamping * 210;
-    const speed = Math.hypot(body.vx, body.vy);
-    if (speed > maxSpeed) {
-      body.vx = (body.vx / speed) * maxSpeed;
-      body.vy = (body.vy / speed) * maxSpeed;
-    }
     structure.thrustAmount += (1 - finiteOr(structure.thrustAmount, 0)) * (1 - Math.pow(0.02, dt));
     structure.thrustDirection = direction;
   }
@@ -14593,13 +15081,14 @@
     );
   }
 
-  function wakeSurvivalCampFromBody(state, body, targetPlayerId) {
+  function wakeSurvivalCampFromBody(state, body, targetPlayerId, options) {
+    const allowScoredBody = Boolean(options && options.allowScoredBody);
     if (
       !state ||
       !body ||
       !body.survivalCampBody ||
       !body.survivalCampId ||
-      isPlayerScoredSurvivalCampBody(state, body) ||
+      (!allowScoredBody && isPlayerScoredSurvivalCampBody(state, body)) ||
       isHordeGameMode(state.gameMode || state.world && state.world.gameMode)
     ) {
       return false;
@@ -14724,6 +15213,32 @@
     mob.survivalMigrationCampId = "";
     mob.survivalMigrationCampX = Number.NaN;
     mob.survivalMigrationCampY = Number.NaN;
+    mob.survivalMigrationStraightTime = 0;
+    mob.survivalMigrationDirX = 0;
+    mob.survivalMigrationDirY = 0;
+  }
+
+  function isSurvivalMigratingMob(state, mob) {
+    return Boolean(
+      mob &&
+      !isPlayerTeamMob(mob) &&
+      !isHordeGameMode(state && state.gameMode) &&
+      (mob.survivalEncounterType === "migration" || mob.survivalEncounterType === "salvage" || (!mob.survivalCampId && mob.survivalMigrationCampId))
+    );
+  }
+
+  function nearbySurvivalMigrationPlayer(state, mob) {
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const player of Object.values(state && state.players || {})) {
+      if (!player || finiteOr(player.health, 0) <= 0 || player.spacecraftInterior) continue;
+      const distance = Math.hypot(player.x - mob.x, player.y - mob.y);
+      if (distance <= SURVIVAL_MIGRATION_AGGRO_RADIUS && distance < nearestDistance) {
+        nearest = player;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
   }
 
   function clearSurvivalCampMobIdentity(mob) {
@@ -14766,8 +15281,11 @@
   function updateOrphanedSurvivalCampMobMigration(state, mob, dt) {
     const targetCamp = survivalCampMigrationTarget(state, mob);
     if (!targetCamp) {
-      clearSurvivalCampMobIdentity(mob);
-      return false;
+      mob.survivalCampId = "";
+      mob.survivalEncounterType = "migration";
+      mob.survivalEncounterId = "";
+      clearSurvivalCampMigrationState(mob);
+      return true;
     }
 
     mob.survivalMigrationCampId = targetCamp.campId;
@@ -14789,8 +15307,12 @@
       mob.survivalCampReturning = false;
       mob.survivalCampSlotAngle = Math.atan2(finiteOr(mob.y, targetCamp.y) - targetCamp.y, finiteOr(mob.x, targetCamp.x) - targetCamp.x);
       mob.survivalCampSlotRadius = clamp(distance, 120, SURVIVAL_CAMP_IDLE_RADIUS);
-      if (mob.survivalEncounterType === "camp") {
-        mob.survivalEncounterId = targetCamp.campId;
+      mob.survivalEncounterType = "camp";
+      mob.survivalEncounterId = targetCamp.campId;
+      const resident = allCombatMobs(state.world).find((candidate) => candidate && candidate !== mob && candidate.health > 0 && candidate.survivalCampId === targetCamp.campId);
+      if (resident) {
+        mob.survivalCampBand = resident.survivalCampBand || mob.survivalCampBand || "starter";
+        mob.survivalCampBudget = Math.max(finiteOr(mob.survivalCampBudget, 0), finiteOr(resident.survivalCampBudget, 0));
       }
       clearSurvivalCampMigrationState(mob);
       clearSurvivalCampAttackState(mob);
@@ -14799,16 +15321,28 @@
 
     const nx = dx / distance;
     const ny = dy / distance;
+    const previousDirX = finiteOr(mob.survivalMigrationDirX, nx);
+    const previousDirY = finiteOr(mob.survivalMigrationDirY, ny);
+    const alignment = previousDirX * nx + previousDirY * ny;
+    mob.survivalMigrationStraightTime = alignment > 0.96
+      ? Math.min(8, finiteOr(mob.survivalMigrationStraightTime, 0) + dt)
+      : Math.max(0, finiteOr(mob.survivalMigrationStraightTime, 0) - dt * 2.5);
+    mob.survivalMigrationDirX = nx;
+    mob.survivalMigrationDirY = ny;
+    const momentum = clamp(mob.survivalMigrationStraightTime / 7, 0, 1);
     const tangentX = -ny * finiteOr(mob.strafeSign, 1);
     const tangentY = nx * finiteOr(mob.strafeSign, 1);
-    mob.vx += nx * 176 * dt + tangentX * 18 * dt;
-    mob.vy += ny * 176 * dt + tangentY * 18 * dt;
-    mob.vx *= Math.pow(0.76, dt);
-    mob.vy *= Math.pow(0.76, dt);
+    const travelForce = 190 + momentum * 240;
+    mob.vx += nx * travelForce * dt + tangentX * 12 * (1 - momentum) * dt;
+    mob.vy += ny * travelForce * dt + tangentY * 12 * (1 - momentum) * dt;
+    mob.vx *= Math.pow(0.88, dt);
+    mob.vy *= Math.pow(0.88, dt);
     const nextSpeed = Math.hypot(mob.vx, mob.vy);
-    if (nextSpeed > 250) {
-      mob.vx = (mob.vx / nextSpeed) * 250;
-      mob.vy = (mob.vy / nextSpeed) * 250;
+    const cruiseSpeed = 250 + (SURVIVAL_MIGRATION_MAX_SPEED - 250) * momentum;
+    const maxSpeed = distance < 2400 ? clamp(120 + distance * 0.2, 150, cruiseSpeed) : cruiseSpeed;
+    if (nextSpeed > maxSpeed) {
+      mob.vx = (mob.vx / nextSpeed) * maxSpeed;
+      mob.vy = (mob.vy / nextSpeed) * maxSpeed;
     }
     mob.x += mob.vx * dt;
     mob.y += mob.vy * dt;
@@ -14817,11 +15351,28 @@
   }
 
   function updateSurvivalCampMobHome(state, mob, dt) {
-    if (!isSurvivalCampMob(state, mob)) {
+    if (mob && mob.survivalEncounterType === "salvage" && mob.survivalSalvageBodyId) {
       return false;
     }
 
+    const campMob = isSurvivalCampMob(state, mob);
+    const migratingMob = isSurvivalMigratingMob(state, mob) || Boolean(mob && !isPlayerTeamMob(mob) && !isHordeGameMode(state && state.gameMode) && !mob.survivalCampId && mob.survivalEncounterType !== "hit-squad");
+    if (!campMob && !migratingMob) return false;
+
     mob.survivalCampAggroTimer = Math.max(0, finiteOr(mob.survivalCampAggroTimer, 0) - dt);
+    if (!campMob) {
+      mob.survivalEncounterType = "migration";
+      const nearbyPlayer = nearbySurvivalMigrationPlayer(state, mob);
+      if (nearbyPlayer) {
+        mob.survivalCampAggroTimer = SURVIVAL_MIGRATION_AGGRO_DURATION;
+        mob.survivalTargetPlayerId = String(nearbyPlayer.id || "");
+      }
+      if (mob.survivalCampAggroTimer > 0 && mob.survivalTargetPlayerId) {
+        return false;
+      }
+      mob.survivalTargetPlayerId = "";
+      return updateOrphanedSurvivalCampMobMigration(state, mob, dt);
+    }
     let campAnchor = survivalCampAnchorPoint(state, mob.survivalCampId, finiteOr(mob.survivalCampX, mob.x), finiteOr(mob.survivalCampY, mob.y));
     if (!campAnchor.hasCampBody) {
       if (mob.survivalCampAggroTimer > 0) {
@@ -14946,7 +15497,7 @@
         let mobTargets = isPlayerTeamMob(mob) && activeFamiliarCommand(mob)
           ? []
           : isPlayerTeamMob(mob) ? familiarHostileTargets(state.world, mob) : players;
-        if (!isPlayerTeamMob(mob) && isSurvivalCampMob(state, mob)) {
+        if (!isPlayerTeamMob(mob) && (isSurvivalCampMob(state, mob) || isSurvivalMigratingMob(state, mob))) {
           const targetId = String(mob.survivalTargetPlayerId || "");
           const target = targetId ? state.players && state.players[targetId] : null;
           mobTargets = target && finiteOr(target.health, 0) > 0 && !target.spacecraftInterior ? [target] : [];
@@ -14954,7 +15505,7 @@
         if (updateSurvivalCampMobHome(state, mob, dt)) {
           continue;
         }
-        if (!mobTargets.length) {
+        if (!mobTargets.length && !(mob.kind === "ufo" && mob.survivalSalvageBodyId)) {
           if (isPlayerTeamMob(mob)) {
             updateFamiliarMob(state, mob, dt);
           }

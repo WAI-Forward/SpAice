@@ -1,3 +1,17 @@
+  const SOLID_BODY_BACKGROUND_DAMPING = 0.992;
+
+  function applySolidBodyBackgroundDamping(body, dt) {
+    if (!body || !body.tier || !body.tier.solid || body.gadgetStabilized) {
+      return;
+    }
+    body.vx *= Math.pow(SOLID_BODY_BACKGROUND_DAMPING, dt);
+    body.vy *= Math.pow(SOLID_BODY_BACKGROUND_DAMPING, dt);
+    if (Math.hypot(finiteOr(body.vx, 0), finiteOr(body.vy, 0)) < 0.08) {
+      body.vx = 0;
+      body.vy = 0;
+    }
+  }
+
   function integrateBody(state, body, dt, tick) {
     if (!body) {
       return;
@@ -11,6 +25,8 @@
       body.vy += Math.cos(body.wobble * 1.7 + tick * 0.009) * 4 * dt;
       body.vx *= Math.pow(0.82, dt);
       body.vy *= Math.pow(0.82, dt);
+    } else {
+      applySolidBodyBackgroundDamping(body, dt);
     }
     body.ufoSapTimer = Math.max(0, finiteOr(body.ufoSapTimer, 0) - dt);
     body.ufoSapSourceGraceTimer = Math.max(0, finiteOr(body.ufoSapSourceGraceTimer, 0) - dt);

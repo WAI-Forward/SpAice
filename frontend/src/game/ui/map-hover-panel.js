@@ -300,7 +300,6 @@
       drawMapClusterPreview(target.entity, x, y, radius, time);
       return;
     }
-
     const color = target.color || (target.entity && target.entity.color) || { r: 88, g: 226, b: 255 };
     ctx.save();
     ctx.globalCompositeOperation = "lighter";

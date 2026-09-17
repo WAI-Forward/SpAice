@@ -403,6 +403,11 @@
     mobSpawnRestDrainTimer = 0;
     mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
     survivalSpawnState.nextCampCheckTick = 0;
+    survivalSpawnState.exploredInitialized = false;
+    survivalSpawnState.exploredMinX = 0;
+    survivalSpawnState.exploredMaxX = 0;
+    survivalSpawnState.exploredMinY = 0;
+    survivalSpawnState.exploredMaxY = 0;
   }
 
   function setDifficultyScreenOpen(open) {

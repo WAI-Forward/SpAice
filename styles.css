@@ -48,6 +48,7 @@ body.hud-hidden .online-toggle,
 body.hud-hidden .settings-toggle,
 body.hud-hidden .map-filter,
 body.hud-hidden .map-speedometer,
+body.hud-hidden .hud__growth-rate,
 body.hud-hidden .social-panel,
 body.hud-hidden .signal-panel,
 body.hud-hidden .command-panel,
@@ -70,6 +71,7 @@ canvas,
 .objective-tree,
 .map-filter,
 .map-speedometer,
+.hud__growth-rate,
 .build-menu,
 .social-panel,
 .signal-panel,
@@ -126,6 +128,7 @@ select {
 .hud__progress,
 .hud__score,
 .hud__body,
+.hud__growth-rate,
 .hud__leaderboard-toggle {
   min-width: 92px;
   height: 42px;
@@ -297,6 +300,46 @@ select {
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
+}
+
+.hud__growth-rate {
+  min-width: 128px;
+  display: grid;
+  grid-template-columns: auto minmax(28px, 1fr) auto;
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 10px;
+}
+
+.hud__growth-rate span {
+  overflow: hidden;
+  color: rgba(232, 241, 255, 0.72);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hud__growth-rate strong {
+  color: #ffe56f;
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 0.9;
+  letter-spacing: 0;
+  text-align: right;
+  text-shadow: 0 0 16px rgba(255, 229, 111, 0.28), 0 1px 12px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+.hud__growth-rate em {
+  color: rgba(223, 252, 255, 0.86);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .hud__status-effects {
@@ -1254,7 +1297,10 @@ select {
   padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
+  background:
+    linear-gradient(135deg, rgba(88, 226, 255, 0.055), transparent 36%),
+    linear-gradient(315deg, rgba(255, 220, 122, 0.045), transparent 42%),
+    rgba(5, 9, 24, 0.72);
   cursor: grab;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -1291,13 +1337,14 @@ select {
 }
 
 .objective-tree__link {
-  stroke: rgba(91, 101, 124, 0.36);
-  stroke-width: 4;
+  fill: none;
+  stroke: rgba(116, 130, 160, 0.34);
+  stroke-width: 3.5;
   stroke-linecap: round;
 }
 
 .objective-tree__link.is-unlocked {
-  stroke: rgba(213, 221, 232, 0.5);
+  stroke: rgba(213, 221, 232, 0.46);
 }
 
 .objective-tree__link.is-unclaimed {
@@ -1310,7 +1357,8 @@ select {
 }
 
 .objective-tree__link-glow {
-  stroke: rgba(91, 101, 124, 0.16);
+  fill: none;
+  stroke: rgba(116, 130, 160, 0.14);
   stroke-width: 12;
   stroke-linecap: round;
 }
@@ -1329,7 +1377,8 @@ select {
 }
 
 .objective-node {
-  --objective-node-size: 62px;
+  --objective-node-size: 58px;
+  --objective-accent: 213, 221, 232;
   position: absolute;
   z-index: 2;
   width: var(--objective-node-size);
@@ -1341,8 +1390,9 @@ select {
   border-radius: 50%;
   background:
     radial-gradient(circle at 38% 30%, rgba(255, 255, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 62% 72%, rgba(var(--objective-accent), 0.18), transparent 44%),
     #101522;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22), 0 0 16px rgba(213, 221, 232, 0.08);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22), 0 0 16px rgba(var(--objective-accent), 0.11);
   color: #f4f7fb;
   font: inherit;
   cursor: pointer;
@@ -1368,8 +1418,9 @@ select {
   border-color: rgba(244, 247, 251, 0.78);
   background:
     radial-gradient(circle at 38% 30%, rgba(255, 255, 255, 0.22), transparent 34%),
+    radial-gradient(circle at 62% 72%, rgba(var(--objective-accent), 0.24), transparent 44%),
     #151b2a;
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(213, 221, 232, 0.12);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(var(--objective-accent), 0.14);
   transform: translate(-50%, calc(-50% - 1px));
 }
 
@@ -1379,11 +1430,11 @@ select {
 }
 
 .objective-node.is-current {
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22), inset 0 0 0 2px rgba(244, 247, 251, 0.18);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22), inset 0 0 0 2px rgba(var(--objective-accent), 0.25);
 }
 
 .objective-node.is-selected {
-  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.34), 0 0 0 5px rgba(244, 247, 251, 0.1);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.34), 0 0 0 5px rgba(var(--objective-accent), 0.16);
 }
 
 .objective-node.is-claimed {
@@ -1434,7 +1485,7 @@ select {
 
 .objective-node__icon {
   color: inherit;
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 950;
   line-height: 1;
   text-align: center;
@@ -1547,6 +1598,76 @@ select {
 .objective-detail__claim:disabled {
   cursor: default;
   opacity: 0.58;
+}
+
+.objective-tree__orbit {
+  fill: none;
+  stroke: rgba(173, 190, 224, 0.14);
+  stroke-width: 2;
+  stroke-dasharray: 9 15;
+  vector-effect: non-scaling-stroke;
+}
+
+.objective-tree__orbit--tier-1 {
+  stroke: rgba(255, 220, 122, 0.24);
+}
+
+.objective-tree__orbit--tier-2,
+.objective-tree__orbit--tier-5 {
+  stroke: rgba(88, 226, 255, 0.17);
+}
+
+.objective-tree__orbit--tier-3,
+.objective-tree__orbit--tier-6 {
+  stroke: rgba(255, 115, 173, 0.15);
+}
+
+.objective-tree__orbit--tier-4,
+.objective-tree__orbit--tier-7,
+.objective-tree__orbit--tier-8 {
+  stroke: rgba(94, 245, 154, 0.14);
+}
+
+.objective-node--celestial_body {
+  --objective-accent: 255, 220, 122;
+}
+
+.objective-node--speed {
+  --objective-accent: 88, 226, 255;
+}
+
+.objective-node--growth_rate {
+  --objective-accent: 178, 255, 112;
+}
+
+.objective-node--mob {
+  --objective-accent: 255, 145, 104;
+}
+
+.objective-node--boss {
+  --objective-accent: 255, 115, 173;
+}
+
+.objective-node--tool {
+  --objective-accent: 128, 171, 255;
+}
+
+.objective-node--structure {
+  --objective-accent: 94, 245, 154;
+}
+
+.objective-node.is-root {
+  --objective-node-size: 76px;
+  border-color: rgba(255, 220, 122, 0.92);
+  background:
+    radial-gradient(circle at 36% 28%, rgba(255, 255, 255, 0.38), transparent 30%),
+    radial-gradient(circle at 52% 54%, rgba(255, 220, 122, 0.42), transparent 62%),
+    #281b06;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34), 0 0 34px rgba(255, 220, 122, 0.32);
+}
+
+.objective-node.is-root .objective-node__icon {
+  font-size: 23px;
 }
 
 .tech-row,
@@ -4591,6 +4712,7 @@ select {
   .hud.is-compact:not(.is-compact-open) .hud__progress,
   .hud.is-compact:not(.is-compact-open) .hud__score,
   .hud.is-compact:not(.is-compact-open) .hud__body,
+  .hud.is-compact:not(.is-compact-open) .hud__growth-rate,
   .hud.is-compact:not(.is-compact-open) .hud__status-effects,
   .hud.is-compact:not(.is-compact-open) .leaderboard-panel {
     display: none;
@@ -4616,6 +4738,11 @@ select {
     width: clamp(216px, calc(100vw - 458px), 360px);
     grid-template-columns: minmax(60px, max-content) minmax(64px, 1fr) minmax(44px, max-content);
     gap: 7px;
+    padding: 7px 9px;
+  }
+
+  .hud__growth-rate {
+    min-width: 116px;
     padding: 7px 9px;
   }
 
@@ -4764,6 +4891,7 @@ select {
   .hud__progress,
   .hud__score,
   .hud__body,
+  .hud__growth-rate,
   .hud__status-effects,
   .hud__leaderboard-toggle {
     min-width: 0;
@@ -4829,6 +4957,10 @@ select {
     grid-template-columns: minmax(62px, auto) minmax(88px, 1fr) minmax(64px, auto);
     gap: 7px;
     padding: 7px 8px;
+  }
+
+  .hud__growth-rate {
+    min-width: 116px;
   }
 
   .hud__body-label {

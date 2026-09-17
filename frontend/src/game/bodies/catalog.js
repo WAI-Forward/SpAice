@@ -1,5 +1,5 @@
   const stellarEvolutionEndThreshold = 60000;
-  const stellarGrowthAverageWindowSeconds = 8;
+  const stellarGrowthAverageWindowSeconds = 20;
   const stellarGrowthRateNeutronThreshold = 80;
   const stellarGrowthRateBlackHoleThreshold = 220;
   const stellarOutcomeTierNames = ["white dwarf", "neutron star", "black hole"];

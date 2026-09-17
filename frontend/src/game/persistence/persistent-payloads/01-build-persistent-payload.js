@@ -346,13 +346,23 @@
 
   function serializeSurvivalSpawnState() {
     return {
-      nextCampCheckTick: Math.max(0, finiteOr(survivalSpawnState.nextCampCheckTick, survivalSpawnState.nextCampCheckAt || 0))
+      nextCampCheckTick: Math.max(0, finiteOr(survivalSpawnState.nextCampCheckTick, survivalSpawnState.nextCampCheckAt || 0)),
+      exploredInitialized: Boolean(survivalSpawnState.exploredInitialized),
+      exploredMinX: finiteOr(survivalSpawnState.exploredMinX, 0),
+      exploredMaxX: finiteOr(survivalSpawnState.exploredMaxX, 0),
+      exploredMinY: finiteOr(survivalSpawnState.exploredMinY, 0),
+      exploredMaxY: finiteOr(survivalSpawnState.exploredMaxY, 0)
     };
   }
 
   function applySurvivalSpawnState(snapshot) {
     const source = snapshot && typeof snapshot === "object" ? snapshot : {};
     survivalSpawnState.nextCampCheckTick = Math.max(0, finiteOr(source.nextCampCheckTick, source.nextCampCheckAt || 0));
+    survivalSpawnState.exploredInitialized = Boolean(source.exploredInitialized);
+    survivalSpawnState.exploredMinX = finiteOr(source.exploredMinX, 0);
+    survivalSpawnState.exploredMaxX = finiteOr(source.exploredMaxX, 0);
+    survivalSpawnState.exploredMinY = finiteOr(source.exploredMinY, 0);
+    survivalSpawnState.exploredMaxY = finiteOr(source.exploredMaxY, 0);
   }
 
   function applyPlayerSnapshot(snapshot) {

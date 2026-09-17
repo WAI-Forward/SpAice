@@ -159,5 +159,15 @@
       return;
     }
 
+    const highestTier = celestialBodyBlueprints[lifeStats.maxTierName] || bodyTiers[0];
+    if (highestTier && highestTier.threshold > tier.threshold) {
+      return;
+    }
+
+    if (!highestTier || tier.threshold > highestTier.threshold) {
+      lifeStats.maxMass = Math.max(lifeStats.maxMass, tier.threshold);
+      lifeStats.maxTierName = tier.name;
+    }
+
     maybeNotifyText("You have made " + tier.article + " " + tier.name + ".");
   }

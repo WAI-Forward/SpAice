@@ -12,6 +12,8 @@
         entity.vy += Math.cos(finiteOr(entity.wobble, 0) * 1.7 + performance.now() * 0.0006) * 4 * dt;
         entity.vx *= Math.pow(0.82, dt);
         entity.vy *= Math.pow(0.82, dt);
+      } else {
+        applySolidBodyBackgroundDamping(entity, dt);
       }
       if (entity.gadgetStabilized && entity.tier.solid && length(entity.vx, entity.vy) <= gadgetStabilizedBreakSpeed) {
         entity.vx = 0;
@@ -68,9 +70,16 @@
       survivalMigrationCampId: typeof (mob && mob.survivalMigrationCampId) === "string" ? mob.survivalMigrationCampId : "",
       survivalMigrationCampX: finiteOr(mob && mob.survivalMigrationCampX, Number.NaN),
       survivalMigrationCampY: finiteOr(mob && mob.survivalMigrationCampY, Number.NaN),
-      survivalEncounterType: mob && mob.survivalEncounterType === "camp" ? "camp" : "",
+      survivalMigrationStraightTime: Math.max(0, finiteOr(mob && mob.survivalMigrationStraightTime, 0)),
+      survivalMigrationDirX: finiteOr(mob && mob.survivalMigrationDirX, 0),
+      survivalMigrationDirY: finiteOr(mob && mob.survivalMigrationDirY, 0),
+      survivalEncounterType: mob && ["camp", "migration", "salvage"].includes(mob.survivalEncounterType) ? mob.survivalEncounterType : "",
       survivalEncounterId: typeof (mob && mob.survivalEncounterId) === "string" ? mob.survivalEncounterId : "",
       survivalTargetPlayerId: typeof (mob && mob.survivalTargetPlayerId) === "string" ? mob.survivalTargetPlayerId : "",
+      survivalSalvageBodyId: Math.max(0, Math.floor(finiteOr(mob && mob.survivalSalvageBodyId, 0))),
+      survivalSalvageSourceCampId: typeof (mob && mob.survivalSalvageSourceCampId) === "string" ? mob.survivalSalvageSourceCampId : "",
+      survivalSalvageTargetCampId: typeof (mob && mob.survivalSalvageTargetCampId) === "string" ? mob.survivalSalvageTargetCampId : "",
+      survivalSalvageAge: Math.max(0, finiteOr(mob && mob.survivalSalvageAge, 0)),
       survivalCampBudget: Math.max(0, finiteOr(mob && mob.survivalCampBudget, 0)),
       survivalCampBand: typeof (mob && mob.survivalCampBand) === "string" ? mob.survivalCampBand : "",
       eliteStars,

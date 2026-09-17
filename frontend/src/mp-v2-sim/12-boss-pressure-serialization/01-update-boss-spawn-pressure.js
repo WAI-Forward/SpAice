@@ -279,13 +279,14 @@
     );
   }
 
-  function wakeSurvivalCampFromBody(state, body, targetPlayerId) {
+  function wakeSurvivalCampFromBody(state, body, targetPlayerId, options) {
+    const allowScoredBody = Boolean(options && options.allowScoredBody);
     if (
       !state ||
       !body ||
       !body.survivalCampBody ||
       !body.survivalCampId ||
-      isPlayerScoredSurvivalCampBody(state, body) ||
+      (!allowScoredBody && isPlayerScoredSurvivalCampBody(state, body)) ||
       isHordeGameMode(state.gameMode || state.world && state.world.gameMode)
     ) {
       return false;
@@ -410,6 +411,32 @@
     mob.survivalMigrationCampId = "";
     mob.survivalMigrationCampX = Number.NaN;
     mob.survivalMigrationCampY = Number.NaN;
+    mob.survivalMigrationStraightTime = 0;
+    mob.survivalMigrationDirX = 0;
+    mob.survivalMigrationDirY = 0;
+  }
+
+  function isSurvivalMigratingMob(state, mob) {
+    return Boolean(
+      mob &&
+      !isPlayerTeamMob(mob) &&
+      !isHordeGameMode(state && state.gameMode) &&
+      (mob.survivalEncounterType === "migration" || mob.survivalEncounterType === "salvage" || (!mob.survivalCampId && mob.survivalMigrationCampId))
+    );
+  }
+
+  function nearbySurvivalMigrationPlayer(state, mob) {
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const player of Object.values(state && state.players || {})) {
+      if (!player || finiteOr(player.health, 0) <= 0 || player.spacecraftInterior) continue;
+      const distance = Math.hypot(player.x - mob.x, player.y - mob.y);
+      if (distance <= SURVIVAL_MIGRATION_AGGRO_RADIUS && distance < nearestDistance) {
+        nearest = player;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
   }
 
   function clearSurvivalCampMobIdentity(mob) {
@@ -452,8 +479,11 @@
   function updateOrphanedSurvivalCampMobMigration(state, mob, dt) {
     const targetCamp = survivalCampMigrationTarget(state, mob);
     if (!targetCamp) {
-      clearSurvivalCampMobIdentity(mob);
-      return false;
+      mob.survivalCampId = "";
+      mob.survivalEncounterType = "migration";
+      mob.survivalEncounterId = "";
+      clearSurvivalCampMigrationState(mob);
+      return true;
     }
 
     mob.survivalMigrationCampId = targetCamp.campId;
@@ -475,8 +505,12 @@
       mob.survivalCampReturning = false;
       mob.survivalCampSlotAngle = Math.atan2(finiteOr(mob.y, targetCamp.y) - targetCamp.y, finiteOr(mob.x, targetCamp.x) - targetCamp.x);
       mob.survivalCampSlotRadius = clamp(distance, 120, SURVIVAL_CAMP_IDLE_RADIUS);
-      if (mob.survivalEncounterType === "camp") {
-        mob.survivalEncounterId = targetCamp.campId;
+      mob.survivalEncounterType = "camp";
+      mob.survivalEncounterId = targetCamp.campId;
+      const resident = allCombatMobs(state.world).find((candidate) => candidate && candidate !== mob && candidate.health > 0 && candidate.survivalCampId === targetCamp.campId);
+      if (resident) {
+        mob.survivalCampBand = resident.survivalCampBand || mob.survivalCampBand || "starter";
+        mob.survivalCampBudget = Math.max(finiteOr(mob.survivalCampBudget, 0), finiteOr(resident.survivalCampBudget, 0));
       }
       clearSurvivalCampMigrationState(mob);
       clearSurvivalCampAttackState(mob);
@@ -485,16 +519,28 @@
 
     const nx = dx / distance;
     const ny = dy / distance;
+    const previousDirX = finiteOr(mob.survivalMigrationDirX, nx);
+    const previousDirY = finiteOr(mob.survivalMigrationDirY, ny);
+    const alignment = previousDirX * nx + previousDirY * ny;
+    mob.survivalMigrationStraightTime = alignment > 0.96
+      ? Math.min(8, finiteOr(mob.survivalMigrationStraightTime, 0) + dt)
+      : Math.max(0, finiteOr(mob.survivalMigrationStraightTime, 0) - dt * 2.5);
+    mob.survivalMigrationDirX = nx;
+    mob.survivalMigrationDirY = ny;
+    const momentum = clamp(mob.survivalMigrationStraightTime / 7, 0, 1);
     const tangentX = -ny * finiteOr(mob.strafeSign, 1);
     const tangentY = nx * finiteOr(mob.strafeSign, 1);
-    mob.vx += nx * 176 * dt + tangentX * 18 * dt;
-    mob.vy += ny * 176 * dt + tangentY * 18 * dt;
-    mob.vx *= Math.pow(0.76, dt);
-    mob.vy *= Math.pow(0.76, dt);
+    const travelForce = 190 + momentum * 240;
+    mob.vx += nx * travelForce * dt + tangentX * 12 * (1 - momentum) * dt;
+    mob.vy += ny * travelForce * dt + tangentY * 12 * (1 - momentum) * dt;
+    mob.vx *= Math.pow(0.88, dt);
+    mob.vy *= Math.pow(0.88, dt);
     const nextSpeed = Math.hypot(mob.vx, mob.vy);
-    if (nextSpeed > 250) {
-      mob.vx = (mob.vx / nextSpeed) * 250;
-      mob.vy = (mob.vy / nextSpeed) * 250;
+    const cruiseSpeed = 250 + (SURVIVAL_MIGRATION_MAX_SPEED - 250) * momentum;
+    const maxSpeed = distance < 2400 ? clamp(120 + distance * 0.2, 150, cruiseSpeed) : cruiseSpeed;
+    if (nextSpeed > maxSpeed) {
+      mob.vx = (mob.vx / nextSpeed) * maxSpeed;
+      mob.vy = (mob.vy / nextSpeed) * maxSpeed;
     }
     mob.x += mob.vx * dt;
     mob.y += mob.vy * dt;
@@ -503,11 +549,28 @@
   }
 
   function updateSurvivalCampMobHome(state, mob, dt) {
-    if (!isSurvivalCampMob(state, mob)) {
+    if (mob && mob.survivalEncounterType === "salvage" && mob.survivalSalvageBodyId) {
       return false;
     }
 
+    const campMob = isSurvivalCampMob(state, mob);
+    const migratingMob = isSurvivalMigratingMob(state, mob) || Boolean(mob && !isPlayerTeamMob(mob) && !isHordeGameMode(state && state.gameMode) && !mob.survivalCampId && mob.survivalEncounterType !== "hit-squad");
+    if (!campMob && !migratingMob) return false;
+
     mob.survivalCampAggroTimer = Math.max(0, finiteOr(mob.survivalCampAggroTimer, 0) - dt);
+    if (!campMob) {
+      mob.survivalEncounterType = "migration";
+      const nearbyPlayer = nearbySurvivalMigrationPlayer(state, mob);
+      if (nearbyPlayer) {
+        mob.survivalCampAggroTimer = SURVIVAL_MIGRATION_AGGRO_DURATION;
+        mob.survivalTargetPlayerId = String(nearbyPlayer.id || "");
+      }
+      if (mob.survivalCampAggroTimer > 0 && mob.survivalTargetPlayerId) {
+        return false;
+      }
+      mob.survivalTargetPlayerId = "";
+      return updateOrphanedSurvivalCampMobMigration(state, mob, dt);
+    }
     let campAnchor = survivalCampAnchorPoint(state, mob.survivalCampId, finiteOr(mob.survivalCampX, mob.x), finiteOr(mob.survivalCampY, mob.y));
     if (!campAnchor.hasCampBody) {
       if (mob.survivalCampAggroTimer > 0) {
@@ -632,7 +695,7 @@
         let mobTargets = isPlayerTeamMob(mob) && activeFamiliarCommand(mob)
           ? []
           : isPlayerTeamMob(mob) ? familiarHostileTargets(state.world, mob) : players;
-        if (!isPlayerTeamMob(mob) && isSurvivalCampMob(state, mob)) {
+        if (!isPlayerTeamMob(mob) && (isSurvivalCampMob(state, mob) || isSurvivalMigratingMob(state, mob))) {
           const targetId = String(mob.survivalTargetPlayerId || "");
           const target = targetId ? state.players && state.players[targetId] : null;
           mobTargets = target && finiteOr(target.health, 0) > 0 && !target.spacecraftInterior ? [target] : [];
@@ -640,7 +703,7 @@
         if (updateSurvivalCampMobHome(state, mob, dt)) {
           continue;
         }
-        if (!mobTargets.length) {
+        if (!mobTargets.length && !(mob.kind === "ufo" && mob.survivalSalvageBodyId)) {
           if (isPlayerTeamMob(mob)) {
             updateFamiliarMob(state, mob, dt);
           }

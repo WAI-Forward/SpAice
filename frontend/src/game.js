@@ -23,6 +23,7 @@
   const milestoneStellarFill = document.getElementById("milestoneStellarFill");
   const milestoneSplit = document.getElementById("milestoneSplit");
   const stellarRateLabel = document.getElementById("stellarRateLabel");
+  const growthRateValue = document.getElementById("growthRateValue");
   const playerStatusEffectsHud = document.getElementById("playerStatusEffects");
   const leaderboardToggle = document.getElementById("leaderboardToggle");
   const leaderboardPanel = document.getElementById("leaderboardPanel");
@@ -360,6 +361,9 @@
     completed: Object.create(null),
     claimed: Object.create(null),
     createdBodyMass: 0,
+    maxTravelSpeed: 0,
+    maxGrowthRate: 0,
+    builtStructures: Object.create(null),
     renderSignature: "",
     selectedId: "",
     newlyCompleted: [],
@@ -370,35 +374,34 @@
     zoom: 1
   };
   const objectiveGraphLayout = Object.freeze({
-    create_rock: { x: 170, y: 90 },
-    create_boulder: { x: 170, y: 210 },
-    create_asteroid: { x: 170, y: 330 },
-    create_moon: { x: 170, y: 450 },
-    create_planet: { x: 170, y: 570 },
-    create_star: { x: 170, y: 690 },
-    kill_3_alienoids: { x: 520, y: 90 },
-    kill_3_ufos: { x: 520, y: 270 },
-    kill_3_rambots: { x: 520, y: 450 },
-    kill_3_engineers: { x: 520, y: 630 },
-    kill_3_teslas: { x: 520, y: 810 },
-    kill_3_satellites: { x: 520, y: 990 },
-    kill_3_rockets: { x: 520, y: 1170 },
-    kill_3_fighters: { x: 520, y: 1350 },
-    kill_alienoid_boss: { x: 950, y: 90 },
-    kill_ufo_boss: { x: 950, y: 270 },
-    kill_rambot_boss: { x: 950, y: 450 },
-    kill_engineer_boss: { x: 950, y: 630 },
-    kill_tesla_boss: { x: 950, y: 810 },
-    kill_satellite_boss: { x: 950, y: 990 },
-    kill_rocket_boss: { x: 950, y: 1170 },
-    kill_fighter_boss: { x: 950, y: 1350 },
-    make_laser_pistol: { x: 1280, y: 300 },
-    create_spanner: { x: 1280, y: 480 },
-    create_turret: { x: 1280, y: 780 },
-    create_accumulator: { x: 1280, y: 960 },
-    create_rifle: { x: 1280, y: 1140 }
+    rootId: "create_rock",
+    padding: 150,
+    firstOrbitRadius: 148,
+    orbitGap: 132,
+    minimumRadius: 300,
+    rootBranchAngles: Object.freeze({
+      celestial_body: -90,
+      speed: -156,
+      growth_rate: -124,
+      mob: -8,
+      boss: 28,
+      tool: 72,
+      structure: 118
+    }),
+    categoryArcOffsets: Object.freeze({
+      celestial_body: 0,
+      speed: 0,
+      growth_rate: 0,
+      mob: 0,
+      boss: 48,
+      tool: -58,
+      structure: 70
+    }),
+    categoryOrder: Object.freeze(["speed", "growth_rate", "celestial_body", "mob", "boss", "tool", "structure"]),
+    siblingArcStep: 82,
+    maxSiblingArcSpread: 248,
+    minimumNodeArcGap: 112
   });
-  const objectiveGraphPadding = 90;
   const techLedgerDrag = {
     active: false,
     pointerId: null,
@@ -955,6 +958,8 @@
       mobBonusChanceScale: 1.1,
       mobStartingBatchBonusChances: [0, 0],
       mobDamageMultiplier: 0.62,
+      survivalBudgetScale: 0.88,
+      survivalCampScale: 0.9,
       healthDropMultiplier: 1.1,
       techDropMultiplier: 1.45,
       bodyScoreMultiplier: 0.75,
@@ -971,6 +976,8 @@
       mobBonusChanceScale: 1.22,
       mobStartingBatchBonusChances: [0.75, 0.2, 0.09],
       mobDamageMultiplier: 0.82,
+      survivalBudgetScale: 1,
+      survivalCampScale: 1,
       healthDropMultiplier: 0.9,
       techDropMultiplier: 1.15,
       bodyScoreMultiplier: 1,
@@ -987,6 +994,8 @@
       mobBonusChanceScale: 1.35,
       mobStartingBatchBonusChances: [0.9, 0.75, 0.34],
       mobDamageMultiplier: 1,
+      survivalBudgetScale: 1.18,
+      survivalCampScale: 1.15,
       healthDropMultiplier: 0.7,
       techDropMultiplier: 1,
       bodyScoreMultiplier: 1.25,
@@ -1098,6 +1107,14 @@
   const survivalCampSpawnDistancePadding = 1200;
   const survivalCampSpawnDistanceSpread = 9000;
   const survivalCampAllowancePreferredSeparation = 4200;
+  const survivalCampActiveRadius = 42000;
+  const survivalCampExpansionDistance = 32000;
+  const survivalCampMaxExpansion = 8;
+  const survivalMigrationAggroRadius = 1450;
+  const survivalMigrationAggroDuration = 14;
+  const survivalMigrationMaxSpeed = 760;
+  const survivalSalvageMaxUfos = 3;
+  const survivalSalvageArrivalRadius = 620;
   const mobSpawnEdgePaddingBonus = 320;
   const mobSpawnSpreadMultiplier = 1.25;
   const mobRelocationEdgePaddingBonus = 560;
@@ -2297,7 +2314,7 @@
   };
 
   const stellarEvolutionEndThreshold = 60000;
-  const stellarGrowthAverageWindowSeconds = 8;
+  const stellarGrowthAverageWindowSeconds = 20;
   const stellarGrowthRateNeutronThreshold = 80;
   const stellarGrowthRateBlackHoleThreshold = 220;
   const stellarOutcomeTierNames = ["white dwarf", "neutron star", "black hole"];
@@ -2347,6 +2364,10 @@
       { id: "create_moon", label: "Create a moon", category: "celestial_body", prerequisites: ["create_asteroid"] },
       { id: "create_planet", label: "Create a planet", category: "celestial_body", prerequisites: ["create_moon"] },
       { id: "create_star", label: "Create a star", category: "celestial_body", prerequisites: ["create_planet"] },
+      { id: "reach_speed_520", label: "Break 520 speed", category: "speed", prerequisites: ["create_rock"] },
+      { id: "reach_speed_1000", label: "Break 1000 speed", category: "speed", prerequisites: ["reach_speed_520"] },
+      { id: "reach_speed_2000", label: "Break 2000 speed", category: "speed", prerequisites: ["reach_speed_1000"] },
+      { id: "reach_growth_rate_10", label: "Get a >10 growth rate", category: "growth_rate", prerequisites: ["create_rock"] },
       { id: "kill_3_alienoids", label: "Kill 3 alienoids", category: "mob", prerequisites: ["create_rock"] },
       { id: "kill_3_ufos", label: "Kill 4 UFOs", category: "mob", prerequisites: ["kill_3_alienoids"] },
       { id: "kill_3_rambots", label: "Kill 5 rambots", category: "mob", prerequisites: ["kill_3_ufos"] },
@@ -2412,6 +2433,34 @@
       hint: "Collapse a planet into a star.",
       progress: function () {
         return objectiveMassProgress("star");
+      }
+    },
+    reach_speed_520: {
+      icon: ">",
+      hint: "Break 520 speed on the map speedometer.",
+      progress: function () {
+        return objectiveSpeedProgress(520);
+      }
+    },
+    reach_speed_1000: {
+      icon: ">>",
+      hint: "Break 1000 speed with boost, jets, or a fast ride.",
+      progress: function () {
+        return objectiveSpeedProgress(1000);
+      }
+    },
+    reach_speed_2000: {
+      icon: ">>>",
+      hint: "Break 2000 speed with advanced propulsion.",
+      progress: function () {
+        return objectiveSpeedProgress(2000);
+      }
+    },
+    reach_growth_rate_10: {
+      icon: "+",
+      hint: "Raise the Growth tracker in the HUD above 10 per second.",
+      progress: function () {
+        return objectiveGrowthRateProgress(10);
       }
     },
     kill_3_alienoids: objectiveMobMetadata("alienoid"),
@@ -2641,7 +2690,12 @@
   let mobSpawnRestDrainTimer = 0;
   let mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
   const survivalSpawnState = {
-    nextCampCheckTick: 0
+    nextCampCheckTick: 0,
+    exploredInitialized: false,
+    exploredMinX: 0,
+    exploredMaxX: 0,
+    exploredMinY: 0,
+    exploredMaxY: 0
   };
   const mobDefeatsByKind = {
     alienoid: 0,
@@ -2875,8 +2929,8 @@
       hudEnabled: true,
       playerHealthBar: true,
       playerEnergyBar: true,
-      mapMinimumBodyTier: "auto",
-      mapMaximumBodyTier: "auto",
+      mapMinimumBodyTier: "rock",
+      mapMaximumBodyTier: "star",
       controls: Object.assign({}, defaultControlBindings)
     };
 
@@ -3242,7 +3296,7 @@
   function normalizeMapBodyTierFilterName(name, fallback) {
     const raw = String(name || "").trim().toLowerCase();
     if (raw === "auto") {
-      return "auto";
+      return fallback;
     }
     const normalized = String(name || "")
       .trim()
@@ -3254,38 +3308,21 @@
   }
 
   function normalizeMapMinimumBodyTierName(name) {
-    return normalizeMapBodyTierFilterName(name, "auto");
+    return normalizeMapBodyTierFilterName(name, "rock");
   }
 
   function normalizeMapMaximumBodyTierName(name) {
-    return normalizeMapBodyTierFilterName(name, "auto");
+    return normalizeMapBodyTierFilterName(name, "star");
   }
 
   function mapMinimumBodyThreshold() {
     const tierName = normalizeMapMinimumBodyTierName(gameSettings.mapMinimumBodyTier);
-    if (tierName === "auto") {
-      return mappedBodyThreshold;
-    }
     const tier = bodyTiers.find((candidate) => candidate.name === tierName);
     return tier ? tier.threshold : mappedBodyThreshold;
   }
 
-  function currentPlayerBodyTierIndex() {
-    if (!player.landed || !player.landed.bodyId) {
-      return -1;
-    }
-    const body = bodyById(player.landed.bodyId);
-    const tierName = body && body.tier && body.tier.name;
-    return bodyTiers.findIndex((candidate) => candidate.name === tierName);
-  }
-
   function mapMaximumBodyThreshold() {
     const tierName = normalizeMapMaximumBodyTierName(gameSettings.mapMaximumBodyTier);
-    if (tierName === "auto") {
-      const bodyTierIndex = currentPlayerBodyTierIndex();
-      const previousTier = bodyTierIndex > 0 ? bodyTiers[bodyTierIndex - 1] : null;
-      return previousTier ? previousTier.threshold : Number.POSITIVE_INFINITY;
-    }
     const tier = bodyTiers.find((candidate) => candidate.name === tierName);
     return tier ? tier.threshold : Number.POSITIVE_INFINITY;
   }
@@ -5058,15 +5095,17 @@
       return;
     }
 
-    maybeNotifyText("You have made " + tier.article + " " + tier.name + ".");
-  }
-
-  function objectiveOwnedTechCount() {
-    let total = 0;
-    for (const tech of techTypes) {
-      total += Math.max(0, Math.floor(finiteOr(techInventory[tech.key], 0)));
+    const highestTier = celestialBodyBlueprints[lifeStats.maxTierName] || bodyTiers[0];
+    if (highestTier && highestTier.threshold > tier.threshold) {
+      return;
     }
-    return total;
+
+    if (!highestTier || tier.threshold > highestTier.threshold) {
+      lifeStats.maxMass = Math.max(lifeStats.maxMass, tier.threshold);
+      lifeStats.maxTierName = tier.name;
+    }
+
+    maybeNotifyText("You have made " + tier.article + " " + tier.name + ".");
   }
 
   function objectiveMobTechKey(kind) {
@@ -5102,9 +5141,29 @@
     return mobKindsByObjective[id] || "";
   }
 
+  function objectiveMobRewardTier(kind) {
+    return Math.max(0, mobTierOrder.indexOf(kind));
+  }
+
+  function objectiveMobHealthRewardAmount(kind, boss) {
+    const tier = objectiveMobRewardTier(kind);
+    return (boss ? 24 : 10) + tier * (boss ? 4 : 2);
+  }
+
+  function objectiveMobRepairRewardAmount(kind, boss) {
+    const tier = objectiveMobRewardTier(kind);
+    if (tier < 2) {
+      return 0;
+    }
+    return boss ? Math.max(1, Math.floor(tier / 2)) + 1 : Math.max(1, Math.floor((tier - 1) / 2));
+  }
+
   function objectiveRewardEntries(definition) {
     const id = String(definition && definition.id || "");
     const fixedRewards = {
+      reach_speed_520: { propulsion: 2 },
+      reach_speed_1000: { propulsion: 4 },
+      reach_speed_2000: { propulsion: 6, energy: 1 },
       make_laser_pistol: { weapon: 1 },
       create_rifle: { weapon: 2 },
       create_spanner: { repair: 1 },
@@ -5120,10 +5179,16 @@
 
     const mobKind = objectiveRewardMobKind(id);
     if (mobKind) {
+      const boss = id.indexOf("_boss") >= 0;
       const rewards = [{
         techKey: objectiveMobTechKey(mobKind),
-        amount: id.indexOf("_boss") >= 0 ? 3 : 1
+        amount: boss ? 3 : 1
       }];
+      rewards.push({ health: objectiveMobHealthRewardAmount(mobKind, boss) });
+      const repairReward = objectiveMobRepairRewardAmount(mobKind, boss);
+      if (repairReward > 0) {
+        rewards.push({ techKey: "repair", amount: repairReward });
+      }
       if (id === "kill_alienoid_boss") {
         rewards.push({ blueprintId: "shotgun", label: "Shotgun Blueprint" });
       }
@@ -5167,6 +5232,9 @@
       if (entry.blueprintId) {
         return entry.label || "Blueprint";
       }
+      if (entry.health) {
+        return "+" + Math.max(1, Math.floor(finiteOr(entry.health, 1))) + " Health";
+      }
       return Math.max(1, Math.floor(finiteOr(entry.amount, 1))) + " " + objectiveTechLabel(entry.techKey);
     }).join(" + ");
   }
@@ -5186,10 +5254,6 @@
 
   function objectiveCanClaim(snapshot) {
     return objectiveIsAwaitingClaim(snapshot);
-  }
-
-  function objectiveHasUnclaimedObjectives(snapshots) {
-    return snapshots.some(objectiveIsAwaitingClaim);
   }
 
   function objectiveClaimableSnapshots(snapshots) {
@@ -5227,6 +5291,30 @@
     return Math.max(0, finiteOr(objectiveState.createdBodyMass, 0));
   }
 
+  function recordObjectiveTravelSpeed(speed) {
+    const value = Math.max(0, finiteOr(speed, 0));
+    if (value > finiteOr(objectiveState.maxTravelSpeed, 0)) {
+      objectiveState.maxTravelSpeed = value;
+      objectiveState.renderSignature = "";
+    }
+  }
+
+  function objectiveMaxTravelSpeed() {
+    return Math.max(0, finiteOr(objectiveState.maxTravelSpeed, 0));
+  }
+
+  function recordObjectiveBuiltStructure(type) {
+    const structureType = String(type || "");
+    if (!structureType) {
+      return;
+    }
+    const builtStructures = objectiveState.builtStructures && typeof objectiveState.builtStructures === "object"
+      ? objectiveState.builtStructures
+      : (objectiveState.builtStructures = Object.create(null));
+    builtStructures[structureType] = Math.max(0, Math.floor(finiteOr(builtStructures[structureType], 0))) + 1;
+    objectiveState.renderSignature = "";
+  }
+
   function objectiveMassProgress(tierName) {
     const tier = bodyTierForCommandToken(tierName);
     const target = tier ? tier.threshold : 1;
@@ -5236,6 +5324,17 @@
       value: mass,
       target,
       label: Math.max(0, Math.round(mass)) + " / " + Math.round(target) + "g created"
+    };
+  }
+
+  function objectiveSpeedProgress(targetSpeed) {
+    const target = Math.max(1, Math.floor(finiteOr(targetSpeed, 1)));
+    const speed = objectiveMaxTravelSpeed();
+    return {
+      complete: speed >= target,
+      value: speed,
+      target,
+      label: Math.min(Math.round(speed), target) + " / " + target + " speed"
     };
   }
 
@@ -5332,7 +5431,10 @@
   }
 
   function objectiveStructureProgress(type) {
-    const count = structures.filter((structure) => structure && structure.type === type).length;
+    const counts = objectiveState.builtStructures && typeof objectiveState.builtStructures === "object"
+      ? objectiveState.builtStructures
+      : {};
+    const count = Math.max(0, Math.floor(finiteOr(counts[type], 0)));
     return {
       complete: count > 0,
       value: count,
@@ -5457,43 +5559,6 @@
     return selected;
   }
 
-  function objectiveGraphPosition(definition) {
-    if (!definition) {
-      return { x: objectiveGraphPadding, y: objectiveGraphPadding };
-    }
-
-    const fixed = objectiveGraphLayout[definition.id];
-    if (fixed) {
-      return fixed;
-    }
-
-    const bossPrefix = "boss-requirement-";
-    if (definition.id && definition.id.indexOf(bossPrefix) === 0) {
-      const kind = definition.id.slice(bossPrefix.length);
-      const index = Math.max(0, mobTierOrder.indexOf(kind));
-      return {
-        x: 585 + (index % 2) * 220,
-        y: 625 + Math.floor(index / 2) * 120
-      };
-    }
-
-    return {
-      x: objectiveGraphPadding + (Math.max(1, Math.round(finiteOr(definition.col, 1))) - 1) * 200,
-      y: objectiveGraphPadding + (Math.max(1, Math.round(finiteOr(definition.row, 1))) - 1) * 120
-    };
-  }
-
-  function objectiveGraphSize(snapshots) {
-    let width = 760;
-    let height = 620;
-    for (const snapshot of snapshots) {
-      const position = objectiveGraphPosition(snapshot.definition);
-      width = Math.max(width, position.x + objectiveGraphPadding);
-      height = Math.max(height, position.y + objectiveGraphPadding);
-    }
-    return { width, height };
-  }
-
   function objectiveGraphZoom() {
     return clamp(finiteOr(objectiveState.zoom, 1), 0.35, 1.8);
   }
@@ -5542,35 +5607,383 @@
     };
   }
 
+  function recordObjectiveGrowthRate(rate) {
+    const value = Math.max(0, finiteOr(rate, 0));
+    if (value > finiteOr(objectiveState.maxGrowthRate, 0)) {
+      objectiveState.maxGrowthRate = value;
+      objectiveState.renderSignature = "";
+    }
+  }
+
+  function objectiveMaxGrowthRate() {
+    return Math.max(0, finiteOr(objectiveState.maxGrowthRate, 0));
+  }
+
+  function objectiveGrowthRateProgress(minimumExclusive) {
+    const target = Math.max(0, finiteOr(minimumExclusive, 0));
+    const rate = objectiveMaxGrowthRate();
+    const displayedRate = rate > 0 ? rate.toFixed(1) : "0";
+    return {
+      complete: rate > target,
+      value: rate,
+      target,
+      label: displayedRate + " / >" + target + " growth/s"
+    };
+  }
+
+  function updateGrowthRateHud(progressBody, progressMass) {
+    if (!growthRateValue) {
+      return 0;
+    }
+
+    const bodyId = progressBody ? progressBody.id : "world";
+    const mass = Math.max(0, finiteOr(progressMass, 0));
+    const now = performance.now() / 1000;
+    const branchRate = progressBody && progressBody.stellarGrowthStarted
+      ? Math.max(0, finiteOr(progressBody.stellarGrowthRate, 0))
+      : null;
+
+    if (branchRate !== null) {
+      hudCache.growthRateBodyId = bodyId;
+      hudCache.growthRateMass = mass;
+      hudCache.growthRateSampleAt = now;
+      hudCache.growthRateValue = branchRate;
+      recordObjectiveGrowthRate(branchRate);
+      setTextIfChanged(growthRateValue, formatGrowthRate(branchRate));
+      return branchRate;
+    }
+
+    if (hudCache.growthRateBodyId !== bodyId || hudCache.growthRateSampleAt <= 0) {
+      hudCache.growthRateBodyId = bodyId;
+      hudCache.growthRateMass = mass;
+      hudCache.growthRateSampleAt = now;
+      hudCache.growthRateValue = 0;
+      setTextIfChanged(growthRateValue, "0");
+      return 0;
+    }
+
+    const elapsed = Math.max(1 / 30, now - hudCache.growthRateSampleAt);
+    const gainedMass = Math.max(0, mass - hudCache.growthRateMass);
+    const instantRate = gainedMass / elapsed;
+    const previousRate = Math.max(0, finiteOr(hudCache.growthRateValue, 0));
+    const alpha = clamp(elapsed / Math.max(0.001, stellarGrowthAverageWindowSeconds), 0.08, 0.55);
+    const growthRate = previousRate > 0 ? previousRate + (instantRate - previousRate) * alpha : instantRate;
+
+    hudCache.growthRateMass = mass;
+    hudCache.growthRateSampleAt = now;
+    hudCache.growthRateValue = growthRate;
+    recordObjectiveGrowthRate(growthRate);
+    setTextIfChanged(growthRateValue, formatGrowthRate(growthRate));
+    return growthRate;
+  }
+
+  function objectivePrerequisiteIds(definition) {
+    return Array.isArray(definition && definition.prerequisites)
+      ? definition.prerequisites
+      : (definition && definition.parent ? [definition.parent] : []);
+  }
+
+  function objectiveDefinitionDepth(definition, definitionsById, memo, active) {
+    if (!definition) {
+      return 0;
+    }
+
+    const id = String(definition.id || "");
+    if (id === objectiveGraphLayout.rootId) {
+      return 0;
+    }
+    if (memo.has(id)) {
+      return memo.get(id);
+    }
+    if (active.has(id)) {
+      return 1;
+    }
+
+    active.add(id);
+    const prerequisites = objectivePrerequisiteIds(definition).filter((prerequisiteId) => definitionsById.has(prerequisiteId));
+    const parentDepth = prerequisites.length
+      ? prerequisites.reduce(function (depth, prerequisiteId) {
+        return Math.max(depth, objectiveDefinitionDepth(definitionsById.get(prerequisiteId), definitionsById, memo, active));
+      }, 0)
+      : 0;
+    const depth = Math.max(1, parentDepth + 1);
+    active.delete(id);
+    memo.set(id, depth);
+    return depth;
+  }
+
+  function objectiveCategoryRank(category) {
+    const order = objectiveGraphLayout.categoryOrder || [];
+    const index = order.indexOf(category);
+    return index >= 0 ? index : order.length + 1;
+  }
+
+  function objectiveRootBranchAngle(category, fallbackIndex, fallbackCount) {
+    const angles = objectiveGraphLayout.rootBranchAngles || {};
+    if (Object.prototype.hasOwnProperty.call(angles, category)) {
+      return finiteOr(angles[category], 0);
+    }
+    return -90 + fallbackIndex * (360 / Math.max(1, fallbackCount));
+  }
+
+  function objectiveArcToDegrees(arcLength, radius) {
+    return finiteOr(arcLength, 0) / Math.max(1, finiteOr(radius, 1)) * 180 / Math.PI;
+  }
+
+  function objectiveCategoryAngleOffset(category, radius) {
+    const offsets = objectiveGraphLayout.categoryArcOffsets || objectiveGraphLayout.categoryAngleOffsets || {};
+    return Object.prototype.hasOwnProperty.call(offsets, category)
+      ? objectiveArcToDegrees(offsets[category], radius)
+      : 0;
+  }
+
+  function objectivePrimaryParentId(definition, definitionsById, depths) {
+    const prerequisites = objectivePrerequisiteIds(definition).filter((prerequisiteId) => definitionsById.has(prerequisiteId));
+    if (!prerequisites.length) {
+      return "";
+    }
+    return prerequisites.reduce(function (selectedId, prerequisiteId) {
+      const selectedDepth = selectedId ? finiteOr(depths.get(selectedId), 0) : -1;
+      const prerequisiteDepth = finiteOr(depths.get(prerequisiteId), 0);
+      return prerequisiteDepth > selectedDepth ? prerequisiteId : selectedId;
+    }, "");
+  }
+
+  function objectiveSiblingAngleOffset(index, count, radius) {
+    if (count <= 1) {
+      return 0;
+    }
+    const maxSpread = Math.max(0, finiteOr(objectiveGraphLayout.maxSiblingArcSpread, 248));
+    const preferredStep = Math.max(42, finiteOr(objectiveGraphLayout.siblingArcStep, 82));
+    const step = Math.min(preferredStep, maxSpread / Math.max(1, count - 1));
+    return objectiveArcToDegrees((index - (count - 1) * 0.5) * step, radius);
+  }
+
+  function objectiveResolveRingAngleCollisions(ring, angles, radius) {
+    if (!ring || ring.length <= 1) {
+      return;
+    }
+
+    const minimumSeparation = objectiveArcToDegrees(
+      Math.max(72, finiteOr(objectiveGraphLayout.minimumNodeArcGap, 112)),
+      radius
+    );
+    const sorted = ring.map(function (definition) {
+      return {
+        definition,
+        angle: finiteOr(angles.get(definition.id), 0)
+      };
+    }).sort(function (a, b) {
+      return a.angle - b.angle || objectiveCategoryRank(a.definition.category) - objectiveCategoryRank(b.definition.category);
+    });
+    const originalCenter = sorted.reduce((sum, item) => sum + item.angle, 0) / sorted.length;
+
+    for (let index = 1; index < sorted.length; index += 1) {
+      const previous = sorted[index - 1];
+      const current = sorted[index];
+      if (current.angle - previous.angle < minimumSeparation) {
+        current.angle = previous.angle + minimumSeparation;
+      }
+    }
+
+    const adjustedCenter = sorted.reduce((sum, item) => sum + item.angle, 0) / sorted.length;
+    const centerShift = originalCenter - adjustedCenter;
+    sorted.forEach(function (item) {
+      angles.set(item.definition.id, item.angle + centerShift);
+    });
+  }
+
+  function objectiveAngleToPoint(center, radius, angleDegrees) {
+    const angle = angleDegrees * Math.PI / 180;
+    return {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius
+    };
+  }
+
+  function objectiveGraphLayoutModel() {
+    const definitionsById = new Map();
+    const depths = new Map();
+    const rings = new Map();
+    const childrenByParentId = new Map();
+    const angles = new Map();
+    const positions = new Map();
+    const memo = new Map();
+    let maxDepth = 0;
+
+    objectiveDefinitions.forEach((definition) => definitionsById.set(definition.id, definition));
+
+    objectiveDefinitions.forEach(function (definition) {
+      const depth = objectiveDefinitionDepth(definition, definitionsById, memo, new Set());
+      depths.set(definition.id, depth);
+      maxDepth = Math.max(maxDepth, depth);
+      if (!rings.has(depth)) {
+        rings.set(depth, []);
+      }
+      rings.get(depth).push(definition);
+    });
+
+    objectiveDefinitions.forEach(function (definition) {
+      const parentId = objectivePrimaryParentId(definition, definitionsById, depths);
+      if (!parentId) {
+        return;
+      }
+      if (!childrenByParentId.has(parentId)) {
+        childrenByParentId.set(parentId, []);
+      }
+      childrenByParentId.get(parentId).push(definition);
+    });
+
+    const radii = [];
+    for (let depth = 1; depth <= maxDepth; depth += 1) {
+      const ring = rings.get(depth) || [];
+      const baseRadius = depth === 1
+        ? objectiveGraphLayout.firstOrbitRadius
+        : radii[depth - 1] + objectiveGraphLayout.orbitGap;
+      const packedRadius = ring.length > 1 ? (ring.length * 92) / (2 * Math.PI) + 72 : 0;
+      radii[depth] = Math.max(baseRadius, packedRadius);
+    }
+
+    const outerRadius = Math.max(objectiveGraphLayout.minimumRadius, radii[maxDepth] || 0);
+    const center = {
+      x: objectiveGraphLayout.padding + outerRadius,
+      y: objectiveGraphLayout.padding + outerRadius
+    };
+    const size = {
+      width: Math.ceil((objectiveGraphLayout.padding + outerRadius) * 2),
+      height: Math.ceil((objectiveGraphLayout.padding + outerRadius) * 2)
+    };
+    positions.set(objectiveGraphLayout.rootId, center);
+    angles.set(objectiveGraphLayout.rootId, -90);
+
+    for (let depth = 1; depth <= maxDepth; depth += 1) {
+      const ring = (rings.get(depth) || []).slice();
+      const rootChildren = depth === 1 ? ring.slice().sort(function (a, b) {
+        const rankDelta = objectiveCategoryRank(a.category) - objectiveCategoryRank(b.category);
+        return rankDelta || objectiveDefinitions.indexOf(a) - objectiveDefinitions.indexOf(b);
+      }) : [];
+
+      rootChildren.forEach(function (definition, index) {
+        const angle = objectiveRootBranchAngle(definition.category, index, rootChildren.length);
+        angles.set(definition.id, angle);
+      });
+
+      for (const definition of ring) {
+        if (angles.has(definition.id)) {
+          continue;
+        }
+        const parentId = objectivePrimaryParentId(definition, definitionsById, depths);
+        const parent = definitionsById.get(parentId);
+        const siblings = (childrenByParentId.get(parentId) || []).slice().sort(function (a, b) {
+          const rankDelta = objectiveCategoryRank(a.category) - objectiveCategoryRank(b.category);
+          return rankDelta || objectiveDefinitions.indexOf(a) - objectiveDefinitions.indexOf(b);
+        });
+        const siblingIndex = Math.max(0, siblings.findIndex((candidate) => candidate.id === definition.id));
+        const parentAngle = angles.has(parentId) ? angles.get(parentId) : objectiveRootBranchAngle(parent && parent.category, 0, 1);
+        angles.set(
+          definition.id,
+          parentAngle +
+            objectiveCategoryAngleOffset(definition.category, radii[depth]) +
+            objectiveSiblingAngleOffset(siblingIndex, siblings.length, radii[depth])
+        );
+      }
+
+      objectiveResolveRingAngleCollisions(ring, angles, radii[depth]);
+      ring.forEach(function (definition) {
+        positions.set(definition.id, objectiveAngleToPoint(center, radii[depth], angles.get(definition.id)));
+      });
+    }
+
+    return {
+      center,
+      orbitRadii: radii.map((radius, depth) => depth > 0 && radius ? { depth, radius } : null).filter(Boolean),
+      positions,
+      size
+    };
+  }
+
+  function objectiveGraphPosition(definition) {
+    const model = objectiveGraphLayoutModel();
+    if (!definition) {
+      return model.center;
+    }
+    return model.positions.get(definition.id) || model.center;
+  }
+
+  function objectiveGraphSize(snapshots) {
+    return objectiveGraphLayoutModel().size;
+  }
+
+  function objectiveGraphOrbits() {
+    return objectiveGraphLayoutModel().orbitRadii;
+  }
+
+  function objectiveGraphCenter() {
+    return objectiveGraphLayoutModel().center;
+  }
+
   function createObjectiveLinkElement(namespace, start, end, status, glow) {
-    const line = document.createElementNS(namespace, "line");
+    const path = document.createElementNS(namespace, "path");
     const points = objectiveEdgePoints(start, end);
-    line.classList.add(glow ? "objective-tree__link-glow" : "objective-tree__link");
-    line.classList.add("is-" + status);
-    line.setAttribute("x1", points.start.x.toFixed(1));
-    line.setAttribute("y1", points.start.y.toFixed(1));
-    line.setAttribute("x2", points.end.x.toFixed(1));
-    line.setAttribute("y2", points.end.y.toFixed(1));
-    return line;
+    const center = objectiveGraphCenter();
+    const startAngle = Math.atan2(points.start.y - center.y, points.start.x - center.x);
+    const endAngle = Math.atan2(points.end.y - center.y, points.end.x - center.x);
+    const startRadius = Math.hypot(points.start.x - center.x, points.start.y - center.y);
+    const endRadius = Math.hypot(points.end.x - center.x, points.end.y - center.y);
+    let delta = endAngle - startAngle;
+    if (delta > Math.PI) {
+      delta -= Math.PI * 2;
+    } else if (delta < -Math.PI) {
+      delta += Math.PI * 2;
+    }
+    const controlAngle = startAngle + delta * 0.5;
+    const controlRadius = (startRadius + endRadius) * 0.5;
+    const control = {
+      x: center.x + Math.cos(controlAngle) * controlRadius,
+      y: center.y + Math.sin(controlAngle) * controlRadius
+    };
+
+    path.classList.add(glow ? "objective-tree__link-glow" : "objective-tree__link");
+    path.classList.add("is-" + status);
+    path.setAttribute(
+      "d",
+      "M " + points.start.x.toFixed(1) + " " + points.start.y.toFixed(1) +
+        " Q " + control.x.toFixed(1) + " " + control.y.toFixed(1) +
+        " " + points.end.x.toFixed(1) + " " + points.end.y.toFixed(1)
+    );
+    return path;
+  }
+
+  function createObjectiveOrbitElement(namespace, center, orbit) {
+    const circle = document.createElementNS(namespace, "circle");
+    circle.classList.add("objective-tree__orbit");
+    circle.classList.add("objective-tree__orbit--tier-" + Math.min(8, Math.max(1, Math.floor(finiteOr(orbit.depth, 1)))));
+    circle.setAttribute("cx", center.x.toFixed(1));
+    circle.setAttribute("cy", center.y.toFixed(1));
+    circle.setAttribute("r", Math.max(1, finiteOr(orbit.radius, 1)).toFixed(1));
+    return circle;
   }
 
   function createObjectiveLinkLayer(snapshots, size) {
     const namespace = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(namespace, "svg");
     const byId = new Map();
+    const center = objectiveGraphCenter();
 
     svg.classList.add("objective-tree__links");
     svg.setAttribute("viewBox", "0 0 " + size.width + " " + size.height);
     svg.setAttribute("aria-hidden", "true");
+
+    for (const orbit of objectiveGraphOrbits()) {
+      svg.append(createObjectiveOrbitElement(namespace, center, orbit));
+    }
 
     for (const snapshot of snapshots) {
       byId.set(snapshot.definition.id, snapshot);
     }
 
     for (const snapshot of snapshots) {
-      const prerequisites = Array.isArray(snapshot.definition.prerequisites)
-        ? snapshot.definition.prerequisites
-        : (snapshot.definition.parent ? [snapshot.definition.parent] : []);
+      const prerequisites = objectivePrerequisiteIds(snapshot.definition);
       for (const prerequisiteId of prerequisites) {
         const parent = byId.get(prerequisiteId);
         if (!parent) {
@@ -5606,7 +6019,10 @@
     node.classList.add("is-" + objectiveVisualStatus(snapshot));
     node.classList.toggle("is-current", snapshot.current);
     node.classList.toggle("is-selected", selectedNode);
+    node.classList.toggle("is-root", definition.id === objectiveGraphLayout.rootId);
+    node.classList.add("objective-node--" + String(definition.category || "misc").replace(/[^a-z0-9_-]/gi, ""));
     node.dataset.objectiveId = definition.id;
+    node.dataset.objectiveCategory = definition.category || "";
     node.disabled = !selectable;
     node.title = definition.title + " - " + objectiveStatusText(snapshot);
     node.setAttribute("aria-label", definition.title + ". " + objectiveStatusText(snapshot) + ". " + objectiveHintText(definition));
@@ -5797,6 +6213,11 @@
       if (reward.blueprintId) {
         continue;
       }
+      if (reward.health) {
+        const healthAmount = Math.max(1, Math.floor(finiteOr(reward.health, 1)));
+        player.health = Math.min(Math.max(1, finiteOr(player.maxHealth, 100)), Math.max(0, finiteOr(player.health, 0)) + healthAmount);
+        continue;
+      }
       const techKey = reward.techKey;
       const amount = Math.max(1, Math.floor(finiteOr(reward.amount, 1)));
       if (techTypes.some((tech) => tech.key === techKey)) {
@@ -5852,7 +6273,16 @@
     return {
       completed: Object.keys(objectiveState.completed).filter((id) => objectiveState.completed[id] === true),
       claimed: Object.keys(objectiveState.claimed).filter((id) => objectiveState.claimed[id] === true),
-      createdBodyMass: Math.max(0, finiteOr(objectiveState.createdBodyMass, 0))
+      createdBodyMass: Math.max(0, finiteOr(objectiveState.createdBodyMass, 0)),
+      maxTravelSpeed: Math.max(0, finiteOr(objectiveState.maxTravelSpeed, 0)),
+      maxGrowthRate: Math.max(0, finiteOr(objectiveState.maxGrowthRate, 0)),
+      builtStructures: Object.keys(objectiveState.builtStructures || {}).reduce(function (result, type) {
+        const count = Math.max(0, Math.floor(finiteOr(objectiveState.builtStructures[type], 0)));
+        if (count > 0) {
+          result[type] = count;
+        }
+        return result;
+      }, {})
     };
   }
 
@@ -5860,6 +6290,9 @@
     objectiveState.completed = Object.create(null);
     objectiveState.claimed = Object.create(null);
     objectiveState.createdBodyMass = Math.max(0, finiteOr(snapshot && snapshot.createdBodyMass, 0));
+    objectiveState.maxTravelSpeed = Math.max(0, finiteOr(snapshot && snapshot.maxTravelSpeed, 0));
+    objectiveState.maxGrowthRate = Math.max(0, finiteOr(snapshot && snapshot.maxGrowthRate, 0));
+    objectiveState.builtStructures = Object.create(null);
     objectiveState.selectedId = "";
     const source = snapshot && typeof snapshot === "object" && Array.isArray(snapshot.completed) ? snapshot.completed : [];
     for (const id of source) {
@@ -5873,13 +6306,22 @@
         objectiveState.claimed[id] = true;
       }
     }
+    const builtStructures = snapshot && typeof snapshot === "object" && snapshot.builtStructures && typeof snapshot.builtStructures === "object"
+      ? snapshot.builtStructures
+      : {};
+    for (const type of Object.keys(builtStructures)) {
+      const count = Math.max(0, Math.floor(finiteOr(builtStructures[type], 0)));
+      if (count > 0) {
+        objectiveState.builtStructures[type] = count;
+      }
+    }
     objectiveState.renderSignature = "";
     objectiveState.lastUpdateFrameId = -1000;
     renderObjectiveTree(true);
   }
 
   function resetObjectiveState() {
-    applyObjectiveState({ completed: [], claimed: [], createdBodyMass: 0 });
+    applyObjectiveState({ completed: [], claimed: [], createdBodyMass: 0, maxTravelSpeed: 0, maxGrowthRate: 0, builtStructures: {} });
   }
 
   function serializeRandomEventState() {
@@ -8912,6 +9354,11 @@
     mobSpawnRestDrainTimer = 0;
     mobSpawnRestCooldownTimer = mobSpawnRestCooldown;
     survivalSpawnState.nextCampCheckTick = 0;
+    survivalSpawnState.exploredInitialized = false;
+    survivalSpawnState.exploredMinX = 0;
+    survivalSpawnState.exploredMaxX = 0;
+    survivalSpawnState.exploredMinY = 0;
+    survivalSpawnState.exploredMaxY = 0;
   }
 
   function setDifficultyScreenOpen(open) {
@@ -15371,7 +15818,8 @@
     }
 
     for (const structure of structures) {
-      if (!structure || structure.health <= 0) {
+      const ownerPlayerId = String(structure && structure.ownerPlayerId || "");
+      if (!structure || structure.health <= 0 || (ownerPlayerId && ownerPlayerId !== String(player.id || ""))) {
         continue;
       }
       if (structure.bodyId && bodyById(structure.bodyId)) {
@@ -15393,7 +15841,8 @@
     while (changed) {
       changed = false;
       for (const structure of structures) {
-        if (!structure || !isLinkedStructureType(structure.type) || structure.health <= 0 || !structure.bodyId || !structure.linkedBodyId) {
+        const ownerPlayerId = String(structure && structure.ownerPlayerId || "");
+        if (!structure || (ownerPlayerId && ownerPlayerId !== String(player.id || "")) || !isLinkedStructureType(structure.type) || structure.health <= 0 || !structure.bodyId || !structure.linkedBodyId) {
           continue;
         }
         const firstKnown = ids.has(structure.bodyId);
@@ -21761,13 +22210,23 @@
 
   function serializeSurvivalSpawnState() {
     return {
-      nextCampCheckTick: Math.max(0, finiteOr(survivalSpawnState.nextCampCheckTick, survivalSpawnState.nextCampCheckAt || 0))
+      nextCampCheckTick: Math.max(0, finiteOr(survivalSpawnState.nextCampCheckTick, survivalSpawnState.nextCampCheckAt || 0)),
+      exploredInitialized: Boolean(survivalSpawnState.exploredInitialized),
+      exploredMinX: finiteOr(survivalSpawnState.exploredMinX, 0),
+      exploredMaxX: finiteOr(survivalSpawnState.exploredMaxX, 0),
+      exploredMinY: finiteOr(survivalSpawnState.exploredMinY, 0),
+      exploredMaxY: finiteOr(survivalSpawnState.exploredMaxY, 0)
     };
   }
 
   function applySurvivalSpawnState(snapshot) {
     const source = snapshot && typeof snapshot === "object" ? snapshot : {};
     survivalSpawnState.nextCampCheckTick = Math.max(0, finiteOr(source.nextCampCheckTick, source.nextCampCheckAt || 0));
+    survivalSpawnState.exploredInitialized = Boolean(source.exploredInitialized);
+    survivalSpawnState.exploredMinX = finiteOr(source.exploredMinX, 0);
+    survivalSpawnState.exploredMaxX = finiteOr(source.exploredMaxX, 0);
+    survivalSpawnState.exploredMinY = finiteOr(source.exploredMinY, 0);
+    survivalSpawnState.exploredMaxY = finiteOr(source.exploredMaxY, 0);
   }
 
   function applyPlayerSnapshot(snapshot) {
@@ -22297,6 +22756,8 @@
         entity.vy += Math.cos(finiteOr(entity.wobble, 0) * 1.7 + performance.now() * 0.0006) * 4 * dt;
         entity.vx *= Math.pow(0.82, dt);
         entity.vy *= Math.pow(0.82, dt);
+      } else {
+        applySolidBodyBackgroundDamping(entity, dt);
       }
       if (entity.gadgetStabilized && entity.tier.solid && length(entity.vx, entity.vy) <= gadgetStabilizedBreakSpeed) {
         entity.vx = 0;
@@ -22353,9 +22814,16 @@
       survivalMigrationCampId: typeof (mob && mob.survivalMigrationCampId) === "string" ? mob.survivalMigrationCampId : "",
       survivalMigrationCampX: finiteOr(mob && mob.survivalMigrationCampX, Number.NaN),
       survivalMigrationCampY: finiteOr(mob && mob.survivalMigrationCampY, Number.NaN),
-      survivalEncounterType: mob && mob.survivalEncounterType === "camp" ? "camp" : "",
+      survivalMigrationStraightTime: Math.max(0, finiteOr(mob && mob.survivalMigrationStraightTime, 0)),
+      survivalMigrationDirX: finiteOr(mob && mob.survivalMigrationDirX, 0),
+      survivalMigrationDirY: finiteOr(mob && mob.survivalMigrationDirY, 0),
+      survivalEncounterType: mob && ["camp", "migration", "salvage"].includes(mob.survivalEncounterType) ? mob.survivalEncounterType : "",
       survivalEncounterId: typeof (mob && mob.survivalEncounterId) === "string" ? mob.survivalEncounterId : "",
       survivalTargetPlayerId: typeof (mob && mob.survivalTargetPlayerId) === "string" ? mob.survivalTargetPlayerId : "",
+      survivalSalvageBodyId: Math.max(0, Math.floor(finiteOr(mob && mob.survivalSalvageBodyId, 0))),
+      survivalSalvageSourceCampId: typeof (mob && mob.survivalSalvageSourceCampId) === "string" ? mob.survivalSalvageSourceCampId : "",
+      survivalSalvageTargetCampId: typeof (mob && mob.survivalSalvageTargetCampId) === "string" ? mob.survivalSalvageTargetCampId : "",
+      survivalSalvageAge: Math.max(0, finiteOr(mob && mob.survivalSalvageAge, 0)),
       survivalCampBudget: Math.max(0, finiteOr(mob && mob.survivalCampBudget, 0)),
       survivalCampBand: typeof (mob && mob.survivalCampBand) === "string" ? mob.survivalCampBand : "",
       eliteStars,
@@ -22838,9 +23306,16 @@
       survivalMigrationCampId: typeof (snapshot && snapshot.survivalMigrationCampId) === "string" ? snapshot.survivalMigrationCampId : "",
       survivalMigrationCampX: finiteOr(snapshot && snapshot.survivalMigrationCampX, Number.NaN),
       survivalMigrationCampY: finiteOr(snapshot && snapshot.survivalMigrationCampY, Number.NaN),
-      survivalEncounterType: snapshot && snapshot.survivalEncounterType === "camp" ? "camp" : "",
+      survivalMigrationStraightTime: Math.max(0, finiteOr(snapshot && snapshot.survivalMigrationStraightTime, 0)),
+      survivalMigrationDirX: finiteOr(snapshot && snapshot.survivalMigrationDirX, 0),
+      survivalMigrationDirY: finiteOr(snapshot && snapshot.survivalMigrationDirY, 0),
+      survivalEncounterType: snapshot && ["camp", "migration", "salvage"].includes(snapshot.survivalEncounterType) ? snapshot.survivalEncounterType : "",
       survivalEncounterId: typeof (snapshot && snapshot.survivalEncounterId) === "string" ? snapshot.survivalEncounterId : "",
       survivalTargetPlayerId: typeof (snapshot && snapshot.survivalTargetPlayerId) === "string" ? snapshot.survivalTargetPlayerId : "",
+      survivalSalvageBodyId: Math.max(0, Math.floor(finiteOr(snapshot && snapshot.survivalSalvageBodyId, 0))),
+      survivalSalvageSourceCampId: typeof (snapshot && snapshot.survivalSalvageSourceCampId) === "string" ? snapshot.survivalSalvageSourceCampId : "",
+      survivalSalvageTargetCampId: typeof (snapshot && snapshot.survivalSalvageTargetCampId) === "string" ? snapshot.survivalSalvageTargetCampId : "",
+      survivalSalvageAge: Math.max(0, finiteOr(snapshot && snapshot.survivalSalvageAge, 0)),
       survivalCampBudget: Math.max(0, finiteOr(snapshot && snapshot.survivalCampBudget, 0)),
       survivalCampBand: typeof (snapshot && snapshot.survivalCampBand) === "string" ? snapshot.survivalCampBand : "",
       eliteStars,
@@ -24070,22 +24545,37 @@
     return mobs;
   }
 
-  const fastParticleBodyAnchorMinSpeed = 180;
-  const fastParticleBodyAnchorFullSpeed = 720;
+  const fastParticleBodyAnchorBaseMass = 150;
+  const fastParticleBodyAnchorBaseSpeed = 700;
+  const fastParticleBodyAnchorMinSpeedFloor = 420;
+  const fastParticleBodyAnchorFullSpeedWindow = 420;
   const fastParticleBodyAnchorMaxCount = 5;
+  const solidBodyBackgroundDamping = 0.992;
 
   function particleAnchorWeight(anchor) {
-    return clamp(finiteOr(anchor && anchor.particleAnchorWeight, 1), 0.18, 1);
+    if (anchor && Object.prototype.hasOwnProperty.call(anchor, "particleAnchorWeight")) {
+      return clamp(finiteOr(anchor.particleAnchorWeight, 0), 0.02, 1);
+    }
+    return 1;
   }
 
   function fastBodyParticleAnchorWeight(body) {
+    const mass = Math.max(1, finiteOr(body && body.mass, 1));
+    if (mass < fastParticleBodyAnchorBaseMass) {
+      return 0;
+    }
     const speed = Math.hypot(finiteOr(body && body.vx, 0), finiteOr(body && body.vy, 0));
-    if (speed < fastParticleBodyAnchorMinSpeed) {
+    const minSpeed = clamp(
+      fastParticleBodyAnchorBaseSpeed - Math.log2(Math.max(1, mass / fastParticleBodyAnchorBaseMass)) * 50,
+      fastParticleBodyAnchorMinSpeedFloor,
+      fastParticleBodyAnchorBaseSpeed
+    );
+    if (speed < minSpeed) {
       return 0;
     }
     return clamp(
-      (speed - fastParticleBodyAnchorMinSpeed) / (fastParticleBodyAnchorFullSpeed - fastParticleBodyAnchorMinSpeed),
-      0.18,
+      (speed - minSpeed) / fastParticleBodyAnchorFullSpeedWindow,
+      0,
       1
     );
   }
@@ -24099,6 +24589,22 @@
       !isUfoBeamCargo(body) &&
       fastBodyParticleAnchorWeight(body) > 0
     );
+  }
+
+  function applySolidBodyBackgroundDamping(body, dt) {
+    if (!body || !body.tier || !body.tier.solid || body.gadgetStabilized) {
+      return;
+    }
+    body.vx *= Math.pow(solidBodyBackgroundDamping, dt);
+    body.vy *= Math.pow(solidBodyBackgroundDamping, dt);
+    if (Math.hypot(finiteOr(body.vx, 0), finiteOr(body.vy, 0)) < 0.08) {
+      body.vx = 0;
+      body.vy = 0;
+    }
+  }
+
+  function randomBowWaveParticleColor() {
+    return hslToRgb(randomRange(24, 56), randomRange(0.84, 0.98), randomRange(0.56, 0.72));
   }
 
   function activeFastBodyParticleAnchors(playerAnchors) {
@@ -24131,10 +24637,12 @@
         y: body.y,
         vx: finiteOr(body.vx, 0),
         vy: finiteOr(body.vy, 0),
+        radius: Math.max(0, finiteOr(body.radius, 0)),
         bodyId: body.id,
         particleAnchorWeight: weight,
-        particleAnchorTargetScale: 0.38 + weight * 0.72,
-        particleAnchorType: "fast-body"
+        particleAnchorTargetScale: 0.08 + weight * 0.72,
+        particleAnchorType: "fast-body",
+        particleAnchorBowWave: true
       });
       if (anchors.length >= fastParticleBodyAnchorMaxCount) {
         break;
@@ -24182,6 +24690,9 @@
     const count = Array.isArray(anchorCount)
       ? effectiveParticleAnchorCount(anchorCount)
       : Math.max(1, finiteOr(anchorCount, 1));
+    if (!isPartySessionActive()) {
+      return Math.round(targetParticles * (1 + Math.max(0, count - 1) * 0.48));
+    }
     if (isPartySessionActive() && !isPartyHost()) {
       return targetParticles;
     }
@@ -24276,11 +24787,23 @@
 
   function countAmbientParticlesNearAnchor(anchor, radius) {
     const radiusSq = radius * radius;
+    const bowWave = Boolean(anchor && anchor.particleAnchorBowWave);
+    const speed = Math.hypot(finiteOr(anchor && anchor.vx, 0), finiteOr(anchor && anchor.vy, 0));
+    const travel = bowWave && speed > 0.001 ? normalize(anchor.vx, anchor.vy) : { x: 0, y: 0 };
+    const anchorRadius = Math.max(0, finiteOr(anchor && anchor.radius, 0));
+    const bowLateralLimit = Math.max(150, anchorRadius + 170);
     let count = 0;
     forAmbientParticlesNear(anchor.x, anchor.y, radius, function (particle) {
       const dx = particle.x - anchor.x;
       const dy = particle.y - anchor.y;
       if (dx * dx + dy * dy <= radiusSq) {
+        if (bowWave) {
+          const forward = dx * travel.x + dy * travel.y;
+          const lateral = Math.abs(dx * -travel.y + dy * travel.x);
+          if (forward < -anchorRadius * 0.35 || lateral > bowLateralLimit) {
+            return;
+          }
+        }
         count += 1;
       }
     });
@@ -24303,10 +24826,11 @@
     for (const anchor of source) {
       const localCount = countAmbientParticlesNearAnchor(anchor, densityRadius);
       const speed = Math.hypot(finiteOr(anchor.vx, 0), finiteOr(anchor.vy, 0));
-      const anchorTargetScale = clamp(finiteOr(anchor.particleAnchorTargetScale, particleAnchorWeight(anchor)), 0.18, 1.1);
-      const anchorLocalTarget = Math.max(6, Math.round(localTarget * anchorTargetScale));
+      const bowWave = Boolean(anchor.particleAnchorBowWave);
+      const anchorTargetScale = clamp(finiteOr(anchor.particleAnchorTargetScale, particleAnchorWeight(anchor)), 0.02, 1.1);
+      const anchorLocalTarget = Math.max(bowWave ? 1 : 6, Math.round(localTarget * anchorTargetScale));
       const deficit = anchorLocalTarget - localCount;
-      const score = deficit + clamp(speed / 480, 0, 1.15) + particleAnchorWeight(anchor) * 0.35;
+      const score = deficit + clamp(speed / 480, 0, 1.15) * (bowWave ? particleAnchorWeight(anchor) : 1) + particleAnchorWeight(anchor) * 0.35;
       if (!best || score > best.score) {
         best = { anchor, localCount, localTarget: anchorLocalTarget, score };
       }
@@ -24410,22 +24934,44 @@
     const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
     const moving = speed > 45;
     const travel = moving ? normalize(source.vx, source.vy) : { x: 0, y: 0 };
+    const bowWave = Boolean(source.particleAnchorBowWave && moving);
+    const bowStrength = bowWave ? particleAnchorWeight(source) : 0;
+    const bodyRadius = Math.max(0, finiteOr(source.radius, 0));
     let best = null;
 
     for (let attempt = 0; attempt < 24; attempt += 1) {
-      const aheadBias = moving && Math.random() < 0.58;
-      const angle = aheadBias
-        ? Math.atan2(travel.y, travel.x) + randomRange(-1.05, 1.05)
-        : randomRange(0, Math.PI * 2);
-      const baseMinDist = minPlayerDistance * randomRange(1, 1.12);
-      const minDist = localFill
+      const bowRoll = Math.random();
+      const wakeBias = bowWave && bowRoll < 0.26 + bowStrength * 0.1;
+      const noseBias = bowWave && !wakeBias && bowRoll > 0.9 - bowStrength * 0.22;
+      const bowSpread = randomRange(0.18, 1.22 - bowStrength * 0.32);
+      const bowSide = Math.random() < 0.5 ? -1 : 1;
+      const aheadBias = moving && Math.random() < (bowWave ? 0.48 + bowStrength * 0.32 : 0.58);
+      const angle = bowWave
+        ? Math.atan2(travel.y, travel.x) + (wakeBias ? Math.PI + randomRange(-0.72, 0.72) : noseBias ? randomRange(-0.22, 0.22) : bowSide * bowSpread)
+        : aheadBias
+          ? Math.atan2(travel.y, travel.x) + randomRange(-1.05, 1.05)
+          : randomRange(0, Math.PI * 2);
+      const baseMinDist = bowWave
+        ? Math.max(bodyRadius + 46, 122)
+        : minPlayerDistance * randomRange(1, 1.12);
+      const minDist = bowWave
+        ? baseMinDist
+        : localFill
         ? Math.min(baseMinDist, Math.max(120, particleDensityRadius() * 0.74))
         : baseMinDist;
-      const broadMaxDist = maxPlayerDistance + clamp(speed * 0.82, 0, 620);
-      const maxDist = localFill ? Math.max(minDist + 60, Math.min(broadMaxDist, localFillRadius * 0.92)) : broadMaxDist;
+      const broadMaxDist = bowWave
+        ? Math.min(Math.max(minDist + 100, bodyRadius + 210 + speed * (0.03 + bowStrength * 0.045)), 520)
+        : maxPlayerDistance + clamp(speed * 0.82, 0, 620);
+      const maxDist = bowWave
+        ? broadMaxDist
+        : localFill ? Math.max(minDist + 60, Math.min(broadMaxDist, localFillRadius * 0.92)) : broadMaxDist;
       const dist = randomRange(minDist, maxDist);
-      const ahead = moving ? clamp(speed * randomRange(0.18, 1.2), 0, 820) : 0;
-      const driftRange = localFill ? 110 : 220;
+      const ahead = bowWave
+        ? wakeBias
+          ? -randomRange(bodyRadius * 0.25, bodyRadius * (0.95 + bowStrength * 0.7) + speed * 0.1)
+          : clamp(speed * randomRange(0.005, 0.05 + bowStrength * 0.05), 0, 96)
+        : moving ? clamp(speed * randomRange(0.18, 1.2), 0, 820) : 0;
+      const driftRange = bowWave ? Math.max(12, Math.min(58, bodyRadius * (0.09 + bowStrength * 0.08))) : localFill ? 110 : 220;
       const drift = rotatePoint(randomRange(-driftRange, driftRange), randomRange(-driftRange, driftRange), angle + Math.PI / 2);
       let x = source.x + travel.x * ahead + Math.cos(angle) * dist + drift.x;
       let y = source.y + travel.y * ahead + Math.sin(angle) * dist + drift.y;
@@ -24444,21 +24990,22 @@
       const density = ambientParticleDensityAt(x, y);
       const patchAffinity = particlePatchAffinityAt(x, y);
       const voidAffinity = particleVoidAffinityAt(x, y) * (1 - patchAffinity * 0.55);
-      const tooCloseToPlayer = Math.max(0, minPlayerDistance - nearestPlayer);
+      const minAnchorDistance = bowWave ? Math.max(70, bodyRadius + 52) : minPlayerDistance;
+      const tooCloseToPlayer = Math.max(0, minAnchorDistance - nearestPlayer);
       const patchWeight = localFill ? 0.24 : 1;
       const preferredSpacing = preferredParticleSpacing * (1 - patchAffinity * 0.16 + voidAffinity * 0.55);
       const spacingPenalty = Math.max(0, preferredSpacing - density.nearest);
       const score =
-        nearestPlayer * 0.16 +
+        nearestPlayer * (bowWave ? 0.015 : 0.16) +
         density.nearest * (1.08 - patchAffinity * 0.2 + voidAffinity * 0.22) +
         patchAffinity * 860 * patchWeight -
         voidAffinity * 560 * (localFill ? 0.48 : 1) -
         density.crowdCount * (135 - patchAffinity * 45 + voidAffinity * 72) -
         (1 - patchAffinity) * 105 * patchWeight -
-        tooCloseToPlayer * 7.5 -
+        tooCloseToPlayer * (bowWave ? 3.8 : 7.5) -
         spacingPenalty * (3.2 - patchAffinity * 1.25 + voidAffinity * 1.2);
       if (!best || score > best.score) {
-        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount };
+        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount, bowWave };
       }
     }
 
@@ -24470,22 +25017,27 @@
       patchAffinity: particlePatchAffinityAt(source.x, source.y),
       voidAffinity: particleVoidAffinityAt(source.x, source.y),
       densityNearest: 480,
-      crowdCount: 0
+      crowdCount: 0,
+      bowWave
     };
   }
 
   function spawnParticleNearPlayer(anchor, options) {
     const source = anchor || randomParticleSpawnAnchor(options && options.anchors);
     const spawnPoint = chooseParticleSpawnPoint(source, options);
+    const bowWave = Boolean(spawnPoint.bowWave);
     const particle = createParticle(
       spawnPoint.x,
       spawnPoint.y,
       randomAmbientParticleMass(spawnPoint),
-      randomParticleColor()
+      bowWave ? randomBowWaveParticleColor() : randomParticleColor()
     );
     particle.ambientSpawnRock = particle.tier && particle.tier.name === "rock";
-    particle.vx += finiteOr(source.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(6, 26);
-    particle.vy += finiteOr(source.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(6, 26);
+    const bowStrength = bowWave ? particleAnchorWeight(source) : 0;
+    const inheritScale = bowWave ? 0.01 + bowStrength * 0.018 : 0.08;
+    const inwardSpeed = bowWave ? randomRange(14 + bowStrength * 18, 36 + bowStrength * 48) : randomRange(6, 26);
+    particle.vx += finiteOr(source.vx, 0) * inheritScale - Math.cos(spawnPoint.angle) * inwardSpeed;
+    particle.vy += finiteOr(source.vy, 0) * inheritScale - Math.sin(spawnPoint.angle) * inwardSpeed;
     particles.push(particle);
   }
 
@@ -24496,17 +25048,21 @@
     const id = particle.id;
     const source = anchor || randomParticleSpawnAnchor(options && options.anchors);
     const spawnPoint = chooseParticleSpawnPoint(source, options);
+    const bowWave = Boolean(spawnPoint.bowWave);
     const replacement = createParticle(
       spawnPoint.x,
       spawnPoint.y,
       randomAmbientParticleMass(spawnPoint),
-      randomParticleColor()
+      bowWave ? randomBowWaveParticleColor() : randomParticleColor()
     );
     replacement.id = id;
     replacement.ambientSpawnRock = replacement.tier && replacement.tier.name === "rock";
     replacement.spawnSizeScale = ambientSpawnSizeScale(replacement.id, replacement.textureSeed);
-    replacement.vx += finiteOr(source.vx, 0) * 0.08 - Math.cos(spawnPoint.angle) * randomRange(6, 26);
-    replacement.vy += finiteOr(source.vy, 0) * 0.08 - Math.sin(spawnPoint.angle) * randomRange(6, 26);
+    const bowStrength = bowWave ? particleAnchorWeight(source) : 0;
+    const inheritScale = bowWave ? 0.01 + bowStrength * 0.018 : 0.08;
+    const inwardSpeed = bowWave ? randomRange(14 + bowStrength * 18, 36 + bowStrength * 48) : randomRange(6, 26);
+    replacement.vx += finiteOr(source.vx, 0) * inheritScale - Math.cos(spawnPoint.angle) * inwardSpeed;
+    replacement.vy += finiteOr(source.vy, 0) * inheritScale - Math.sin(spawnPoint.angle) * inwardSpeed;
     Object.keys(particle).forEach(function (key) {
       delete particle[key];
     });
@@ -25986,22 +26542,31 @@
   function survivalAllowanceCandidateList(budget, options) {
     const settings = options && typeof options === "object" ? options : {};
     const allowBosses = settings.allowBosses !== false;
+    const threat = Math.max(0, finiteOr(settings.scoreThreat, 0));
+    const preferredCost = Math.max(
+      survivalAllowanceMobCosts.alienoid,
+      budget * clamp(0.24 + threat * 0.035, 0.24, 0.62)
+    );
     const candidates = [];
-    for (const kind of mobTierOrder) {
+    for (let kindIndex = 0; kindIndex < mobTierOrder.length; kindIndex += 1) {
+      const kind = mobTierOrder[kindIndex];
       const baseCost = survivalMobAllowanceCost(kind);
+      const tierLift = Math.pow(kindIndex + 1, clamp(threat * 0.09, 0, 1));
       if (baseCost <= budget) {
-        candidates.push({ kind, cost: baseCost, eliteStars: 0, eliteGroupSize: 1, isBoss: false, weight: 1 / Math.pow(baseCost, 1.15) });
+        const fit = Math.exp(-Math.abs(Math.log(baseCost / preferredCost)) * 1.25);
+        candidates.push({ kind, cost: baseCost, eliteStars: 0, eliteGroupSize: 1, isBoss: false, weight: fit * tierLift });
       }
       for (let stars = 1; stars <= mobEliteMaxStars; stars += 1) {
         const cost = survivalMobAllowanceCost(kind, { eliteStars: stars });
         if (cost <= budget) {
+          const fit = Math.exp(-Math.abs(Math.log(cost / preferredCost)) * 1.12);
           candidates.push({
             kind,
             cost,
             eliteStars: stars,
             eliteGroupSize: stars * mobEliteCompressionSize,
             isBoss: false,
-            weight: 0.55 / Math.pow(cost, 1.1)
+            weight: (0.32 + Math.min(0.5, threat * 0.055)) * fit * tierLift
           });
         }
       }
@@ -26009,6 +26574,7 @@
         for (let bossStars = 0; bossStars <= 2; bossStars += 1) {
           const cost = survivalMobAllowanceCost(kind, { isBoss: true, bossStars });
           if (cost <= budget) {
+            const fit = Math.exp(-Math.abs(Math.log(cost / preferredCost)) * 0.95);
             candidates.push({
               kind,
               cost,
@@ -26016,7 +26582,7 @@
               eliteGroupSize: 1,
               isBoss: true,
               bossStars,
-              weight: 0.18 / Math.pow(cost, 1.04)
+              weight: (0.08 + Math.min(0.72, threat * 0.075)) * fit * tierLift
             });
           }
         }
@@ -26041,10 +26607,31 @@
   }
 
   function planSurvivalAllowanceMobs(budget, options) {
+    const settings = options && typeof options === "object" ? options : {};
     let remaining = Math.max(0, finiteOr(budget, 0));
     const entries = [];
+    if (settings.forceBoss) {
+      const bossCandidates = survivalAllowanceCandidateList(remaining, settings)
+        .filter((candidate) => candidate.isBoss)
+        .sort((a, b) => (
+          mobTierOrder.indexOf(b.kind) - mobTierOrder.indexOf(a.kind) ||
+          finiteOr(a.bossStars, 0) - finiteOr(b.bossStars, 0)
+        ));
+      const boss = bossCandidates[0];
+      if (boss) {
+        entries.push({
+          kind: boss.kind,
+          cost: boss.cost,
+          eliteStars: 0,
+          eliteGroupSize: 1,
+          isBoss: true,
+          bossStars: Math.max(0, Math.floor(finiteOr(boss.bossStars, 0)))
+        });
+        remaining -= boss.cost;
+      }
+    }
     while (remaining >= survivalAllowanceMobCosts.alienoid && entries.length < 18) {
-      const candidates = survivalAllowanceCandidateList(remaining, options);
+      const candidates = survivalAllowanceCandidateList(remaining, settings);
       if (!candidates.length) {
         break;
       }
@@ -26121,7 +26708,7 @@
     return players.slice(0, crazyGamesRoomMaxPlayers);
   }
 
-  function activeSurvivalEncounterCounts() {
+  function activeSurvivalEncounterCounts(players) {
     const seen = new Set();
     const counts = { starter: 0, standard: 0, dangerous: 0, boss: 0, total: 0 };
     for (const mob of hostileCombatMobs()) {
@@ -26130,6 +26717,13 @@
       }
       const encounterId = mob.survivalEncounterId || mob.survivalCampId || "";
       if (mob.survivalEncounterType !== "camp" || !encounterId || seen.has(encounterId)) {
+        continue;
+      }
+      if (Array.isArray(players) && players.length && nearestPartyAnchorDistance(
+        finiteOr(mob.survivalCampX, mob.x),
+        finiteOr(mob.survivalCampY, mob.y),
+        players
+      ) > survivalCampActiveRadius) {
         continue;
       }
       seen.add(encounterId);
@@ -26153,26 +26747,82 @@
     ));
   }
 
-  function survivalCampBands(combatProgress, playerCount) {
+  function updateSurvivalExploration(players) {
+    if (!Array.isArray(players) || !players.length) {
+      return;
+    }
+    for (const entry of players) {
+      const x = finiteOr(entry && entry.x, 0);
+      const y = finiteOr(entry && entry.y, 0);
+      if (!survivalSpawnState.exploredInitialized) {
+        Object.assign(survivalSpawnState, { exploredInitialized: true, exploredMinX: x, exploredMaxX: x, exploredMinY: y, exploredMaxY: y });
+        continue;
+      }
+      survivalSpawnState.exploredMinX = Math.min(survivalSpawnState.exploredMinX, x);
+      survivalSpawnState.exploredMaxX = Math.max(survivalSpawnState.exploredMaxX, x);
+      survivalSpawnState.exploredMinY = Math.min(survivalSpawnState.exploredMinY, y);
+      survivalSpawnState.exploredMaxY = Math.max(survivalSpawnState.exploredMaxY, y);
+    }
+  }
+
+  function survivalExploredSpan() {
+    if (!survivalSpawnState.exploredInitialized) {
+      return 0;
+    }
+    return Math.hypot(
+      Math.max(0, finiteOr(survivalSpawnState.exploredMaxX, 0) - finiteOr(survivalSpawnState.exploredMinX, 0)),
+      Math.max(0, finiteOr(survivalSpawnState.exploredMaxY, 0) - finiteOr(survivalSpawnState.exploredMinY, 0))
+    );
+  }
+
+  function survivalScoreThreat(players) {
+    const totalScore = (players || []).reduce((total, entry) => total + Math.max(0, finiteOr(entry && entry.score, 0)), 0);
+    return Math.max(0, Math.log2(1 + totalScore / 6000));
+  }
+
+  function survivalScoreBudgetScale(scoreThreat) {
+    return finiteOr(activeDifficulty().survivalBudgetScale, 1) * (1 + 0.075 * Math.pow(Math.max(0, scoreThreat), 1.35));
+  }
+
+  function survivalCampBands(combatProgress, playerCount, scoreThreat) {
     const playerBonus = Math.max(0, Math.min(crazyGamesRoomMaxPlayers - 1, Math.floor(finiteOr(playerCount, 1)) - 1));
-    const standardUnlocked = combatProgress >= survivalMobAllowanceCost("alienoid") * 3;
-    const dangerousUnlocked = combatProgress >= survivalMobAllowanceCost("ufo") * 4;
-    const bossUnlocked = combatProgress >= survivalMobAllowanceCost("rambot") * 8 || survivalCampBossProgressReady();
+    const effectiveProgress = combatProgress + Math.max(0, scoreThreat) * 300;
+    const standardUnlocked = effectiveProgress >= survivalMobAllowanceCost("alienoid") * 3;
+    const dangerousUnlocked = effectiveProgress >= survivalMobAllowanceCost("ufo") * 4;
+    const bossUnlocked = effectiveProgress >= survivalMobAllowanceCost("rambot") * 8 || survivalCampBossProgressReady();
+    const difficultyExpansion = finiteOr(activeDifficulty().survivalCampScale, 1) >= 1.1 ? 1 : 0;
+    const expansion = clamp(
+      Math.floor(survivalExploredSpan() / survivalCampExpansionDistance) + difficultyExpansion,
+      0,
+      survivalCampMaxExpansion
+    );
+    const extra = (index) => Math.floor((expansion + 3 - index) / 4);
+    const budgetScale = survivalScoreBudgetScale(scoreThreat);
+    const band = (id, target, minBudget, maxBudget, allowBosses, index) => ({
+      id,
+      target: target > 0 ? target + extra(index) : 0,
+      minBudget: Math.round(minBudget * budgetScale),
+      maxBudget: Math.round(maxBudget * budgetScale),
+      allowBosses,
+      scoreThreat,
+      forceBoss: id === "boss" && scoreThreat >= 3.2
+    });
     return [
-      { id: "starter", target: 2 + playerBonus, minBudget: 50, maxBudget: 170, allowBosses: false },
-      { id: "standard", target: standardUnlocked ? 1 + playerBonus : 0, minBudget: 150, maxBudget: 340, allowBosses: false },
-      { id: "dangerous", target: dangerousUnlocked ? 1 + Math.floor(playerBonus / 2) : 0, minBudget: 340, maxBudget: 760, allowBosses: false },
-      { id: "boss", target: bossUnlocked ? 1 : 0, minBudget: 700, maxBudget: 1600, allowBosses: true }
+      band("starter", 2 + playerBonus, 50, 180, false, 0),
+      band("standard", standardUnlocked ? 1 + playerBonus : 0, 150, 380, false, 1),
+      band("dangerous", dangerousUnlocked ? 1 + Math.floor(playerBonus / 2) : 0, 340, 900, false, 2),
+      band("boss", bossUnlocked ? 1 : 0, 850, 3000, true, 3)
     ];
   }
 
   function chooseSurvivalCampBand(players) {
     const combatProgress = survivalCampCombatProgress();
-    const counts = activeSurvivalEncounterCounts();
-    for (const band of survivalCampBands(combatProgress, players.length || 1)) {
+    const scoreThreat = survivalScoreThreat(players);
+    const counts = activeSurvivalEncounterCounts(players);
+    for (const band of survivalCampBands(combatProgress, players.length || 1, scoreThreat)) {
       if (band.target > 0 && (counts[band.id] || 0) < band.target) {
         const budget = clamp(randomRange(band.minBudget, band.maxBudget), 50, Math.max(50, band.maxBudget));
-        return { ...band, budget: Math.max(50, Math.round(budget)), combatProgress };
+        return { ...band, budget: Math.max(50, Math.round(budget)), combatProgress, scoreThreat };
       }
     }
     return null;
@@ -26193,6 +26843,248 @@
       }
     }
     return nearest;
+  }
+
+  function collectSurvivalCampGroups() {
+    const camps = new Map();
+    const ensure = (campId) => {
+      const id = String(campId || "");
+      if (!id) return null;
+      if (!camps.has(id)) {
+        camps.set(id, { id, mobs: [], bodies: [], structures: [], x: 0, y: 0, weight: 0, band: "starter", budget: 0 });
+      }
+      return camps.get(id);
+    };
+    for (const mob of hostileCombatMobs()) {
+      if (!mob || mob.health <= 0 || isPlayerTeamMob(mob) || mob.survivalEncounterType !== "camp") continue;
+      const group = ensure(mob.survivalCampId || mob.survivalEncounterId);
+      if (!group) continue;
+      group.mobs.push(mob);
+      group.band = mob.survivalCampBand || group.band;
+      group.budget = Math.max(group.budget, finiteOr(mob.survivalCampBudget, 0));
+      group.x += finiteOr(mob.survivalCampX, mob.x) * 2;
+      group.y += finiteOr(mob.survivalCampY, mob.y) * 2;
+      group.weight += 2;
+    }
+    const scoredBodyIds = playerScoredSurvivalCampBodyIds();
+    for (const body of particles) {
+      if (!body || !body.survivalCampBody || !body.survivalCampId || isPlayerScoredSurvivalCampBody(body, scoredBodyIds)) continue;
+      const group = ensure(body.survivalCampId);
+      const weight = Math.max(1, Math.sqrt(Math.max(1, finiteOr(body.mass, 1))));
+      group.bodies.push(body);
+      group.x += finiteOr(body.x, 0) * weight;
+      group.y += finiteOr(body.y, 0) * weight;
+      group.weight += weight;
+    }
+    for (const structure of structures) {
+      if (!structure || !structure.survivalCampId || finiteOr(structure.health, 0) <= 0) continue;
+      ensure(structure.survivalCampId).structures.push(structure);
+    }
+    for (const group of camps.values()) {
+      if (group.weight > 0) {
+        group.x /= group.weight;
+        group.y /= group.weight;
+      }
+    }
+    return camps;
+  }
+
+  function setMobSurvivalMigration(mob, targetCamp) {
+    if (!mob) return;
+    mob.survivalCampId = "";
+    mob.survivalCampReturning = true;
+    mob.survivalCampAggroTimer = 0;
+    mob.survivalTargetPlayerId = "";
+    mob.survivalEncounterType = "migration";
+    mob.survivalEncounterId = "";
+    mob.survivalMigrationCampId = targetCamp && targetCamp.id || "";
+    mob.survivalMigrationCampX = targetCamp ? targetCamp.x : Number.NaN;
+    mob.survivalMigrationCampY = targetCamp ? targetCamp.y : Number.NaN;
+    mob.survivalMigrationStraightTime = 0;
+  }
+
+  function retireDistantSurvivalCamps(players) {
+    const groups = Array.from(collectSurvivalCampGroups().values()).filter((group) => group.mobs.length);
+    if (!groups.length || !players.length) return;
+    const active = groups.filter((group) => nearestPartyAnchorDistance(group.x, group.y, players) <= survivalCampActiveRadius);
+    const keeper = active.length ? null : groups.slice().sort((a, b) => nearestPartyAnchorDistance(a.x, a.y, players) - nearestPartyAnchorDistance(b.x, b.y, players))[0];
+    for (const group of groups) {
+      if (active.includes(group) || group === keeper) continue;
+      const destinations = (active.length ? active : groups).filter((candidate) => candidate !== group && candidate.bodies.length);
+      let target = null;
+      let bestDistance = Infinity;
+      for (const candidate of destinations) {
+        const distance = Math.hypot(candidate.x - group.x, candidate.y - group.y);
+        if (distance < bestDistance) {
+          target = candidate;
+          bestDistance = distance;
+        }
+      }
+      for (const mob of group.mobs) {
+        if (!mob.survivalSalvageBodyId) setMobSurvivalMigration(mob, target);
+      }
+    }
+  }
+
+  function beginSurvivalSalvageAssignment(ufo, body, sourceCamp, targetCamp) {
+    if (!ufo || !body || !targetCamp) return false;
+    setMobSurvivalMigration(ufo, targetCamp);
+    ufo.survivalEncounterType = "salvage";
+    ufo.survivalEncounterId = "salvage-body-" + body.id;
+    ufo.survivalSalvageBodyId = body.id;
+    ufo.survivalSalvageSourceCampId = sourceCamp && sourceCamp.id || body.survivalCampId || "";
+    ufo.survivalSalvageTargetCampId = targetCamp.id;
+    ufo.survivalSalvageAge = 0;
+    return true;
+  }
+
+  function spawnSurvivalSalvageUfo(players, body, sourceCamp, targetCamp) {
+    const offscreenDistance = survivalFullZoomOutRadius() + 720;
+    let x;
+    let y;
+    if (nearestPartyAnchorDistance(body.x, body.y, players) > offscreenDistance) {
+      const angle = randomRange(0, Math.PI * 2);
+      const distance = randomRange(900, 1500);
+      x = body.x + Math.cos(angle) * distance;
+      y = body.y + Math.sin(angle) * distance;
+    } else {
+      const anchor = leastPopulatedMobSpawnAnchor(players);
+      const spawn = chooseMobSpawnPoint("ufo", 220, 720, anchor, players);
+      x = spawn.x;
+      y = spawn.y;
+    }
+    const ufo = createMobByKind("ufo", x, y);
+    beginSurvivalSalvageAssignment(ufo, body, sourceCamp, targetCamp);
+    ufos.push(ufo);
+    return ufo;
+  }
+
+  function manageSurvivalCampSalvage(players) {
+    const groups = collectSurvivalCampGroups();
+    const populated = Array.from(groups.values()).filter((group) => group.mobs.length && group.bodies.length);
+    if (!populated.length) return;
+    const assignedBodyIds = new Set(ufos
+      .filter((ufo) => ufo && ufo.health > 0 && ufo.survivalSalvageBodyId)
+      .map((ufo) => Math.floor(finiteOr(ufo.survivalSalvageBodyId, 0))));
+    const orphaned = Array.from(groups.values()).filter((group) => !group.mobs.length && group.bodies.length);
+    let activeSalvagers = assignedBodyIds.size;
+    for (const source of orphaned) {
+      const bodies = source.bodies.slice().sort((a, b) => finiteOr(b.mass, 0) - finiteOr(a.mass, 0));
+      for (const body of bodies) {
+        if (assignedBodyIds.has(body.id) || activeSalvagers >= survivalSalvageMaxUfos) continue;
+        const target = populated.slice().sort((a, b) => Math.hypot(a.x - body.x, a.y - body.y) - Math.hypot(b.x - body.x, b.y - body.y))[0];
+        if (!target || target.id === source.id) continue;
+        const idleCampUfo = ufos.find((ufo) => (
+          ufo &&
+          ufo.health > 0 &&
+          !ufo.survivalSalvageBodyId &&
+          ufo.survivalCampId &&
+          groups.has(ufo.survivalCampId) &&
+          groups.get(ufo.survivalCampId).mobs.length > 1
+        ));
+        if (idleCampUfo) beginSurvivalSalvageAssignment(idleCampUfo, body, source, target);
+        else spawnSurvivalSalvageUfo(players, body, source, target);
+        assignedBodyIds.add(body.id);
+        activeSalvagers += 1;
+      }
+    }
+  }
+
+  function survivalSalvageBody(ufo) {
+    const bodyId = Math.floor(finiteOr(ufo && ufo.survivalSalvageBodyId, 0));
+    return bodyId > 0 ? particles.find((body) => body && body.id === bodyId) || null : null;
+  }
+
+  function clearSurvivalSalvageAssignment(ufo) {
+    if (!ufo) return;
+    Object.assign(ufo, {
+      survivalSalvageBodyId: 0,
+      survivalSalvageSourceCampId: "",
+      survivalSalvageTargetCampId: "",
+      survivalSalvageAge: 0
+    });
+  }
+
+  function finishSurvivalSalvage(ufo, body, destination) {
+    const targetCampId = String(destination && destination.campId || ufo.survivalSalvageTargetCampId || "");
+    if (!targetCampId) return false;
+    const sourceCampId = String(body.survivalCampId || ufo.survivalSalvageSourceCampId || "");
+    Object.assign(body, {
+      survivalCampId: targetCampId,
+      survivalCampX: destination.x,
+      survivalCampY: destination.y,
+      survivalCampHomeX: finiteOr(body.x, destination.x),
+      survivalCampHomeY: finiteOr(body.y, destination.y),
+      survivalCampMovedByPlayer: false,
+      survivalCampBodyMovedWakeSent: false
+    });
+    const pull = normalize(destination.x - body.x, destination.y - body.y);
+    body.vx += pull.x * 120;
+    body.vy += pull.y * 120;
+    for (const structure of structures) {
+      if (!structure || structure.bodyId !== body.id || structure.survivalCampId !== sourceCampId) continue;
+      Object.assign(structure, {
+        survivalCampId: targetCampId,
+        survivalEncounterId: targetCampId,
+        survivalCampX: destination.x,
+        survivalCampY: destination.y
+      });
+    }
+    Object.assign(ufo, {
+      survivalCampId: targetCampId,
+      survivalCampX: destination.x,
+      survivalCampY: destination.y,
+      survivalCampReturning: true,
+      survivalEncounterType: "camp",
+      survivalEncounterId: targetCampId,
+      survivalTargetPlayerId: ""
+    });
+    clearSurvivalCampMigrationState(ufo);
+    clearSurvivalSalvageAssignment(ufo);
+    return true;
+  }
+
+  function survivalSalvageTowTarget(ufo, dt) {
+    if (!ufo || !ufo.survivalSalvageBodyId) return null;
+    const body = survivalSalvageBody(ufo);
+    if (!body) {
+      clearSurvivalSalvageAssignment(ufo);
+      ufo.survivalEncounterType = "migration";
+      return null;
+    }
+    let destination = survivalCampAnchorPoint(
+      ufo.survivalSalvageTargetCampId,
+      finiteOr(ufo.survivalMigrationCampX, body.x),
+      finiteOr(ufo.survivalMigrationCampY, body.y)
+    );
+    if (!destination.hasCampBody) {
+      const nearest = nearestSurvivalCampAnchor(body.survivalCampId, body.x, body.y);
+      if (!nearest) return null;
+      ufo.survivalSalvageTargetCampId = nearest.campId;
+      destination = { ...nearest, hasCampBody: true };
+    } else {
+      destination.campId = String(ufo.survivalSalvageTargetCampId || "");
+    }
+    const dx = destination.x - body.x;
+    const dy = destination.y - body.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    ufo.survivalSalvageAge = Math.max(0, finiteOr(ufo.survivalSalvageAge, 0) + dt);
+    if (distance <= survivalSalvageArrivalRadius + finiteOr(body.radius, 0)) {
+      finishSurvivalSalvage(ufo, body, destination);
+      return null;
+    }
+    const nx = dx / distance;
+    const ny = dy / distance;
+    const towOffset = clamp(finiteOr(body.radius, 0) + 310, 380, 620);
+    return {
+      kind: "salvage",
+      body,
+      x: body.x + nx * towOffset,
+      y: body.y + ny * towOffset,
+      radius: 0,
+      destinationX: destination.x,
+      destinationY: destination.y
+    };
   }
 
   function survivalFullZoomOutRadius() {
@@ -26444,7 +27336,11 @@
   }
 
   function spawnSurvivalAllowanceCamp(band, players) {
-    const entries = planSurvivalAllowanceMobs(band.budget, { allowBosses: band.allowBosses });
+    const entries = planSurvivalAllowanceMobs(band.budget, {
+      allowBosses: band.allowBosses,
+      forceBoss: band.forceBoss,
+      scoreThreat: band.scoreThreat
+    });
     if (!entries.length) {
       return false;
     }
@@ -26493,6 +27389,9 @@
       return;
     }
     survivalSpawnState.nextCampCheckTick = nowSeconds + survivalCampCheckInterval;
+    updateSurvivalExploration(players);
+    retireDistantSurvivalCamps(players);
+    manageSurvivalCampSalvage(players);
     const band = chooseSurvivalCampBand(players);
     if (band) {
       spawnSurvivalAllowanceCamp(band, players);
@@ -27954,6 +28853,7 @@
         }
         pendingTetherAnchor = null;
         activePlacementRecipeId = null;
+        recordObjectiveBuiltStructure(recipe.structureType);
         playSound("place");
         maybeNotifyText(recipe.name + " placed.");
         return true;
@@ -27961,6 +28861,7 @@
 
       spendRecipeCost(recipe);
       structures.push(createStructure(recipe, firstPlacement, placement));
+      recordObjectiveBuiltStructure(recipe.structureType);
       pendingTetherAnchor = null;
     } else {
       if (isMultiplayerV2Active()) {
@@ -27976,6 +28877,7 @@
           return false;
         }
         activePlacementRecipeId = null;
+        recordObjectiveBuiltStructure(recipe.structureType);
         playSound("place");
         maybeNotifyText(recipe.name + " placed.");
         return true;
@@ -27983,6 +28885,7 @@
 
       spendRecipeCost(recipe);
       structures.push(createStructure(recipe, placement));
+      recordObjectiveBuiltStructure(recipe.structureType);
     }
     activePlacementRecipeId = null;
     updateTechUi();
@@ -28577,6 +29480,9 @@
       return;
     }
 
+    // Preserve speed carried away from a moving surface. The normal jetpack
+    // limit should cap new acceleration, not erase momentum on the next frame.
+    const carriedSpeed = length(player.vx, player.vy);
     let localX = 0;
     let localY = 0;
 
@@ -28622,17 +29528,18 @@
     const boostSpeed = canUseJetpackBoost(dt) ? jetpackBoostSpeedMultiplier : 1;
     const rocketSuitActive = isRocketSuitEquipped() && mouse.left && !buildMenuOpen;
     const rocketSuitMaxSpeed = rocketSuitBaseMaxSpeed + clamp(finiteOr(player.rocketSuitCharge, 0), 0, 1) * rocketSuitChargeMaxSpeed;
-    const maxSpeed = vacuumHoldActive
+    const controlledMaxSpeed = vacuumHoldActive
       ? 0
       : rocketSuitActive
         ? rocketSuitMaxSpeed
         : ((canUseSuctionControls() && isGadgetButtonPressed()) ? 275 : 430 * boostSpeed) * weaponSlowFactor;
+    const maxSpeed = vacuumHoldActive ? 0 : Math.max(controlledMaxSpeed, carriedSpeed);
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
     }
 
-    const drag = Math.pow(0.18, dt);
+    const drag = Math.pow(0.58, dt);
     player.vx *= drag;
     player.vy *= drag;
     player.x += player.vx * dt;
@@ -30049,6 +30956,8 @@
         particle.vy += Math.cos(particle.wobble * 1.7 + performance.now() * 0.0006) * 4 * dt;
         particle.vx *= Math.pow(0.82, dt);
         particle.vy *= Math.pow(0.82, dt);
+      } else {
+        applySolidBodyBackgroundDamping(particle, dt);
       }
       if (particle.gadgetStabilized && particle.tier.solid && length(particle.vx, particle.vy) <= gadgetStabilizedBreakSpeed) {
         particle.vx = 0;
@@ -30420,6 +31329,19 @@
     merged.survivalCampBody = true;
   }
 
+  function wakeSurvivalCampFromPlayerBodyMerge(absorber, absorbed, scoredBodyIds) {
+    if (typeof wakeSurvivalCampFromBody !== "function") {
+      return false;
+    }
+    if (absorbed && absorbed.survivalCampBody && scoredBodyIds.has(absorber && absorber.id)) {
+      return wakeSurvivalCampFromBody(absorbed, player.id || "", { allowScoredBody: true });
+    }
+    if (absorber && absorber.survivalCampBody && scoredBodyIds.has(absorbed && absorbed.id)) {
+      return wakeSurvivalCampFromBody(absorber, player.id || "", { allowScoredBody: true });
+    }
+    return false;
+  }
+
   function mergeParticles() {
     let mergesThisFrame = 0;
     let restartScan = true;
@@ -30481,13 +31403,7 @@
 
           const scoredBodyIds = connectedScoredBodyIds();
           const absorberIsScoredBody = scoredBodyIds.has(absorbingPair.absorber.id);
-          if (
-            absorbingPair.absorbed.survivalCampBody &&
-            absorberIsScoredBody &&
-            typeof wakeSurvivalCampFromBody === "function"
-          ) {
-            wakeSurvivalCampFromBody(absorbingPair.absorbed, player.id || "");
-          }
+          wakeSurvivalCampFromPlayerBodyMerge(absorbingPair.absorber, absorbingPair.absorbed, scoredBodyIds);
           recordPlayerAbsorption(absorbingPair.absorber, absorbingPair.absorbed);
           const mass = absorbingPair.absorber.mass + absorbingPair.absorbed.mass;
           const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;
@@ -34586,121 +35502,244 @@
     ctx.save();
     ctx.translate(npc.x, npc.y);
     const crouching = Boolean(npc.crouching);
+    const moving = !crouching && Math.hypot(npc.targetX - npc.x, npc.targetY - npc.y) > 4;
+
+    ctx.fillStyle = "rgba(5, 8, 13, 0.32)";
+    ctx.beginPath();
+    ctx.ellipse(0, 40, crouching ? 34 : 29, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(0, -34);
+    ctx.scale(0.78, 0.78);
     if (crouching) {
-      ctx.translate(0, 13);
-      ctx.scale(1, 0.86);
+      ctx.translate(0, playerFootOffset);
+      ctx.scale(1.08, 0.84);
+      ctx.translate(0, -playerFootOffset);
     }
-    const walk = crouching ? 0 : Math.sin(npc.walkCycle || 0) * 4;
-    const oppositeWalk = Math.cos(npc.walkCycle || 0) * 3.5;
-    const aimAngle = finiteOr(npc.aimAngle, 0);
-    const shoulderBob = (crouching ? 7 : 0) + Math.sin((npc.walkCycle || 0) * 0.5) * 1.8;
-    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
-    ctx.lineCap = "round";
-
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.moveTo(-12, -8);
-    ctx.lineTo(-17, 19 + walk);
-    ctx.lineTo(-18, 36 + walk * 0.3);
-    ctx.moveTo(12, -8);
-    ctx.lineTo(15, 19 - walk);
-    ctx.lineTo(18, 36 - walk * 0.3);
-    ctx.stroke();
-
-    ctx.fillStyle = "#302d2b";
-    roundRectPath(-25, 32 + walk * 0.3, 18, 10, 4);
-    ctx.fill();
-    roundRectPath(7, 32 - walk * 0.3, 18, 10, 4);
-    ctx.fill();
-
-    ctx.fillStyle = "#6d5845";
-    ctx.strokeStyle = "rgba(8, 10, 14, 0.84)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(-24, -39 + shoulderBob);
-    ctx.quadraticCurveTo(0, -52 + shoulderBob, 24, -39 + shoulderBob);
-    ctx.lineTo(19, 15);
-    ctx.quadraticCurveTo(0, 27, -19, 15);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#3e332b";
-    ctx.beginPath();
-    ctx.moveTo(-9, -42 + shoulderBob);
-    ctx.lineTo(0, 12);
-    ctx.lineTo(10, -42 + shoulderBob);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "#caa98a";
-    ctx.beginPath();
-    ctx.arc(0, -65 + shoulderBob, 20, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#42372f";
-    ctx.beginPath();
-    ctx.ellipse(0, -76 + shoulderBob, 24, 12, 0, Math.PI, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#172534";
-    roundRectPath(-15, -70 + shoulderBob, 30, 10, 5);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(113, 225, 236, 0.72)";
-    ctx.beginPath();
-    ctx.ellipse(-6, -65 + shoulderBob, 5.5, 3.5, -0.15, 0, Math.PI * 2);
-    ctx.ellipse(7, -65 + shoulderBob, 5.5, 3.5, 0.15, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(-18, -31 + shoulderBob);
-    ctx.quadraticCurveTo(-34, -16 + walk * 0.25, -27, -1 + walk * 0.2);
-    ctx.stroke();
-
-    ctx.save();
-    ctx.translate(18, -31 + shoulderBob);
-    ctx.rotate(aimAngle);
-    ctx.strokeStyle = "rgba(9, 11, 16, 0.82)";
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(-4, 0);
-    ctx.lineTo(20, oppositeWalk * 0.08);
-    ctx.stroke();
-
-    ctx.fillStyle = "#caa98a";
-    ctx.beginPath();
-    ctx.arc(21, oppositeWalk * 0.08, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#27313a";
-    ctx.strokeStyle = "rgba(7, 9, 13, 0.86)";
-    ctx.lineWidth = 3;
-    roundRectPath(18, -7, 56, 12, 4);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#111821";
-    roundRectPath(64, -4, 22, 6, 3);
-    ctx.fill();
-    ctx.fillStyle = "#5c4a38";
-    roundRectPath(30, 5, 10, 13, 3);
-    ctx.fill();
-    ctx.restore();
+    drawTraderNpcBody(npc, time, moving ? npc.speed : 0);
+    drawTraderNpcRifle(npc, time);
     ctx.restore();
 
-    const screen = worldToScreen(npc.worldX, npc.worldY - 92);
+    const screen = worldToScreen(npc.worldX, npc.worldY - 104);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.font = "600 12px Inter, sans-serif";
     ctx.textAlign = "center";
     ctx.fillStyle = "rgba(245, 237, 221, 0.86)";
     ctx.fillText(npc.name, screen.x, screen.y);
+    ctx.restore();
+  }
+
+  function drawTraderNpcBody(npc, time, walkSpeed) {
+    const outline = "rgba(23, 27, 44, 0.76)";
+    const walkCycle = finiteOr(npc.walkCycle, 0);
+    const walkBounce = walkSpeed > 1 ? Math.max(0, Math.sin(walkCycle * 2)) * 3 : 0;
+    const coatGradient = ctx.createLinearGradient(-28, 12, 30, 84);
+    coatGradient.addColorStop(0, "#a77a4e");
+    coatGradient.addColorStop(0.48, "#765138");
+    coatGradient.addColorStop(1, "#49362f");
+
+    ctx.save();
+    ctx.translate(0, -walkBounce);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    ctx.fillStyle = "#49352f";
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-32, 10);
+    ctx.quadraticCurveTo(-44, 38, -35, 82);
+    ctx.lineTo(-9, 68);
+    ctx.lineTo(9, 68);
+    ctx.lineTo(35, 82);
+    ctx.quadraticCurveTo(44, 38, 32, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "#5d4438";
+    ctx.lineWidth = 15;
+    ctx.beginPath();
+    ctx.ellipse(0, -23, 40, 43, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
+
+    drawCharacterBodyOn(ctx, 0, 0, time, { x: 0, y: 0 }, 0, {
+      suit: {
+        torso: "#78604a",
+        limb: "#45505a",
+        arm: "#8d704f",
+        helmet: "#d2c39f",
+        panel: "#43515a",
+        accent: "#ffbd5d"
+      },
+      onFoot: true,
+      crouching: false,
+      walkCycle,
+      walkSpeed,
+      centerX: 0,
+      centerY: 0
+    });
+
+    ctx.save();
+    ctx.translate(0, -walkBounce);
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = outline;
+
+    ctx.fillStyle = coatGradient;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-27, 13);
+    ctx.quadraticCurveTo(0, 2, 27, 13);
+    ctx.lineTo(22, 59);
+    ctx.lineTo(31, 84);
+    ctx.lineTo(4, 72);
+    ctx.lineTo(0, 45);
+    ctx.lineTo(-5, 72);
+    ctx.lineTo(-31, 84);
+    ctx.lineTo(-22, 59);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#d7a45d";
+    ctx.beginPath();
+    ctx.moveTo(-25, 14);
+    ctx.lineTo(-13, 10);
+    ctx.lineTo(11, 56);
+    ctx.lineTo(3, 62);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(23, 27, 44, 0.58)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#303a42";
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 3;
+    roundRectPath(-31, 49, 61, 11, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffc467";
+    roundRectPath(-5, 49, 11, 11, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#69503e";
+    roundRectPath(-42, 30, 17, 32, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffbd5d";
+    roundRectPath(-38, 35, 9, 4, 2);
+    ctx.fill();
+
+    const visorGlow = ctx.createLinearGradient(-24, -42, 24, -5);
+    visorGlow.addColorStop(0, "rgba(255, 221, 150, 0.86)");
+    visorGlow.addColorStop(0.32, "rgba(255, 174, 70, 0.35)");
+    visorGlow.addColorStop(1, "rgba(255, 128, 38, 0.06)");
+    ctx.fillStyle = visorGlow;
+    ctx.beginPath();
+    ctx.ellipse(0, -24, 27, 21, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#2a3037";
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-11, -10);
+    ctx.lineTo(11, -10);
+    ctx.lineTo(8, 2);
+    ctx.lineTo(-8, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffbd5d";
+    roundRectPath(-5, -6, 10, 3, 1.5);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawTraderNpcRifle(npc, time) {
+    const aimAngle = finiteOr(npc.aimAngle, 0);
+    const outline = "rgba(12, 16, 25, 0.9)";
+    const pulse = 0.72 + Math.sin(time * 0.008) * 0.18;
+    const walking = !npc.crouching && Math.hypot(npc.targetX - npc.x, npc.targetY - npc.y) > 4;
+    const walkBounce = walking ? Math.max(0, Math.sin(finiteOr(npc.walkCycle, 0) * 2)) * 3 : 0;
+
+    ctx.save();
+    ctx.translate(25, 28 - walkBounce);
+    ctx.rotate(aimAngle);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 17;
+    ctx.beginPath();
+    ctx.moveTo(-3, 2);
+    ctx.quadraticCurveTo(15, 13, 35, 2);
+    ctx.stroke();
+    ctx.strokeStyle = "#8d704f";
+    ctx.lineWidth = 10;
+    ctx.stroke();
+
+    ctx.fillStyle = "#4b382f";
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(17, -8);
+    ctx.lineTo(38, -12);
+    ctx.lineTo(49, 7);
+    ctx.lineTo(24, 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    const rifleGradient = ctx.createLinearGradient(34, -10, 118, 10);
+    rifleGradient.addColorStop(0, "#71808a");
+    rifleGradient.addColorStop(0.45, "#34424c");
+    rifleGradient.addColorStop(1, "#18232d");
+    ctx.fillStyle = rifleGradient;
+    roundRectPath(34, -10, 71, 20, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#18222c";
+    roundRectPath(95, -6, 35, 12, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#d7a45d";
+    roundRectPath(127, -4, 13, 8, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#202b35";
+    roundRectPath(52, -22, 38, 9, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 183, 78, " + pulse + ")";
+    ctx.beginPath();
+    ctx.arc(84, -17.5, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#4b382f";
+    ctx.beginPath();
+    ctx.moveTo(48, 8);
+    ctx.lineTo(66, 8);
+    ctx.lineTo(60, 29);
+    ctx.lineTo(48, 25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#d2c39f";
+    ctx.beginPath();
+    ctx.arc(36, 2, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -37174,13 +38213,6 @@
       1
     );
 
-    const maxSpeed = 150 + massDamping * 210;
-    const speed = Math.hypot(body.vx, body.vy);
-    if (speed > maxSpeed) {
-      body.vx = (body.vx / speed) * maxSpeed;
-      body.vy = (body.vy / speed) * maxSpeed;
-    }
-
     structure.thrustAmount += (1 - finiteOr(structure.thrustAmount, 0)) * (1 - Math.pow(0.02, dt));
     structure.thrustDirection = direction;
 
@@ -37850,11 +38882,12 @@
       return;
     }
 
-    let bestParticle = null;
+    const assignedSalvageBody = survivalSalvageBody(ufo);
+    let bestParticle = assignedSalvageBody;
     let bestScore = Infinity;
     const playerBody = player.landed ? bodyById(player.landed.bodyId) : null;
 
-    for (const particle of particles) {
+    for (const particle of assignedSalvageBody ? [] : particles) {
       if (!canUfoTractorAffectParticle(particle) || !canUfoPreferTractorTarget(ufo, particle)) {
         continue;
       }
@@ -37912,8 +38945,9 @@
       const centerStrength = clamp(1 - Math.abs(side) / Math.max(1, beamHalf), 0, 1);
       const toOriginX = originX - particle.x;
       const toOriginY = originY - particle.y;
+      const isAssignedSalvageBody = particle === assignedSalvageBody;
 
-      if (shouldUfoSiphonBody(ufo, particle)) {
+      if (!isAssignedSalvageBody && shouldUfoSiphonBody(ufo, particle)) {
         drainBodyWithUfoTractor(ufo, particle, pullStrength, centerStrength, dt);
         continue;
       }
@@ -37927,6 +38961,9 @@
       particle.vy += (toOrigin.y * force - normalY * side * 7.5) * dt;
 
       if (Math.hypot(toOriginX, toOriginY) < ufo.radius + particle.radius * 1.05) {
+        if (isAssignedSalvageBody) {
+          continue;
+        }
         const speed = Math.hypot(particle.vx, particle.vy);
         if (shouldUfoImpactBody(ufo, particle)) {
           if (speed >= rivalBodyImpactSpeed && ufo.hitCooldown <= 0) {
@@ -38324,31 +39361,30 @@
         continue;
       }
 
-      if (updateSurvivalCampMobHome(ufo, dt)) {
+      const salvageTarget = survivalSalvageTowTarget(ufo, dt);
+      if (!salvageTarget && updateSurvivalCampMobHome(ufo, dt)) {
         continue;
       }
 
       const target = combatTargetForMob(ufo);
-      if (!target) {
+      if (!target && !salvageTarget) {
         updateFamiliarMob(ufo, dt);
         continue;
       }
-      const targetPlayer = target.player;
-      const attackTarget = ufo.isBoss && beamMode === "drain" ? {
+      const targetPlayer = target && target.player ? target.player : null;
+      const attackTarget = salvageTarget || (ufo.isBoss && beamMode === "drain" && targetPlayer ? {
         kind: "player",
         target,
         x: targetPlayer.x,
         y: targetPlayer.y,
         radius: targetPlayer.radius || player.radius
-      } : ufoAttackTarget(ufo, target);
-      const toPlayerX = targetPlayer.x - ufo.x;
-      const toPlayerY = targetPlayer.y - ufo.y;
-      const playerDist = Math.hypot(toPlayerX, toPlayerY) || 1;
+      } : ufoAttackTarget(ufo, target));
+      const playerDist = targetPlayer ? Math.hypot(targetPlayer.x - ufo.x, targetPlayer.y - ufo.y) || 1 : 0;
       const toTargetX = attackTarget.x - ufo.x;
       const toTargetY = attackTarget.y - ufo.y;
       const dist = Math.hypot(toTargetX, toTargetY) || 1;
 
-      if (playerDist > Math.max(width, height) * 2.7 + 1800) {
+      if (!salvageTarget && targetPlayer && playerDist > Math.max(width, height) * 2.7 + 1800) {
         const spawn = relocatedMobOffscreenPoint(180, 560, targetPlayer);
         ufo.x = spawn.x;
         ufo.y = spawn.y;
@@ -38361,7 +39397,7 @@
       const ny = toTargetY / dist;
       const tangentX = -ny * ufo.strafeSign;
       const tangentY = nx * ufo.strafeSign;
-      const desiredDistance = attackTarget.kind === "body" ? clamp(attackTarget.radius + 350, 430, 660) : 430;
+      const desiredDistance = attackTarget.kind === "salvage" ? 0 : attackTarget.kind === "body" ? clamp(attackTarget.radius + 350, 430, 660) : 430;
       const noBeamBoost = ufo.isBoss && beamMode === "cooldown" ? 1.34 : 1;
       const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
       const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);
@@ -38383,7 +39419,7 @@
       ufo.x += ufo.vx * dt;
       ufo.y += ufo.vy * dt;
       applyUfoTractorBeam(ufo, dt);
-      applyUfoBossPlayerDrainBeam(ufo, target, dt);
+      if (target) applyUfoBossPlayerDrainBeam(ufo, target, dt);
       if (!isPlayerTeamMob(ufo)) {
         updateUfoUndersideImpact(ufo);
       }
@@ -38539,8 +39575,9 @@
     );
   }
 
-  function wakeSurvivalCampFromBody(body, targetPlayerId) {
-    if (!body || !body.survivalCampBody || !body.survivalCampId || isHordeModeActive() || isPlayerScoredSurvivalCampBody(body)) {
+  function wakeSurvivalCampFromBody(body, targetPlayerId, options) {
+    const allowScoredBody = Boolean(options && options.allowScoredBody);
+    if (!body || !body.survivalCampBody || !body.survivalCampId || isHordeModeActive() || (!allowScoredBody && isPlayerScoredSurvivalCampBody(body))) {
       return false;
     }
 
@@ -38654,7 +39691,43 @@
   }
 
   function clearSurvivalCampMigrationState(mob) {
-    Object.assign(mob, { survivalMigrationCampId: "", survivalMigrationCampX: Number.NaN, survivalMigrationCampY: Number.NaN });
+    Object.assign(mob, {
+      survivalMigrationCampId: "",
+      survivalMigrationCampX: Number.NaN,
+      survivalMigrationCampY: Number.NaN,
+      survivalMigrationStraightTime: 0,
+      survivalMigrationDirX: 0,
+      survivalMigrationDirY: 0
+    });
+  }
+
+  function isSurvivalMigratingMob(mob) {
+    return Boolean(
+      mob &&
+      !isPlayerTeamMob(mob) &&
+      !isHordeModeActive() &&
+      (mob.survivalEncounterType === "migration" || mob.survivalEncounterType === "salvage" || (!mob.survivalCampId && mob.survivalMigrationCampId))
+    );
+  }
+
+  function nearbySurvivalMigrationTarget(mob) {
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const target of collectCombatPlayerTargets()) {
+      if (!target || !target.player || target.player.health <= 0) continue;
+      const distance = Math.hypot(target.player.x - mob.x, target.player.y - mob.y);
+      if (distance <= survivalMigrationAggroRadius && distance < nearestDistance) {
+        nearest = target;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  }
+
+  function survivalTargetPlayerId(target) {
+    return target && target.local
+      ? String(player.id || "")
+      : String(target && target.remote && target.remote.playerId || target && target.player && target.player.id || "");
   }
 
   function clearSurvivalCampMobIdentity(mob) {
@@ -38688,8 +39761,11 @@
   function updateOrphanedSurvivalCampMobMigration(mob, dt) {
     const targetCamp = survivalCampMigrationTarget(mob);
     if (!targetCamp) {
-      clearSurvivalCampMobIdentity(mob);
-      return false;
+      mob.survivalCampId = "";
+      mob.survivalEncounterType = "migration";
+      mob.survivalEncounterId = "";
+      clearSurvivalCampMigrationState(mob);
+      return true;
     }
 
     Object.assign(mob, { survivalMigrationCampId: targetCamp.campId, survivalMigrationCampX: targetCamp.x, survivalMigrationCampY: targetCamp.y });
@@ -38709,8 +39785,12 @@
       mob.survivalCampReturning = false;
       mob.survivalCampSlotAngle = Math.atan2(finiteOr(mob.y, targetCamp.y) - targetCamp.y, finiteOr(mob.x, targetCamp.x) - targetCamp.x);
       mob.survivalCampSlotRadius = clamp(distance, 120, survivalCampIdleRadius);
-      if (mob.survivalEncounterType === "camp") {
-        mob.survivalEncounterId = targetCamp.campId;
+      mob.survivalEncounterType = "camp";
+      mob.survivalEncounterId = targetCamp.campId;
+      const resident = hostileCombatMobs().find((candidate) => candidate && candidate !== mob && candidate.health > 0 && candidate.survivalCampId === targetCamp.campId);
+      if (resident) {
+        mob.survivalCampBand = resident.survivalCampBand || mob.survivalCampBand || "starter";
+        mob.survivalCampBudget = Math.max(finiteOr(mob.survivalCampBudget, 0), finiteOr(resident.survivalCampBudget, 0));
       }
       clearSurvivalCampMigrationState(mob);
       clearSurvivalCampAttackState(mob);
@@ -38719,16 +39799,28 @@
 
     const nx = dx / distance;
     const ny = dy / distance;
+    const previousDirX = finiteOr(mob.survivalMigrationDirX, nx);
+    const previousDirY = finiteOr(mob.survivalMigrationDirY, ny);
+    const alignment = previousDirX * nx + previousDirY * ny;
+    mob.survivalMigrationStraightTime = alignment > 0.96
+      ? Math.min(8, finiteOr(mob.survivalMigrationStraightTime, 0) + dt)
+      : Math.max(0, finiteOr(mob.survivalMigrationStraightTime, 0) - dt * 2.5);
+    mob.survivalMigrationDirX = nx;
+    mob.survivalMigrationDirY = ny;
+    const momentum = clamp(mob.survivalMigrationStraightTime / 7, 0, 1);
     const tangentX = -ny * finiteOr(mob.strafeSign, 1);
     const tangentY = nx * finiteOr(mob.strafeSign, 1);
-    mob.vx += nx * 176 * dt + tangentX * 18 * dt;
-    mob.vy += ny * 176 * dt + tangentY * 18 * dt;
-    mob.vx *= Math.pow(0.76, dt);
-    mob.vy *= Math.pow(0.76, dt);
+    const travelForce = 190 + momentum * 240;
+    mob.vx += nx * travelForce * dt + tangentX * 12 * (1 - momentum) * dt;
+    mob.vy += ny * travelForce * dt + tangentY * 12 * (1 - momentum) * dt;
+    mob.vx *= Math.pow(0.88, dt);
+    mob.vy *= Math.pow(0.88, dt);
     const nextSpeed = Math.hypot(mob.vx, mob.vy);
-    if (nextSpeed > 250) {
-      mob.vx = (mob.vx / nextSpeed) * 250;
-      mob.vy = (mob.vy / nextSpeed) * 250;
+    const cruiseSpeed = 250 + (survivalMigrationMaxSpeed - 250) * momentum;
+    const maxSpeed = distance < 2400 ? clamp(120 + distance * 0.2, 150, cruiseSpeed) : cruiseSpeed;
+    if (nextSpeed > maxSpeed) {
+      mob.vx = (mob.vx / nextSpeed) * maxSpeed;
+      mob.vy = (mob.vy / nextSpeed) * maxSpeed;
     }
     mob.x += mob.vx * dt;
     mob.y += mob.vy * dt;
@@ -38737,11 +39829,28 @@
   }
 
   function updateSurvivalCampMobHome(mob, dt) {
-    if (!isSurvivalCampMob(mob)) {
+    if (mob && mob.survivalEncounterType === "salvage" && mob.survivalSalvageBodyId) {
       return false;
     }
 
+    const campMob = isSurvivalCampMob(mob);
+    const migratingMob = isSurvivalMigratingMob(mob) || Boolean(mob && !isPlayerTeamMob(mob) && !isHordeModeActive() && !mob.survivalCampId && mob.survivalEncounterType !== "hit-squad");
+    if (!campMob && !migratingMob) return false;
+
     mob.survivalCampAggroTimer = Math.max(0, finiteOr(mob.survivalCampAggroTimer, 0) - dt);
+    if (!campMob) {
+      mob.survivalEncounterType = "migration";
+      const nearbyTarget = nearbySurvivalMigrationTarget(mob);
+      if (nearbyTarget) {
+        mob.survivalCampAggroTimer = survivalMigrationAggroDuration;
+        mob.survivalTargetPlayerId = survivalTargetPlayerId(nearbyTarget);
+      }
+      if (mob.survivalCampAggroTimer > 0 && mob.survivalTargetPlayerId) {
+        return false;
+      }
+      mob.survivalTargetPlayerId = "";
+      return updateOrphanedSurvivalCampMobMigration(mob, dt);
+    }
     let campAnchor = survivalCampAnchorPoint(mob.survivalCampId, finiteOr(mob.survivalCampX, mob.x), finiteOr(mob.survivalCampY, mob.y));
     if (!campAnchor.hasCampBody) {
       if (mob.survivalCampAggroTimer > 0) {
@@ -38865,7 +39974,7 @@
     if (mob && mob.survivalEncounterType === "hit-squad") {
       return null;
     }
-    if (mob && isSurvivalCampMob(mob)) {
+    if (mob && (isSurvivalCampMob(mob) || isSurvivalMigratingMob(mob))) {
       if (finiteOr(mob.survivalCampAggroTimer, 0) <= 0) {
         return null;
       }
@@ -43979,6 +45088,10 @@
     progressLandedBodyId: null,
     progressEquippedToolId: "",
     progressSnapshot: null,
+    growthRateBodyId: null,
+    growthRateMass: 0,
+    growthRateSampleAt: 0,
+    growthRateValue: 0,
     leaderboardFrameId: -1000
   };
   let dynamicLightingPlayerBoost = 1;
@@ -44002,6 +45115,10 @@
     hudCache.progressLandedBodyId = null;
     hudCache.progressEquippedToolId = "";
     hudCache.progressSnapshot = null;
+    hudCache.growthRateBodyId = null;
+    hudCache.growthRateMass = 0;
+    hudCache.growthRateSampleAt = 0;
+    hudCache.growthRateValue = 0;
     hudCache.leaderboardFrameId = -1000;
     gadgetGatherCache.frameId = -1;
     gadgetGatherCache.limit = 0;
@@ -50022,6 +51139,451 @@
     ctx.restore();
   }
 
+  const mapActivityCompassState = {
+    angle: 0,
+    distance: 0,
+    strength: 0,
+    targetAngle: 0,
+    targetDistance: 0,
+    targetStrength: 0,
+    targetCount: 0,
+    targetColor: { r: 255, g: 229, b: 111 },
+    lastRetargetAt: -Infinity,
+    lastUpdateAt: 0,
+    initialized: false
+  };
+  const mapActivityCompassRetargetMs = 5200;
+  const mapActivityCompassUrgentRetargetMs = 2400;
+  const mapActivityCompassDirectionStep = Math.PI / 8;
+  const mapActivityCompassAngleHalfLife = 6.5;
+  const mapActivityCompassValueHalfLife = 4.5;
+
+  function isBodyEligibleForActivityCompass(body) {
+    return Boolean(body && body.tier && body.tier.threshold >= mappedBodyThreshold);
+  }
+
+  function pushActivityCompassSource(sources, source) {
+    if (!source) {
+      return;
+    }
+    const x = finiteOr(source.x, Number.NaN);
+    const y = finiteOr(source.y, Number.NaN);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return;
+    }
+    const distance = Math.hypot(x - player.x, y - player.y);
+    if (distance < 160) {
+      return;
+    }
+    sources.push({
+      x,
+      y,
+      distance,
+      weight: clamp(finiteOr(source.weight, 1), 0.25, 90),
+      count: Math.max(1, Math.floor(finiteOr(source.count, 1))),
+      kind: source.kind || "activity",
+      color: source.color || { r: 255, g: 229, b: 111 }
+    });
+  }
+
+  function addActivityCompassBodySources(sources, bodyContacts) {
+    if (!bodyContacts) {
+      return;
+    }
+
+    for (const cluster of Array.isArray(bodyContacts.clusters) ? bodyContacts.clusters : []) {
+      if (!cluster) {
+        continue;
+      }
+      const camp = cluster.kind === "camp";
+      pushActivityCompassSource(sources, {
+        x: cluster.x,
+        y: cluster.y,
+        count: cluster.count,
+        kind: camp ? "camp" : cluster.kind || "cluster",
+        color: camp ? { r: 255, g: 115, b: 173 } : cluster.color,
+        weight: Math.sqrt(Math.max(1, finiteOr(cluster.totalMass, 1))) * 0.32 + Math.max(1, finiteOr(cluster.count, 1)) * (camp ? 2.6 : 1.2)
+      });
+    }
+
+    for (const body of Array.isArray(bodyContacts.singles) ? bodyContacts.singles : []) {
+      if (!body || !body.tier) {
+        continue;
+      }
+      const camp = Boolean(body.survivalCampBody);
+      pushActivityCompassSource(sources, {
+        x: body.x,
+        y: body.y,
+        count: 1,
+        kind: camp ? "camp" : "body",
+        color: camp ? { r: 255, g: 115, b: 173 } : body.color,
+        weight: Math.sqrt(Math.max(1, finiteOr(body.mass, 1))) * (camp ? 0.95 : 0.24) + (camp ? 5 : 0.7)
+      });
+    }
+  }
+
+  function addActivityCompassSurvivalCampSources(sources) {
+    if (isHordeModeActive()) {
+      return;
+    }
+
+    const camps = new Map();
+    function addCampPoint(campId, x, y, weight) {
+      const id = String(campId || "");
+      if (!id) {
+        return;
+      }
+      const pointX = finiteOr(x, Number.NaN);
+      const pointY = finiteOr(y, Number.NaN);
+      if (!Number.isFinite(pointX) || !Number.isFinite(pointY)) {
+        return;
+      }
+      const normalizedWeight = Math.max(0.5, finiteOr(weight, 1));
+      const current = camps.get(id) || { x: 0, y: 0, weight: 0, count: 0 };
+      current.x += pointX * normalizedWeight;
+      current.y += pointY * normalizedWeight;
+      current.weight += normalizedWeight;
+      current.count += 1;
+      camps.set(id, current);
+    }
+
+    const scoredBodyIds = typeof playerScoredSurvivalCampBodyIds === "function" ? playerScoredSurvivalCampBodyIds() : new Set();
+    for (const body of particles) {
+      if (!body || !body.survivalCampBody || !body.survivalCampId || isPlayerScoredSurvivalCampBody(body, scoredBodyIds)) {
+        continue;
+      }
+      addCampPoint(body.survivalCampId, body.x, body.y, Math.sqrt(Math.max(1, finiteOr(body.mass, 1))) + 3);
+    }
+
+    for (const mob of hostileCombatMobs()) {
+      if (!mob || !mob.survivalCampId || mob.health <= 0) {
+        continue;
+      }
+      addCampPoint(mob.survivalCampId, finiteOr(mob.survivalCampX, mob.x), finiteOr(mob.survivalCampY, mob.y), mob.isBoss ? 7 : 3);
+    }
+
+    for (const structure of structures) {
+      if (!structure || !structure.survivalCampId || finiteOr(structure.health, 0) <= 0) {
+        continue;
+      }
+      addCampPoint(structure.survivalCampId, finiteOr(structure.survivalCampX, structure.x), finiteOr(structure.survivalCampY, structure.y), 2.4);
+    }
+
+    for (const camp of camps.values()) {
+      if (!camp || camp.weight <= 0) {
+        continue;
+      }
+      pushActivityCompassSource(sources, {
+        x: camp.x / camp.weight,
+        y: camp.y / camp.weight,
+        count: camp.count,
+        kind: "camp",
+        color: { r: 255, g: 115, b: 173 },
+        weight: camp.weight + camp.count * 2
+      });
+    }
+  }
+
+  function addActivityCompassCombatSources(sources) {
+    for (const mob of hostileCombatMobs()) {
+      if (!mob || mob.health <= 0 || mob.survivalCampId) {
+        continue;
+      }
+      pushActivityCompassSource(sources, {
+        x: mob.x,
+        y: mob.y,
+        count: 1,
+        kind: mob.isBoss ? "boss" : "mob",
+        color: mob.color || (mob.isBoss ? { r: 255, g: 229, b: 111 } : { r: 255, g: 115, b: 173 }),
+        weight: mob.isBoss ? 10 : 2.2
+      });
+    }
+  }
+
+  function addActivityCompassStructureSources(sources) {
+    for (const structure of structures) {
+      if (!structure || finiteOr(structure.health, 0) <= 0 || structure.survivalCampId) {
+        continue;
+      }
+      pushActivityCompassSource(sources, {
+        x: structure.x,
+        y: structure.y,
+        count: 1,
+        kind: "structure",
+        color: { r: 101, g: 245, b: 154 },
+        weight: 2.6
+      });
+    }
+  }
+
+  function addActivityCompassWorldSources(sources, bodyContacts, remoteContacts, spacecraftContacts, campContacts, eventRegions) {
+    addActivityCompassBodySources(sources, bodyContacts);
+    addActivityCompassSurvivalCampSources(sources);
+    addActivityCompassCombatSources(sources);
+    addActivityCompassStructureSources(sources);
+
+    for (const camp of Array.isArray(campContacts) ? campContacts : []) {
+      pushActivityCompassSource(sources, {
+        x: camp.x,
+        y: camp.y,
+        count: 1,
+        kind: "camp",
+        color: camp.color || { r: 255, g: 115, b: 173 },
+        weight: 12 + mapCampDifficultyScore(camp) * 1.4
+      });
+    }
+
+    for (const contact of remoteContacts && Array.isArray(remoteContacts.bodies) ? remoteContacts.bodies : []) {
+      pushActivityCompassSource(sources, {
+        x: contact.body && contact.body.x,
+        y: contact.body && contact.body.y,
+        count: 1,
+        kind: "remote",
+        color: { r: 88, g: 226, b: 255 },
+        weight: 2.5
+      });
+    }
+
+    for (const contact of remoteContacts && Array.isArray(remoteContacts.players) ? remoteContacts.players : []) {
+      pushActivityCompassSource(sources, {
+        x: contact.player && contact.player.x,
+        y: contact.player && contact.player.y,
+        count: 1,
+        kind: "player",
+        color: { r: 255, g: 115, b: 173 },
+        weight: 4
+      });
+    }
+
+    for (const contact of Array.isArray(spacecraftContacts) ? spacecraftContacts : []) {
+      pushActivityCompassSource(sources, {
+        x: contact.craft && contact.craft.x,
+        y: contact.craft && contact.craft.y,
+        count: 1,
+        kind: "spacecraft",
+        color: contact.color || rogueTraderMapColor,
+        weight: 7
+      });
+    }
+
+    for (const region of Array.isArray(eventRegions) ? eventRegions : []) {
+      pushActivityCompassSource(sources, {
+        x: region.x,
+        y: region.y,
+        count: 1,
+        kind: "event",
+        color: region.color || particleStormMapColor,
+        weight: 5
+      });
+    }
+  }
+
+  function activityCompassDensityScore(source, sources, range) {
+    const radius = Math.max(1800, range * 0.72);
+    let score = 0;
+    for (const other of sources) {
+      const distance = Math.hypot(other.x - source.x, other.y - source.y);
+      const falloff = 1 / Math.pow(1 + distance / radius, 2.35);
+      score += other.weight * falloff;
+    }
+    return score;
+  }
+
+  function dominantActivityCompassKind(sources, focus, range) {
+    const radius = Math.max(1800, range * 0.72);
+    const weights = Object.create(null);
+    for (const source of sources) {
+      const distance = Math.hypot(source.x - focus.x, source.y - focus.y);
+      const falloff = 1 / Math.pow(1 + distance / radius, 2.6);
+      weights[source.kind] = (weights[source.kind] || 0) + source.weight * falloff;
+    }
+
+    let bestKind = "activity";
+    let bestWeight = -Infinity;
+    for (const kind of Object.keys(weights)) {
+      if (weights[kind] > bestWeight) {
+        bestKind = kind;
+        bestWeight = weights[kind];
+      }
+    }
+    return bestKind;
+  }
+
+  function collectMapActivityCompass(options) {
+    const range = Math.max(1, finiteOr(options && options.range, 1400));
+    const bodyContacts = collectMapBodyClusters(particles.filter(isBodyEligibleForActivityCompass));
+    const sources = [];
+    addActivityCompassWorldSources(sources, bodyContacts, options && options.remoteContacts, options && options.spacecraftContacts, options && options.campContacts, options && options.eventRegions);
+
+    if (!sources.length) {
+      return null;
+    }
+
+    let focus = sources[0];
+    let bestScore = -Infinity;
+    for (const source of sources) {
+      const score = activityCompassDensityScore(source, sources, range) + Math.sqrt(source.weight) * 0.55;
+      if (score > bestScore) {
+        bestScore = score;
+        focus = source;
+      }
+    }
+
+    const radius = Math.max(2200, range * 0.82);
+    let weightedX = 0;
+    let weightedY = 0;
+    let totalWeight = 0;
+    let totalCount = 0;
+    for (const source of sources) {
+      const distance = Math.hypot(source.x - focus.x, source.y - focus.y);
+      const falloff = 1 / Math.pow(1 + distance / radius, 2.8);
+      const weight = source.weight * falloff;
+      weightedX += source.x * weight;
+      weightedY += source.y * weight;
+      totalWeight += weight;
+      totalCount += source.count * falloff;
+    }
+
+    const targetX = totalWeight > 0 ? weightedX / totalWeight : focus.x;
+    const targetY = totalWeight > 0 ? weightedY / totalWeight : focus.y;
+    const dx = targetX - player.x;
+    const dy = targetY - player.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance < 160) {
+      return null;
+    }
+
+    const kind = dominantActivityCompassKind(sources, { x: targetX, y: targetY }, range);
+    return {
+      x: targetX,
+      y: targetY,
+      distance,
+      angle: Math.atan2(dy, dx),
+      strength: clamp(bestScore / 22, 0.28, 1),
+      count: Math.max(1, Math.round(totalCount)),
+      kind,
+      color: kind === "camp" || kind === "mob" || kind === "boss"
+        ? { r: 255, g: 115, b: 173 }
+        : kind === "structure"
+          ? { r: 101, g: 245, b: 154 }
+          : { r: 255, g: 229, b: 111 }
+    };
+  }
+
+  function smoothedMapActivityCompass(compass) {
+    const now = performance.now();
+    const dt = mapActivityCompassState.lastUpdateAt > 0
+      ? clamp((now - mapActivityCompassState.lastUpdateAt) / 1000, 0, 0.25)
+      : 1 / 60;
+    mapActivityCompassState.lastUpdateAt = now;
+
+    if (!compass) {
+      mapActivityCompassState.strength *= Math.pow(0.5, dt / 2.8);
+      return mapActivityCompassState.strength > 0.03
+        ? {
+            angle: mapActivityCompassState.angle,
+            distance: mapActivityCompassState.distance,
+            strength: mapActivityCompassState.strength,
+            count: mapActivityCompassState.targetCount,
+            color: mapActivityCompassState.targetColor
+          }
+        : null;
+    }
+
+    const steppedAngle = Math.round(compass.angle / mapActivityCompassDirectionStep) * mapActivityCompassDirectionStep;
+    const targetAngleDelta = Math.abs(shortestAngleDelta(mapActivityCompassState.targetAngle, steppedAngle));
+    const canRetarget = now - mapActivityCompassState.lastRetargetAt >= mapActivityCompassRetargetMs;
+    const canUrgentRetarget =
+      targetAngleDelta >= Math.PI * 0.72 &&
+      now - mapActivityCompassState.lastRetargetAt >= mapActivityCompassUrgentRetargetMs;
+
+    if (!mapActivityCompassState.initialized) {
+      mapActivityCompassState.angle = steppedAngle;
+      mapActivityCompassState.distance = compass.distance;
+      mapActivityCompassState.strength = compass.strength;
+      mapActivityCompassState.targetAngle = steppedAngle;
+      mapActivityCompassState.targetDistance = compass.distance;
+      mapActivityCompassState.targetStrength = compass.strength;
+      mapActivityCompassState.targetCount = compass.count;
+      mapActivityCompassState.targetColor = compass.color || mapActivityCompassState.targetColor;
+      mapActivityCompassState.lastRetargetAt = now;
+      mapActivityCompassState.initialized = true;
+    } else if (canRetarget || canUrgentRetarget) {
+      mapActivityCompassState.targetAngle = steppedAngle;
+      mapActivityCompassState.targetDistance = compass.distance;
+      mapActivityCompassState.targetStrength = compass.strength;
+      mapActivityCompassState.targetCount = compass.count;
+      mapActivityCompassState.targetColor = compass.color || mapActivityCompassState.targetColor;
+      mapActivityCompassState.lastRetargetAt = now;
+    }
+
+    const angleBlend = 1 - Math.pow(0.5, dt / mapActivityCompassAngleHalfLife);
+    const valueBlend = 1 - Math.pow(0.5, dt / mapActivityCompassValueHalfLife);
+    mapActivityCompassState.angle += shortestAngleDelta(mapActivityCompassState.angle, mapActivityCompassState.targetAngle) * angleBlend;
+    mapActivityCompassState.distance += (mapActivityCompassState.targetDistance - mapActivityCompassState.distance) * valueBlend;
+    mapActivityCompassState.strength += (mapActivityCompassState.targetStrength - mapActivityCompassState.strength) * valueBlend;
+
+    return {
+      ...compass,
+      angle: mapActivityCompassState.angle,
+      distance: mapActivityCompassState.distance,
+      strength: mapActivityCompassState.strength,
+      count: mapActivityCompassState.targetCount,
+      color: mapActivityCompassState.targetColor
+    };
+  }
+
+  function drawMapActivityCompassLine(compass, centerX, centerY, mapRadius, range) {
+    const smoothed = smoothedMapActivityCompass(compass);
+    if (!smoothed) {
+      return;
+    }
+
+    const localAngle = smoothed.angle - cameraRoll;
+    const distanceScale = clamp(smoothed.distance / Math.max(1, range), 0.28, 1);
+    const innerRadius = mapRadius * 0.18;
+    const outerRadius = mapRadius * (0.64 + distanceScale * 0.24);
+    const startX = centerX + Math.cos(localAngle) * innerRadius;
+    const startY = centerY + Math.sin(localAngle) * innerRadius;
+    const endX = centerX + Math.cos(localAngle) * outerRadius;
+    const endY = centerY + Math.sin(localAngle) * outerRadius;
+    const color = smoothed.color || { r: 255, g: 229, b: 111 };
+    const alpha = clamp(0.28 + smoothed.strength * 0.52, 0.24, 0.86);
+    const pulse = 1 + Math.sin(performance.now() * 0.006) * 0.06;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = colorString(color, 0.16 * alpha);
+    ctx.lineWidth = 8;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    ctx.strokeStyle = colorString(color, alpha);
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    ctx.translate(endX, endY);
+    ctx.rotate(localAngle);
+    ctx.fillStyle = colorString(color, 0.92);
+    ctx.strokeStyle = "rgba(248, 251, 255, 0.76)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(10 * pulse, 0);
+    ctx.lineTo(-5, -6);
+    ctx.lineTo(-2, 0);
+    ctx.lineTo(-5, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function mapHoverCandidate(type, entity, marker, options) {
     const markerRadius = options && Number.isFinite(options.radius) ? options.radius : 12;
     return {
@@ -50324,7 +51886,6 @@
       drawMapClusterPreview(target.entity, x, y, radius, time);
       return;
     }
-
     const color = target.color || (target.entity && target.entity.color) || { r: 88, g: 226, b: 255 };
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
@@ -50543,12 +52104,18 @@
     return String(Math.round(normalized));
   }
 
+  function formatGrowthRate(rate) {
+    const normalized = Math.max(0, finiteOr(rate, 0));
+    return String(Math.round(normalized));
+  }
+
   function updateMapSpeedometerHud() {
     if (!mapSpeedValue) {
       return;
     }
     const source = currentTravelVelocitySource();
     const speed = Math.hypot(finiteOr(source.vx, 0), finiteOr(source.vy, 0));
+    recordObjectiveTravelSpeed(speed);
     setTextIfChanged(mapSpeedValue, formatTravelSpeed(speed));
   }
 
@@ -51203,6 +52770,13 @@
     }
 
     const range = clamp(farthest * 1.08, 1400, 9000);
+    const activityCompass = collectMapActivityCompass({
+      range,
+      remoteContacts,
+      spacecraftContacts,
+      campContacts,
+      eventRegions
+    });
 
     ctx.save();
     ctx.fillStyle = "rgba(3, 8, 24, 0.72)";
@@ -51235,6 +52809,8 @@
     ctx.moveTo(centerX, centerY - mapRadius);
     ctx.lineTo(centerX, centerY + mapRadius);
     ctx.stroke();
+
+    drawMapActivityCompassLine(activityCompass, centerX, centerY, mapRadius, range);
 
     for (const region of eventRegions) {
       drawMapEventRegion(region, centerX, centerY, mapRadius, range);
@@ -51369,6 +52945,7 @@
     const starThreshold = thresholdForTierName("star");
     const terminalStellar = stellarOutcomeTierNames.includes(tier.name);
     const stellarProgressActive = progressMass >= planetThreshold && (progressMass < stellarEvolutionEndThreshold || terminalStellar);
+    const displayedGrowthRate = updateGrowthRateHud(progressBody, progressMass);
     setTextIfChanged(currentBodyLabel, formatTierName(tier.name).toUpperCase() + ":");
     if (stellarProgressActive) {
       const firstProgress = progressMass >= starThreshold
@@ -51379,7 +52956,9 @@
         : progressMass >= starThreshold
           ? clamp((progressMass - starThreshold) / Math.max(1, stellarEvolutionEndThreshold - starThreshold), 0, 1)
           : 0;
-      const growthRate = Math.max(0, finiteOr(progressBody && progressBody.stellarGrowthRate, 0));
+      const growthRate = progressBody && progressBody.stellarGrowthStarted
+        ? Math.max(0, finiteOr(progressBody.stellarGrowthRate, 0))
+        : displayedGrowthRate;
       const predictedOutcome = terminalStellar
         ? tier.name
         : progressMass >= starThreshold
@@ -51394,7 +52973,7 @@
       }
       if (stellarRateLabel) {
         stellarRateLabel.hidden = progressMass < starThreshold || terminalStellar;
-        setTextIfChanged(stellarRateLabel, "Rate " + growthRate.toFixed(growthRate >= 10 ? 0 : 1) + "/s -> " + formatTierName(predictedOutcome));
+        setTextIfChanged(stellarRateLabel, "Rate " + formatGrowthRate(growthRate) + "/s -> " + formatTierName(predictedOutcome));
       }
       maybeRenderOpenLeaderboard();
       return;
@@ -51999,6 +53578,9 @@
       snapshot: function () {
         return createClusternautsFrameRateSnapshot();
       },
+      playerId: function () {
+        return String(player.id || "");
+      },
       objectiveState: function () {
         updateObjectiveState();
         return {
@@ -52011,10 +53593,33 @@
               target: snapshot.progress.target,
               label: snapshot.progress.label,
               available: snapshot.available,
-              current: snapshot.current
+              current: snapshot.current,
+              claimed: objectiveIsClaimed(snapshot.definition)
             };
           })
         };
+      },
+      techInventory: function () {
+        return Object.assign({}, techInventory);
+      },
+      claimObjectiveReward: function (id) {
+        claimObjectiveReward(id);
+        return {
+          objectives: serializeObjectiveState(),
+          tech: Object.assign({}, techInventory),
+          player: {
+            health: player.health,
+            maxHealth: player.maxHealth
+          }
+        };
+      },
+      completeObjective: function (id) {
+        const objectiveId = String(id || "");
+        if (objectiveDefinitions.some((definition) => definition.id === objectiveId)) {
+          objectiveState.completed[objectiveId] = true;
+          objectiveState.renderSignature = "";
+        }
+        return serializeObjectiveState();
       },
       startRun: function (options) {
         const config = options || {};
@@ -52027,6 +53632,9 @@
         }
         resize();
         resetSoloMultiplayerSession();
+        if (config.gameMode) {
+          applyGameMode(config.gameMode);
+        }
         applyDifficulty(config.difficulty || defaultDifficultyId);
         resetLocalPlayerState();
         resetLocalWorldState();
@@ -52206,6 +53814,23 @@
       getStructures: function () {
         return structures.map(function (structure) {
           return Object.assign({}, structure);
+        });
+      },
+      scoredBodyIds: function () {
+        return Array.from(connectedScoredBodyIds());
+      },
+      setAlienoids: function (items) {
+        rivals.length = 0;
+        for (const mob of Array.isArray(items) ? items : []) {
+          rivals.push(Object.assign({}, mob));
+        }
+        return rivals.map(function (mob) {
+          return Object.assign({}, mob);
+        });
+      },
+      getAlienoids: function () {
+        return rivals.map(function (mob) {
+          return Object.assign({}, mob);
         });
       },
       setTechPickups: setClusternautsTestTechPickups,

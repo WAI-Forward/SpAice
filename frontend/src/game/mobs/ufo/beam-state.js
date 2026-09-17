@@ -168,11 +168,12 @@
       return;
     }
 
-    let bestParticle = null;
+    const assignedSalvageBody = survivalSalvageBody(ufo);
+    let bestParticle = assignedSalvageBody;
     let bestScore = Infinity;
     const playerBody = player.landed ? bodyById(player.landed.bodyId) : null;
 
-    for (const particle of particles) {
+    for (const particle of assignedSalvageBody ? [] : particles) {
       if (!canUfoTractorAffectParticle(particle) || !canUfoPreferTractorTarget(ufo, particle)) {
         continue;
       }
@@ -230,8 +231,9 @@
       const centerStrength = clamp(1 - Math.abs(side) / Math.max(1, beamHalf), 0, 1);
       const toOriginX = originX - particle.x;
       const toOriginY = originY - particle.y;
+      const isAssignedSalvageBody = particle === assignedSalvageBody;
 
-      if (shouldUfoSiphonBody(ufo, particle)) {
+      if (!isAssignedSalvageBody && shouldUfoSiphonBody(ufo, particle)) {
         drainBodyWithUfoTractor(ufo, particle, pullStrength, centerStrength, dt);
         continue;
       }
@@ -245,6 +247,9 @@
       particle.vy += (toOrigin.y * force - normalY * side * 7.5) * dt;
 
       if (Math.hypot(toOriginX, toOriginY) < ufo.radius + particle.radius * 1.05) {
+        if (isAssignedSalvageBody) {
+          continue;
+        }
         const speed = Math.hypot(particle.vx, particle.vy);
         if (shouldUfoImpactBody(ufo, particle)) {
           if (speed >= rivalBodyImpactSpeed && ufo.hitCooldown <= 0) {
@@ -306,4 +311,3 @@
     if (particle.tier.name === "particle") return 4;
     return 8;
   }
-

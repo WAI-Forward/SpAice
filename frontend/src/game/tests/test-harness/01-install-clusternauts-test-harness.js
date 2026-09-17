@@ -7,6 +7,9 @@
       snapshot: function () {
         return createClusternautsFrameRateSnapshot();
       },
+      playerId: function () {
+        return String(player.id || "");
+      },
       objectiveState: function () {
         updateObjectiveState();
         return {
@@ -19,10 +22,33 @@
               target: snapshot.progress.target,
               label: snapshot.progress.label,
               available: snapshot.available,
-              current: snapshot.current
+              current: snapshot.current,
+              claimed: objectiveIsClaimed(snapshot.definition)
             };
           })
         };
+      },
+      techInventory: function () {
+        return Object.assign({}, techInventory);
+      },
+      claimObjectiveReward: function (id) {
+        claimObjectiveReward(id);
+        return {
+          objectives: serializeObjectiveState(),
+          tech: Object.assign({}, techInventory),
+          player: {
+            health: player.health,
+            maxHealth: player.maxHealth
+          }
+        };
+      },
+      completeObjective: function (id) {
+        const objectiveId = String(id || "");
+        if (objectiveDefinitions.some((definition) => definition.id === objectiveId)) {
+          objectiveState.completed[objectiveId] = true;
+          objectiveState.renderSignature = "";
+        }
+        return serializeObjectiveState();
       },
       startRun: function (options) {
         const config = options || {};
@@ -35,6 +61,9 @@
         }
         resize();
         resetSoloMultiplayerSession();
+        if (config.gameMode) {
+          applyGameMode(config.gameMode);
+        }
         applyDifficulty(config.difficulty || defaultDifficultyId);
         resetLocalPlayerState();
         resetLocalWorldState();
@@ -214,6 +243,23 @@
       getStructures: function () {
         return structures.map(function (structure) {
           return Object.assign({}, structure);
+        });
+      },
+      scoredBodyIds: function () {
+        return Array.from(connectedScoredBodyIds());
+      },
+      setAlienoids: function (items) {
+        rivals.length = 0;
+        for (const mob of Array.isArray(items) ? items : []) {
+          rivals.push(Object.assign({}, mob));
+        }
+        return rivals.map(function (mob) {
+          return Object.assign({}, mob);
+        });
+      },
+      getAlienoids: function () {
+        return rivals.map(function (mob) {
+          return Object.assign({}, mob);
         });
       },
       setTechPickups: setClusternautsTestTechPickups,
