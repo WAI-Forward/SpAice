@@ -79,6 +79,8 @@
       "summonDuration",
       "summonBaseRadius",
       "summonSpinSpeed",
+      "playerDamageAggroTimer",
+      "playerDamageAggroTargetPlayerId",
       "survivalCampId",
       "survivalCampX",
       "survivalCampY",

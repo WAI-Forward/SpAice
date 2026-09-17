@@ -59,6 +59,8 @@
       summonDuration: Math.max(0, finiteOr(mob && mob.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(mob && mob.summonBaseRadius, mob && mob.radius)),
       summonSpinSpeed: finiteOr(mob && mob.summonSpinSpeed, 0),
+      playerDamageAggroTimer: Math.max(0, finiteOr(mob && mob.playerDamageAggroTimer, 0)),
+      playerDamageAggroTargetPlayerId: typeof (mob && mob.playerDamageAggroTargetPlayerId) === "string" ? mob.playerDamageAggroTargetPlayerId : "",
       survivalCampId: typeof (mob && mob.survivalCampId) === "string" ? mob.survivalCampId : "",
       survivalCampX: finiteOr(mob && mob.survivalCampX, 0),
       survivalCampY: finiteOr(mob && mob.survivalCampY, 0),

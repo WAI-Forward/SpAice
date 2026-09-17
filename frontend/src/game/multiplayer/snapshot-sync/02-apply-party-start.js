@@ -37,6 +37,7 @@
     multiplayer.sharedWorldJoinPending = false;
     updateSharedTeamFromSession(multiplayer.partySession, { notifyJoins: false });
     clearCurrentAccountSave();
+    updateOnlineUi();
 
     applyDifficulty(difficulty);
     applyGameMode(multiplayer.partySession.gameMode || (multiplayer.partySession.worldMode === "shared-public" ? "survival" : "horde"));
@@ -477,4 +478,3 @@
     const entity = applyAcceptedPartyPhysicsSession(validation, message);
     sendPartyPhysicsHostAuthority(message.type === "party.physics.start" ? "start" : "state", validation, entity);
   }
-

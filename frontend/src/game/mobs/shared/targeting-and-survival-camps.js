@@ -104,6 +104,36 @@
     );
   }
 
+  function aggroNearbyMobsFromPlayerDamage(damagedMob, targetPlayerId) {
+    const cleanTargetPlayerId = String(targetPlayerId || "");
+    if (!damagedMob || !cleanTargetPlayerId || isPlayerTeamMob(damagedMob)) {
+      return false;
+    }
+
+    let aggroed = 0;
+    for (const nearbyMob of hostileCombatMobs()) {
+      if (
+        !nearbyMob ||
+        nearbyMob.health <= 0 ||
+        isPlayerTeamMob(nearbyMob) ||
+        Math.hypot(nearbyMob.x - damagedMob.x, nearbyMob.y - damagedMob.y) > survivalCampWakeRadius
+      ) {
+        continue;
+      }
+
+      nearbyMob.playerDamageAggroTimer = survivalCampAggroDuration;
+      nearbyMob.playerDamageAggroTargetPlayerId = cleanTargetPlayerId;
+      if (isSurvivalCampMob(nearbyMob) || isSurvivalMigratingMob(nearbyMob)) {
+        nearbyMob.survivalCampAggroTimer = survivalCampAggroDuration;
+        nearbyMob.survivalTargetPlayerId = cleanTargetPlayerId;
+        nearbyMob.survivalCampReturning = false;
+        nearbyMob.survivalCampOrphanedByAggro = false;
+      }
+      aggroed += 1;
+    }
+    return aggroed > 0;
+  }
+
   function isSurvivalCampStructure(structure) {
     return Boolean(structure && structure.survivalCampId && !isHordeModeActive());
   }
@@ -534,6 +564,25 @@
     return null;
   }
 
+  function playerDamageCombatTarget(mob) {
+    if (!mob || finiteOr(mob.playerDamageAggroTimer, 0) <= 0) {
+      return null;
+    }
+    const targetId = String(mob.playerDamageAggroTargetPlayerId || "");
+    if (!targetId || typeof collectCombatPlayerTargets !== "function") {
+      return null;
+    }
+    for (const target of collectCombatPlayerTargets()) {
+      const playerId = target && target.local
+        ? String(player.id || "")
+        : String(target && target.remote && target.remote.playerId || target && target.player && target.player.id || "");
+      if (playerId === targetId && target.player && target.player.health > 0) {
+        return target;
+      }
+    }
+    return null;
+  }
+
   function combatTargetForMob(mob) {
     if (isPlayerTeamMob(mob)) {
       if (activeFamiliarCommand(mob)) {
@@ -541,6 +590,10 @@
       }
       const target = nearestHostileMobTarget(mob);
       return target ? familiarEnemyCombatTarget(target.mob) : null;
+    }
+    const damageTarget = playerDamageCombatTarget(mob);
+    if (damageTarget) {
+      return damageTarget;
     }
     if (mob && mob.survivalEncounterType === "hit-squad") {
       return null;

@@ -203,7 +203,8 @@
   function mobProjectileSourceFields(mob) {
     return {
       team: isPlayerTeamMob(mob) ? "player" : "",
-      sourceMobId: mob && mob.id ? mob.id : 0
+      sourceMobId: mob && mob.id ? mob.id : 0,
+      sourcePlayerId: isPlayerTeamMob(mob) ? String(mob.familiarOwnerPlayerId || player.id || "") : ""
     };
   }
 

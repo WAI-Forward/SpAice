@@ -7,7 +7,9 @@
     if (target && target.familiarEnemy) {
       const enemy = target.player;
       knockMob(enemy, nx, ny, 210);
-      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rambot, rambotImpactDamage)), rambot.color, mobName(enemy) + " rammed by your rambot familiar.");
+      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rambot, rambotImpactDamage)), rambot.color, mobName(enemy) + " rammed by your rambot familiar.", {
+        sourcePlayerId: rambot.familiarOwnerPlayerId || player.id || ""
+      });
     } else if (target && target.spacecraft && target.spacecraftComponent) {
       damageSpacecraftComponent(
         target.spacecraft,
@@ -451,4 +453,3 @@
       updateRambotBossHeadTracking(rambot, targetPlayer.x, targetPlayer.y, dt, rambot.chargeTimer > 0 ? 6.5 : 3.6);
     }
   }
-

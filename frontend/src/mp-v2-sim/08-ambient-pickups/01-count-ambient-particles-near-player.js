@@ -451,7 +451,6 @@
     if (!mob || mob.health <= 0) {
       return false;
     }
-    wakeSurvivalCampFromMob(state, mob, sourcePlayerId);
     if (mob.kind === "fighter" && !isMobDisabled(mob) && finiteOr(mob.shieldCharge, 0) > 0) {
       mob.shieldActive = Math.max(finiteOr(mob.shieldActive, 0), 0.55);
       mob.shieldRecharge = FIGHTER_SHIELD_CYCLE;
@@ -473,6 +472,10 @@
     mob.hitCooldown = Math.max(finiteOr(mob.hitCooldown, 0), 0.42);
     mob.flash = Math.max(finiteOr(mob.flash, 0), 0.28);
     emitMobDamageParticles(state, mob, dealtDamage);
+    if (dealtDamage > 0 && sourcePlayerId) {
+      wakeSurvivalCampFromMob(state, mob, sourcePlayerId);
+      aggroNearbyMobsFromPlayerDamage(state, mob, sourcePlayerId);
+    }
     if (mob.health <= 0) {
       const kind = mobEntityKind(mob);
       if (isMobBeacon(mob)) {

@@ -54,7 +54,9 @@
           const toolDisable = Math.max(0, finiteOr(projectile.toolDisable, 0));
           knockMob(mob, dirX, dirY, projectile.rocket ? 170 : 125);
           if (damage > 0) {
-            damageMob(mob, damage, projectile.color, mobName(mob) + " hit by your familiar.");
+            damageMob(mob, damage, projectile.color, mobName(mob) + " hit by your familiar.", {
+              sourcePlayerId: projectile.sourcePlayerId || player.id || ""
+            });
           }
           if (toolDisable > 0) {
             disableMob(mob, toolDisable, projectile.color);
@@ -304,4 +306,3 @@
     projectile.vx = Math.cos(angle) * nextSpeed;
     projectile.vy = Math.sin(angle) * nextSpeed;
   }
-

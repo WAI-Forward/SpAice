@@ -294,7 +294,9 @@
     if (damage > 0 && Number.isFinite(target.health)) {
       const color = normalizeColorSnapshot(effect.color, { r: 255, g: 115, b: 173 });
       if (target.kind) {
-        damageMob(target, damage, color, mobName(target) + " dropped by " + (message.fromPlayerId || "a contact") + ".");
+        damageMob(target, damage, color, mobName(target) + " dropped by " + (message.fromPlayerId || "a contact") + ".", {
+          sourcePlayerId: message.fromPlayerId || ""
+        });
       } else {
         target.health = Math.max(0, target.health - damage);
         target.hitCooldown = Math.max(target.hitCooldown || 0, 0.45);

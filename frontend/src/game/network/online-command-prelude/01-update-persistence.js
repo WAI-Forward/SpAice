@@ -36,6 +36,7 @@
       onlineCount.textContent = String(multiplayer.onlineCount || 0);
     }
     if (onlineToggle) {
+      onlineToggle.hidden = !isPartySessionActive();
       onlineToggle.classList.toggle("is-active", multiplayer.panelOpen && multiplayer.socialMode === "online");
     }
   }
@@ -452,4 +453,3 @@
       multiplayer.commandCompletionIndex = 0;
     }
   }
-

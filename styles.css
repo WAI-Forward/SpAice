@@ -2355,6 +2355,10 @@ select {
   cursor: pointer;
 }
 
+.online-toggle[hidden] {
+  display: none;
+}
+
 .online-toggle:hover,
 .online-toggle.is-active {
   border-color: rgba(88, 226, 255, 0.5);

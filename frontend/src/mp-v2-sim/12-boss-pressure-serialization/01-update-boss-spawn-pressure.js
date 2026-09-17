@@ -125,7 +125,7 @@
     mob.rotation = Math.atan2(mob.vy || ny, mob.vx || nx) + Math.PI / 2;
     if (dist < finiteOr(mob.radius, 28) + finiteOr(enemy.radius, 28) + 14 && finiteOr(enemy.hitCooldown, 0) <= 0) {
       knockMob(enemy, nx, ny, 125);
-      damageMob(state, enemy, FAMILIAR_DAMAGE_PER_SECOND * dt * 6.5, "familiar");
+      damageMob(state, enemy, FAMILIAR_DAMAGE_PER_SECOND * dt * 6.5, "familiar", mob.familiarOwnerPlayerId || "");
       mob.health = Math.max(0, finiteOr(mob.health, mob.maxHealth) - HOSTILE_FAMILIAR_DAMAGE_PER_SECOND * dt * 3.5);
       mob.flash = Math.max(finiteOr(mob.flash, 0), 0.1);
     }
@@ -263,6 +263,37 @@
       finiteOr(mob.survivalCampX, mob.x),
       finiteOr(mob.survivalCampY, mob.y)
     );
+  }
+
+  function aggroNearbyMobsFromPlayerDamage(state, damagedMob, targetPlayerId) {
+    const world = state && state.world;
+    const cleanTargetPlayerId = String(targetPlayerId || "");
+    if (!world || !damagedMob || !cleanTargetPlayerId || isPlayerTeamMob(damagedMob)) {
+      return false;
+    }
+
+    let aggroed = 0;
+    for (const nearbyMob of allCombatMobs(world)) {
+      if (
+        !nearbyMob ||
+        nearbyMob.health <= 0 ||
+        isPlayerTeamMob(nearbyMob) ||
+        Math.hypot(nearbyMob.x - damagedMob.x, nearbyMob.y - damagedMob.y) > SURVIVAL_CAMP_WAKE_RADIUS
+      ) {
+        continue;
+      }
+
+      nearbyMob.playerDamageAggroTimer = SURVIVAL_CAMP_AGGRO_DURATION;
+      nearbyMob.playerDamageAggroTargetPlayerId = cleanTargetPlayerId;
+      if (isSurvivalCampMob(state, nearbyMob) || isSurvivalMigratingMob(state, nearbyMob)) {
+        nearbyMob.survivalCampAggroTimer = SURVIVAL_CAMP_AGGRO_DURATION;
+        nearbyMob.survivalTargetPlayerId = cleanTargetPlayerId;
+        nearbyMob.survivalCampReturning = false;
+        nearbyMob.survivalCampOrphanedByAggro = false;
+      }
+      aggroed += 1;
+    }
+    return aggroed > 0;
   }
 
   function wakeSurvivalCampFromStructure(state, structure, targetPlayerId) {
@@ -660,6 +691,10 @@
         ensureMobMechanics(mob, seedHolder);
         mob.hitCooldown = Math.max(0, finiteOr(mob.hitCooldown, 0) - dt);
         mob.disabledTimer = Math.max(0, finiteOr(mob.disabledTimer, 0) - dt);
+        mob.playerDamageAggroTimer = Math.max(0, finiteOr(mob.playerDamageAggroTimer, 0) - dt);
+        if (mob.playerDamageAggroTimer <= 0) {
+          mob.playerDamageAggroTargetPlayerId = "";
+        }
         if (finiteOr(mob.summonDuration, 0) > 0 && finiteOr(mob.summonAge, 0) < finiteOr(mob.summonDuration, 0)) {
           mob.summonAge = Math.min(mob.summonDuration, finiteOr(mob.summonAge, 0) + dt);
           const progress = clamp(mob.summonAge / Math.max(0.001, mob.summonDuration), 0, 1);
@@ -688,14 +723,21 @@
         if (finiteOr(mob.summonDuration, 0) > 0 && finiteOr(mob.summonAge, 0) < finiteOr(mob.summonDuration, 0)) {
           continue;
         }
-        if (!isPlayerTeamMob(mob) && mob.survivalEncounterType === "hit-squad") {
+        if (!isPlayerTeamMob(mob) && mob.survivalEncounterType === "hit-squad" && mob.playerDamageAggroTimer <= 0) {
           list.splice(i, 1);
           continue;
         }
-        let mobTargets = isPlayerTeamMob(mob) && activeFamiliarCommand(mob)
+        const damageTargetId = String(mob.playerDamageAggroTargetPlayerId || "");
+        const damageTarget = mob.playerDamageAggroTimer > 0 && damageTargetId
+          ? state.players && state.players[damageTargetId]
+          : null;
+        const hasDamageTarget = Boolean(damageTarget && finiteOr(damageTarget.health, 0) > 0 && !damageTarget.spacecraftInterior);
+        let mobTargets = hasDamageTarget
+          ? [damageTarget]
+          : isPlayerTeamMob(mob) && activeFamiliarCommand(mob)
           ? []
           : isPlayerTeamMob(mob) ? familiarHostileTargets(state.world, mob) : players;
-        if (!isPlayerTeamMob(mob) && (isSurvivalCampMob(state, mob) || isSurvivalMigratingMob(state, mob))) {
+        if (!hasDamageTarget && !isPlayerTeamMob(mob) && (isSurvivalCampMob(state, mob) || isSurvivalMigratingMob(state, mob))) {
           const targetId = String(mob.survivalTargetPlayerId || "");
           const target = targetId ? state.players && state.players[targetId] : null;
           mobTargets = target && finiteOr(target.health, 0) > 0 && !target.spacecraftInterior ? [target] : [];

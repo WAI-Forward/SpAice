@@ -7,7 +7,9 @@
     if (target && target.familiarEnemy) {
       const enemy = target.player;
       knockMob(enemy, nx, ny, 245);
-      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rocket, rocketImpactDamage)), rocket.color, mobName(enemy) + " struck by your rocket familiar.");
+      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rocket, rocketImpactDamage)), rocket.color, mobName(enemy) + " struck by your rocket familiar.", {
+        sourcePlayerId: rocket.familiarOwnerPlayerId || player.id || ""
+      });
     } else if (target && target.spacecraft && target.spacecraftComponent) {
       damageSpacecraftComponent(
         target.spacecraft,
@@ -194,4 +196,3 @@
       break;
     }
   }
-

@@ -246,6 +246,7 @@
     multiplayer.sharedTeamMemberIds.clear();
     clearCurrentAccountSave();
     updateSettingsJoinCodeUi();
+    updateOnlineUi();
   }
 
   function multiplayerV2EventKey(event) {

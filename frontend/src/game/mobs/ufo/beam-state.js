@@ -118,7 +118,9 @@
     if (target && target.familiarEnemy) {
       const enemy = target.player;
       knockMob(enemy, -dirX, -dirY, 105 * hitStrength);
-      damageMob(enemy, damage, beamColor, mobName(enemy) + " drained by your UFO familiar.");
+      damageMob(enemy, damage, beamColor, mobName(enemy) + " drained by your UFO familiar.", {
+        sourcePlayerId: ufo.familiarOwnerPlayerId || player.id || ""
+      });
     } else if (target && target.familiar) {
       const familiar = target.player;
       knockMob(familiar, -dirX, -dirY, 105 * hitStrength);

@@ -10695,6 +10695,7 @@
     multiplayer.sharedTeamMemberIds.clear();
     clearCurrentAccountSave();
     updateSettingsJoinCodeUi();
+    updateOnlineUi();
   }
 
   function multiplayerV2EventKey(event) {
@@ -11917,6 +11918,7 @@
     multiplayer.sharedWorldJoinPending = false;
     updateSharedTeamFromSession(multiplayer.partySession, { notifyJoins: false });
     clearCurrentAccountSave();
+    updateOnlineUi();
 
     applyDifficulty(difficulty);
     applyGameMode(multiplayer.partySession.gameMode || (multiplayer.partySession.worldMode === "shared-public" ? "survival" : "horde"));
@@ -16483,6 +16485,7 @@
       onlineCount.textContent = String(multiplayer.onlineCount || 0);
     }
     if (onlineToggle) {
+      onlineToggle.hidden = !isPartySessionActive();
       onlineToggle.classList.toggle("is-active", multiplayer.panelOpen && multiplayer.socialMode === "online");
     }
   }
@@ -21819,7 +21822,9 @@
     if (damage > 0 && Number.isFinite(target.health)) {
       const color = normalizeColorSnapshot(effect.color, { r: 255, g: 115, b: 173 });
       if (target.kind) {
-        damageMob(target, damage, color, mobName(target) + " dropped by " + (message.fromPlayerId || "a contact") + ".");
+        damageMob(target, damage, color, mobName(target) + " dropped by " + (message.fromPlayerId || "a contact") + ".", {
+          sourcePlayerId: message.fromPlayerId || ""
+        });
       } else {
         target.health = Math.max(0, target.health - damage);
         target.hitCooldown = Math.max(target.hitCooldown || 0, 0.45);
@@ -22803,6 +22808,8 @@
       summonDuration: Math.max(0, finiteOr(mob && mob.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(mob && mob.summonBaseRadius, mob && mob.radius)),
       summonSpinSpeed: finiteOr(mob && mob.summonSpinSpeed, 0),
+      playerDamageAggroTimer: Math.max(0, finiteOr(mob && mob.playerDamageAggroTimer, 0)),
+      playerDamageAggroTargetPlayerId: typeof (mob && mob.playerDamageAggroTargetPlayerId) === "string" ? mob.playerDamageAggroTargetPlayerId : "",
       survivalCampId: typeof (mob && mob.survivalCampId) === "string" ? mob.survivalCampId : "",
       survivalCampX: finiteOr(mob && mob.survivalCampX, 0),
       survivalCampY: finiteOr(mob && mob.survivalCampY, 0),
@@ -23290,6 +23297,8 @@
       summonDuration: Math.max(0, finiteOr(snapshot && snapshot.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(snapshot && snapshot.summonBaseRadius, fallbackRadius)),
       summonSpinSpeed: finiteOr(snapshot && snapshot.summonSpinSpeed, 0),
+      playerDamageAggroTimer: Math.max(0, finiteOr(snapshot && snapshot.playerDamageAggroTimer, 0)),
+      playerDamageAggroTargetPlayerId: typeof (snapshot && snapshot.playerDamageAggroTargetPlayerId) === "string" ? snapshot.playerDamageAggroTargetPlayerId : "",
       survivalCampId: typeof (snapshot && snapshot.survivalCampId) === "string" ? snapshot.survivalCampId : "",
       survivalCampX: finiteOr(snapshot && snapshot.survivalCampX, 0),
       survivalCampY: finiteOr(snapshot && snapshot.survivalCampY, 0),
@@ -25403,17 +25412,21 @@
       return false;
     }
 
+    const dealtDamage = Math.max(0, finiteOr(damage, 0));
     mob.lastDamageTool = options && options.sourceTool ? options.sourceTool : "";
-    mob.health = Math.max(0, mob.health - damage);
+    mob.health = Math.max(0, mob.health - dealtDamage);
     mob.flash = 0.28;
     mob.hitCooldown = Math.max(finiteOr(mob.hitCooldown, 0), 0.42);
-    emitMobDamageParticles(mob, damage, color);
+    emitMobDamageParticles(mob, dealtDamage, color);
     const sourcePlayerId = options && options.sourcePlayerId !== undefined && options.sourcePlayerId !== null
       ? String(options.sourcePlayerId || "")
       : options && options.sourceTool
         ? player.id || ""
         : "";
-    wakeSurvivalCampFromMob(mob, sourcePlayerId);
+    if (dealtDamage > 0 && sourcePlayerId) {
+      wakeSurvivalCampFromMob(mob, sourcePlayerId);
+      aggroNearbyMobsFromPlayerDamage(mob, sourcePlayerId);
+    }
 
     if (color) {
       sparks.push({
@@ -25491,6 +25504,10 @@
   function tickMobDamageTimers(mob, dt) {
     mob.hitCooldown = Math.max(0, mob.hitCooldown - dt);
     mob.disabledTimer = Math.max(0, finiteOr(mob.disabledTimer, 0) - dt);
+    mob.playerDamageAggroTimer = Math.max(0, finiteOr(mob.playerDamageAggroTimer, 0) - dt);
+    if (mob.playerDamageAggroTimer <= 0) {
+      mob.playerDamageAggroTargetPlayerId = "";
+    }
     if (finiteOr(mob.summonDuration, 0) > 0 && finiteOr(mob.summonAge, 0) < finiteOr(mob.summonDuration, 0)) {
       mob.summonAge = Math.min(mob.summonDuration, finiteOr(mob.summonAge, 0) + dt);
       const progress = clamp(mob.summonAge / Math.max(0.001, mob.summonDuration), 0, 1);
@@ -27046,6 +27063,7 @@
 
   function survivalSalvageTowTarget(ufo, dt) {
     if (!ufo || !ufo.survivalSalvageBodyId) return null;
+    if (finiteOr(ufo.playerDamageAggroTimer, 0) > 0 && ufo.playerDamageAggroTargetPlayerId) return null;
     const body = survivalSalvageBody(ufo);
     if (!body) {
       clearSurvivalSalvageAssignment(ufo);
@@ -35948,7 +35966,8 @@
   function mobProjectileSourceFields(mob) {
     return {
       team: isPlayerTeamMob(mob) ? "player" : "",
-      sourceMobId: mob && mob.id ? mob.id : 0
+      sourceMobId: mob && mob.id ? mob.id : 0,
+      sourcePlayerId: isPlayerTeamMob(mob) ? String(mob.familiarOwnerPlayerId || player.id || "") : ""
     };
   }
 
@@ -38461,7 +38480,9 @@
           const toolDisable = Math.max(0, finiteOr(projectile.toolDisable, 0));
           knockMob(mob, dirX, dirY, projectile.rocket ? 170 : 125);
           if (damage > 0) {
-            damageMob(mob, damage, projectile.color, mobName(mob) + " hit by your familiar.");
+            damageMob(mob, damage, projectile.color, mobName(mob) + " hit by your familiar.", {
+              sourcePlayerId: projectile.sourcePlayerId || player.id || ""
+            });
           }
           if (toolDisable > 0) {
             disableMob(mob, toolDisable, projectile.color);
@@ -38832,7 +38853,9 @@
     if (target && target.familiarEnemy) {
       const enemy = target.player;
       knockMob(enemy, -dirX, -dirY, 105 * hitStrength);
-      damageMob(enemy, damage, beamColor, mobName(enemy) + " drained by your UFO familiar.");
+      damageMob(enemy, damage, beamColor, mobName(enemy) + " drained by your UFO familiar.", {
+        sourcePlayerId: ufo.familiarOwnerPlayerId || player.id || ""
+      });
     } else if (target && target.familiar) {
       const familiar = target.player;
       knockMob(familiar, -dirX, -dirY, 105 * hitStrength);
@@ -39533,6 +39556,36 @@
     );
   }
 
+  function aggroNearbyMobsFromPlayerDamage(damagedMob, targetPlayerId) {
+    const cleanTargetPlayerId = String(targetPlayerId || "");
+    if (!damagedMob || !cleanTargetPlayerId || isPlayerTeamMob(damagedMob)) {
+      return false;
+    }
+
+    let aggroed = 0;
+    for (const nearbyMob of hostileCombatMobs()) {
+      if (
+        !nearbyMob ||
+        nearbyMob.health <= 0 ||
+        isPlayerTeamMob(nearbyMob) ||
+        Math.hypot(nearbyMob.x - damagedMob.x, nearbyMob.y - damagedMob.y) > survivalCampWakeRadius
+      ) {
+        continue;
+      }
+
+      nearbyMob.playerDamageAggroTimer = survivalCampAggroDuration;
+      nearbyMob.playerDamageAggroTargetPlayerId = cleanTargetPlayerId;
+      if (isSurvivalCampMob(nearbyMob) || isSurvivalMigratingMob(nearbyMob)) {
+        nearbyMob.survivalCampAggroTimer = survivalCampAggroDuration;
+        nearbyMob.survivalTargetPlayerId = cleanTargetPlayerId;
+        nearbyMob.survivalCampReturning = false;
+        nearbyMob.survivalCampOrphanedByAggro = false;
+      }
+      aggroed += 1;
+    }
+    return aggroed > 0;
+  }
+
   function isSurvivalCampStructure(structure) {
     return Boolean(structure && structure.survivalCampId && !isHordeModeActive());
   }
@@ -39963,6 +40016,25 @@
     return null;
   }
 
+  function playerDamageCombatTarget(mob) {
+    if (!mob || finiteOr(mob.playerDamageAggroTimer, 0) <= 0) {
+      return null;
+    }
+    const targetId = String(mob.playerDamageAggroTargetPlayerId || "");
+    if (!targetId || typeof collectCombatPlayerTargets !== "function") {
+      return null;
+    }
+    for (const target of collectCombatPlayerTargets()) {
+      const playerId = target && target.local
+        ? String(player.id || "")
+        : String(target && target.remote && target.remote.playerId || target && target.player && target.player.id || "");
+      if (playerId === targetId && target.player && target.player.health > 0) {
+        return target;
+      }
+    }
+    return null;
+  }
+
   function combatTargetForMob(mob) {
     if (isPlayerTeamMob(mob)) {
       if (activeFamiliarCommand(mob)) {
@@ -39970,6 +40042,10 @@
       }
       const target = nearestHostileMobTarget(mob);
       return target ? familiarEnemyCombatTarget(target.mob) : null;
+    }
+    const damageTarget = playerDamageCombatTarget(mob);
+    if (damageTarget) {
+      return damageTarget;
     }
     if (mob && mob.survivalEncounterType === "hit-squad") {
       return null;
@@ -40170,7 +40246,9 @@
     if (target && target.familiarEnemy) {
       const enemy = target.player;
       knockMob(enemy, nx, ny, 210);
-      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rambot, rambotImpactDamage)), rambot.color, mobName(enemy) + " rammed by your rambot familiar.");
+      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rambot, rambotImpactDamage)), rambot.color, mobName(enemy) + " rammed by your rambot familiar.", {
+        sourcePlayerId: rambot.familiarOwnerPlayerId || player.id || ""
+      });
     } else if (target && target.spacecraft && target.spacecraftComponent) {
       damageSpacecraftComponent(
         target.spacecraft,
@@ -40923,7 +41001,9 @@
     if (target && target.familiarEnemy) {
       const enemy = target.player;
       knockMob(enemy, nx, ny, 245);
-      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rocket, rocketImpactDamage)), rocket.color, mobName(enemy) + " struck by your rocket familiar.");
+      damageMob(enemy, difficultyMobDamage(bossScaledDamage(rocket, rocketImpactDamage)), rocket.color, mobName(enemy) + " struck by your rocket familiar.", {
+        sourcePlayerId: rocket.familiarOwnerPlayerId || player.id || ""
+      });
     } else if (target && target.spacecraft && target.spacecraftComponent) {
       damageSpacecraftComponent(
         target.spacecraft,

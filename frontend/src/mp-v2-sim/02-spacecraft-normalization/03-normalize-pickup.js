@@ -140,6 +140,8 @@
       summonDuration: Math.max(0, finiteOr(snapshot.summonDuration, 0)),
       summonBaseRadius: Math.max(0, finiteOr(snapshot.summonBaseRadius, baseRadius)),
       summonSpinSpeed: finiteOr(snapshot.summonSpinSpeed, 0),
+      playerDamageAggroTimer: Math.max(0, finiteOr(snapshot.playerDamageAggroTimer, 0)),
+      playerDamageAggroTargetPlayerId: typeof snapshot.playerDamageAggroTargetPlayerId === "string" ? snapshot.playerDamageAggroTargetPlayerId : "",
       survivalCampId: typeof snapshot.survivalCampId === "string" ? snapshot.survivalCampId : "",
       survivalCampX: finiteOr(snapshot.survivalCampX, 0),
       survivalCampY: finiteOr(snapshot.survivalCampY, 0),

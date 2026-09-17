@@ -311,17 +311,21 @@
       return false;
     }
 
+    const dealtDamage = Math.max(0, finiteOr(damage, 0));
     mob.lastDamageTool = options && options.sourceTool ? options.sourceTool : "";
-    mob.health = Math.max(0, mob.health - damage);
+    mob.health = Math.max(0, mob.health - dealtDamage);
     mob.flash = 0.28;
     mob.hitCooldown = Math.max(finiteOr(mob.hitCooldown, 0), 0.42);
-    emitMobDamageParticles(mob, damage, color);
+    emitMobDamageParticles(mob, dealtDamage, color);
     const sourcePlayerId = options && options.sourcePlayerId !== undefined && options.sourcePlayerId !== null
       ? String(options.sourcePlayerId || "")
       : options && options.sourceTool
         ? player.id || ""
         : "";
-    wakeSurvivalCampFromMob(mob, sourcePlayerId);
+    if (dealtDamage > 0 && sourcePlayerId) {
+      wakeSurvivalCampFromMob(mob, sourcePlayerId);
+      aggroNearbyMobsFromPlayerDamage(mob, sourcePlayerId);
+    }
 
     if (color) {
       sparks.push({
@@ -399,6 +403,10 @@
   function tickMobDamageTimers(mob, dt) {
     mob.hitCooldown = Math.max(0, mob.hitCooldown - dt);
     mob.disabledTimer = Math.max(0, finiteOr(mob.disabledTimer, 0) - dt);
+    mob.playerDamageAggroTimer = Math.max(0, finiteOr(mob.playerDamageAggroTimer, 0) - dt);
+    if (mob.playerDamageAggroTimer <= 0) {
+      mob.playerDamageAggroTargetPlayerId = "";
+    }
     if (finiteOr(mob.summonDuration, 0) > 0 && finiteOr(mob.summonAge, 0) < finiteOr(mob.summonDuration, 0)) {
       mob.summonAge = Math.min(mob.summonDuration, finiteOr(mob.summonAge, 0) + dt);
       const progress = clamp(mob.summonAge / Math.max(0.001, mob.summonDuration), 0, 1);
