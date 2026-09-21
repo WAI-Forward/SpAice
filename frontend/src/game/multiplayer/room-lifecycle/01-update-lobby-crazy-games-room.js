@@ -184,6 +184,7 @@
     multiplayer.v2.inputSeq = 0;
     multiplayer.v2.clientTick = 0;
     multiplayer.v2.fixedAccumulator = 0;
+    multiplayer.v2.firstStepPending = false;
     multiplayer.v2.sendAccumulator = 0;
     multiplayer.v2.lastSentInput = null;
     multiplayer.v2.pendingInputs = [];
@@ -301,7 +302,7 @@
     } else if (stellarOutcomeTierNames.includes(tier.name) && !stellarOutcomeTierNames.includes(previousTier.name)) {
       maybeNotifyText("Star collapsed into " + tier.article + " " + tier.name + ".", { groupKey: "stellar-branch-formed" });
     }
-    recordObjectiveCreatedBodyMass(mass);
+    recordObjectiveCreatedBodyMass(mass, tier.name);
     maybeNotifyTier(tier, previousTier);
   }
 

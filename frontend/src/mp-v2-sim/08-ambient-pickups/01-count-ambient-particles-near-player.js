@@ -133,14 +133,7 @@
     let best = null;
     let bestDistance = -Infinity;
     for (const body of world.particles) {
-      if (
-        !body ||
-        !body.tier ||
-        body.tier.solid ||
-        body.randomEventId ||
-        body.survivalCampBody ||
-        finiteOr(body.ufoSapTimer, 0) > 0
-      ) {
+      if (!isRecyclableAmbientMatter(body)) {
         continue;
       }
       const distance = nearestPlayerDistance(body.x, body.y, players);
@@ -151,6 +144,46 @@
       bestDistance = distance;
     }
     return best;
+  }
+
+  function isRecyclableAmbientMatter(body) {
+    return Boolean(
+      body &&
+      body.tier &&
+      !body.randomEventId &&
+      !body.survivalCampBody &&
+      finiteOr(body.ufoSapTimer, 0) <= 0 &&
+      (body.tier.name === "particle" || Boolean(body.ambientSpawnRock))
+    );
+  }
+
+  function pruneDistantAmbientMatter(world, players, keepRadius, maxRemovals) {
+    const limit = Math.max(0, Math.floor(finiteOr(maxRemovals, 0)));
+    let removedParticles = 0;
+    for (let removed = 0; removed < limit; removed += 1) {
+      let removeIndex = -1;
+      let removeDistance = keepRadius;
+      for (let i = 0; i < world.particles.length; i += 1) {
+        const body = world.particles[i];
+        if (!isRecyclableAmbientMatter(body)) {
+          continue;
+        }
+        const distance = nearestPlayerDistance(body.x, body.y, players);
+        if (distance <= removeDistance) {
+          continue;
+        }
+        removeDistance = distance;
+        removeIndex = i;
+      }
+      if (removeIndex < 0) {
+        break;
+      }
+      const removedBody = world.particles.splice(removeIndex, 1)[0];
+      if (isAmbientParticle(removedBody)) {
+        removedParticles += 1;
+      }
+    }
+    return removedParticles;
   }
 
   function effectiveParticleAnchorCount(players) {
@@ -211,12 +244,16 @@
     const localTarget = AMBIENT_PARTICLE_PLAYFIELD_TARGET;
     const densityRadius = AMBIENT_PARTICLE_PLAYFIELD_RADIUS;
     let ambientCount = countAmbientParticles(world);
+    ambientCount = Math.max(
+      0,
+      ambientCount - pruneDistantAmbientMatter(world, players, Math.max(densityRadius * 1.75, 3200), AMBIENT_PARTICLE_CATCHUP_SPAWNS * 2)
+    );
     const seedHolder = { seed: state.seed >>> 0 };
     for (let spawned = 0; spawned < AMBIENT_PARTICLE_CATCHUP_SPAWNS; spawned += 1) {
       const underdense = mostUnderdenseAmbientPlayer(world, anchors, localTarget, densityRadius);
       const needsLocalFill = underdense.score > 0.5 && underdense.localCount < underdense.localTarget;
       if (ambientCount >= targetCount && (!needsLocalFill || ambientCount >= maxAmbientBudget)) {
-        const recycled = needsLocalFill ? farthestRecyclableAmbientParticle(world, anchors, densityRadius * 1.18) : null;
+        const recycled = needsLocalFill ? farthestRecyclableAmbientParticle(world, players, densityRadius * 1.18) : null;
         if (!recycled) {
           break;
         }
@@ -451,6 +488,14 @@
     if (!mob || mob.health <= 0) {
       return false;
     }
+    const source = sourcePlayerId && typeof sourcePlayerId === "object"
+      ? sourcePlayerId
+      : { playerId: String(sourcePlayerId || ""), cause: cause || "impact", hostileActionType: "damage" };
+    const controllingPlayerId = String(source.playerId || source.sourcePlayerId || "");
+    if (controllingPlayerId) {
+      wakeSurvivalCampFromMob(state, mob, controllingPlayerId);
+      aggroNearbyMobsFromPlayerDamage(state, mob, controllingPlayerId);
+    }
     if (mob.kind === "fighter" && !isMobDisabled(mob) && finiteOr(mob.shieldCharge, 0) > 0) {
       mob.shieldActive = Math.max(finiteOr(mob.shieldActive, 0), 0.55);
       mob.shieldRecharge = FIGHTER_SHIELD_CYCLE;
@@ -472,10 +517,6 @@
     mob.hitCooldown = Math.max(finiteOr(mob.hitCooldown, 0), 0.42);
     mob.flash = Math.max(finiteOr(mob.flash, 0), 0.28);
     emitMobDamageParticles(state, mob, dealtDamage);
-    if (dealtDamage > 0 && sourcePlayerId) {
-      wakeSurvivalCampFromMob(state, mob, sourcePlayerId);
-      aggroNearbyMobsFromPlayerDamage(state, mob, sourcePlayerId);
-    }
     if (mob.health <= 0) {
       const kind = mobEntityKind(mob);
       if (isMobBeacon(mob)) {
@@ -594,6 +635,9 @@
   }
 
   function bossStrafeForce(mob, baseForce) {
+    if (mob && ["engage", "revenge", "migrant-skirmish"].includes(mob.survivalAiState) && !mob.survivalManeuverActive) {
+      return 0;
+    }
     if (mob && mob.isBoss) {
       return baseForce * 1.35 * bossStatScaleForStars(bossStarRank(mob), MOB_BOSS_STAR_FORCE_MULTIPLIER);
     }

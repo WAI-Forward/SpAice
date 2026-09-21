@@ -51,7 +51,7 @@
 
 .leaderboard-filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -81,6 +81,27 @@
   font: inherit;
   font-size: 12px;
   font-weight: 850;
+  color-scheme: dark;
+  accent-color: #58e2ff;
+}
+
+.leaderboard-filters select:focus-visible {
+  outline: 2px solid rgba(88, 226, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.leaderboard-filters select option {
+  background: #071025;
+  color: #f8fbff;
+}
+
+.leaderboard-filters select option:disabled {
+  color: rgba(248, 251, 255, 0.36);
+}
+
+.leaderboard-filters select option:checked {
+  background: #1d5c99;
+  color: #ffffff;
 }
 
 .leaderboard-panel__list {
@@ -101,6 +122,13 @@
 .leaderboard-row.is-local {
   border-color: rgba(88, 226, 255, 0.38);
   background: rgba(88, 226, 255, 0.12);
+}
+
+.leaderboard-row--status {
+  display: block;
+  color: rgba(232, 241, 255, 0.72);
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .leaderboard-row__rank,
@@ -130,4 +158,3 @@
   font-weight: 950;
   text-align: right;
 }
-

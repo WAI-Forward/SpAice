@@ -113,6 +113,22 @@
         remaining -= boss.cost;
       }
     }
+    const signatureKinds = Array.isArray(settings.signatureKinds)
+      ? settings.signatureKinds.filter((kind) => mobTierOrder.includes(kind) && survivalMobAllowanceCost(kind) <= remaining)
+      : [];
+    if (signatureKinds.length) {
+      const signatureKind = signatureKinds[Math.floor(randomRange(0, signatureKinds.length))];
+      const signatureCost = survivalMobAllowanceCost(signatureKind);
+      entries.push({
+        kind: signatureKind,
+        cost: signatureCost,
+        eliteStars: 0,
+        eliteGroupSize: 1,
+        isBoss: false,
+        bossStars: 0
+      });
+      remaining -= signatureCost;
+    }
     while (remaining >= survivalAllowanceMobCosts.alienoid && entries.length < 18) {
       const candidates = survivalAllowanceCandidateList(remaining, settings);
       if (!candidates.length) {
@@ -281,20 +297,21 @@
     );
     const extra = (index) => Math.floor((expansion + 3 - index) / 4);
     const budgetScale = survivalScoreBudgetScale(scoreThreat);
-    const band = (id, target, minBudget, maxBudget, allowBosses, index) => ({
+    const band = (id, target, minBudget, maxBudget, allowBosses, index, signatureKinds) => ({
       id,
       target: target > 0 ? target + extra(index) : 0,
       minBudget: Math.round(minBudget * budgetScale),
       maxBudget: Math.round(maxBudget * budgetScale),
       allowBosses,
+      signatureKinds,
       scoreThreat,
       forceBoss: id === "boss" && scoreThreat >= 3.2
     });
     return [
-      band("starter", 2 + playerBonus, 50, 180, false, 0),
-      band("standard", standardUnlocked ? 1 + playerBonus : 0, 150, 380, false, 1),
-      band("dangerous", dangerousUnlocked ? 1 + Math.floor(playerBonus / 2) : 0, 340, 900, false, 2),
-      band("boss", bossUnlocked ? 1 : 0, 850, 3000, true, 3)
+      band("starter", 1 + playerBonus, 50, 170, false, 0, []),
+      band("standard", 1 + (standardUnlocked ? 1 + playerBonus : 0), 220, 480, false, 1, ["ufo", "rambot"]),
+      band("dangerous", 1 + (dangerousUnlocked ? 1 + Math.floor(playerBonus / 2) : 0), 520, 1050, false, 2, ["rambot", "engineer", "tesla"]),
+      band("boss", bossUnlocked ? 1 : 0, 850, 3000, true, 3, [])
     ];
   }
 
@@ -302,13 +319,16 @@
     const combatProgress = survivalCampCombatProgress();
     const scoreThreat = survivalScoreThreat(players);
     const counts = activeSurvivalEncounterCounts(players);
-    for (const band of survivalCampBands(combatProgress, players.length || 1, scoreThreat)) {
-      if (band.target > 0 && (counts[band.id] || 0) < band.target) {
-        const budget = clamp(randomRange(band.minBudget, band.maxBudget), 50, Math.max(50, band.maxBudget));
-        return { ...band, budget: Math.max(50, Math.round(budget)), combatProgress, scoreThreat };
-      }
+    const bands = survivalCampBands(combatProgress, players.length || 1, scoreThreat);
+    const underfilled = bands.filter((band) => band.target > 0 && (counts[band.id] || 0) < band.target);
+    if (!underfilled.length) {
+      return null;
     }
-    return null;
+    const band = counts.total === 0
+      ? underfilled.find((candidate) => candidate.id === "starter") || underfilled[0]
+      : underfilled.find((candidate) => (counts[candidate.id] || 0) === 0) || underfilled[0];
+    const budget = clamp(randomRange(band.minBudget, band.maxBudget), 50, Math.max(50, band.maxBudget));
+    return { ...band, budget: Math.max(50, Math.round(budget)), combatProgress, scoreThreat };
   }
 
   function nearestSurvivalAllowanceCampDistance(x, y) {

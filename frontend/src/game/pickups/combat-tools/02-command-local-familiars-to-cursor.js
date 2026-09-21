@@ -102,7 +102,7 @@
       }
 
       for (const mob of allCombatMobs()) {
-        if (mob.health <= 0 || mob.hitCooldown > 0 || isPlayerTeamMob(mob) || !canDamageMobWithBody(mob, particle)) {
+        if (mob.health <= 0 || isPlayerTeamMob(mob) || shouldSleepDistantSurvivalMob(mob) || !canDamageMobWithBody(mob, particle)) {
           continue;
         }
 
@@ -116,6 +116,9 @@
 
         const nx = dx / dist;
         const ny = dy / dist;
+        const controllerPlayerId = controllingPlayerIdForBody(particle);
+        if (controllerPlayerId) aggroNearbyMobsFromPlayerDamage(mob, controllerPlayerId);
+        if (mob.hitCooldown > 0) continue;
         if (tryFighterShieldBlock(mob, particle, nx, ny, { damping: 0.36, minSpeed: 110, pushBack: particle.radius * 0.8 })) {
           continue;
         }
@@ -126,7 +129,9 @@
         particle.vx *= 0.92;
         particle.vy *= 0.92;
 
-        damageMob(mob, damage, particle.color, mobName(mob) + " knocked out by " + particle.tier.article + " " + particle.tier.name + ".");
+        damageMob(mob, damage, particle.color, mobName(mob) + " knocked out by " + particle.tier.article + " " + particle.tier.name + ".", {
+          source: { playerId: controllerPlayerId, bodyId: particle.id, cause: "projectile-impact", hostileActionType: "player-controlled-body-impact" }
+        });
       }
     }
   }
@@ -262,6 +267,8 @@
 
         const damageThreshold = body.tier.solid ? solidBodyDamageSpeed : rivalBodyImpactSpeed;
         const canTriggerBodyDamage = impactSpeed >= damageThreshold && mob.hitCooldown <= 0 && canDamageMobWithBody(mob, body);
+        const controllerPlayerId = controllingPlayerIdForBody(body);
+        if (controllerPlayerId) aggroNearbyMobsFromPlayerDamage(mob, controllerPlayerId);
         const bodyDashActive = finiteOr(mob.bossBodyEvadeTimer, 0) > 0 && finiteOr(mob.hitCooldown, 0) > 0;
 
         if (body.tier.solid) {
@@ -292,6 +299,7 @@
         markMobDamagedByBody(mob, body);
         triggerBossBodyEvade(mob, body, nx, ny, impactSpeed);
         if (damageMob(mob, damage, body.color, mobName(mob) + " crushed by " + body.tier.article + " " + body.tier.name + ".", {
+          source: { playerId: controllingPlayerIdForBody(body), bodyId: body.id, cause: "body-impact", hostileActionType: "player-controlled-body-impact" },
           notification: bodyDefeatNotificationOptions(mob, body, "crushed")
         })) {
           break;

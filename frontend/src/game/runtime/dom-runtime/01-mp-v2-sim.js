@@ -14,6 +14,7 @@
   const developerOverlay = document.getElementById("developerOverlay");
   const developerMetricsText = document.getElementById("developerMetricsText");
   const developerMetricsCopy = document.getElementById("developerMetricsCopy");
+  const developerMetricsMinimize = document.getElementById("developerMetricsMinimize");
   const developerMetricsCopyStatus = document.getElementById("developerMetricsCopyStatus");
   const touchLandButton = document.getElementById("touchLandButton");
   const currentBodyLabel = document.getElementById("currentBodyLabel");
@@ -29,6 +30,7 @@
   const leaderboardPanel = document.getElementById("leaderboardPanel");
   const leaderboardList = document.getElementById("leaderboardList");
   const leaderboardModeFilter = document.getElementById("leaderboardModeFilter");
+  const leaderboardPlayersFilter = document.getElementById("leaderboardPlayersFilter");
   const leaderboardDifficultyFilter = document.getElementById("leaderboardDifficultyFilter");
   const vitalsToggle = document.getElementById("vitalsToggle");
   const resourcesToggle = document.getElementById("resourcesToggle");
@@ -131,6 +133,7 @@
   const startMenuAccountLogoutButton = document.getElementById("startMenuAccountLogoutButton");
   const menuLeaderboardList = document.getElementById("menuLeaderboardList");
   const menuLeaderboardModeFilter = document.getElementById("menuLeaderboardModeFilter");
+  const menuLeaderboardPlayersFilter = document.getElementById("menuLeaderboardPlayersFilter");
   const menuLeaderboardDifficultyFilter = document.getElementById("menuLeaderboardDifficultyFilter");
   const startSavedGameList = document.getElementById("startSavedGameList");
   const startStoreStatus = document.getElementById("startStoreStatus");
@@ -201,7 +204,6 @@
   const deathStatsList = document.getElementById("deathStatsList");
   const deathLeaderboardForm = document.getElementById("deathLeaderboardForm");
   const deathRunNameInput = document.getElementById("deathRunNameInput");
-  const deathLeaderboardButton = document.getElementById("deathLeaderboardButton");
   const deathLeaderboardStatus = document.getElementById("deathLeaderboardStatus");
   const playAgainButton = document.getElementById("playAgainButton");
   const deathMainMenuButton = document.getElementById("deathMainMenuButton");
@@ -353,6 +355,7 @@
   const developerMetricsRefreshMs = 250;
   const developerMetricsState = {
     open: false,
+    minimized: false,
     lastUpdateAt: -Infinity,
     lastText: "",
     copyStatusClearAt: 0
@@ -361,6 +364,7 @@
     completed: Object.create(null),
     claimed: Object.create(null),
     createdBodyMass: 0,
+    createdBodyTiers: Object.create(null),
     maxTravelSpeed: 0,
     maxGrowthRate: 0,
     builtStructures: Object.create(null),
@@ -375,32 +379,26 @@
   };
   const objectiveGraphLayout = Object.freeze({
     rootId: "create_rock",
-    padding: 150,
-    firstOrbitRadius: 148,
-    orbitGap: 132,
-    minimumRadius: 300,
-    rootBranchAngles: Object.freeze({
-      celestial_body: -90,
-      speed: -156,
-      growth_rate: -124,
-      mob: -8,
-      boss: 28,
-      tool: 72,
-      structure: 118
-    }),
-    categoryArcOffsets: Object.freeze({
-      celestial_body: 0,
-      speed: 0,
-      growth_rate: 0,
-      mob: 0,
-      boss: 48,
-      tool: -58,
-      structure: 70
-    }),
-    categoryOrder: Object.freeze(["speed", "growth_rate", "celestial_body", "mob", "boss", "tool", "structure"]),
-    siblingArcStep: 82,
-    maxSiblingArcSpread: 248,
-    minimumNodeArcGap: 112
+    rootX: 260,
+    graphTop: 76,
+    graphRight: 120,
+    laneLabelWidth: 150,
+    columnGap: 228,
+    nodeWidth: 184,
+    nodeHeight: 64,
+    nodeGap: 14,
+    lanePadding: 30,
+    minimumLaneHeight: 116,
+    categoryOrder: Object.freeze(["celestial_body", "speed", "growth_rate", "mob", "boss", "tool", "structure"]),
+    categoryLabels: Object.freeze({
+      celestial_body: "Evolution",
+      speed: "Velocity",
+      growth_rate: "Growth",
+      mob: "Hostiles",
+      boss: "Commanders",
+      tool: "Arsenal",
+      structure: "Engineering"
+    })
   });
   const techLedgerDrag = {
     active: false,

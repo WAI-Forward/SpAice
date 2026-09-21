@@ -345,13 +345,18 @@
   }
 
   function serializeSurvivalSpawnState() {
+    const engagements = JSON.parse(JSON.stringify(survivalSpawnState.engagements && typeof survivalSpawnState.engagements === "object" ? survivalSpawnState.engagements : {}));
+    for (const controller of Object.values(engagements)) {
+      if (controller && typeof controller === "object") delete controller.revengeUntil;
+    }
     return {
       nextCampCheckTick: Math.max(0, finiteOr(survivalSpawnState.nextCampCheckTick, survivalSpawnState.nextCampCheckAt || 0)),
       exploredInitialized: Boolean(survivalSpawnState.exploredInitialized),
       exploredMinX: finiteOr(survivalSpawnState.exploredMinX, 0),
       exploredMaxX: finiteOr(survivalSpawnState.exploredMaxX, 0),
       exploredMinY: finiteOr(survivalSpawnState.exploredMinY, 0),
-      exploredMaxY: finiteOr(survivalSpawnState.exploredMaxY, 0)
+      exploredMaxY: finiteOr(survivalSpawnState.exploredMaxY, 0),
+      engagements
     };
   }
 
@@ -363,6 +368,12 @@
     survivalSpawnState.exploredMaxX = finiteOr(source.exploredMaxX, 0);
     survivalSpawnState.exploredMinY = finiteOr(source.exploredMinY, 0);
     survivalSpawnState.exploredMaxY = finiteOr(source.exploredMaxY, 0);
+    survivalSpawnState.engagements = source.engagements && typeof source.engagements === "object"
+      ? JSON.parse(JSON.stringify(source.engagements))
+      : {};
+    for (const controller of Object.values(survivalSpawnState.engagements)) {
+      if (controller && typeof controller === "object") delete controller.revengeUntil;
+    }
   }
 
   function applyPlayerSnapshot(snapshot) {

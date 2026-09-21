@@ -253,6 +253,11 @@ select {
   box-shadow: 0 0 16px rgba(255, 64, 80, 0.48);
 }
 
+.hud__energy-fill.is-loading {
+  background: linear-gradient(90deg, #58e2ff, #8fffd0, #f8fbff);
+  box-shadow: 0 0 18px rgba(88, 226, 255, 0.52);
+}
+
 .hud__score {
   min-width: 126px;
   display: grid;
@@ -633,7 +638,7 @@ select {
 
 .leaderboard-filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -663,6 +668,27 @@ select {
   font: inherit;
   font-size: 12px;
   font-weight: 850;
+  color-scheme: dark;
+  accent-color: #58e2ff;
+}
+
+.leaderboard-filters select:focus-visible {
+  outline: 2px solid rgba(88, 226, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.leaderboard-filters select option {
+  background: #071025;
+  color: #f8fbff;
+}
+
+.leaderboard-filters select option:disabled {
+  color: rgba(248, 251, 255, 0.36);
+}
+
+.leaderboard-filters select option:checked {
+  background: #1d5c99;
+  color: #ffffff;
 }
 
 .leaderboard-panel__list {
@@ -683,6 +709,13 @@ select {
 .leaderboard-row.is-local {
   border-color: rgba(88, 226, 255, 0.38);
   background: rgba(88, 226, 255, 0.12);
+}
+
+.leaderboard-row--status {
+  display: block;
+  color: rgba(232, 241, 255, 0.72);
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .leaderboard-row__rank,
@@ -745,6 +778,30 @@ select {
   pointer-events: auto;
 }
 
+.developer-overlay.is-minimized {
+  width: 36px;
+  max-height: 36px;
+  border-radius: 9px;
+}
+
+.developer-overlay.is-minimized .developer-overlay__header {
+  justify-content: center;
+  padding: 6px;
+  border-bottom: 0;
+}
+
+.developer-overlay.is-minimized .developer-overlay__header strong,
+.developer-overlay.is-minimized .developer-overlay__copy,
+.developer-overlay.is-minimized .developer-overlay__shortcut,
+.developer-overlay.is-minimized .developer-overlay__copy-status,
+.developer-overlay.is-minimized .developer-overlay__metrics {
+  display: none;
+}
+
+.developer-overlay.is-minimized .developer-overlay__actions {
+  gap: 0;
+}
+
 .developer-overlay__header {
   display: flex;
   align-items: center;
@@ -775,6 +832,7 @@ select {
 }
 
 .developer-overlay__copy,
+.developer-overlay__minimize,
 .developer-overlay__shortcut {
   display: inline-grid;
   place-items: center;
@@ -788,6 +846,20 @@ select {
   font-size: 11px;
   font-weight: 900;
   line-height: 1;
+}
+
+.developer-overlay__minimize {
+  cursor: pointer;
+  min-width: 24px;
+  width: 24px;
+  padding: 0;
+  color: #dffcff;
+}
+
+.developer-overlay__minimize:hover,
+.developer-overlay__minimize:focus-visible {
+  border-color: rgba(141, 244, 255, 0.72);
+  background: rgba(141, 244, 255, 0.2);
 }
 
 .developer-overlay__copy {
@@ -1021,6 +1093,10 @@ select {
 .map-filter select option {
   background: #071025;
   color: #f8fbff;
+}
+
+.map-filter select option:disabled {
+  color: rgba(248, 251, 255, 0.36);
 }
 
 .map-filter select option:checked {
@@ -1600,32 +1676,288 @@ select {
   opacity: 0.58;
 }
 
-.objective-tree__orbit {
-  fill: none;
-  stroke: rgba(173, 190, 224, 0.14);
-  stroke-width: 2;
-  stroke-dasharray: 9 15;
-  vector-effect: non-scaling-stroke;
+.objective-tree__panel {
+  width: min(1180px, calc((100vw - 32px) / var(--ui-scale)));
+  border-color: rgba(128, 171, 255, 0.24);
+  background:
+    radial-gradient(circle at 18% 8%, rgba(88, 226, 255, 0.08), transparent 28%),
+    radial-gradient(circle at 82% 100%, rgba(128, 171, 255, 0.08), transparent 30%),
+    rgba(3, 8, 24, 0.95);
 }
 
-.objective-tree__orbit--tier-1 {
+.objective-tree__heading {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.objective-tree__heading small {
+  color: rgba(151, 178, 212, 0.7);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.objective-tree__body {
+  grid-template-columns: minmax(0, 1fr) minmax(286px, 318px);
+  gap: 14px;
+}
+
+.objective-tree__map {
+  padding: 0;
+  border-color: rgba(128, 171, 255, 0.16);
+  background:
+    radial-gradient(circle at 16% 20%, rgba(255, 255, 255, 0.3) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 67% 36%, rgba(88, 226, 255, 0.22) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 38% 78%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.5px),
+    linear-gradient(135deg, rgba(88, 226, 255, 0.035), transparent 34%),
+    rgba(3, 7, 20, 0.96);
+  background-size: 97px 89px, 149px 137px, 181px 163px, auto, auto;
+}
+
+.objective-tree__map::after {
+  content: "DRAG TO PAN  •  SCROLL TO ZOOM";
+  position: sticky;
+  z-index: 5;
+  left: 14px;
+  bottom: 12px;
+  display: block;
+  width: max-content;
+  margin-top: -30px;
+  padding: 6px 8px;
+  border: 1px solid rgba(128, 171, 255, 0.13);
+  border-radius: 6px;
+  background: rgba(3, 8, 24, 0.78);
+  color: rgba(151, 178, 212, 0.58);
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.11em;
+  pointer-events: none;
+}
+
+.objective-tree__viewport {
+  width: 1100px;
+  height: 1040px;
+}
+
+.objective-tree__chart-backdrop {
+  pointer-events: none;
+}
+
+.objective-tree__lane {
+  fill: rgba(128, 171, 255, 0.025);
+  stroke: rgba(128, 171, 255, 0.08);
+  stroke-width: 1;
+}
+
+.objective-tree__lane:nth-of-type(even) {
+  fill: rgba(88, 226, 255, 0.018);
+}
+
+.objective-tree__lane-label,
+.objective-tree__stage-label {
+  fill: rgba(179, 202, 231, 0.62);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+}
+
+.objective-tree__stage-label {
+  fill: rgba(151, 178, 212, 0.5);
+  font-size: 9px;
+  text-anchor: middle;
+}
+
+.objective-tree__stage-line {
+  stroke: rgba(128, 171, 255, 0.075);
+  stroke-width: 1;
+  stroke-dasharray: 3 12;
+}
+
+.objective-tree__lane-signal {
+  fill: rgba(128, 171, 255, 0.72);
+  filter: drop-shadow(0 0 5px rgba(128, 171, 255, 0.46));
+}
+
+.objective-tree__link {
+  stroke: rgba(116, 130, 160, 0.32);
+  stroke-width: 2;
+}
+
+.objective-tree__link.is-unlocked {
+  stroke: rgba(198, 214, 237, 0.5);
+}
+
+.objective-tree__link.is-unclaimed {
+  stroke: rgba(255, 220, 122, 0.8);
+}
+
+.objective-tree__link.is-claimed {
+  stroke: rgba(94, 245, 154, 0.58);
+}
+
+.objective-tree__link-glow {
+  stroke: rgba(116, 130, 160, 0.1);
+  stroke-width: 9;
+}
+
+.objective-tree__link-glow.is-unlocked {
+  stroke: rgba(198, 214, 237, 0.12);
+}
+
+.objective-tree__link-glow.is-unclaimed {
   stroke: rgba(255, 220, 122, 0.24);
 }
 
-.objective-tree__orbit--tier-2,
-.objective-tree__orbit--tier-5 {
-  stroke: rgba(88, 226, 255, 0.17);
+.objective-tree__link-glow.is-claimed {
+  stroke: rgba(94, 245, 154, 0.16);
 }
 
-.objective-tree__orbit--tier-3,
-.objective-tree__orbit--tier-6 {
-  stroke: rgba(255, 115, 173, 0.15);
+.objective-node {
+  --objective-node-size: auto;
+  --objective-accent: 213, 221, 232;
+  width: 184px;
+  height: 64px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  place-items: center stretch;
+  padding: 9px 12px 9px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--objective-accent), 0.42);
+  border-radius: 10px;
+  background:
+    linear-gradient(110deg, rgba(var(--objective-accent), 0.13), transparent 58%),
+    rgba(11, 17, 34, 0.96);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  text-align: left;
 }
 
-.objective-tree__orbit--tier-4,
-.objective-tree__orbit--tier-7,
-.objective-tree__orbit--tier-8 {
-  stroke: rgba(94, 245, 154, 0.14);
+.objective-node::before {
+  right: auto;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 3px;
+  height: auto;
+  border: 0;
+  border-radius: 0 3px 3px 0;
+  background: rgba(var(--objective-accent), 0.72);
+  box-shadow: 0 0 12px rgba(var(--objective-accent), 0.24);
+}
+
+.objective-node::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(213, 221, 232, 0.42);
+}
+
+.objective-node:hover:not(:disabled),
+.objective-node:focus-visible {
+  border-color: rgba(var(--objective-accent), 0.82);
+  background:
+    linear-gradient(110deg, rgba(var(--objective-accent), 0.2), transparent 62%),
+    rgba(16, 24, 44, 0.98);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34), 0 0 0 3px rgba(var(--objective-accent), 0.1);
+  transform: translate(-50%, calc(-50% - 2px));
+}
+
+.objective-node__icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(var(--objective-accent), 0.38);
+  border-radius: 50%;
+  background: rgba(var(--objective-accent), 0.09);
+  color: rgba(242, 248, 255, 0.94);
+  font-size: 13px;
+  text-align: center;
+}
+
+.objective-node__copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.objective-node__label {
+  min-width: 0;
+  overflow: hidden;
+  color: #f4f8ff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.objective-node__meta {
+  color: rgba(var(--objective-accent), 0.72);
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.objective-node.is-selected {
+  border-color: rgba(var(--objective-accent), 0.92);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36), 0 0 0 3px rgba(var(--objective-accent), 0.16), 0 0 24px rgba(var(--objective-accent), 0.1);
+}
+
+.objective-node.is-current {
+  border-color: rgba(var(--objective-accent), 0.72);
+}
+
+.objective-node.is-claimed {
+  border-color: rgba(94, 245, 154, 0.44);
+  background:
+    linear-gradient(110deg, rgba(94, 245, 154, 0.13), transparent 58%),
+    rgba(7, 26, 24, 0.96);
+}
+
+.objective-node.is-claimed::before,
+.objective-node.is-claimed::after {
+  background: rgba(94, 245, 154, 0.82);
+}
+
+.objective-node.is-unclaimed {
+  border-color: rgba(255, 220, 122, 0.84);
+  background:
+    linear-gradient(110deg, rgba(255, 220, 122, 0.2), transparent 62%),
+    rgba(35, 27, 8, 0.97);
+}
+
+.objective-node.is-unclaimed::before,
+.objective-node.is-unclaimed::after {
+  background: #ffdc7a;
+}
+
+.objective-node.is-locked {
+  opacity: 0.58;
+  border-color: rgba(var(--objective-accent), 0.2);
+  background: rgba(7, 11, 24, 0.92);
+  color: rgba(244, 247, 251, 0.55);
+  cursor: pointer;
+  filter: saturate(0.45);
+}
+
+.objective-node.is-locked::before {
+  background: rgba(var(--objective-accent), 0.24);
+}
+
+.objective-node.is-locked::after {
+  background: rgba(116, 130, 160, 0.35);
 }
 
 .objective-node--celestial_body {
@@ -1656,18 +1988,55 @@ select {
   --objective-accent: 94, 245, 154;
 }
 
-.objective-node.is-root {
-  --objective-node-size: 76px;
-  border-color: rgba(255, 220, 122, 0.92);
-  background:
-    radial-gradient(circle at 36% 28%, rgba(255, 255, 255, 0.38), transparent 30%),
-    radial-gradient(circle at 52% 54%, rgba(255, 220, 122, 0.42), transparent 62%),
-    #281b06;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34), 0 0 34px rgba(255, 220, 122, 0.32);
+.objective-tree__lane-signal--celestial_body {
+  fill: rgb(255, 220, 122);
 }
 
-.objective-node.is-root .objective-node__icon {
-  font-size: 23px;
+.objective-tree__lane-signal--speed {
+  fill: rgb(88, 226, 255);
+}
+
+.objective-tree__lane-signal--growth_rate {
+  fill: rgb(178, 255, 112);
+}
+
+.objective-tree__lane-signal--mob {
+  fill: rgb(255, 145, 104);
+}
+
+.objective-tree__lane-signal--boss {
+  fill: rgb(255, 115, 173);
+}
+
+.objective-tree__lane-signal--tool {
+  fill: rgb(128, 171, 255);
+}
+
+.objective-tree__lane-signal--structure {
+  fill: rgb(94, 245, 154);
+}
+
+.objective-tree__detail {
+  gap: 14px;
+  padding: 18px;
+  border-color: rgba(128, 171, 255, 0.17);
+  background:
+    linear-gradient(145deg, rgba(128, 171, 255, 0.07), transparent 42%),
+    rgba(9, 15, 31, 0.96);
+}
+
+.objective-detail__eyebrow {
+  color: rgba(128, 197, 255, 0.78);
+  letter-spacing: 0.12em;
+}
+
+.objective-detail__title {
+  font-size: 22px;
+}
+
+.objective-detail__progress {
+  border: 1px solid rgba(88, 226, 255, 0.12);
+  background: rgba(88, 226, 255, 0.07);
 }
 
 .tech-row,

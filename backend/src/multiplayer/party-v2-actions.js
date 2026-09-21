@@ -31,8 +31,17 @@ function handlePartyV2Input(client, message) {
   }
 
   const queue = room.inputQueues.get(client.playerId) || [];
-  queue.push(input);
-  queue.sort((a, b) => a.seq - b.seq);
+  // Inputs normally arrive in sequence order. Preserve the stable ordering of
+  // the previous full sort while avoiding it on that common path.
+  if (!queue.length || input.seq >= queue[queue.length - 1].seq) {
+    queue.push(input);
+  } else {
+    let insertAt = queue.length;
+    while (insertAt > 0 && queue[insertAt - 1].seq > input.seq) {
+      insertAt -= 1;
+    }
+    queue.splice(insertAt, 0, input);
+  }
   while (queue.length > 120) {
     queue.shift();
   }
@@ -182,4 +191,3 @@ function popPartyV2Input(room, playerId) {
   }
   return room.lastInputs.get(playerId) || { playerId, seq: room.lastAckByPlayerId.get(playerId) || 0 };
 }
-

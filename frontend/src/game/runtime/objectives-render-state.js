@@ -41,6 +41,27 @@
         return objectiveMassProgress("star");
       }
     },
+    create_white_dwarf: {
+      icon: "W",
+      hint: "Evolve a star into a white dwarf by keeping its growth rate below 80 per second.",
+      progress: function () {
+        return objectiveCreatedTierProgress("white dwarf");
+      }
+    },
+    create_neutron_star: {
+      icon: "N",
+      hint: "Evolve a star into a neutron star with a growth rate from 80 to 220 per second.",
+      progress: function () {
+        return objectiveCreatedTierProgress("neutron star");
+      }
+    },
+    create_black_hole: {
+      icon: "B",
+      hint: "Evolve a star into a black hole by raising its growth rate above 220 per second.",
+      progress: function () {
+        return objectiveCreatedTierProgress("black hole");
+      }
+    },
     reach_speed_520: {
       icon: ">",
       hint: "Break 520 speed on the map speedometer.",
@@ -180,6 +201,7 @@
   };
   const gadgetForceReach = 560;
   const gadgetHoldReach = gadgetForceReach * 0.5;
+  const gadgetPushReach = 470;
   const gadgetStabilizedBreakSpeed = 18;
   const soundPreferenceKey = "clusternauts.sound.enabled";
   const legacySoundPreferenceKey = "spaice.sound.enabled";
@@ -301,7 +323,8 @@
     exploredMinX: 0,
     exploredMaxX: 0,
     exploredMinY: 0,
-    exploredMaxY: 0
+    exploredMaxY: 0,
+    engagements: {}
   };
   const mobDefeatsByKind = {
     alienoid: 0,

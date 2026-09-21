@@ -118,7 +118,7 @@
       }
     }
 
-    if (rightActive && forward > -20 - targetRadius * 0.15 && forward < 470 + targetRadius && side < coneWidth * 0.9 + targetRadius * 0.32) {
+    if (rightActive && forward > -20 - targetRadius * 0.15 && forward < gadgetPushReachForState(state) + targetRadius && side < coneWidth * 0.9 + targetRadius * 0.32) {
       const blastFalloff = clamp(1 - Math.max(0, forward) / 520, 0.22, 1);
       const sidePush = normalize(sideX, sideY);
       const force = 1450 * finiteOr(state.blowFactor, 1) * blastFalloff * pushResponse;
@@ -159,7 +159,7 @@
     const targetRadius = Math.max(0, finiteOr(target.radius, 0));
     const coneWidth = 64 + Math.max(0, forward) * 0.42;
     const pullRange = forward > -70 && forward < gadgetForceReachForState(state) + targetRadius && side < coneWidth + targetRadius * 0.28;
-    const pushRange = forward > -20 && forward < 470 + targetRadius && side < coneWidth * 0.95 + targetRadius * 0.28;
+    const pushRange = forward > -20 && forward < gadgetPushReachForState(state) + targetRadius && side < coneWidth * 0.95 + targetRadius * 0.28;
     const activeRange = mode === "push" ? pushRange : pullRange;
     if (!activeRange) {
       return null;

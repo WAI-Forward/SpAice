@@ -35,6 +35,8 @@ function leaveSharedWorld(client, explicitLeave) {
     room.lastAckByPlayerId.delete(playerId);
   }
   session.players = session.players.filter((candidate) => candidate !== playerId);
+  session.idleSince = session.players.length ? 0 : Date.now();
+  scheduleSharedWorldIdleReset(session);
   markSharedWorldDirty();
 
   relayToParty(session, {
@@ -149,6 +151,59 @@ function sharedWorldPlayerRows(session, room) {
   return Array.from(rows.values()).filter((row) => row.playerId && row.state);
 }
 
+function sharedWorldTimestampMs(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return Math.floor(numeric);
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+function sharedWorldStoredIdleSince(payload, updatedAt) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const explicit = sharedWorldTimestampMs(source.idleSince || source.emptySince || source.lastEmptyAt);
+  if (explicit) {
+    return explicit;
+  }
+  return sharedWorldTimestampMs(source.savedAt || updatedAt);
+}
+
+function isSharedWorldIdleExpired(idleSince, now) {
+  const startedAt = sharedWorldTimestampMs(idleSince);
+  const current = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+  return sharedWorldIdleResetMs > 0 && startedAt > 0 && current - startedAt >= sharedWorldIdleResetMs;
+}
+
+function clearSharedWorldIdleResetTimer() {
+  if (sharedWorldIdleResetTimer) {
+    clearTimeout(sharedWorldIdleResetTimer);
+    sharedWorldIdleResetTimer = null;
+  }
+}
+
+function scheduleSharedWorldIdleReset(session) {
+  clearSharedWorldIdleResetTimer();
+  if (!isSharedWorldSession(session) || session.players.length || sharedWorldIdleResetMs <= 0) {
+    return;
+  }
+  const idleSince = sharedWorldTimestampMs(session.idleSince) || Date.now();
+  session.idleSince = idleSince;
+  const delay = Math.max(0, Math.min(sharedWorldIdleResetMs - Math.max(0, Date.now() - idleSince), 2147483647));
+  sharedWorldIdleResetTimer = setTimeout(() => {
+    sharedWorldIdleResetTimer = null;
+    void resetSharedWorldRuntimeForIdle(partySessions.get(sharedWorldSessionId), partyV2Rooms.get(sharedWorldSessionId));
+  }, delay);
+  if (typeof sharedWorldIdleResetTimer.unref === "function") {
+    sharedWorldIdleResetTimer.unref();
+  }
+}
+
 async function loadSharedWorldStorage() {
   const pool = await getDbPool();
   if (!pool) {
@@ -166,13 +221,15 @@ async function loadSharedWorldStorage() {
     return {
       state: stored && stored.state ? stored.state : null,
       teams: Array.isArray(stored && stored.teams) ? stored.teams.map(normalizeSharedWorldTeam).filter(Boolean) : [],
-      players
+      players,
+      idleSince: sharedWorldStoredIdleSince(stored, null)
     };
   }
 
   await ensureDatabaseSchema(pool);
-  const worldResult = await pool.query("SELECT state FROM clusternauts_shared_world_state WHERE id = $1", [sharedWorldStorageId]);
-  const stored = worldResult.rows[0] && worldResult.rows[0].state || null;
+  const worldResult = await pool.query("SELECT state, updated_at FROM clusternauts_shared_world_state WHERE id = $1", [sharedWorldStorageId]);
+  const worldRow = worldResult.rows[0] || null;
+  const stored = worldRow && worldRow.state || null;
   const playerResult = await pool.query(
     "SELECT player_id, state, team_id FROM clusternauts_shared_player_state WHERE world_id = $1",
     [sharedWorldStorageId]
@@ -190,12 +247,14 @@ async function loadSharedWorldStorage() {
   return {
     state: stored && stored.state ? stored.state : null,
     teams: Array.isArray(stored && stored.teams) ? stored.teams.map(normalizeSharedWorldTeam).filter(Boolean) : [],
-    players
+    players,
+    idleSince: sharedWorldStoredIdleSince(stored, worldRow && worldRow.updated_at)
   };
 }
 
 let sharedWorldLoadPromise = null;
 let sharedWorldSavePromise = null;
+let sharedWorldIdleResetTimer = null;
 let sharedWorldDirty = false;
 let sharedWorldLastSaveAt = 0;
 
@@ -277,6 +336,7 @@ function resetSharedWorldRuntime(kind) {
   room.lastSnapshotTick = Math.max(0, Math.floor(Number(nextState.tick) || 0));
   room.pendingEvents = [];
   room.lastTouchedAt = Date.now();
+  session.idleSince = session.players.length ? 0 : Date.now();
   if (room.perf) {
     room.perf.stepMsEma = 0;
     room.perf.snapshotBytesEma = 0;
@@ -287,6 +347,30 @@ function resetSharedWorldRuntime(kind) {
   session.worldSnapshot = buildPartyV2StartSnapshot(room);
   markSharedWorldDirty();
   return { session, room };
+}
+
+async function resetSharedWorldRuntimeForIdle(session, room) {
+  if (!isSharedWorldSession(session) || !room || session.players.length) {
+    return null;
+  }
+  const idleSince = sharedWorldTimestampMs(session.idleSince);
+  if (!isSharedWorldIdleExpired(idleSince)) {
+    return null;
+  }
+
+  await waitForSharedWorldSaveIdle();
+  if (session.players.length) {
+    return null;
+  }
+  clearSharedWorldIdleResetTimer();
+  const reset = resetSharedWorldRuntime("all");
+  if (!reset) {
+    return null;
+  }
+  reset.session.idleSince = Date.now();
+  markSharedWorldDirty();
+  await saveSharedWorldRuntime("idle-timeout");
+  return reset;
 }
 
 function finishSharedWorldRuntimeReset(reset, kind) {
@@ -305,7 +389,7 @@ async function ensureSharedWorldSession() {
   const existingSession = partySessions.get(sharedWorldSessionId);
   const existingRoom = partyV2Rooms.get(sharedWorldSessionId);
   if (existingSession && existingRoom) {
-    return { session: existingSession, room: existingRoom };
+    return await resetSharedWorldRuntimeForIdle(existingSession, existingRoom) || { session: existingSession, room: existingRoom };
   }
   if (sharedWorldLoadPromise) {
     return sharedWorldLoadPromise;
@@ -313,7 +397,8 @@ async function ensureSharedWorldSession() {
 
   sharedWorldLoadPromise = (async () => {
     const stored = await loadSharedWorldStorage();
-    const storedState = stored.state && stored.state.world ? mpV2Sim.serializeState(stored.state) : null;
+    const resetForIdle = isSharedWorldIdleExpired(stored.idleSince);
+    const storedState = !resetForIdle && stored.state && stored.state.world ? mpV2Sim.serializeState(stored.state) : null;
     const state = storedState || createFreshSharedWorldState([]);
     state.gameMode = "survival";
     if (state.world) {
@@ -323,7 +408,7 @@ async function ensureSharedWorldSession() {
     state.events = [];
 
     const teams = new Map();
-    for (const team of stored.teams || []) {
+    for (const team of (resetForIdle ? [] : stored.teams || [])) {
       const normalized = normalizeSharedWorldTeam(team);
       if (normalized) {
         teams.set(normalized.teamId, normalized);
@@ -331,7 +416,7 @@ async function ensureSharedWorldSession() {
     }
 
     const playerSnapshots = new Map();
-    for (const [playerId, entry] of stored.players.entries()) {
+    for (const [playerId, entry] of (resetForIdle ? new Map() : stored.players).entries()) {
       if (entry && entry.state) {
         const snapshot = { ...entry.state, teamId: sanitizeTeamId(entry.teamId || entry.state.teamId) };
         playerSnapshots.set(playerId, snapshot);
@@ -356,7 +441,8 @@ async function ensureSharedWorldSession() {
       createdAt: Date.now(),
       anomalyId: "",
       teams,
-      playerTeams: new Map()
+      playerTeams: new Map(),
+      idleSince: resetForIdle ? Date.now() : sharedWorldTimestampMs(stored.idleSince)
     };
     rebuildSharedWorldTeamIndex(session);
 
@@ -380,6 +466,12 @@ async function ensureSharedWorldSession() {
     partySessions.set(session.id, session);
     partyV2Rooms.set(session.id, room);
     session.worldSnapshot = buildPartyV2StartSnapshot(room);
+    if (resetForIdle) {
+      markSharedWorldDirty();
+      await saveSharedWorldRuntime("idle-timeout");
+    } else {
+      scheduleSharedWorldIdleReset(session);
+    }
     return { session, room };
   })();
 
@@ -406,6 +498,8 @@ async function saveSharedWorldRuntime(reason) {
 
   sharedWorldSavePromise = (async () => {
     pruneSharedWorldTeams(session);
+    const idleSince = session.players.length ? 0 : sharedWorldTimestampMs(session.idleSince) || Date.now();
+    session.idleSince = idleSince;
     const serialized = mpV2Sim.serializeState(room.state);
     serialized.players = {};
     const payload = {
@@ -414,12 +508,21 @@ async function saveSharedWorldRuntime(reason) {
       gameMode: "survival",
       state: serialized,
       teams: sharedWorldTeamsArray(session),
+      idleSince,
+      idleResetMs: sharedWorldIdleResetMs,
+      onlinePlayers: session.players.length,
       savedAt: Date.now(),
       reason: sanitizeText(reason, 64)
     };
     const playerRows = sharedWorldPlayerRows(session, room);
+    const currentPlayerIds = new Set(playerRows.map((row) => row.playerId));
     const pool = await getDbPool();
     if (!pool) {
+      for (const [playerId, entry] of Array.from(memoryPersistence.sharedPlayers.entries())) {
+        if (entry && entry.worldId === sharedWorldStorageId && !currentPlayerIds.has(playerId)) {
+          memoryPersistence.sharedPlayers.delete(playerId);
+        }
+      }
       memoryPersistence.sharedWorlds.set(sharedWorldStorageId, payload);
       for (const row of playerRows) {
         memoryPersistence.sharedPlayers.set(row.playerId, {
@@ -441,6 +544,14 @@ async function saveSharedWorldRuntime(reason) {
        ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
       [sharedWorldStorageId, JSON.stringify(payload)]
     );
+    if (playerRows.length) {
+      await pool.query(
+        "DELETE FROM clusternauts_shared_player_state WHERE world_id = $1 AND NOT (player_id = ANY($2::text[]))",
+        [sharedWorldStorageId, Array.from(currentPlayerIds)]
+      );
+    } else {
+      await pool.query("DELETE FROM clusternauts_shared_player_state WHERE world_id = $1", [sharedWorldStorageId]);
+    }
     for (const row of playerRows) {
       await pool.query(
         `INSERT INTO clusternauts_shared_player_state (world_id, player_id, state, team_id, updated_at)
@@ -461,4 +572,3 @@ async function saveSharedWorldRuntime(reason) {
     sharedWorldSavePromise = null;
   }
 }
-

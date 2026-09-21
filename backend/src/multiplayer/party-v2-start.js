@@ -286,8 +286,17 @@ function sharedWorldTopPlayer(session, state) {
   return top || { playerId: "", publicName: "No players yet", online: false, score: 0 };
 }
 
-function buildSharedWorldStats(session, room) {
-  const state = room && room.state ? mpV2Sim.serializeState(room.state) : session && session.worldSnapshot && session.worldSnapshot.state ? session.worldSnapshot.state : null;
+function buildSharedWorldStats(session, room, availableState) {
+  // Stats only read scalar/entity fields, so they can reuse either the live
+  // authoritative state or an already-serialized snapshot without cloning the
+  // whole shared world.
+  const state = availableState && typeof availableState === "object"
+    ? availableState
+    : room && room.state
+      ? mpV2Sim.serializeState(room.state)
+      : session && session.worldSnapshot && session.worldSnapshot.state
+        ? session.worldSnapshot.state
+        : null;
   const world = state && state.world && typeof state.world === "object" ? state.world : {};
   const players = state && state.players && typeof state.players === "object" ? state.players : {};
   const mobBreakdown = sharedWorldMobBreakdown(world);
@@ -449,6 +458,8 @@ async function handleSharedWorldJoin(client) {
   if (!session.players.includes(client.playerId)) {
     session.players.push(client.playerId);
   }
+  session.idleSince = 0;
+  clearSharedWorldIdleResetTimer();
   addPartyV2Player(room, session, client.playerId);
   setSharedWorldPlayerTeam(session, room, client.playerId, sharedWorldTeamIdForPlayer(session, client.playerId));
 
@@ -468,4 +479,3 @@ async function handleSharedWorldJoin(client) {
     session: publicPartySession(session)
   }, client.playerId);
 }
-

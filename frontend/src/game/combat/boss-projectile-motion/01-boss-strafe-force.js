@@ -1,4 +1,7 @@
   function bossStrafeForce(mob, baseForce) {
+    if (mob && ["engage", "revenge", "migrant-skirmish"].includes(mob.survivalAiState) && !mob.survivalManeuverActive) {
+      return 0;
+    }
     if (mob && mob.isBoss) {
       return baseForce * 1.35 * bossStatScaleForStars(bossStarRank(mob), mobBossStarForceMultiplier);
     }
@@ -97,7 +100,11 @@
 
     if (settings.affectStructures) {
       for (const structure of structures) {
-        if (!structure || structure.health <= 0) {
+        if (
+          !structure ||
+          structure.health <= 0 ||
+          settings.sourceMob && !isPlayerTeamMob(settings.sourceMob) && isMobOwnedStructure(structure)
+        ) {
           continue;
         }
         const distance = Math.hypot(structure.x - x, structure.y - y);
@@ -167,7 +174,7 @@
     if (!mob) {
       return baseMaxSpeed;
     }
-    let chaseMaxSpeed = baseMaxSpeed;
+    let chaseMaxSpeed = baseMaxSpeed * (isPlayerTeamMob(mob) ? 1 : difficultyMobSpeedMultiplier());
     if (mob.isBoss) {
       const speed = Math.hypot(finiteOr(mob.vx, 0), finiteOr(mob.vy, 0));
       const desiredLength = Math.hypot(finiteOr(desiredX, 0), finiteOr(desiredY, 0));
@@ -278,7 +285,7 @@
 
   function findTurretTarget(turret) {
     if (isSurvivalCampStructure(turret)) {
-      return findCampStructurePlayerTarget(turret, turretRange);
+      return findCampTurretPlayerTarget(turret, turretRange);
     }
 
     let best = null;
@@ -313,7 +320,13 @@
   }
 
   function survivalCampStructureIsAggro(structure) {
-    return Boolean(structure && isSurvivalCampStructure(structure) && finiteOr(structure.survivalCampAggroTimer, 0) > 0);
+    if (!structure || !isSurvivalCampStructure(structure)) {
+      return false;
+    }
+    const controller = survivalCampControllerForStructure(structure);
+    return controller
+      ? ["engage", "revenge"].includes(controller.phase)
+      : finiteOr(structure.survivalCampAggroTimer, 0) > 0;
   }
 
   function campStructureCanSeePlayer(structure, target) {
@@ -342,13 +355,17 @@
       return null;
     }
 
-    const preferredTargetId = String(structure.survivalTargetPlayerId || "");
+    const controller = survivalCampControllerForStructure(structure);
+    const preferredTargetId = String(controller && controller.primaryAggressorId || structure.survivalTargetPlayerId || "");
     if (!preferredTargetId) {
       return null;
     }
     let best = null;
     let bestDistance = Infinity;
-    for (const target of collectCombatPlayerTargets()) {
+    const candidates = controller && ["engage", "revenge"].includes(controller.phase)
+      ? survivalTargetsForController(controller)
+      : collectCombatPlayerTargets();
+    for (const target of candidates) {
       const targetPlayer = target && target.player;
       if (!targetPlayer || targetPlayer.health <= 0 || target.familiarEnemy) {
         continue;
@@ -368,6 +385,40 @@
         remote: target.remote || null
       };
       bestDistance = scoreDistance;
+    }
+    return best;
+  }
+
+  function findCampTurretPlayerTarget(structure, maxRange) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const target of collectCombatPlayerTargets()) {
+      const targetPlayer = target && target.player;
+      if (!targetPlayer || targetPlayer.health <= 0 || target.familiarEnemy) {
+        continue;
+      }
+      const distance = Math.hypot(targetPlayer.x - structure.x, targetPlayer.y - structure.y);
+      if (distance > maxRange || distance >= bestDistance || !campStructureCanSeePlayer(structure, target)) {
+        continue;
+      }
+      best = {
+        ...targetPlayer,
+        player: targetPlayer,
+        combatTarget: target,
+        local: Boolean(target.local),
+        remote: target.remote || null
+      };
+      bestDistance = distance;
+    }
+    if (best) {
+      const targetId = best.local ? String(player.id || "") : String(best.remote && best.remote.playerId || best.id || "");
+      if (targetId && structure.survivalProximityTargetPlayerId !== targetId) {
+        structure.survivalAggroAlertTimer = survivalAggroAlertDuration;
+      }
+      structure.survivalProximityTargetPlayerId = targetId;
+      structure.survivalTargetPlayerId = targetId;
+    } else {
+      structure.survivalProximityTargetPlayerId = "";
     }
     return best;
   }
@@ -463,6 +514,15 @@
     return aboveSurface > -mob.radius * 0.25;
   }
 
+  function launcherMobClusterWeight(mob) {
+    if (!mob) {
+      return 1;
+    }
+    const compressedGroupSize = Math.max(1, finiteOr(mob.eliteGroupSize, 1));
+    const bossBonus = mob.isBoss ? 1.6 : 1;
+    return compressedGroupSize * bossBonus;
+  }
+
   function findMobCluster(originX, originY, maxRange, options) {
     const settings = options || {};
     const sourceStructure = settings.structure || null;
@@ -498,13 +558,16 @@
       let vx = 0;
       let vy = 0;
       let healthWeight = 0;
+      let effectiveCount = 0;
       for (const mob of members) {
         const weight = clamp(finiteOr(mob.health, 1) / Math.max(1, finiteOr(mob.maxHealth, mob.health || 1)), 0.35, 1.25);
+        const clusterWeight = launcherMobClusterWeight(mob);
         x += mob.x * weight;
         y += mob.y * weight;
         vx += finiteOr(mob.vx, 0) * weight;
         vy += finiteOr(mob.vy, 0) * weight;
         healthWeight += weight;
+        effectiveCount += clusterWeight;
       }
       x /= Math.max(0.001, healthWeight);
       y /= Math.max(0.001, healthWeight);
@@ -528,7 +591,8 @@
       const preferredDistance = Number.isFinite(preferredX) && Number.isFinite(preferredY)
         ? Math.hypot(x - preferredX, y - preferredY)
         : 0;
-      const score = members.length * 1000 - spread * 1.35 - distance * 0.18 - preferredDistance * 0.48;
+      const density = effectiveCount / Math.max(0.35, 1 + spread / clusterRadius);
+      const score = effectiveCount * 1180 + density * 760 - spread * 1.12 - distance * 0.14 - preferredDistance * 0.48;
       if (score > bestScore) {
         bestScore = score;
         best = {
@@ -536,7 +600,7 @@
           y,
           vx,
           vy,
-          count: members.length,
+          count: Math.max(members.length, Math.round(effectiveCount)),
           radius: clusterRadius,
           members
         };

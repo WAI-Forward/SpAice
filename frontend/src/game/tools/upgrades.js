@@ -20,12 +20,12 @@
       { id: "dismantle-speed", name: "Dismantle speed", techKey: "weapon", cost: 3, bonusScale: 1.15 }
     ],
     [defaultToolId]: [
-      { id: "suck", name: "Suck strength", techKey: "suction", cost: 3, bonusScale: 1.2 },
-      { id: "blow", name: "Blow strength", techKey: "propulsion", cost: 3, bonusScale: 1.2 }
+      { id: "suck", name: "Suction strength & range", techKey: "suction", cost: 3, bonusScale: 1.2 },
+      { id: "blow", name: "Propulsion strength & range", techKey: "propulsion", cost: 3, bonusScale: 1.2 }
     ],
     [visciousVacuumToolId]: [
-      { id: "suck", name: "Suck strength", techKey: "suction", cost: 4, bonusScale: 1.2 },
-      { id: "blow", name: "Blow strength", techKey: "propulsion", cost: 4, bonusScale: 1.2 }
+      { id: "suck", name: "Suction strength & range", techKey: "suction", cost: 4, bonusScale: 1.2 },
+      { id: "blow", name: "Propulsion strength & range", techKey: "propulsion", cost: 4, bonusScale: 1.2 }
     ],
     [empToolId]: [
       { id: "range", name: "Pulse range", techKey: "target", cost: 5, bonusScale: 0.8 },

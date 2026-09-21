@@ -183,6 +183,9 @@
       if (isMobSummoning(rocket)) {
         continue;
       }
+      if (shouldSleepDistantSurvivalMob(rocket)) {
+        continue;
+      }
       updateBossSpawnPressure(rocket, dt);
       if (isMobDisabled(rocket)) {
         rocket.lockTimer = 0;
@@ -325,4 +328,3 @@
       rocket.rotation = aimAngle + Math.PI / 2;
     }
   }
-

@@ -165,18 +165,22 @@
     });
   }
 
-  function applyUfoTractorBeam(ufo, dt) {
+  function applyUfoTractorBeam(ufo, dt, towTarget) {
     if (!ufoHasTractorBeam(ufo)) {
       return;
     }
 
     const assignedSalvageBody = survivalSalvageBody(ufo);
+    const usesSurvivalTowRules = ufoUsesSurvivalTowRules(ufo);
     let bestParticle = assignedSalvageBody;
     let bestScore = Infinity;
     const playerBody = player.landed ? bodyById(player.landed.bodyId) : null;
 
     for (const particle of assignedSalvageBody ? [] : particles) {
       if (!canUfoTractorAffectParticle(particle) || !canUfoPreferTractorTarget(ufo, particle)) {
+        continue;
+      }
+      if (usesSurvivalTowRules && isAsteroidOrLarger(particle)) {
         continue;
       }
 
@@ -235,7 +239,14 @@
       const toOriginY = originY - particle.y;
       const isAssignedSalvageBody = particle === assignedSalvageBody;
 
-      if (!isAssignedSalvageBody && shouldUfoSiphonBody(ufo, particle)) {
+      if (usesSurvivalTowRules && isAsteroidOrLarger(particle)) {
+        if (isAssignedSalvageBody) {
+          applyControlledSurvivalTow(ufo, particle, towTarget, pullStrength, centerStrength, dt);
+        }
+        continue;
+      }
+
+      if (!isAssignedSalvageBody && !isSurvivalLogisticsUfo(ufo) && shouldUfoSiphonBody(ufo, particle)) {
         drainBodyWithUfoTractor(ufo, particle, pullStrength, centerStrength, dt);
         continue;
       }
@@ -259,6 +270,7 @@
             knockMob(ufo, toOrigin.x, toOrigin.y, 150 + speed * 0.34);
             triggerBossBodyEvade(ufo, particle, toOrigin.x, toOrigin.y, speed);
             damageMob(ufo, damage, particle.color, "UFO cracked by " + particle.tier.article + " " + particle.tier.name + ".", {
+              source: { playerId: controllingPlayerIdForBody(particle), bodyId: particle.id, cause: "ufo-tractor-impact", hostileActionType: "player-controlled-body-impact" },
               notification: bodyDefeatNotificationOptions(ufo, particle, "cracked")
             });
             if (ufo.isBoss) {
@@ -274,6 +286,9 @@
           continue;
         }
 
+        if (isSurvivalLogisticsUfo(ufo)) {
+          addSurvivalUfoCargo(ufo, particle);
+        }
         sparks.push({
           x: particle.x,
           y: particle.y,

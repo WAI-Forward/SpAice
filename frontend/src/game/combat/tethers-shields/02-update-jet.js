@@ -107,6 +107,9 @@
         structures.splice(i, 1);
         continue;
       }
+      if (shouldSleepDistantSurvivalStructure(structure)) {
+        continue;
+      }
 
       const maxHealth = Math.max(1, finiteOr(structure.maxHealth, structureMaxHealth(structure.type)));
       structure.maxHealth = maxHealth;
@@ -115,6 +118,7 @@
       structure.flash = Math.max(0, finiteOr(structure.flash, 0) - dt);
       if (isSurvivalCampStructure(structure)) {
         structure.survivalCampAggroTimer = Math.max(0, finiteOr(structure.survivalCampAggroTimer, 0) - dt);
+        structure.survivalAggroAlertTimer = Math.max(0, finiteOr(structure.survivalAggroAlertTimer, 0) - dt);
         if (structure.survivalCampAggroTimer <= 0) {
           structure.survivalTargetPlayerId = "";
         }

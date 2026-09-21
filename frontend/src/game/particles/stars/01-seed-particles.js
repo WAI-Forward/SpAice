@@ -311,22 +311,24 @@
       return false;
     }
 
+    const source = options && options.source && typeof options.source === "object" ? options.source : options || {};
+    const sourcePlayerId = source.playerId !== undefined && source.playerId !== null
+      ? String(source.playerId || "")
+      : source.sourcePlayerId !== undefined && source.sourcePlayerId !== null
+        ? String(source.sourcePlayerId || "")
+        : source.sourceTool
+          ? player.id || ""
+          : "";
+    if (sourcePlayerId) {
+      wakeSurvivalCampFromMob(mob, sourcePlayerId);
+      aggroNearbyMobsFromPlayerDamage(mob, sourcePlayerId);
+    }
     const dealtDamage = Math.max(0, finiteOr(damage, 0));
     mob.lastDamageTool = options && options.sourceTool ? options.sourceTool : "";
     mob.health = Math.max(0, mob.health - dealtDamage);
     mob.flash = 0.28;
     mob.hitCooldown = Math.max(finiteOr(mob.hitCooldown, 0), 0.42);
     emitMobDamageParticles(mob, dealtDamage, color);
-    const sourcePlayerId = options && options.sourcePlayerId !== undefined && options.sourcePlayerId !== null
-      ? String(options.sourcePlayerId || "")
-      : options && options.sourceTool
-        ? player.id || ""
-        : "";
-    if (dealtDamage > 0 && sourcePlayerId) {
-      wakeSurvivalCampFromMob(mob, sourcePlayerId);
-      aggroNearbyMobsFromPlayerDamage(mob, sourcePlayerId);
-    }
-
     if (color) {
       sparks.push({
         x: mob.x,
@@ -403,8 +405,18 @@
   function tickMobDamageTimers(mob, dt) {
     mob.hitCooldown = Math.max(0, mob.hitCooldown - dt);
     mob.disabledTimer = Math.max(0, finiteOr(mob.disabledTimer, 0) - dt);
-    mob.playerDamageAggroTimer = Math.max(0, finiteOr(mob.playerDamageAggroTimer, 0) - dt);
-    if (mob.playerDamageAggroTimer <= 0) {
+    const aggroTarget = mob.playerDamageAggroTargetPlayerId
+      ? survivalTargetForPlayerId(mob.playerDamageAggroTargetPlayerId)
+      : null;
+    const aggroPlayer = aggroTarget && aggroTarget.player;
+    if (
+      aggroPlayer &&
+      aggroPlayer.health > 0 &&
+      Math.hypot(aggroPlayer.x - mob.x, aggroPlayer.y - mob.y) <= survivalAggroDisengageRadius
+    ) {
+      mob.playerDamageAggroTimer = Math.max(1, finiteOr(mob.playerDamageAggroTimer, 0));
+    } else {
+      mob.playerDamageAggroTimer = 0;
       mob.playerDamageAggroTargetPlayerId = "";
     }
     if (finiteOr(mob.summonDuration, 0) > 0 && finiteOr(mob.summonAge, 0) < finiteOr(mob.summonDuration, 0)) {

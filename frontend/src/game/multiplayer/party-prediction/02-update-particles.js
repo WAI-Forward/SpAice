@@ -7,23 +7,29 @@
     const vacuumBucketActive = hasVacuumBucketCollider();
     const partyGadgetStates = activePartyGadgetStates();
     const particleSpawnAnchors = activeParticleSpawnAnchors();
+    const playerCleanupAnchors = activePartyPlayerAnchors();
     const activeTargetParticles = activeParticleTargetCount(particleSpawnAnchors);
     const maxParticleBudget = activeTargetParticles;
     const playfieldFill = useParticlePlayfieldFill();
     const localFillRadius = playfieldFill ? particlePlayfieldRadius() : particleDensityRadius();
+    const distantAmbientKeepRadius = Math.max(localFillRadius * 1.75, 3200);
 
     pruneInvalidParticles();
     let ambientParticleCount = countAmbientParticles();
+    ambientParticleCount = Math.max(
+      0,
+      ambientParticleCount - pruneDistantAmbientMatter(playerCleanupAnchors, distantAmbientKeepRadius, 10)
+    );
     spawnTimer -= dt;
     while (spawnTimer <= 0) {
       const underdense = mostUnderdenseParticleAnchor(particleSpawnAnchors);
       const needsLocalFill = underdense.score > 0.5 && underdense.localCount < underdense.localTarget;
       if (ambientParticleCount >= activeTargetParticles && (!needsLocalFill || ambientParticleCount >= maxParticleBudget)) {
-        const recycled = needsLocalFill && playfieldFill ? farthestRecyclableAmbientParticle(particleSpawnAnchors, localFillRadius * 1.18) : null;
+        const recycled = needsLocalFill && playfieldFill ? farthestRecyclableAmbientParticle(playerCleanupAnchors, localFillRadius * 1.18) : null;
         if (!recycled || !recycleParticleNearPlayer(recycled, underdense.anchor, { localFill: true, playfieldFill: true, anchors: particleSpawnAnchors })) {
           break;
         }
-        spawnTimer += 0.035;
+        spawnTimer += 0.028;
         continue;
       }
       spawnParticleNearPlayer(needsLocalFill ? underdense.anchor : randomParticleSpawnAnchor(particleSpawnAnchors), {
@@ -33,7 +39,7 @@
       });
       ambientParticleCount += 1;
       const deficit = clamp((activeTargetParticles - ambientParticleCount) / Math.max(1, activeTargetParticles), 0, 1);
-      spawnTimer += needsLocalFill ? 0.035 : 0.11 - deficit * 0.07;
+      spawnTimer += needsLocalFill ? 0.028 : 0.11 - deficit * 0.07;
     }
 
     if (isPartySessionActive() || multiplayer.remoteUniverses.size > 0) {
@@ -78,7 +84,7 @@
       }
 
       applyOrbitCaptureForces(particle, particles, dt);
-      if (!particle.tier.solid) {
+      if (!particle.tier.solid && !particle.survivalCampBody) {
         particle.vx += Math.sin(particle.wobble + performance.now() * 0.0007) * 4 * dt;
         particle.vy += Math.cos(particle.wobble * 1.7 + performance.now() * 0.0006) * 4 * dt;
         particle.vx *= Math.pow(0.82, dt);
@@ -107,9 +113,9 @@
         }
       }
 
-      const fromPlayer = nearestPartyAnchorDistance(particle.x, particle.y, particleSpawnAnchors);
+      const fromPlayer = nearestPartyAnchorDistance(particle.x, particle.y, playerCleanupAnchors);
       const cullDistance = Math.max(width, height) * 1.85 + 1600;
-      if (!particle.tier.solid && fromPlayer > cullDistance && ambientParticleCount > activeTargetParticles * 0.82) {
+      if (isRecyclableAmbientMatter(particle) && fromPlayer > cullDistance) {
         particles.splice(i, 1);
         if (isAmbientDensityParticle(particle)) {
           ambientParticleCount -= 1;
@@ -128,6 +134,7 @@
       body &&
       body.tier &&
       body.tier.threshold <= thresholdForTierName("asteroid") &&
+      !body.survivalCampBody &&
       !isProtectedStrategicBody(body)
     );
   }

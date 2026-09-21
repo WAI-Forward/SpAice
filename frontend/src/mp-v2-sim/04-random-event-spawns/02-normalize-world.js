@@ -190,6 +190,7 @@
       seed: seedHolder.seed >>> 0,
       difficulty,
       gameMode,
+      worldMode: String(options && options.worldMode || payload.worldMode || "party"),
       players,
       world,
       events: []
@@ -476,4 +477,3 @@
     }
     return finiteOr(player && player.energy, 0) >= Math.max(0, finiteOr(amount, 0));
   }
-

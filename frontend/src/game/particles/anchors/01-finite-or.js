@@ -38,6 +38,7 @@
       stellarGrowthRate: Math.max(0, finiteOr(settings.stellarGrowthRate, 0)),
       stellarGrowthLastSampleAt: Math.max(0, finiteOr(settings.stellarGrowthLastSampleAt, 0)),
       stellarOutcome,
+      ownerPlayerId: tier.name !== "particle" && typeof settings.ownerPlayerId === "string" ? settings.ownerPlayerId : "",
       survivalCampId: typeof settings.survivalCampId === "string" ? settings.survivalCampId : "",
       survivalCampX: finiteOr(settings.survivalCampX, 0),
       survivalCampY: finiteOr(settings.survivalCampY, 0),
@@ -46,6 +47,8 @@
       survivalCampMovedByPlayer: Boolean(settings.survivalCampMovedByPlayer),
       survivalCampBodyMovedWakeSent: Boolean(settings.survivalCampBodyMovedWakeSent),
       survivalCampLastMoverPlayerId: typeof settings.survivalCampLastMoverPlayerId === "string" ? settings.survivalCampLastMoverPlayerId : "",
+      lastControllingPlayerId: typeof settings.lastControllingPlayerId === "string" ? settings.lastControllingPlayerId : "",
+      lastPlayerControlBelowSpeedAt: Math.max(0, finiteOr(settings.lastPlayerControlBelowSpeedAt, 0)),
       survivalCampBody: Boolean(settings.survivalCampBody)
     };
     normalizeBodyEnergy(body);
@@ -239,7 +242,8 @@
     const resourceRoom = spacingRoom * crowdRoom;
     const roll = Math.random();
     const detail = ambientMassDetail(spawnPoint, roll, 1);
-    const rockChance = Math.max(0, (richness - 0.28) / 0.72) * (0.04 + richness * 0.065) * resourceRoom;
+    const rockChanceScale = spawnPoint && spawnPoint.bowWave ? 0.12 : spawnPoint && spawnPoint.localFill ? 0.35 : 1;
+    const rockChance = Math.max(0, (richness - 0.28) / 0.72) * (0.04 + richness * 0.065) * resourceRoom * rockChanceScale;
 
     if (roll < rockChance) {
       return 10;

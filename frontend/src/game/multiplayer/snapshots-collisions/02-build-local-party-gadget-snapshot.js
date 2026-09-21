@@ -162,7 +162,9 @@
     }
 
     multiplayer.snapshotTimer -= dt;
-    const snapshotInterval = isPartyHost() && hasRecentPartyGadgetActivity()
+    const snapshotInterval = isMultiplayerV2Active() || isSharedWorldFollower()
+      ? multiplayerSnapshotInterval
+      : isPartyHost() && hasRecentPartyGadgetActivity()
       ? partyActiveWorldSnapshotInterval
       : isPartyHost()
       ? partyWorldSnapshotInterval
@@ -172,17 +174,21 @@
     }
     if (multiplayer.connected && multiplayer.snapshotTimer <= 0) {
       multiplayer.snapshotTimer = snapshotInterval;
-      const snapshot = isMultiplayerV2Active() || isSharedWorldFollower() ? buildPersistentPayload(false) : buildRealtimeSnapshot();
-      sendMultiplayer({
+      const hasOverlapConsumers = multiplayer.remoteUniverses.size > 0 || multiplayer.forceWorldSnapshot === true;
+      const snapshot = isMultiplayerV2Active() || isSharedWorldFollower() || !hasOverlapConsumers
+        ? buildMultiplayerPresenceSnapshot()
+        : buildOverlapRealtimeSnapshot();
+      const snapshotSent = sendMultiplayer({
         type: "input",
         multiplayerOptIn: Boolean(multiplayer.friendJoinsEnabled),
         snapshot
       });
+      if (snapshotSent) multiplayer.forceWorldSnapshot = false;
       if (isPartySessionActive()) {
         if (isPartyHost() && !isMultiplayerV2Active()) {
           sendMultiplayer({
             type: "party.world.snapshot",
-            snapshot
+            snapshot: buildRealtimeSnapshot()
           });
         }
       }

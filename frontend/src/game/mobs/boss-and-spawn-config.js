@@ -53,20 +53,34 @@
   const survivalCampAggroDuration = 90;
   const survivalCampBodyWakeDistance = 320;
   const survivalCampIdleRadius = 780;
-  const survivalCampCheckInterval = 8;
+  const survivalCampPatrolRadius = 520;
+  const survivalCampCheckInterval = 12;
   const survivalCampRadarBodyMinMass = 150;
   const survivalCampSpawnMinDistance = 9000;
   const survivalCampSpawnDistancePadding = 1200;
   const survivalCampSpawnDistanceSpread = 9000;
   const survivalCampAllowancePreferredSeparation = 4200;
   const survivalCampActiveRadius = 42000;
+  // Camps well outside the replicated encounter bubble remain part of the
+  // world, but their idle actors do not need a 60 Hz AI/physics update.  Keep
+  // this beyond the 24k multiplayer encounter interest radius so sleeping is
+  // never visible to a player approaching a camp.
+  const survivalCampFullSimulationRadius = 28000;
   const survivalCampExpansionDistance = 32000;
   const survivalCampMaxExpansion = 8;
   const survivalMigrationAggroRadius = 1450;
-  const survivalMigrationAggroDuration = 14;
+  const survivalAggroDisengageRadius = 6500;
   const survivalMigrationMaxSpeed = 760;
-  const survivalSalvageMaxUfos = 3;
+  const survivalAggroAlertDuration = 1.4;
+  const survivalTargetLockDuration = 2;
+  const survivalTargetSwitchThreatRatio = 1.35;
+  const survivalBodyProvenanceTimeout = 2;
   const survivalSalvageArrivalRadius = 620;
+  const survivalRambotDefenseScanRadius = 6200;
+  const survivalRambotDefenseLookahead = 18;
+  const survivalRambotDefensePathPadding = 260;
+  const survivalRambotDefenseMinClosingSpeed = 18;
+  const survivalRambotDefenseBodyImpulse = 105;
   const mobSpawnEdgePaddingBonus = 320;
   const mobSpawnSpreadMultiplier = 1.25;
   const mobRelocationEdgePaddingBonus = 560;

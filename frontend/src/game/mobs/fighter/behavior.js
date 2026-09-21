@@ -25,6 +25,9 @@
       if (isMobSummoning(fighter)) {
         continue;
       }
+      if (shouldSleepDistantSurvivalMob(fighter)) {
+        continue;
+      }
       updateBossSpawnPressure(fighter, dt);
       if (isMobDisabled(fighter)) {
         fighter.shieldActive = 0;

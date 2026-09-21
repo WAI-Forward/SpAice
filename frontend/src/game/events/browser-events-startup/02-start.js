@@ -24,9 +24,6 @@
       if (event.target === deathRunNameInput) {
         return;
       }
-      if (event.target === deathLeaderboardButton) {
-        return;
-      }
       if (event.target === playAgainButton) {
         return;
       }

@@ -326,7 +326,14 @@
   }
 
   function isAmbientParticle(body) {
-    return Boolean(body && body.tier && !body.tier.solid);
+    return Boolean(
+      body &&
+      body.tier &&
+      body.tier.name === "particle" &&
+      !body.randomEventId &&
+      !body.survivalCampBody &&
+      finiteOr(body.ufoSapTimer, 0) <= 0
+    );
   }
 
   function countAmbientParticles(world) {

@@ -249,6 +249,8 @@
     }
 
     if (message.type === "overlap.start") {
+      multiplayer.forceWorldSnapshot = true;
+      multiplayer.snapshotTimer = 0;
       maybeNotifyText(message.mode === "friend" ? "Friend universe aligned." : "Universe overlap detected.");
       return;
     }

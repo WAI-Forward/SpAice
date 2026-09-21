@@ -1,4 +1,6 @@
   const SOLID_BODY_BACKGROUND_DAMPING = 0.992;
+  const PLAYER_BODY_IMPACT_DEBRIS_SPEED = 320;
+  const PLAYER_BODY_IMPACT_DEBRIS_COOLDOWN = 0.16;
 
   function applySolidBodyBackgroundDamping(body, dt) {
     if (!body || !body.tier || !body.tier.solid || body.gadgetStabilized) {
@@ -20,7 +22,8 @@
     body.tier = clone(tier);
     body.radius = radiusFromMassForTier(body.mass, body.tier);
     decayGadgetPullContactIntent(body, dt);
-    if (!tier.solid) {
+    body.playerImpactDebrisCooldown = Math.max(0, finiteOr(body.playerImpactDebrisCooldown, 0) - dt);
+    if (!tier.solid && !body.survivalCampBody) {
       body.vx += Math.sin(body.wobble + tick * 0.011) * 4 * dt;
       body.vy += Math.cos(body.wobble * 1.7 + tick * 0.009) * 4 * dt;
       body.vx *= Math.pow(0.82, dt);
@@ -51,6 +54,36 @@
     } else {
       body.angularVelocity = 0;
     }
+  }
+
+  function emitPlayerBodyImpactDebris(state, player, body, nx, ny, impactSpeed) {
+    if (
+      !state ||
+      !body ||
+      !body.tier ||
+      body.tier.name === "particle" ||
+      finiteOr(body.playerImpactDebrisCooldown, 0) > 0 ||
+      finiteOr(impactSpeed, 0) < PLAYER_BODY_IMPACT_DEBRIS_SPEED
+    ) {
+      return 0;
+    }
+
+    const lossCount = clamp(Math.floor((impactSpeed - 260) / 150), 1, 4);
+    const emitted = shedCrashParticlesFromBody(state, body, -nx, -ny, lossCount);
+    if (emitted > 0) {
+      body.playerImpactDebrisCooldown = PLAYER_BODY_IMPACT_DEBRIS_COOLDOWN;
+      state.events.push({
+        type: "body.impactDebris",
+        playerId: player && player.id || "",
+        bodyId: body.id,
+        x: finiteOr(body.x, 0) - nx * Math.max(8, finiteOr(body.radius, 1)),
+        y: finiteOr(body.y, 0) - ny * Math.max(8, finiteOr(body.radius, 1)),
+        color: cloneColor(body.color),
+        count: emitted,
+        tick: state.tick
+      });
+    }
+    return emitted;
   }
 
   function resolvePlayerBodyCollisions(state) {
@@ -95,6 +128,9 @@
         markSurvivalCampBodyMovedByPlayer(body, player.id || "");
         const relativeVelocity = (player.vx - body.vx) * nx + (player.vy - body.vy) * ny;
         const incomingSpeed = Math.max(0, -relativeVelocity);
+        if (solid) {
+          emitPlayerBodyImpactDebris(state, player, body, nx, ny, incomingSpeed);
+        }
         if (relativeVelocity < 0) {
           const impulse = -relativeVelocity * (solid ? 0.92 : 0.72);
           const playerImpulseShare = solid ? 0.72 : 0.18;

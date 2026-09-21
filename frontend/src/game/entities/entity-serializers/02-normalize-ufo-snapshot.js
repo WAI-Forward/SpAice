@@ -362,6 +362,7 @@
       survivalCampX: finiteOr(snapshot.survivalCampX, 0),
       survivalCampY: finiteOr(snapshot.survivalCampY, 0),
       survivalCampAggroTimer: Math.max(0, finiteOr(snapshot.survivalCampAggroTimer, 0)),
+      survivalAggroAlertTimer: Math.max(0, finiteOr(snapshot.survivalAggroAlertTimer, 0)),
       survivalEncounterType: snapshot.survivalEncounterType === "camp" ? "camp" : "",
       survivalEncounterId: typeof snapshot.survivalEncounterId === "string" ? snapshot.survivalEncounterId : "",
       survivalTargetPlayerId: typeof snapshot.survivalTargetPlayerId === "string" ? snapshot.survivalTargetPlayerId : "",

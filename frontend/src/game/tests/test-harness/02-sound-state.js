@@ -302,25 +302,37 @@
 
   if (leaderboardModeFilter) {
     leaderboardModeFilter.addEventListener("change", function () {
-      setLeaderboardFilters(leaderboardModeFilter.value, leaderboard.filters && leaderboard.filters.difficulty);
+      setLeaderboardFilters(leaderboardModeFilter.value, leaderboard.filters && leaderboard.filters.mode, leaderboard.filters && leaderboard.filters.difficulty);
     });
   }
 
   if (menuLeaderboardModeFilter) {
     menuLeaderboardModeFilter.addEventListener("change", function () {
-      setLeaderboardFilters(menuLeaderboardModeFilter.value, leaderboard.filters && leaderboard.filters.difficulty);
+      setLeaderboardFilters(menuLeaderboardModeFilter.value, leaderboard.filters && leaderboard.filters.mode, leaderboard.filters && leaderboard.filters.difficulty);
+    });
+  }
+
+  if (leaderboardPlayersFilter) {
+    leaderboardPlayersFilter.addEventListener("change", function () {
+      setLeaderboardFilters(leaderboard.filters && leaderboard.filters.gameMode, leaderboardPlayersFilter.value, leaderboard.filters && leaderboard.filters.difficulty);
+    });
+  }
+
+  if (menuLeaderboardPlayersFilter) {
+    menuLeaderboardPlayersFilter.addEventListener("change", function () {
+      setLeaderboardFilters(leaderboard.filters && leaderboard.filters.gameMode, menuLeaderboardPlayersFilter.value, leaderboard.filters && leaderboard.filters.difficulty);
     });
   }
 
   if (leaderboardDifficultyFilter) {
     leaderboardDifficultyFilter.addEventListener("change", function () {
-      setLeaderboardFilters(leaderboard.filters && leaderboard.filters.mode, leaderboardDifficultyFilter.value);
+      setLeaderboardFilters(leaderboard.filters && leaderboard.filters.gameMode, leaderboard.filters && leaderboard.filters.mode, leaderboardDifficultyFilter.value);
     });
   }
 
   if (menuLeaderboardDifficultyFilter) {
     menuLeaderboardDifficultyFilter.addEventListener("change", function () {
-      setLeaderboardFilters(leaderboard.filters && leaderboard.filters.mode, menuLeaderboardDifficultyFilter.value);
+      setLeaderboardFilters(leaderboard.filters && leaderboard.filters.gameMode, leaderboard.filters && leaderboard.filters.mode, menuLeaderboardDifficultyFilter.value);
     });
   }
 

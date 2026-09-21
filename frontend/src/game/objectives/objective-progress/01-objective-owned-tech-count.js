@@ -169,18 +169,6 @@
     }
   }
 
-  function recordObjectiveCreatedBodyMass(mass) {
-    const value = Math.max(0, finiteOr(mass, 0));
-    if (value > finiteOr(objectiveState.createdBodyMass, 0)) {
-      objectiveState.createdBodyMass = value;
-      objectiveState.renderSignature = "";
-    }
-  }
-
-  function objectiveCreatedBodyMass() {
-    return Math.max(0, finiteOr(objectiveState.createdBodyMass, 0));
-  }
-
   function recordObjectiveTravelSpeed(speed) {
     const value = Math.max(0, finiteOr(speed, 0));
     if (value > finiteOr(objectiveState.maxTravelSpeed, 0)) {
@@ -203,18 +191,6 @@
       : (objectiveState.builtStructures = Object.create(null));
     builtStructures[structureType] = Math.max(0, Math.floor(finiteOr(builtStructures[structureType], 0))) + 1;
     objectiveState.renderSignature = "";
-  }
-
-  function objectiveMassProgress(tierName) {
-    const tier = bodyTierForCommandToken(tierName);
-    const target = tier ? tier.threshold : 1;
-    const mass = objectiveCreatedBodyMass();
-    return {
-      complete: mass >= target,
-      value: mass,
-      target,
-      label: Math.max(0, Math.round(mass)) + " / " + Math.round(target) + "g created"
-    };
   }
 
   function objectiveSpeedProgress(targetSpeed) {
@@ -417,7 +393,7 @@
   }
 
   function objectiveCanSelect(snapshot) {
-    return Boolean(snapshot && (snapshot.available || snapshot.progress.complete));
+    return Boolean(snapshot);
   }
 
   function objectiveIconText(definition) {
@@ -467,32 +443,26 @@
       : 1;
   }
 
-  function objectiveNodeRadius() {
-    return window.matchMedia && window.matchMedia("(max-width: 560px)").matches ? 28 : 31;
-  }
-
   function objectiveEdgePoints(start, end) {
     const dx = end.x - start.x;
     const dy = end.y - start.y;
-    const distance = Math.hypot(dx, dy);
-    const radius = objectiveNodeRadius();
-
-    if (!distance) {
+    if (!dx && !dy) {
       return { start, end };
     }
-
-    const offset = Math.min(radius, distance * 0.42);
-    const ux = dx / distance;
-    const uy = dy / distance;
+    const halfWidth = Math.max(1, finiteOr(objectiveGraphLayout.nodeWidth, 184) * 0.5);
+    const halfHeight = Math.max(1, finiteOr(objectiveGraphLayout.nodeHeight, 64) * 0.5);
+    const xScale = Math.abs(dx) > 0.001 ? halfWidth / Math.abs(dx) : Infinity;
+    const yScale = Math.abs(dy) > 0.001 ? halfHeight / Math.abs(dy) : Infinity;
+    const scale = Math.min(xScale, yScale, 0.42);
 
     return {
       start: {
-        x: start.x + ux * offset,
-        y: start.y + uy * offset
+        x: start.x + dx * scale,
+        y: start.y + dy * scale
       },
       end: {
-        x: end.x - ux * offset,
-        y: end.y - uy * offset
+        x: end.x - dx * scale,
+        y: end.y - dy * scale
       }
     };
   }

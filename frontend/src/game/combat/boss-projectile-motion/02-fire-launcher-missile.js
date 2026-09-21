@@ -9,15 +9,16 @@
     launcherMissiles.push({
       x: structure.x + aim.x * muzzleDistance,
       y: structure.y + aim.y * muzzleDistance,
-      vx: aim.x * launcherMissileSpeed,
-      vy: aim.y * launcherMissileSpeed,
-      radius: 11,
-      length: 58,
+      vx: aim.x * launcherMissileSpeed * 0.72,
+      vy: aim.y * launcherMissileSpeed * 0.72,
+      radius: 13,
+      length: 78,
       color,
       life: launcherMissileLife,
       maxLife: launcherMissileLife,
       damage: launcherMissileDamage,
       rocket: true,
+      launchedByStructure: true,
       targetX,
       targetY,
       targetCount: cluster.count,
@@ -31,21 +32,33 @@
     structure.targetY = targetY;
     structure.targetCount = cluster.count;
     structure.deploy = 1;
+    structure.launchFlash = 0.46;
+    structure.recoil = 1;
     structure.aimAngle = Math.atan2(aim.y, aim.x);
 
     sparks.push({
       x: structure.x + aim.x * muzzleDistance,
       y: structure.y + aim.y * muzzleDistance,
-      radius: 42,
+      radius: 68,
       color,
-      life: 0.24,
-      maxLife: 0.24
+      life: 0.32,
+      maxLife: 0.32
+    });
+    sparks.push({
+      x: structure.x - aim.x * 14,
+      y: structure.y - aim.y * 14,
+      radius: 48,
+      color: { r: 255, g: 115, b: 173 },
+      life: 0.22,
+      maxLife: 0.22
     });
     playSound("missile");
   }
 
   function updateMissileLauncher(structure, dt) {
     const body = bodyById(structure.bodyId);
+    structure.launchFlash = Math.max(0, finiteOr(structure.launchFlash, 0) - dt * 2.4);
+    structure.recoil = Math.max(0, finiteOr(structure.recoil, 0) - dt * 5.2);
     structure.missileCharge = clamp(finiteOr(structure.missileCharge, 0) + dt / missileLauncherProductionTime, 0, 1);
     structure.lockTimer = Math.max(0, finiteOr(structure.lockTimer, 0) - dt);
     structure.beepTimer = Math.max(0, finiteOr(structure.beepTimer, 0) - dt);
@@ -249,7 +262,7 @@
       } else {
         const cluster = findMobCluster(missile.x, missile.y, 760, {
           minCount: 1,
-          clusterRadius: missileLauncherClusterRadius,
+          clusterRadius: missileLauncherClusterRadius * 1.12,
           preferredX: missile.targetX,
           preferredY: missile.targetY
         });
@@ -267,7 +280,10 @@
       const turnRate = missile.guided ? launcherMissileTurnRate * 1.2 : launcherMissileTurnRate;
       const angle = currentAngle + clamp(shortestAngleDelta(currentAngle, desiredAngle), -turnRate * dt, turnRate * dt);
       const maxLife = finiteOr(missile.maxLife, launcherMissileLife);
-      const targetSpeed = launcherMissileSpeed * (missile.life > maxLife - 0.24 ? 0.74 : missile.guided ? 0.92 : 1);
+      const launchBoost = missile.launchedByStructure && missile.life > maxLife - 0.42
+        ? 0.68 + (maxLife - missile.life) / 0.42 * 0.42
+        : 1;
+      const targetSpeed = launcherMissileSpeed * launchBoost * (missile.guided ? 0.92 : 1);
       const nextSpeed = speed + (targetSpeed - speed) * (1 - Math.pow(0.05, dt));
       missile.vx = Math.cos(angle) * nextSpeed;
       missile.vy = Math.sin(angle) * nextSpeed;

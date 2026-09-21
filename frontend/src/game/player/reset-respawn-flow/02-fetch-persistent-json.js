@@ -54,6 +54,9 @@
     try {
       const params = new URLSearchParams({ limit: "40" });
       const filters = leaderboard.filters || {};
+      if (filters.gameMode && filters.gameMode !== "all") {
+        params.set("gameMode", filters.gameMode);
+      }
       if (filters.mode && filters.mode !== "all") {
         params.set("mode", filters.mode);
       }
@@ -80,27 +83,31 @@
 
   async function submitDeathLeaderboardScore(stats, runName) {
     if (!window.fetch || !stats || leaderboard.submitInFlight) {
-      return false;
+      return null;
     }
 
     const score = Math.max(1, Math.round(finiteOr(stats.score, stats.maxMass || 1)));
     const mode = isPartySessionActive() ? "multiplayer" : "singleplayer";
-    const deathKey = [player.id, mode, score, stats.survived, stats.cause, Math.floor(lifeStats.startedAt)].join("|");
+    const gameMode = normalizeGameMode(stats.gameMode || runState.gameMode);
+    const deathKey = [player.id, gameMode, mode, score, stats.survived, stats.cause, Math.floor(lifeStats.startedAt)].join("|");
     if (leaderboard.submittedDeathKey === deathKey) {
-      return true;
+      return leaderboard.entries.find((entry) => entry.id === deathState.leaderboardEntryId) || null;
     }
 
     const cleanName = sanitizePlayerName(runName) || sanitizePlayerName(player.name) || "Player";
     leaderboard.submitInFlight = true;
     leaderboard.submittedDeathKey = deathKey;
     try {
-      const data = await fetchPersistentJson("/api/leaderboard", {
+      const requestOptions = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: deathState.leaderboardEntryId,
+          createdAt: deathState.leaderboardCreatedAt,
           playerId: player.id,
           name: cleanName,
           mode,
+          gameMode,
           score,
           difficulty: stats.difficulty,
           bodyScore: stats.bodyScore,
@@ -111,12 +118,15 @@
           maxTier: stats.maxTier,
           survived: stats.survived,
           cause: stats.cause
-        })
-      });
+        }),
+        timeoutMs: 8000
+      };
+      const data = await submitDeathLeaderboardRequest(requestOptions);
+      const savedEntry = normalizeLeaderboardEntry(data.entry);
       leaderboard.entries = Array.isArray(data.entries) ? data.entries.map(normalizeLeaderboardEntry).filter(Boolean) : leaderboard.entries;
       leaderboard.lastRefreshAt = performance.now();
       leaderboard.statusMessage = "";
-      if (leaderboard.filters && (leaderboard.filters.mode !== "all" || leaderboard.filters.difficulty !== "all")) {
+      if (leaderboard.filters && (leaderboard.filters.gameMode !== "all" || leaderboard.filters.mode !== "all" || leaderboard.filters.difficulty !== "all")) {
         void refreshLeaderboard(true);
       }
       if (leaderboard.open) {
@@ -125,73 +135,15 @@
       deathState.leaderboardSubmitted = true;
       await submitCrazyGamesLeaderboardScore(score, deathKey, "death-run-save");
       submitGamePixLeaderboardScore(score, deathKey, "death-run-save");
-      return true;
+      return savedEntry;
     } catch (error) {
       leaderboard.statusMessage = backendErrorMessage(error, "Could not save this run.");
       console.warn("Clusternauts leaderboard submit failed.", error);
       leaderboard.submittedDeathKey = "";
-      return false;
+      return null;
     } finally {
       leaderboard.submitInFlight = false;
     }
-  }
-
-  async function submitCrazyGamesLeaderboardScore(score, submissionKey, reason) {
-    if (!isCrazyGamesRuntime()) {
-      return false;
-    }
-
-    const cleanScore = Math.max(1, Math.round(finiteOr(score, 1)));
-    const cleanSubmissionKey = String(submissionKey || cleanScore || "").trim();
-    if (cleanSubmissionKey && leaderboard.submittedCrazyGamesKey === cleanSubmissionKey) {
-      return true;
-    }
-
-    try {
-      await initializeCrazyGamesIntegration();
-      await handleCrazyGamesAuthChange("leaderboard-" + (reason || "submit"));
-    } catch (error) {
-      console.warn("CrazyGames leaderboard auth refresh failed.", { reason, error });
-    }
-
-    if (!isCrazyGamesUserSignedIn()) {
-      return false;
-    }
-
-    const userModule = crazyGamesUserModule();
-    if (!userModule || typeof userModule.submitScore !== "function") {
-      console.warn("CrazyGames leaderboard score submit unavailable.", { reason });
-      return false;
-    }
-
-    try {
-      await Promise.resolve(userModule.submitScore({ score: cleanScore }));
-      if (cleanSubmissionKey) {
-        leaderboard.submittedCrazyGamesKey = cleanSubmissionKey;
-      }
-      return true;
-    } catch (error) {
-      console.warn("CrazyGames leaderboard score submit failed.", { reason, score: cleanScore, error });
-      return false;
-    }
-  }
-
-  function submitGamePixLeaderboardScore(score, submissionKey, reason) {
-    if (!isGamePixRuntime()) {
-      return false;
-    }
-
-    const cleanScore = Math.max(1, Math.round(finiteOr(score, 1)));
-    const cleanSubmissionKey = String(submissionKey || cleanScore || "").trim();
-    if (cleanSubmissionKey && gamePixState.submittedScoreKey === cleanSubmissionKey) {
-      return true;
-    }
-
-    updateGamePixScore(cleanScore, reason || "leaderboard-submit");
-    if (cleanSubmissionKey) {
-      gamePixState.submittedScoreKey = cleanSubmissionKey;
-    }
-    return true;
   }
 
   function connectedScoredBodyIds() {
@@ -301,6 +253,9 @@
 
   function collectDeathStats() {
     updateLifeStats();
+    const structuresBuilt = Object.values(objectiveState.builtStructures || {}).reduce(function (total, count) {
+      return total + Math.max(0, Math.floor(finiteOr(count, 0)));
+    }, 0);
     return {
       score: Math.round(lifeStats.bestScore),
       difficulty: runState.difficultyId,
@@ -314,7 +269,7 @@
       mobScore: Math.round(lifeStats.mobScore),
       mobsDefeated: lifeStats.mobsDefeated,
       techCollected: lifeStats.techCollected,
-      structures: structures.length,
+      structures: structuresBuilt,
       tools: unlockedToolIds.length,
       cause: deathState.cause
     };
@@ -349,7 +304,7 @@
       ["Best body", formatTierName(stats.maxTier) + " / " + stats.maxMass + "g"],
       ["Mobs defeated", stats.mobsDefeated],
       ["Tech collected", stats.techCollected],
-      ["Structures", stats.structures],
+      ["Structures built", stats.structures],
       ["Tools", stats.tools],
       ["Final blow", stats.cause]
     ];
@@ -369,24 +324,24 @@
 
   function resetDeathLeaderboardForm() {
     const multiplayerDeath = isPartySessionActive();
+    if (deathState.stats && !deathState.leaderboardEntryId) {
+      deathState.leaderboardEntryId = window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : "run-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
+      deathState.leaderboardCreatedAt = Date.now();
+    }
     if (deathLeaderboardForm) {
       deathLeaderboardForm.hidden = false;
     }
     if (deathRunNameInput) {
-      deathRunNameInput.disabled = false;
       deathRunNameInput.value = sanitizePlayerName(player.name) || "Player";
     }
-    if (deathLeaderboardButton) {
-      deathLeaderboardButton.disabled = false;
-      deathLeaderboardButton.textContent = "Save run";
-      deathLeaderboardButton.classList.remove("is-loading", "is-saved");
-    }
     if (deathLeaderboardStatus) {
-      deathLeaderboardStatus.textContent = "";
+      deathLeaderboardStatus.textContent = deathState.stats ? "Saving to leaderboard..." : "";
     }
     if (playAgainButton) {
       playAgainButton.disabled = false;
-      playAgainButton.textContent = multiplayerDeath ? "Respawn" : "Play again";
+      playAgainButton.textContent = multiplayerDeath ? "Respawn" : "Restart run";
       playAgainButton.classList.remove("is-loading");
     }
     if (deathMainMenuButton) {
@@ -397,48 +352,109 @@
   }
 
   async function saveDeathLeaderboardRun() {
-    if (!deathState.stats || deathState.resetInFlight) {
-      return;
+    if (!deathState.stats) {
+      return false;
     }
     if (deathState.leaderboardSubmitted) {
-      if (deathLeaderboardStatus) {
-        deathLeaderboardStatus.textContent = "Saved to leaderboard.";
-      }
-      return;
+      return true;
+    }
+    if (deathState.leaderboardSavePromise) {
+      return deathState.leaderboardSavePromise;
     }
 
-    if (deathLeaderboardButton) {
-      deathLeaderboardButton.disabled = true;
-      deathLeaderboardButton.textContent = "Saving...";
-      deathLeaderboardButton.classList.add("is-loading");
-      deathLeaderboardButton.classList.remove("is-saved");
-    }
     if (deathLeaderboardStatus) {
-      deathLeaderboardStatus.textContent = "";
+      deathLeaderboardStatus.textContent = "Saving to leaderboard...";
     }
 
-    const ok = await submitDeathLeaderboardScore(deathState.stats, deathRunNameInput && deathRunNameInput.value);
-    if (ok) {
-      if (deathRunNameInput) {
-        deathRunNameInput.disabled = true;
+    const runName = sanitizePlayerName(deathRunNameInput && deathRunNameInput.value) || sanitizePlayerName(player.name) || "Player";
+    deathState.leaderboardSavePromise = (async function () {
+      const savedEntry = await submitDeathLeaderboardScore(deathState.stats, runName);
+      if (savedEntry) {
+        deathState.leaderboardEntryId = savedEntry.id;
+        deathState.leaderboardName = savedEntry.name;
+        if (deathLeaderboardStatus) {
+          deathLeaderboardStatus.textContent = "Saved automatically. Edit the name to rename this run.";
+        }
+        return true;
       }
-      if (deathLeaderboardButton) {
-        deathLeaderboardButton.textContent = "Saved";
-        deathLeaderboardButton.classList.remove("is-loading");
-        deathLeaderboardButton.classList.add("is-saved");
-      }
+
       if (deathLeaderboardStatus) {
-        deathLeaderboardStatus.textContent = "Saved to leaderboard.";
+        deathLeaderboardStatus.textContent = leaderboard.statusMessage || "Could not save this run.";
       }
-      return;
+      return false;
+    })();
+
+    try {
+      return await deathState.leaderboardSavePromise;
+    } finally {
+      deathState.leaderboardSavePromise = null;
+    }
+  }
+
+  async function renameDeathLeaderboardRun() {
+    if (!deathState.stats || !deathRunNameInput) {
+      return false;
+    }
+    while (deathState.leaderboardRenamePromise) {
+      await deathState.leaderboardRenamePromise;
+      if (!deathState.stats) {
+        return false;
+      }
     }
 
-    if (deathLeaderboardButton) {
-      deathLeaderboardButton.disabled = false;
-      deathLeaderboardButton.textContent = "Save run";
-      deathLeaderboardButton.classList.remove("is-loading", "is-saved");
-    }
-    if (deathLeaderboardStatus) {
-      deathLeaderboardStatus.textContent = leaderboard.statusMessage || "Could not save this run.";
+    const cleanName = sanitizePlayerName(deathRunNameInput.value) || sanitizePlayerName(player.name) || "Player";
+    deathRunNameInput.value = cleanName;
+    const renamePromise = (async function () {
+      const saved = await saveDeathLeaderboardRun();
+      if (!saved || !deathState.leaderboardEntryId) {
+        return false;
+      }
+      if (cleanName === deathState.leaderboardName) {
+        return true;
+      }
+
+      if (deathLeaderboardStatus) {
+        deathLeaderboardStatus.textContent = "Updating run name...";
+      }
+
+      try {
+        const data = await fetchPersistentJson("/api/leaderboard/" + encodeURIComponent(deathState.leaderboardEntryId), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playerId: player.id,
+            name: cleanName
+          })
+        });
+        const renamedEntry = normalizeLeaderboardEntry(data.entry);
+        leaderboard.entries = Array.isArray(data.entries)
+          ? data.entries.map(normalizeLeaderboardEntry).filter(Boolean)
+          : leaderboard.entries.map((entry) => entry.id === renamedEntry.id ? renamedEntry : entry);
+        deathState.leaderboardName = renamedEntry.name;
+        leaderboard.lastRefreshAt = performance.now();
+        if (leaderboard.open) {
+          renderLeaderboard();
+        }
+        if (deathLeaderboardStatus) {
+          deathLeaderboardStatus.textContent = "Run name updated.";
+        }
+        return true;
+      } catch (error) {
+        leaderboard.statusMessage = backendErrorMessage(error, "Could not update the run name.");
+        if (deathLeaderboardStatus) {
+          deathLeaderboardStatus.textContent = leaderboard.statusMessage;
+        }
+        console.warn("Clusternauts leaderboard rename failed.", error);
+        return false;
+      }
+    })();
+    deathState.leaderboardRenamePromise = renamePromise;
+
+    try {
+      return await renamePromise;
+    } finally {
+      if (deathState.leaderboardRenamePromise === renamePromise) {
+        deathState.leaderboardRenamePromise = null;
+      }
     }
   }

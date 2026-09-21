@@ -375,6 +375,9 @@
     if (!orbiter || !host || orbiter === host || !orbiter.tier || !host.tier) {
       return false;
     }
+    if (orbiter.survivalCampBody || host.survivalCampBody) {
+      return false;
+    }
     if (orbitRingCountForBody(host) <= 0) {
       return false;
     }
@@ -451,4 +454,3 @@
     body.orbitStrength = 0;
     body.orbitGrace = 0;
   }
-

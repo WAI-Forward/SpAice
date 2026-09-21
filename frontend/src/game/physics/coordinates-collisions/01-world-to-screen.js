@@ -160,6 +160,26 @@
     target.gadgetPullTowardActor = pullTowardActor === true;
   }
 
+  function inheritGadgetPullContactIntent(target, firstSource, secondSource) {
+    if (!target) {
+      return;
+    }
+
+    const firstTimer = Math.max(0, finiteOr(firstSource && firstSource.gadgetPullContactTimer, 0));
+    const secondTimer = Math.max(0, finiteOr(secondSource && secondSource.gadgetPullContactTimer, 0));
+    const source = secondTimer > firstTimer ? secondSource : firstSource;
+    const timer = Math.max(firstTimer, secondTimer);
+    if (!source || timer <= 0) {
+      return;
+    }
+
+    target.gadgetPullContactTimer = timer;
+    target.gadgetPullActorId = source.gadgetPullActorId || "";
+    target.gadgetPullAimX = finiteOr(source.gadgetPullAimX, 1);
+    target.gadgetPullAimY = finiteOr(source.gadgetPullAimY, 0);
+    target.gadgetPullTowardActor = source.gadgetPullTowardActor === true;
+  }
+
   function markDirectGadgetBodyForceIntent(target, actor) {
     if (!target || !target.tier || !target.tier.solid || !actor || !actor.landed || actor.landed.bridgeId) {
       return;

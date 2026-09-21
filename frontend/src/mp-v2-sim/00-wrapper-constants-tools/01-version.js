@@ -9,7 +9,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const VERSION = 2;
+  const VERSION = 3;
   const TICK_RATE = 60;
   const TICK_DT = 1 / TICK_RATE;
   const SNAPSHOT_RATE = 20;
@@ -58,6 +58,7 @@
   const LANDING_RANGE_PADDING = 90;
   const GADGET_FORCE_REACH = 560;
   const GADGET_HOLD_REACH = GADGET_FORCE_REACH * 0.5;
+  const GADGET_PUSH_REACH = 470;
   const VICIOUS_VACUUM_MOB_DRAIN_RATE = 16;
   const VICIOUS_VACUUM_MOB_DRAIN_TICK_INTERVAL = 0.18;
   const VICIOUS_VACUUM_BODY_DRAIN_RATE = 2.15;
@@ -179,9 +180,9 @@
   const MOB_BEACON_DROP_COUNT = 4;
   const MOB_TIER_ORDER = ["alienoid", "ufo", "rambot", "engineer", "tesla", "satellite", "rocket", "fighter"];
   const DIFFICULTY_MOB_SETTINGS = {
-    easy: { intervalScale: 0.82, firstWaveDelay: 28, batchScale: 1.12, bonusChanceScale: 1.1, startingBatchBonusChances: [0, 0], damageMultiplier: 0.62, healthDropMultiplier: 1.1, survivalBudgetScale: 0.88, survivalCampScale: 0.9 },
-    medium: { intervalScale: 0.72, firstWaveDelay: 18, batchScale: 1.24, bonusChanceScale: 1.22, startingBatchBonusChances: [0.75, 0.2, 0.09], damageMultiplier: 0.82, healthDropMultiplier: 0.9, survivalBudgetScale: 1, survivalCampScale: 1 },
-    hard: { intervalScale: 0.62, firstWaveDelay: 9, batchScale: 1.38, bonusChanceScale: 1.35, startingBatchBonusChances: [0.9, 0.75, 0.34], damageMultiplier: 1, healthDropMultiplier: 0.7, survivalBudgetScale: 1.18, survivalCampScale: 1.15 }
+    easy: { intervalScale: 0.82, firstWaveDelay: 28, batchScale: 1.12, bonusChanceScale: 1.1, startingBatchBonusChances: [0, 0], damageMultiplier: 0.62, speedMultiplier: 1.08, healthDropMultiplier: 1.1, survivalBudgetScale: 0.88, survivalCampScale: 0.9 },
+    medium: { intervalScale: 0.72, firstWaveDelay: 18, batchScale: 1.24, bonusChanceScale: 1.22, startingBatchBonusChances: [0.75, 0.2, 0.09], damageMultiplier: 0.82, speedMultiplier: 1.18, healthDropMultiplier: 0.9, survivalBudgetScale: 1, survivalCampScale: 1 },
+    hard: { intervalScale: 0.62, firstWaveDelay: 9, batchScale: 1.38, bonusChanceScale: 1.35, startingBatchBonusChances: [0.9, 0.75, 0.34], damageMultiplier: 1, speedMultiplier: 1.3, healthDropMultiplier: 0.7, survivalBudgetScale: 1.18, survivalCampScale: 1.15 }
   };
   const MOB_TIER_UNLOCK_BASE_DEFEATS = 3;
   const MOB_BOSS_DEFEATS_TO_UNLOCK = 30;
@@ -228,20 +229,32 @@
   const SURVIVAL_CAMP_AGGRO_DURATION = 90;
   const SURVIVAL_CAMP_BODY_WAKE_DISTANCE = 320;
   const SURVIVAL_CAMP_IDLE_RADIUS = 780;
-  const SURVIVAL_CAMP_CHECK_INTERVAL = 8;
+  const SURVIVAL_CAMP_PATROL_RADIUS = 520;
+  const SURVIVAL_CAMP_CHECK_INTERVAL = 12;
   const SURVIVAL_CAMP_RADAR_BODY_MIN_MASS = 150;
   const SURVIVAL_CAMP_SPAWN_MIN_DISTANCE = 9000;
   const SURVIVAL_CAMP_SPAWN_DISTANCE_PADDING = 1200;
   const SURVIVAL_CAMP_SPAWN_DISTANCE_SPREAD = 9000;
   const SURVIVAL_CAMP_ALLOWANCE_PREFERRED_SEPARATION = 4200;
   const SURVIVAL_CAMP_ACTIVE_RADIUS = 42000;
+  // This deliberately exceeds the server's 24k survival encounter interest
+  // radius. Idle camps are fully awake before a client can receive them.
+  const SURVIVAL_CAMP_FULL_SIMULATION_RADIUS = 28000;
   const SURVIVAL_CAMP_EXPANSION_DISTANCE = 32000;
   const SURVIVAL_CAMP_MAX_EXPANSION = 8;
   const SURVIVAL_MIGRATION_AGGRO_RADIUS = 1450;
-  const SURVIVAL_MIGRATION_AGGRO_DURATION = 14;
+  const SURVIVAL_AGGRO_DISENGAGE_RADIUS = 6500;
   const SURVIVAL_MIGRATION_MAX_SPEED = 760;
-  const SURVIVAL_SALVAGE_MAX_UFOS = 3;
+  const SURVIVAL_AGGRO_ALERT_DURATION = 1.4;
+  const SURVIVAL_TARGET_LOCK_DURATION = 2;
+  const SURVIVAL_TARGET_SWITCH_THREAT_RATIO = 1.35;
+  const SURVIVAL_BODY_PROVENANCE_TIMEOUT = 2;
   const SURVIVAL_SALVAGE_ARRIVAL_RADIUS = 620;
+  const SURVIVAL_RAMBOT_DEFENSE_SCAN_RADIUS = 6200;
+  const SURVIVAL_RAMBOT_DEFENSE_LOOKAHEAD = 18;
+  const SURVIVAL_RAMBOT_DEFENSE_PATH_PADDING = 260;
+  const SURVIVAL_RAMBOT_DEFENSE_MIN_CLOSING_SPEED = 18;
+  const SURVIVAL_RAMBOT_DEFENSE_BODY_IMPULSE = 105;
   const MOB_SPAWN_FULLY_ZOOMED_OUT_VIEW_RADIUS = Math.hypot(1280, 720) / (2 * 0.08);
   const MOB_SPAWN_DISTANCE_BONUS = 320;
   const MOB_SPAWN_SPREAD_MULTIPLIER = 1.25;
@@ -398,13 +411,13 @@
   const TURRET_LASER_KNOCKBACK = 210;
   const TURRET_SHOOT_COOLDOWN = 2.2;
   const TURRET_RANGE = 625;
-  const MISSILE_LAUNCHER_RANGE = 1120;
-  const MISSILE_LAUNCHER_PRODUCTION_TIME = 9.5;
-  const MISSILE_LAUNCHER_LOCK_DURATION = 0.62;
-  const MISSILE_LAUNCHER_ENERGY_COST = 22;
-  const LAUNCHER_MISSILE_SPEED = 610;
-  const LAUNCHER_MISSILE_DAMAGE = 68;
-  const LAUNCHER_MISSILE_KNOCKBACK = 320;
+  const MISSILE_LAUNCHER_RANGE = 1320;
+  const MISSILE_LAUNCHER_PRODUCTION_TIME = 6.4;
+  const MISSILE_LAUNCHER_LOCK_DURATION = 0.38;
+  const MISSILE_LAUNCHER_ENERGY_COST = 20;
+  const LAUNCHER_MISSILE_SPEED = 720;
+  const LAUNCHER_MISSILE_DAMAGE = 82;
+  const LAUNCHER_MISSILE_KNOCKBACK = 390;
   const ACCUMULATOR_BURST_COST = 6;
   const ACCUMULATOR_BURST_DURATION = 0.62;
   const ACCUMULATOR_RANGE = 680;
@@ -413,7 +426,9 @@
   const SHIELD_GENERATOR_ROCKET_COST = 16;
   const SHIELD_GENERATOR_LIGHTNING_COST = 14;
   const SHIELD_GENERATOR_POWER_OUT_DURATION = 1.4;
-  const SHIELD_GENERATOR_FIELD_PADDING = 84;
+  const SHIELD_GENERATOR_FIELD_PADDING = 148;
+  const SHIELD_GENERATOR_ACTOR_COST = 8;
+  const SHIELD_GENERATOR_ACTOR_MIN_BOUNCE_SPEED = 155;
   const TETHER_GIVE_RADIUS_SCALE = 0.45;
   const TETHER_MIN_GIVE = 18;
   const TETHER_MAX_GIVE = 96;

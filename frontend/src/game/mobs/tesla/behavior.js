@@ -13,6 +13,9 @@
       if (isMobSummoning(tesla)) {
         continue;
       }
+      if (shouldSleepDistantSurvivalMob(tesla)) {
+        continue;
+      }
       updateBossSpawnPressure(tesla, dt);
       if (isMobDisabled(tesla)) {
         tesla.lightningWarmup = 0;
@@ -103,4 +106,3 @@
       tesla.rotation = tesla.lightningAngle + Math.PI / 2;
     }
   }
-

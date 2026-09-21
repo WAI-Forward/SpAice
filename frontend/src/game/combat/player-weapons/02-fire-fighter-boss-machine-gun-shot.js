@@ -315,7 +315,12 @@
     const cost = projectileShieldCost(projectile);
 
     for (const structure of structures) {
-      if (structure.type !== "shield-generator" || structure.health <= 0 || isStructureDisabled(structure)) {
+      if (
+        structure.type !== "shield-generator" ||
+        structure.health <= 0 ||
+        isStructureDisabled(structure) ||
+        projectile && projectile.lightning && isMobOwnedStructure(structure)
+      ) {
         continue;
       }
 
@@ -372,7 +377,7 @@
   function resolveShieldGeneratorMobCollisions(dt) {
     for (const mob of allCombatMobs()) {
       tickMobShieldImpactCooldowns(mob, dt);
-      if (mob.health <= 0 || isPlayerTeamMob(mob)) {
+      if (mob.health <= 0 || isPlayerTeamMob(mob) || shouldSleepDistantSurvivalMob(mob)) {
         continue;
       }
 

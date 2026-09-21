@@ -107,6 +107,7 @@ function normalizeLeaderboardEntry(source) {
     playerId,
     name: sanitizeText(snapshot.name ?? stats.name, 32) || (playerId ? `Player ${playerId.slice(-4).toUpperCase()}` : "Player"),
     mode: normalizeLeaderboardMode(snapshot.mode ?? stats.mode),
+    gameMode: normalizeLeaderboardGameMode(snapshot.gameMode ?? stats.gameMode),
     score,
     difficulty: normalizeLeaderboardDifficulty(snapshot.difficulty ?? stats.difficulty),
     bodyScore: Math.max(0, Math.round(clampNumber(snapshot.bodyScore ?? stats.bodyScore, 0, 1000000000))),
@@ -131,6 +132,16 @@ function normalizeLeaderboardModeFilter(mode) {
   return value === "singleplayer" || value === "multiplayer" ? value : "all";
 }
 
+function normalizeLeaderboardGameMode(gameMode) {
+  const value = sanitizeText(gameMode, 32).toLowerCase();
+  return value === "survival" ? "survival" : "horde";
+}
+
+function normalizeLeaderboardGameModeFilter(gameMode) {
+  const value = sanitizeText(gameMode, 32).toLowerCase();
+  return value === "horde" || value === "survival" ? value : "all";
+}
+
 function normalizeLeaderboardDifficulty(difficulty) {
   const value = sanitizeText(difficulty, 32).toLowerCase();
   return difficultyChoices.has(value) ? value : "medium";
@@ -144,6 +155,7 @@ function normalizeLeaderboardDifficultyFilter(difficulty) {
 function normalizeLeaderboardFilters(filters) {
   const source = filters && typeof filters === "object" ? filters : {};
   return {
+    gameMode: normalizeLeaderboardGameModeFilter(source.gameMode),
     mode: normalizeLeaderboardModeFilter(source.mode),
     difficulty: normalizeLeaderboardDifficultyFilter(source.difficulty)
   };
@@ -151,6 +163,9 @@ function normalizeLeaderboardFilters(filters) {
 
 function leaderboardEntryMatchesFilters(entry, filters) {
   const cleanFilters = normalizeLeaderboardFilters(filters);
+  if (cleanFilters.gameMode !== "all" && normalizeLeaderboardGameMode(entry && entry.gameMode) !== cleanFilters.gameMode) {
+    return false;
+  }
   if (cleanFilters.mode !== "all" && normalizeLeaderboardMode(entry && entry.mode) !== cleanFilters.mode) {
     return false;
   }
@@ -176,4 +191,3 @@ function createLeaderboardEntryId() {
   }
   return `score-${Date.now().toString(36)}-${crypto.randomBytes(6).toString("hex")}`;
 }
-

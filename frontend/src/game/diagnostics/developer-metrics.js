@@ -46,11 +46,13 @@
       "  mass: total " + formatDeveloperNumber(mass.totalMass) + " | largest " + formatDeveloperNumber(mass.largestMass) + " (" + bodies.largestTier + ")",
       "  structures: " + structures.length + " | spacecraft: " + spacecrafts.length + " | pickups: health " + healthPickups.length + ", tech " + techPickups.length,
       "",
+      ...developerSurvivalCampMetricLines(),
       "Combat",
       "  mobs: " + mobs.total + " | bosses " + mobs.bosses,
       "  " + mobs.detail,
       "  projectiles: rival " + rivalProjectiles.length + ", lasers " + playerLasers.length + ", missiles " + launcherMissiles.length,
       "  effects: sparks " + sparks.length + ", star dust " + starDust.length,
+      "  survival AI:\n  " + (developerSurvivalAiSummary() || "none"),
       "",
       "Player",
       "  hp: " + formatDeveloperNumber(player.health, 1) + "/" + formatDeveloperNumber(player.maxHealth, 1) + " | energy " + formatDeveloperNumber(player.energy, 1) + "/" + formatDeveloperNumber(player.maxEnergy, 1),
@@ -89,7 +91,7 @@
   }
 
   function updateDeveloperOverlay(force) {
-    if (!developerMetricsState.open || !developerMetricsText) {
+    if (!developerMetricsState.open || developerMetricsState.minimized || !developerMetricsText) {
       return;
     }
 
@@ -414,6 +416,7 @@
       setTextIfChanged(energyValue, "EP: " + Math.round(player.energy) + "/" + Math.round(player.maxEnergy));
       setStyleWidthIfChanged(energyFill, energyPct + "%");
       energyFill.classList.toggle("is-disabled", areToolsDisabled());
+      energyFill.classList.toggle("is-loading", false);
     }
     updateDifficultyUi();
     if (scoreValue) {

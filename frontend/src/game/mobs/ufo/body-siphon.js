@@ -26,6 +26,7 @@
 
   function updateBodyAfterMassChange(body, previousTier) {
     body.tier = tierForMassAndStellarOutcome(body.mass, body.stellarOutcome);
+    if (body.tier.name === "particle") body.ownerPlayerId = "";
     body.radius = radiusFromMassForTier(body.mass, body.tier);
     normalizeBodyEnergy(body);
     body.textureSeed += 0.09;
@@ -228,4 +229,3 @@
       maxLife: 0.28
     });
   }
-

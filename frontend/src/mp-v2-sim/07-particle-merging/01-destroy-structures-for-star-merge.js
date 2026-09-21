@@ -84,15 +84,6 @@
     target.stellarOutcome = normalizedStellarOutcomeName(source && source.stellarOutcome);
   }
 
-  function survivalCampMergeSource(sources) {
-    for (const source of sources) {
-      if (source && source.survivalCampBody && source.survivalCampId) {
-        return source;
-      }
-    }
-    return null;
-  }
-
   function clearSurvivalCampMergeState(body) {
     if (!body) {
       return;
@@ -105,19 +96,25 @@
     body.survivalCampMovedByPlayer = false;
     body.survivalCampBodyMovedWakeSent = false;
     body.survivalCampLastMoverPlayerId = "";
+    body.lastControllingPlayerId = "";
+    body.lastPlayerControlBelowSpeedAt = 0;
     body.survivalCampBody = false;
   }
 
-  function applySurvivalCampMergeState(merged, sources, options) {
+  function applySurvivalCampMergeState(merged, absorber, options) {
     if (options && options.clearCampState) {
       clearSurvivalCampMergeState(merged);
       return;
     }
-    const source = survivalCampMergeSource(sources);
-    if (!merged || !source) {
+    const source = absorber && absorber.survivalCampBody && absorber.survivalCampId ? absorber : null;
+    if (!merged) {
+      return;
+    }
+    if (!source) {
       return;
     }
     merged.survivalCampId = source.survivalCampId;
+    merged.color = survivalCampColor(source.survivalCampId);
     merged.survivalCampX = finiteOr(source.survivalCampX, merged.x);
     merged.survivalCampY = finiteOr(source.survivalCampY, merged.y);
     merged.survivalCampHomeX = finiteOr(merged.x, source.survivalCampHomeX);
@@ -125,6 +122,8 @@
     merged.survivalCampMovedByPlayer = false;
     merged.survivalCampBodyMovedWakeSent = false;
     merged.survivalCampLastMoverPlayerId = "";
+    merged.lastControllingPlayerId = "";
+    merged.lastPlayerControlBelowSpeedAt = 0;
     merged.survivalCampBody = true;
   }
 
@@ -209,9 +208,12 @@
     return bodyIds;
   }
 
-  function playerIdForScoredBody(state, body) {
+  function playerIdForEstablishedBodyOwner(state, body) {
     if (!state || !body) {
       return "";
+    }
+    if (body.ownerPlayerId) {
+      return String(body.ownerPlayerId);
     }
     for (const player of Object.values(state.players || {})) {
       if (playerScoredBodyIds(state, player).has(body.id)) {
@@ -219,6 +221,13 @@
       }
     }
     return "";
+  }
+
+  function playerIdForScoredBody(state, body) {
+    if (!state || !body) {
+      return "";
+    }
+    return String(body.lastControllingPlayerId || playerIdForEstablishedBodyOwner(state, body) || "");
   }
 
   function wakeSurvivalCampFromPlayerBodyMerge(state, absorber, absorbed) {
@@ -342,6 +351,7 @@
     state.seed = seedHolder.seed >>> 0;
     body.mass = Math.max(1, finiteOr(body.mass, 1) - count);
     body.tier = clone(tierForMassAndStellarOutcome(body.mass, body.stellarOutcome));
+    if (body.tier.name === "particle") body.ownerPlayerId = "";
     body.radius = radiusFromMassForTier(body.mass, body.tier);
     normalizeBodyEnergy(world, body);
     return count;
@@ -404,13 +414,17 @@
     const totalMass = a.mass + b.mass;
     const keep = absorbingPair.absorber;
     const absorb = absorbingPair.absorbed;
-    const keepIsScoredBody = Boolean(playerIdForScoredBody(state, keep));
+    const keepHasCampOwner = Boolean(keep.survivalCampBody && keep.survivalCampId);
+    const keepWasOwnable = keep.tier && keep.tier.name !== "particle";
     wakeSurvivalCampFromPlayerBodyMerge(state, keep, absorb);
     const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;
     const stellarSource = stellarGrowthSourceForMerge(a, b, keep);
     const previousStellarMass = Math.max(0, finiteOr(stellarSource && stellarSource.mass, 0));
     const gainedStellarMass = Math.max(0, totalMass - previousStellarMass);
     let nextTier = tierForMass(totalMass);
+    const ownerPlayerId = nextTier.name === "particle" || keepHasCampOwner
+      ? ""
+      : String(keepWasOwnable ? playerIdForEstablishedBodyOwner(state, keep) || "" : playerIdForScoredBody(state, keep) || "");
     const graduated = nextTier.threshold > previousTier.threshold || (totalMass >= STELLAR_EVOLUTION_END_THRESHOLD && !STELLAR_OUTCOME_TIER_NAMES.includes(previousTier.name));
     const becameStar = nextTier.name === "star" && previousTier.name !== "star";
     const color = graduated ? mixColor(a.color, b.color, a.mass, b.mass) : keep.color;
@@ -431,10 +445,12 @@
       BODY_MAX_ANGULAR_SPEED
     );
     keep.color = color;
+    keep.ownerPlayerId = ownerPlayerId;
     keep.starBirthAge = becameStar ? 0 : nextTier.name === "star" ? keptStarBirthAge : 0;
     keep.starEmissionAccumulator = nextTier.name === "star" ? keptStarEmissionAccumulator : 0;
-    applySurvivalCampMergeState(keep, [keep, absorb, a, b], {
-      clearCampState: keepIsScoredBody
+    inheritGadgetPullContactIntent(keep, absorbingPair.absorber, absorbingPair.absorbed);
+    applySurvivalCampMergeState(keep, absorbingPair.absorber, {
+      clearCampState: Boolean(ownerPlayerId) && keepHasCampOwner
     });
     copyStellarGrowthState(keep, stellarSource);
     updateStellarGrowthForMerge(keep, previousStellarMass, gainedStellarMass, Math.max(0, finiteOr(state && state.tick, 0)) * TICK_DT);
@@ -560,7 +576,12 @@
   }
 
   function canLocalGravityClusterBody(body) {
-    return Boolean(body && body.tier && finiteOr(body.tier.threshold, 0) <= thresholdForTierName("asteroid"));
+    return Boolean(
+      body &&
+      body.tier &&
+      finiteOr(body.tier.threshold, 0) <= thresholdForTierName("asteroid") &&
+      !body.survivalCampBody
+    );
   }
 
   function applyLocalBodyGravity(state, dt) {

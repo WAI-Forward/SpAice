@@ -20,10 +20,12 @@
     const coneWidth = 64 + Math.max(0, forward) * 0.42;
     const targetRadius = finiteOr(target.radius, 1);
     const forceReach = gadgetForceReachForInput(actor, input);
+    const pushReach = gadgetPushReachForInput(actor, input);
     const holdReach = gadgetHoldReachForInput(actor, input);
     const inCone = forward > -70 && forward < forceReach && side < coneWidth + targetRadius * 0.2;
+    const inPushCone = forward > -20 - targetRadius * 0.15 && forward < pushReach + targetRadius && side < coneWidth * 0.95 + targetRadius * 0.32;
     const middleGatherRange = holding && gadgetMiddleGatherRange(forward, side, targetRadius, holdReach);
-    if (!inCone && !middleGatherRange) {
+    if (!(pushing ? inPushCone : inCone || middleGatherRange)) {
       return false;
     }
 
@@ -79,7 +81,7 @@
       markDirectGadgetBodyForceIntent(target, actor);
     }
 
-    if (pushing && forward > -20 - targetRadius * 0.15 && forward < 470 + targetRadius && side < coneWidth * 0.95 + targetRadius * 0.32) {
+    if (pushing && inPushCone) {
       const blastFalloff = clamp(1 - Math.max(0, forward) / 520, 0.22, 1);
       const sidePush = normalize(sideX, sideY);
       const force = 1450 * gadgetBlowFactor(actor, input) * blastFalloff * response;
@@ -119,7 +121,7 @@
     const targetRadius = Math.max(0, finiteOr(target.radius, 0));
     const coneWidth = 64 + Math.max(0, forward) * 0.42;
     const pullRange = forward > -70 && forward < gadgetForceReachForInput(actor, input) + targetRadius && side < coneWidth + targetRadius * 0.28;
-    const pushRange = forward > -20 && forward < 470 + targetRadius && side < coneWidth * 0.95 + targetRadius * 0.28;
+    const pushRange = forward > -20 && forward < gadgetPushReachForInput(actor, input) + targetRadius && side < coneWidth * 0.95 + targetRadius * 0.28;
     const activeRange = mode === "push" ? pushRange : pullRange;
     if (!activeRange) {
       return null;
@@ -220,7 +222,7 @@
     const strength = influence.pullStrength * (0.4 + influence.centerStrength * 0.6) * gadgetSuckFactor(actor, input);
     const before = Math.max(0, finiteOr(mob.health, 0));
     const damage = VICIOUS_VACUUM_MOB_DRAIN_RATE * VICIOUS_VACUUM_MOB_DRAIN_TICK_INTERVAL * strength;
-    damageMob(state, mob, damage, "vicious-vacuum", actor.id || "");
+    damageMob(state, mob, damage, "vicious-vacuum", { playerId: actor.id || "", cause: "vicious-vacuum", hostileActionType: "direct-tool-damage" });
     const drained = Math.max(0, before - Math.max(0, finiteOr(mob.health, 0)));
     if (drained > 0 && actor.health > 0) {
       actor.health = Math.min(finiteOr(actor.maxHealth, PLAYER_MAX_HEALTH), finiteOr(actor.health, 0) + drained);

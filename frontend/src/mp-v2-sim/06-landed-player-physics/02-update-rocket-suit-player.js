@@ -39,7 +39,7 @@
         const nx = dx / dist;
         const ny = dy / dist;
         knockMob(mob, nx, ny, ROCKET_SUIT_MOB_KNOCKBACK + speed * 0.22);
-        damageMob(state, mob, ROCKET_SUIT_MOB_DAMAGE + Math.max(0, speed - minHitSpeed) * ROCKET_SUIT_MOB_DAMAGE_SPEED_SCALE, "Rocket Suit", player.id || "");
+        damageMob(state, mob, ROCKET_SUIT_MOB_DAMAGE + Math.max(0, speed - minHitSpeed) * ROCKET_SUIT_MOB_DAMAGE_SPEED_SCALE, "Rocket Suit", { playerId: player.id || "", cause: "rocket-suit", hostileActionType: "player-impact" });
         player.vx -= nx * 120;
         player.vy -= ny * 120;
         break;

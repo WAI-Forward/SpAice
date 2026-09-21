@@ -17,6 +17,10 @@ const advertisedHosts = [
   process.env.EXTERNAL_IP || "92.29.230.204"
 ].filter(uniqueOnly);
 const maxJsonBodyBytes = 500000;
+const maxHttpJsonBodyBytes = Math.min(
+  16 * 1024 * 1024,
+  Math.max(500000, Math.floor(Number(process.env.CLUSTERNAUTS_MAX_HTTP_JSON_BODY_BYTES) || 8 * 1024 * 1024))
+);
 const wsLargeOutboundWarnBytes = Math.floor(maxJsonBodyBytes * 0.9);
 const wsBackpressureWarnBytes = maxJsonBodyBytes * 3;
 const wsOutboundPressureWarnIntervalMs = 5000;
@@ -104,6 +108,8 @@ const memoryPersistence = {
   sharedPlayers: new Map()
 };
 let dbPoolPromise = null;
+let dbPoolRetryAfter = 0;
+const databaseReconnectDelayMs = 30000;
 const sockets = new Set();
 const clientsByPlayerId = new Map();
 const pendingSignals = new Map();
@@ -132,6 +138,7 @@ const sharedWorldMode = "shared-public";
 const sharedWorldMaxPlayers = Math.max(1, Math.floor(Number(process.env.CLUSTERNAUTS_SHARED_WORLD_MAX_PLAYERS) || 40));
 const sharedWorldTeamMaxPlayers = 4;
 const sharedWorldSaveIntervalMs = 5000;
+const sharedWorldIdleResetMs = Math.max(0, Math.floor(Number(process.env.CLUSTERNAUTS_SHARED_WORLD_IDLE_RESET_MS) || 24 * 60 * 60 * 1000));
 const sharedWorldOfflineTeamRetentionMs = 7 * 24 * 60 * 60 * 1000;
 const anomalyPromptTimeoutMs = 15000;
 const anomalyEncounterLifetimeMs = 90000;
@@ -340,4 +347,3 @@ const mimeTypes = {
 };
 const gzipStaticExtensions = new Set([".css", ".html", ".js", ".json", ".svg", ".txt"]);
 const staticCompressionMinBytes = 1024;
-

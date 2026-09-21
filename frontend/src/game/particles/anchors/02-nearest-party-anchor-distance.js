@@ -253,7 +253,27 @@
   }
 
   function isAmbientDensityParticle(particle) {
-    return Boolean(particle && particle.tier && !particle.randomEventId && !particle.tier.solid && !isUfoBeamCargo(particle));
+    return Boolean(
+      particle &&
+      particle.tier &&
+      particle.tier.name === "particle" &&
+      !particle.randomEventId &&
+      !particle.survivalCampBody &&
+      finiteOr(particle.ufoSapTimer, 0) <= 0 &&
+      !isUfoBeamCargo(particle)
+    );
+  }
+
+  function isRecyclableAmbientMatter(particle) {
+    return Boolean(
+      particle &&
+      particle.tier &&
+      !particle.randomEventId &&
+      !particle.survivalCampBody &&
+      finiteOr(particle.ufoSapTimer, 0) <= 0 &&
+      !isUfoBeamCargo(particle) &&
+      (particle.tier.name === "particle" || Boolean(particle.ambientSpawnRock))
+    );
   }
 
   function countAmbientParticles() {
@@ -546,7 +566,7 @@
         tooCloseToPlayer * (bowWave ? 3.8 : 7.5) -
         spacingPenalty * (3.2 - patchAffinity * 1.25 + voidAffinity * 1.2);
       if (!best || score > best.score) {
-        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount, bowWave };
+        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount, bowWave, localFill };
       }
     }
 
@@ -559,7 +579,8 @@
       voidAffinity: particleVoidAffinityAt(source.x, source.y),
       densityNearest: 480,
       crowdCount: 0,
-      bowWave
+      bowWave,
+      localFill
     };
   }
 

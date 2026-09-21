@@ -62,6 +62,14 @@
             <span>Mode</span>
             <select id="leaderboardModeFilter">
               <option value="all">All</option>
+              <option value="horde">Horde</option>
+              <option value="survival">Survival</option>
+            </select>
+          </label>
+          <label>
+            <span>Play Type</span>
+            <select id="leaderboardPlayersFilter">
+              <option value="all">All</option>
               <option value="singleplayer">Singleplayer</option>
               <option value="multiplayer">Multiplayer</option>
             </select>
@@ -81,13 +89,14 @@
     </div>
 
     <section class="developer-overlay" id="developerOverlay" aria-label="Developer metrics" aria-hidden="true">
-        <div class="developer-overlay__header">
-          <strong>Developer Metrics</strong>
-          <div class="developer-overlay__actions">
-            <button class="developer-overlay__copy" id="developerMetricsCopy" type="button">Copy</button>
-            <span class="developer-overlay__shortcut">Ctrl+`</span>
-          </div>
+      <div class="developer-overlay__header">
+        <strong>Developer Metrics</strong>
+        <div class="developer-overlay__actions">
+          <button class="developer-overlay__copy" id="developerMetricsCopy" type="button">Copy</button>
+          <span class="developer-overlay__shortcut">Ctrl+`</span>
+          <button class="developer-overlay__minimize" id="developerMetricsMinimize" type="button" aria-label="Minimize developer metrics" aria-controls="developerMetricsText" aria-expanded="true" title="Minimize developer metrics">−</button>
         </div>
+      </div>
       <div class="developer-overlay__copy-status" id="developerMetricsCopyStatus" aria-live="polite"></div>
       <pre class="developer-overlay__metrics" id="developerMetricsText">Metrics paused</pre>
     </section>
@@ -167,7 +176,10 @@
     <section class="objective-tree" id="objectiveTree" aria-label="Objective tree" aria-hidden="true">
       <div class="objective-tree__panel">
         <div class="objective-tree__header">
-          <span>Objectives</span>
+          <div class="objective-tree__heading">
+            <span>Objectives</span>
+            <small>Mission navigation chart</small>
+          </div>
           <div class="objective-tree__header-actions">
             <strong id="objectiveSummary">Find matter, grow, and survive.</strong>
             <button class="objective-tree__claim-all" id="objectiveClaimAll" type="button" disabled>Claim All</button>
@@ -614,6 +626,14 @@
                 <span>Mode</span>
                 <select id="menuLeaderboardModeFilter">
                   <option value="all">All</option>
+                  <option value="horde">Horde</option>
+                  <option value="survival">Survival</option>
+                </select>
+              </label>
+              <label>
+                <span>Play Type</span>
+                <select id="menuLeaderboardPlayersFilter">
+                  <option value="all">All</option>
                   <option value="singleplayer">Singleplayer</option>
                   <option value="multiplayer">Multiplayer</option>
                 </select>
@@ -696,13 +716,12 @@
         <p class="death-screen__eyebrow">Life support offline</p>
         <h1>You died</h1>
         <dl class="death-screen__stats" id="deathStatsList"></dl>
-        <form class="death-screen__leaderboard" id="deathLeaderboardForm">
+        <div class="death-screen__leaderboard" id="deathLeaderboardForm">
           <label for="deathRunNameInput">Name this run</label>
           <input id="deathRunNameInput" type="text" autocomplete="off" maxlength="32" placeholder="Run name">
-          <button class="death-screen__button" id="deathLeaderboardButton" type="submit">Save run</button>
           <p class="death-screen__leaderboard-status" id="deathLeaderboardStatus" aria-live="polite"></p>
-        </form>
-        <button class="death-screen__button" id="playAgainButton" type="button">Play again</button>
+        </div>
+        <button class="death-screen__button" id="playAgainButton" type="button">Restart run</button>
         <button class="death-screen__button death-screen__button--secondary" id="deathMainMenuButton" type="button">Exit to main menu</button>
       </div>
     </section>

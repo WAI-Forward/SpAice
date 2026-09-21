@@ -2,6 +2,10 @@
     if (!body || !Array.isArray(bodies) || dt <= 0) {
       return false;
     }
+    if (body.survivalCampBody) {
+      clearOrbitState(body);
+      return false;
+    }
     const capture = findOrbitCapture(body, bodies);
     if (!capture) {
       if (finiteOr(body.orbitGrace, 0) > 0) {

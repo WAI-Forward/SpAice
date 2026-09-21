@@ -61,7 +61,8 @@
       player.energy = Math.max(0, finiteOr(player.energy, 0) - SUCTION_ENERGY_DRAIN * dt);
     }
     if (isSuctionToolId(input.equippedTool) && (input.buttons.pull || input.buttons.push)) {
-      if (applyGadgetThrustToBody(body, aimVector(input), input.buttons.pull ? 1 : -1, dt, 1, { x: player.x, y: player.y })) {
+      const strengthFactor = input.buttons.pull ? gadgetSuckFactor(player, input) : gadgetBlowFactor(player, input);
+      if (applyGadgetThrustToBody(body, aimVector(input), input.buttons.pull ? 1 : -1, dt, strengthFactor, { x: player.x, y: player.y })) {
         markSurvivalCampBodyMovedByPlayer(body, player.id || "");
       }
     }
@@ -231,7 +232,7 @@
     if (target) {
       target.vx += punch.aim.x * PISTON_PUNCH_KNOCKBACK;
       target.vy += punch.aim.y * PISTON_PUNCH_KNOCKBACK;
-      damageMob(state, target, PISTON_PUNCH_DAMAGE, "Piston Punch", player.id || "");
+      damageMob(state, target, PISTON_PUNCH_DAMAGE, "Piston Punch", { playerId: player.id || "", cause: "piston-punch", hostileActionType: "direct-tool-damage" });
     }
     state.events.push({
       type: "player.pistonPunch",

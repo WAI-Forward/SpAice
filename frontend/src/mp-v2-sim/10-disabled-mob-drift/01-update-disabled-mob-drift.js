@@ -33,7 +33,11 @@
 
     if (world && settings.affectStructures) {
       for (const structure of world.structures || []) {
-        if (!structure || finiteOr(structure.health, 0) <= 0) {
+        if (
+          !structure ||
+          finiteOr(structure.health, 0) <= 0 ||
+          settings.sourceMob && !isPlayerTeamMob(settings.sourceMob) && isMobOwnedStructure(structure)
+        ) {
           continue;
         }
         const distance = Math.hypot(structure.x - x, structure.y - y);
@@ -224,7 +228,9 @@
       return playerTarget(player);
     }
     const playerDistance = Math.hypot(player.x - tesla.x, player.y - tesla.y);
-    const structure = nearestStructureTarget(state.world, tesla.x, tesla.y, TESLA_LIGHTNING_RANGE * 0.95, (candidate) => candidate.health > 0);
+    const structure = nearestStructureTarget(state.world, tesla.x, tesla.y, TESLA_LIGHTNING_RANGE * 0.95, (candidate) => (
+      candidate.health > 0 && !isMobOwnedStructure(candidate)
+    ));
     if (structure) {
       const structureDistance = Math.hypot(structure.x - tesla.x, structure.y - tesla.y);
       if (structureDistance < playerDistance * 1.12 && hasClearShotAtStructure(state.world, tesla.x, tesla.y, structure)) {
@@ -468,4 +474,3 @@
     rocket.rotation = Math.atan2(aim.y, aim.x) + Math.PI / 2;
     state.events.push({ type: "mob.shot", mobId: rocket.id, kind: rocket.kind || "satellite", projectileId: projectile.id, tick: state.tick });
   }
-

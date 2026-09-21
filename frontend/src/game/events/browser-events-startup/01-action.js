@@ -146,11 +146,7 @@
 
   if (playAgainButton) {
     playAgainButton.addEventListener("click", function () {
-      if (isPartySessionActive()) {
-        respawnMultiplayerPlayer();
-      } else {
-        void hardResetAfterDeath();
-      }
+      void continueAfterDeath();
     });
   }
 
@@ -161,12 +157,20 @@
   }
 
   if (deathLeaderboardForm) {
-    deathLeaderboardForm.addEventListener("submit", function (event) {
-      event.preventDefault();
-      void saveDeathLeaderboardRun();
-    });
     deathLeaderboardForm.addEventListener("click", function (event) {
       event.stopPropagation();
+    });
+  }
+
+  if (deathRunNameInput) {
+    deathRunNameInput.addEventListener("blur", function () {
+      void renameDeathLeaderboardRun();
+    });
+    deathRunNameInput.addEventListener("keydown", function (event) {
+      if (event.code === "Enter") {
+        event.preventDefault();
+        deathRunNameInput.blur();
+      }
     });
   }
 
@@ -358,6 +362,14 @@
     });
   }
 
+  if (developerMetricsMinimize) {
+    developerMetricsMinimize.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleDeveloperOverlayMinimized();
+    });
+  }
+
   window.addEventListener("keydown", function (event) {
     if (pendingControlRemap) {
       event.preventDefault();
@@ -376,4 +388,3 @@
       setSettingsOpen(false);
     }
   });
-

@@ -148,6 +148,11 @@
   box-shadow: 0 0 16px rgba(255, 64, 80, 0.48);
 }
 
+.hud__energy-fill.is-loading {
+  background: linear-gradient(90deg, #58e2ff, #8fffd0, #f8fbff);
+  box-shadow: 0 0 18px rgba(88, 226, 255, 0.52);
+}
+
 .hud__score {
   min-width: 126px;
   display: grid;

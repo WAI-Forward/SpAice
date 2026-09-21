@@ -227,6 +227,9 @@
     if (!orbiter || !host || orbiter === host || !orbiter.tier || !host.tier) {
       return false;
     }
+    if (orbiter.survivalCampBody || host.survivalCampBody) {
+      return false;
+    }
     if (orbitRingCountForBody(host) <= 0) {
       return false;
     }
@@ -306,6 +309,10 @@
 
   function applyOrbitCaptureForces(body, bodies, dt) {
     if (!body || !Array.isArray(bodies) || dt <= 0) {
+      return false;
+    }
+    if (body.survivalCampBody) {
+      clearOrbitState(body);
       return false;
     }
     const capture = findOrbitCapture(body, bodies);

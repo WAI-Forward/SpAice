@@ -13,7 +13,9 @@
     }
 
     const playerDistance = Math.hypot(targetPlayer.x - tesla.x, targetPlayer.y - tesla.y);
-    const structure = nearestStructureTarget(tesla.x, tesla.y, teslaLightningRange * 0.95, (candidate) => candidate.health > 0);
+    const structure = nearestStructureTarget(tesla.x, tesla.y, teslaLightningRange * 0.95, (candidate) => (
+      candidate.health > 0 && !isMobOwnedStructure(candidate)
+    ));
 
     if (structure) {
       const structureDistance = Math.hypot(structure.x - tesla.x, structure.y - tesla.y);
@@ -83,6 +85,9 @@
         continue;
       }
       if (isMobSummoning(engineer)) {
+        continue;
+      }
+      if (shouldSleepDistantSurvivalMob(engineer)) {
         continue;
       }
       updateBossSpawnPressure(engineer, dt);

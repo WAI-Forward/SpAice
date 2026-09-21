@@ -78,6 +78,11 @@
     summaryReady: false,
     resetInFlight: false,
     leaderboardSubmitted: false,
+    leaderboardEntryId: "",
+    leaderboardCreatedAt: 0,
+    leaderboardName: "",
+    leaderboardSavePromise: null,
+    leaderboardRenamePromise: null,
     timer: 0,
     stats: null,
     cause: "Unknown impact"
@@ -93,6 +98,7 @@
     submittedDeathKey: "",
     submittedCrazyGamesKey: "",
     filters: {
+      gameMode: "all",
       mode: "all",
       difficulty: "all"
     }

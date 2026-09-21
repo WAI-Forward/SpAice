@@ -32,6 +32,16 @@
     return tier ? tier.threshold : Number.POSITIVE_INFINITY;
   }
 
+  function syncMapBodyFilterOptions(select, isDisabled) {
+    if (!select) {
+      return;
+    }
+    for (const option of select.options) {
+      const tier = bodyTiers.find((candidate) => candidate.name === option.value);
+      option.disabled = Boolean(tier && isDisabled(tier.threshold));
+    }
+  }
+
   function isBodyVisibleOnMap(body) {
     if (!body || !body.tier) {
       return false;
@@ -43,12 +53,19 @@
   function syncMapMinimumBodyFilter() {
     gameSettings.mapMinimumBodyTier = normalizeMapMinimumBodyTierName(gameSettings.mapMinimumBodyTier);
     gameSettings.mapMaximumBodyTier = normalizeMapMaximumBodyTierName(gameSettings.mapMaximumBodyTier);
+    if (mapMinimumBodyThreshold() > mapMaximumBodyThreshold()) {
+      gameSettings.mapMaximumBodyTier = gameSettings.mapMinimumBodyTier;
+    }
     if (mapMinimumBodyFilter) {
       mapMinimumBodyFilter.value = gameSettings.mapMinimumBodyTier;
     }
     if (mapMaximumBodyFilter) {
       mapMaximumBodyFilter.value = gameSettings.mapMaximumBodyTier;
     }
+    const minimumThreshold = mapMinimumBodyThreshold();
+    const maximumThreshold = mapMaximumBodyThreshold();
+    syncMapBodyFilterOptions(mapMinimumBodyFilter, (threshold) => threshold > maximumThreshold);
+    syncMapBodyFilterOptions(mapMaximumBodyFilter, (threshold) => threshold < minimumThreshold);
     invalidateRenderCaches();
   }
 

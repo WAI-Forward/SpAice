@@ -186,6 +186,7 @@
       playerId: String(entry.playerId || ""),
       name: sanitizePlayerName(entry.name) || "Player",
       mode,
+      gameMode: normalizeGameMode(entry.gameMode),
       score,
       difficulty: difficultyDefinitions[entry.difficulty] ? entry.difficulty : defaultDifficultyId,
       bodyScore: Math.max(0, Math.round(finiteOr(entry.bodyScore, 0))),
@@ -213,6 +214,11 @@
     return value === "singleplayer" || value === "multiplayer" ? value : "all";
   }
 
+  function normalizeLeaderboardGameModeFilter(gameMode) {
+    const value = String(gameMode || "all").toLowerCase();
+    return value === "horde" || value === "survival" ? value : "all";
+  }
+
   function normalizeLeaderboardDifficultyFilter(difficulty) {
     const value = String(difficulty || "all").toLowerCase();
     return difficultyDefinitions[value] ? value : "all";
@@ -220,9 +226,13 @@
 
   function leaderboardEntryMatchesFilters(entry) {
     const filters = leaderboard.filters || {};
+    const gameModeFilter = normalizeLeaderboardGameModeFilter(filters.gameMode);
     const modeFilter = normalizeLeaderboardModeFilter(filters.mode);
     const difficultyFilter = normalizeLeaderboardDifficultyFilter(filters.difficulty);
 
+    if (gameModeFilter !== "all" && normalizeGameMode(entry.gameMode) !== gameModeFilter) {
+      return false;
+    }
     if (modeFilter !== "all" && normalizeLeaderboardMode(entry.mode, "singleplayer") !== modeFilter) {
       return false;
     }
@@ -246,6 +256,7 @@
         playerId: player.id || "local-player",
         name: player.name || "Player",
         mode: liveMode,
+        gameMode: normalizeGameMode(runState.gameMode),
         score: localLeaderboardScore(),
         difficulty: runState.difficultyId,
         local: true,
@@ -270,6 +281,7 @@
         playerId: remote.playerId,
         name: remote.publicName || (remotePlayer && remotePlayer.name) || "Contact",
         mode: "multiplayer",
+        gameMode: normalizeGameMode(remotePlayer && remotePlayer.gameMode || snapshot && snapshot.world && snapshot.world.gameMode || runState.gameMode),
         score,
         difficulty: remoteDifficulty,
         local: false,
@@ -291,7 +303,7 @@
 
   function appendLeaderboardStatus(target, message) {
     const status = document.createElement("div");
-    status.className = "leaderboard-row";
+    status.className = "leaderboard-row leaderboard-row--status";
     status.textContent = message;
     target.append(status);
   }
@@ -321,7 +333,7 @@
       score.className = "leaderboard-row__score";
 
       rank.textContent = "#" + (index + 1);
-      name.textContent = entry.name + " [" + (entry.mode === "multiplayer" ? "MP" : "SP") + " " + difficultyLabel(entry.difficulty) + "]" + (entry.local ? " (you)" : "") + (entry.live ? " current" : "");
+      name.textContent = entry.name + " [" + (entry.mode === "multiplayer" ? "MP" : "SP") + " " + (entry.gameMode === "survival" ? "Survival" : "Horde") + " " + difficultyLabel(entry.difficulty) + "]" + (entry.local ? " (you)" : "") + (entry.live ? " current" : "");
       score.textContent = entry.score + " pts";
 
       row.append(rank, name, score);
@@ -337,10 +349,12 @@
   }
 
   function syncLeaderboardFilters() {
-    const filters = leaderboard.filters || { mode: "all", difficulty: "all" };
+    const filters = leaderboard.filters || { gameMode: "all", mode: "all", difficulty: "all" };
     const controls = [
-      [leaderboardModeFilter, filters.mode],
-      [menuLeaderboardModeFilter, filters.mode],
+      [leaderboardModeFilter, filters.gameMode],
+      [menuLeaderboardModeFilter, filters.gameMode],
+      [leaderboardPlayersFilter, filters.mode],
+      [menuLeaderboardPlayersFilter, filters.mode],
       [leaderboardDifficultyFilter, filters.difficulty],
       [menuLeaderboardDifficultyFilter, filters.difficulty]
     ];
@@ -352,15 +366,17 @@
     }
   }
 
-  function setLeaderboardFilters(mode, difficulty) {
+  function setLeaderboardFilters(gameMode, mode, difficulty) {
+    const nextGameMode = normalizeLeaderboardGameModeFilter(gameMode);
     const nextMode = normalizeLeaderboardModeFilter(mode);
     const nextDifficulty = normalizeLeaderboardDifficultyFilter(difficulty);
-    const current = leaderboard.filters || { mode: "all", difficulty: "all" };
-    if (current.mode === nextMode && current.difficulty === nextDifficulty) {
+    const current = leaderboard.filters || { gameMode: "all", mode: "all", difficulty: "all" };
+    if (current.gameMode === nextGameMode && current.mode === nextMode && current.difficulty === nextDifficulty) {
       return;
     }
 
     leaderboard.filters = {
+      gameMode: nextGameMode,
       mode: nextMode,
       difficulty: nextDifficulty
     };

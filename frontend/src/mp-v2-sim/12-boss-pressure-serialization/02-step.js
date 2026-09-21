@@ -26,6 +26,7 @@
     updateSpacecrafts(state, dt);
     resolveGadgetBuckets(state, inputs, dt);
     resolvePlayerBodyCollisions(state);
+    resolveShieldGeneratorPlayerCollisions(state);
     mergeParticles(state);
     syncStructuresToSurfaces(state, true);
     syncLandedPlayersToSurfaces(state);
@@ -199,6 +200,7 @@
       seed: finiteOr(source.seed, 0) >>> 0,
       difficulty: String(source.difficulty || "medium"),
       gameMode,
+      worldMode: String(source.worldMode || "party"),
       players: serializePlayers(source.players),
       world,
       events: Array.isArray(source.events) ? source.events.map((event) => event && typeof event === "object" ? { ...event } : event).filter(Boolean) : []

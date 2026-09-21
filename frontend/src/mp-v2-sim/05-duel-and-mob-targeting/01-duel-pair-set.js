@@ -109,6 +109,10 @@
     return GADGET_HOLD_REACH * Math.max(0.1, finiteOr(gadgetRangeFactor(player, input), 1));
   }
 
+  function gadgetPushReachForInput(player, input) {
+    return GADGET_PUSH_REACH * Math.max(0.1, finiteOr(gadgetBlowFactor(player, input), 1));
+  }
+
   function weaponByToolId(player, toolId) {
     const id = String(toolId || "");
     const base = PLAYER_WEAPON_DEFINITIONS[id] || null;
@@ -244,6 +248,26 @@
     body.gadgetPullAimX = finiteOr(aim.x, 1);
     body.gadgetPullAimY = finiteOr(aim.y, 0);
     body.gadgetPullTowardActor = pullTowardActor === true;
+  }
+
+  function inheritGadgetPullContactIntent(target, firstSource, secondSource) {
+    if (!target) {
+      return;
+    }
+
+    const firstTimer = Math.max(0, finiteOr(firstSource && firstSource.gadgetPullContactTimer, 0));
+    const secondTimer = Math.max(0, finiteOr(secondSource && secondSource.gadgetPullContactTimer, 0));
+    const source = secondTimer > firstTimer ? secondSource : firstSource;
+    const timer = Math.max(firstTimer, secondTimer);
+    if (!source || timer <= 0) {
+      return;
+    }
+
+    target.gadgetPullContactTimer = timer;
+    target.gadgetPullActorId = source.gadgetPullActorId || "";
+    target.gadgetPullAimX = finiteOr(source.gadgetPullAimX, 1);
+    target.gadgetPullAimY = finiteOr(source.gadgetPullAimY, 0);
+    target.gadgetPullTowardActor = source.gadgetPullTowardActor === true;
   }
 
   function markDirectGadgetBodyForceIntent(body, actor) {

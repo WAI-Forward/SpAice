@@ -44,6 +44,11 @@
     deathState.summaryReady = false;
     deathState.resetInFlight = false;
     deathState.leaderboardSubmitted = false;
+    deathState.leaderboardEntryId = "";
+    deathState.leaderboardCreatedAt = 0;
+    deathState.leaderboardName = "";
+    deathState.leaderboardSavePromise = null;
+    deathState.leaderboardRenamePromise = null;
     deathState.timer = 0;
     deathState.stats = null;
     deathState.cause = "Unknown impact";
@@ -438,4 +443,3 @@
       await new Promise((resolve) => window.setTimeout(resolve, 50));
     }
   }
-

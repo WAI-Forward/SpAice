@@ -123,14 +123,49 @@
     };
   }
 
-  function drawRockShape(particle, radius, roughness, sides) {
+  function rockyShapeProfile(tierName) {
+    if (tierName === "boulder") {
+      return {
+        axisX: 1.08,
+        axisY: 0.72,
+        roughness: 0.13,
+        sides: 14,
+        chipStrength: 0.05
+      };
+    }
+    if (tierName === "asteroid") {
+      return {
+        axisX: 0.99,
+        axisY: 0.96,
+        roughness: 0.24,
+        sides: 19,
+        chipStrength: 0.13
+      };
+    }
+    return {
+      axisX: 0.98,
+      axisY: 0.92,
+      roughness: 0.16,
+      sides: 13,
+      chipStrength: 0.04
+    };
+  }
+
+  function drawRockShape(particle, radius, profile) {
+    const roughness = profile && Number.isFinite(profile.roughness) ? profile.roughness : 0.15;
+    const sides = profile && Number.isFinite(profile.sides) ? Math.max(6, Math.round(profile.sides)) : 15;
+    const axisX = profile && Number.isFinite(profile.axisX) ? profile.axisX : 1;
+    const axisY = profile && Number.isFinite(profile.axisY) ? profile.axisY : 1;
+    const chipStrength = profile && Number.isFinite(profile.chipStrength) ? profile.chipStrength : 0.05;
+
     ctx.beginPath();
     for (let i = 0; i < sides; i += 1) {
       const angle = (Math.PI * 2 * i) / sides;
       const n = Math.sin(particle.textureSeed * 3.1 + i * 1.83) * 0.5 + Math.sin(particle.textureSeed * 1.7 + i * 4.31) * 0.5;
-      const r = radius * (1 + n * roughness);
-      const x = Math.cos(angle) * r;
-      const y = Math.sin(angle) * r;
+      const chip = Math.max(0, Math.sin(particle.textureSeed * 5.7 + i * 2.41)) * chipStrength;
+      const r = radius * (1 + n * roughness - chip);
+      const x = Math.cos(angle) * r * axisX;
+      const y = Math.sin(angle) * r * axisY;
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
@@ -149,8 +184,7 @@
 
     ctx.globalCompositeOperation = "source-over";
     if (rockyBody) {
-      const roughness = tierName === "asteroid" ? 0.22 : 0.15;
-      const sides = tierName === "asteroid" ? 19 : 15;
+      const profile = rockyShapeProfile(tierName);
 
       ctx.save();
       ctx.translate(particle.x, particle.y);
@@ -168,12 +202,12 @@
       gradient.addColorStop(0.62, colorString(particle.color, bodyAlpha * 0.94));
       gradient.addColorStop(1, colorString(dark, bodyAlpha * 0.96));
       ctx.fillStyle = gradient;
-      drawRockShape(particle, radius, roughness, sides);
+      drawRockShape(particle, radius, profile);
       ctx.fill();
 
       ctx.strokeStyle = colorString(light, bodyAlpha * 0.24);
       ctx.lineWidth = Math.max(1, radius * 0.045);
-      drawRockShape(particle, radius + Math.max(1.5, radius * 0.035), roughness * 0.82, sides);
+      drawRockShape(particle, radius + Math.max(1.5, radius * 0.035), Object.assign({}, profile, { roughness: profile.roughness * 0.82 }));
       ctx.stroke();
       ctx.restore();
       return;
@@ -247,6 +281,8 @@
 
   function drawRockBody(particle, radius, tierName) {
     const isAsteroid = tierName === "asteroid";
+    const isBoulder = tierName === "boulder";
+    const profile = rockyShapeProfile(tierName);
     const base = isAsteroid ? shadeColor(particle.color, -28) : shadeColor(particle.color, -12);
     const light = shadeColor(particle.color, 66);
     const dark = shadeColor(particle.color, -82);
@@ -261,26 +297,38 @@
     gradient.addColorStop(1, colorString(dark, 0.98));
     ctx.fillStyle = gradient;
 
-    drawRockShape(particle, radius, isAsteroid ? 0.22 : 0.15, isAsteroid ? 19 : 15);
+    drawRockShape(particle, radius, profile);
     ctx.fill();
     ctx.clip();
 
     ctx.strokeStyle = colorString(dark, isAsteroid ? 0.42 : 0.28);
-    ctx.lineWidth = Math.max(1.2, radius * 0.045);
-    for (let i = 0; i < (isAsteroid ? 7 : 4); i += 1) {
-      const y = (textureNoise(particle.textureSeed, i) - 0.5) * radius * 1.25;
+    ctx.lineWidth = Math.max(1.2, radius * (isBoulder ? 0.052 : 0.045));
+    for (let i = 0; i < (isAsteroid ? 7 : isBoulder ? 5 : 4); i += 1) {
+      const y = (textureNoise(particle.textureSeed, i) - 0.5) * radius * (isBoulder ? 0.78 : 1.25);
       ctx.beginPath();
-      ctx.moveTo(-radius * 0.72, y);
+      ctx.moveTo(-radius * (isBoulder ? 0.92 : 0.72), y);
       ctx.quadraticCurveTo(
-        -radius * 0.1,
-        y + textureNoise(particle.textureSeed + 3, i) * radius * 0.5,
-        radius * 0.72,
-        y + textureNoise(particle.textureSeed + 6, i) * radius * 0.32
+        -radius * (isBoulder ? 0.06 : 0.1),
+        y + textureNoise(particle.textureSeed + 3, i) * radius * (isBoulder ? 0.22 : 0.5),
+        radius * (isBoulder ? 0.92 : 0.72),
+        y + textureNoise(particle.textureSeed + 6, i) * radius * (isBoulder ? 0.18 : 0.32)
       );
       ctx.stroke();
     }
 
-    drawCraters(radius, particle.textureSeed, isAsteroid ? 7 : 4, particle.color, isAsteroid ? 0.9 : 0.65);
+    if (isBoulder) {
+      ctx.strokeStyle = colorString(light, 0.2);
+      ctx.lineWidth = Math.max(1.1, radius * 0.032);
+      for (let i = 0; i < 3; i += 1) {
+        const x = -radius * 0.48 + i * radius * 0.44;
+        ctx.beginPath();
+        ctx.moveTo(x, -radius * 0.34);
+        ctx.lineTo(x + textureNoise(particle.textureSeed + 12, i) * radius * 0.15, radius * 0.3);
+        ctx.stroke();
+      }
+    }
+
+    drawCraters(radius, particle.textureSeed, isAsteroid ? 8 : isBoulder ? 3 : 4, particle.color, isAsteroid ? 0.95 : isBoulder ? 0.48 : 0.65);
     ctx.restore();
   }
 

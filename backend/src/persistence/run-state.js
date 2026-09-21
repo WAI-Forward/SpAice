@@ -124,6 +124,10 @@ async function listLeaderboardEntries(limit, filters) {
   await ensureDatabaseSchema(pool);
   const clauses = [];
   const params = [];
+  if (cleanFilters.gameMode !== "all") {
+    params.push(cleanFilters.gameMode);
+    clauses.push(`COALESCE(state->>'gameMode', 'horde') = $${params.length}`);
+  }
   if (cleanFilters.mode !== "all") {
     params.push(cleanFilters.mode);
     clauses.push(`COALESCE(state->>'mode', 'singleplayer') = $${params.length}`);
@@ -152,7 +156,15 @@ async function saveLeaderboardEntry(source) {
 
   const pool = await getDbPool();
   if (!pool) {
-    memoryPersistence.leaderboard.push(entry);
+    const existingIndex = memoryPersistence.leaderboard.findIndex((candidate) => candidate.id === entry.id);
+    if (existingIndex >= 0) {
+      if (memoryPersistence.leaderboard[existingIndex].playerId !== entry.playerId) {
+        throw new Error("Leaderboard entry id already belongs to another player.");
+      }
+      memoryPersistence.leaderboard[existingIndex] = entry;
+    } else {
+      memoryPersistence.leaderboard.push(entry);
+    }
     memoryPersistence.leaderboard.sort(compareLeaderboardEntries);
     while (memoryPersistence.leaderboard.length > 500) {
       memoryPersistence.leaderboard.pop();
@@ -162,12 +174,62 @@ async function saveLeaderboardEntry(source) {
   }
 
   await ensureDatabaseSchema(pool);
-  await pool.query(
+  const result = await pool.query(
     `INSERT INTO clusternauts_leaderboard_entry (id, player_id, score, state, created_at)
-     VALUES ($1, $2, $3, $4::jsonb, to_timestamp($5 / 1000.0))`,
+     VALUES ($1, $2, $3, $4::jsonb, to_timestamp($5 / 1000.0))
+     ON CONFLICT (id) DO UPDATE
+     SET score = EXCLUDED.score,
+         state = EXCLUDED.state,
+         created_at = EXCLUDED.created_at
+     WHERE clusternauts_leaderboard_entry.player_id = EXCLUDED.player_id
+     RETURNING id`,
     [entry.id, entry.playerId, entry.score, JSON.stringify(entry), entry.createdAt]
   );
+  if (!result.rows.length) {
+    throw new Error("Leaderboard entry id already belongs to another player.");
+  }
 
   return entry;
 }
 
+async function updateLeaderboardEntryName(entryId, playerId, name) {
+  const cleanEntryId = sanitizeText(entryId, 80);
+  const cleanPlayerId = sanitizeText(playerId, 80);
+  const cleanName = sanitizeText(name, 32);
+  if (!cleanEntryId || !cleanPlayerId || !cleanName) {
+    throw new Error("Missing leaderboard entry name.");
+  }
+
+  const pool = await getDbPool();
+  if (!pool) {
+    const entry = memoryPersistence.leaderboard.find((candidate) => (
+      candidate.id === cleanEntryId && candidate.playerId === cleanPlayerId
+    ));
+    if (!entry) {
+      return null;
+    }
+    entry.name = cleanName;
+    return normalizeLeaderboardEntry(entry);
+  }
+
+  await ensureDatabaseSchema(pool);
+  const result = await pool.query(
+    `SELECT state
+     FROM clusternauts_leaderboard_entry
+     WHERE id = $1 AND player_id = $2`,
+    [cleanEntryId, cleanPlayerId]
+  );
+  if (!result.rows.length) {
+    return null;
+  }
+
+  const entry = normalizeLeaderboardEntry(result.rows[0].state);
+  entry.name = cleanName;
+  await pool.query(
+    `UPDATE clusternauts_leaderboard_entry
+     SET state = $3::jsonb
+     WHERE id = $1 AND player_id = $2`,
+    [cleanEntryId, cleanPlayerId, JSON.stringify(entry)]
+  );
+  return entry;
+}

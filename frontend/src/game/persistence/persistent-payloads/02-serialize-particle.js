@@ -36,6 +36,7 @@
       ufoExtractedById: particle.ufoExtractedById,
       ufoExtractedFromId: particle.ufoExtractedFromId,
       ufoSapParticleBuffer: particle.ufoSapParticleBuffer,
+      ownerPlayerId: particle.tier && particle.tier.name !== "particle" ? particle.ownerPlayerId || "" : "",
       survivalCampId: particle.survivalCampId || "",
       survivalCampX: particle.survivalCampX,
       survivalCampY: particle.survivalCampY,
@@ -44,6 +45,9 @@
       survivalCampMovedByPlayer: Boolean(particle.survivalCampMovedByPlayer),
       survivalCampBodyMovedWakeSent: Boolean(particle.survivalCampBodyMovedWakeSent),
       survivalCampLastMoverPlayerId: particle.survivalCampLastMoverPlayerId || "",
+      lastControllingPlayerId: particle.lastControllingPlayerId || "",
+      lastPlayerControlBelowSpeedAt: Math.max(0, finiteOr(particle.lastPlayerControlBelowSpeedAt, 0)),
+      playerImpactDebrisCooldown: Math.max(0, finiteOr(particle.playerImpactDebrisCooldown, 0)),
       survivalCampBody: Boolean(particle.survivalCampBody),
       ambientSpawnRock: Boolean(particle.ambientSpawnRock)
     };

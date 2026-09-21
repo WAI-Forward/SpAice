@@ -1,12 +1,3 @@
-  function survivalCampMergeSource(sources) {
-    for (const source of sources) {
-      if (source && source.survivalCampBody && source.survivalCampId) {
-        return source;
-      }
-    }
-    return null;
-  }
-
   function clearSurvivalCampMergeState(body) {
     if (!body) {
       return;
@@ -19,19 +10,25 @@
     body.survivalCampMovedByPlayer = false;
     body.survivalCampBodyMovedWakeSent = false;
     body.survivalCampLastMoverPlayerId = "";
+    body.lastControllingPlayerId = "";
+    body.lastPlayerControlBelowSpeedAt = 0;
     body.survivalCampBody = false;
   }
 
-  function applySurvivalCampMergeState(merged, sources, options) {
+  function applySurvivalCampMergeState(merged, absorber, options) {
     if (options && options.clearCampState) {
       clearSurvivalCampMergeState(merged);
       return;
     }
-    const source = survivalCampMergeSource(sources);
-    if (!merged || !source) {
+    const source = absorber && absorber.survivalCampBody && absorber.survivalCampId ? absorber : null;
+    if (!merged) {
+      return;
+    }
+    if (!source) {
       return;
     }
     merged.survivalCampId = source.survivalCampId;
+    merged.color = survivalCampColor(source.survivalCampId);
     merged.survivalCampX = finiteOr(source.survivalCampX, merged.x);
     merged.survivalCampY = finiteOr(source.survivalCampY, merged.y);
     merged.survivalCampHomeX = finiteOr(merged.x, source.survivalCampHomeX);
@@ -39,6 +36,8 @@
     merged.survivalCampMovedByPlayer = false;
     merged.survivalCampBodyMovedWakeSent = false;
     merged.survivalCampLastMoverPlayerId = "";
+    merged.lastControllingPlayerId = "";
+    merged.lastPlayerControlBelowSpeedAt = 0;
     merged.survivalCampBody = true;
   }
 
@@ -46,11 +45,13 @@
     if (typeof wakeSurvivalCampFromBody !== "function") {
       return false;
     }
-    if (absorbed && absorbed.survivalCampBody && scoredBodyIds.has(absorber && absorber.id)) {
-      return wakeSurvivalCampFromBody(absorbed, player.id || "", { allowScoredBody: true });
+    const absorberPlayerId = String(absorber && absorber.ownerPlayerId || (scoredBodyIds.has(absorber && absorber.id) ? player.id : "") || "");
+    const absorbedPlayerId = String(absorbed && absorbed.ownerPlayerId || (scoredBodyIds.has(absorbed && absorbed.id) ? player.id : "") || "");
+    if (absorbed && absorbed.survivalCampBody && absorberPlayerId) {
+      return wakeSurvivalCampFromBody(absorbed, absorberPlayerId, { allowScoredBody: true });
     }
-    if (absorber && absorber.survivalCampBody && scoredBodyIds.has(absorbed && absorbed.id)) {
-      return wakeSurvivalCampFromBody(absorber, player.id || "", { allowScoredBody: true });
+    if (absorber && absorber.survivalCampBody && absorbedPlayerId) {
+      return wakeSurvivalCampFromBody(absorber, absorbedPlayerId, { allowScoredBody: true });
     }
     return false;
   }
@@ -116,11 +117,20 @@
 
           const scoredBodyIds = connectedScoredBodyIds();
           const absorberIsScoredBody = scoredBodyIds.has(absorbingPair.absorber.id);
+          const absorberHasCampOwner = Boolean(absorbingPair.absorber.survivalCampBody && absorbingPair.absorber.survivalCampId);
+          const absorberWasOwnable = absorbingPair.absorber.tier && absorbingPair.absorber.tier.name !== "particle";
           wakeSurvivalCampFromPlayerBodyMerge(absorbingPair.absorber, absorbingPair.absorbed, scoredBodyIds);
           recordPlayerAbsorption(absorbingPair.absorber, absorbingPair.absorbed);
           const mass = absorbingPair.absorber.mass + absorbingPair.absorbed.mass;
           const previousTier = a.tier.threshold >= b.tier.threshold ? a.tier : b.tier;
           let tier = tierForMass(mass);
+          const ownerPlayerId = tier.name === "particle" || absorberHasCampOwner
+            ? ""
+            : String(
+              absorberWasOwnable
+                ? absorbingPair.absorber.ownerPlayerId || (absorberIsScoredBody ? player.id : "") || ""
+                : absorbingPair.absorber.lastControllingPlayerId || (absorberIsScoredBody ? player.id : "") || ""
+            );
           const stellarSource = stellarGrowthSourceForMerge(a, b, absorbingPair.absorber);
           const previousStellarMass = Math.max(0, finiteOr(stellarSource && stellarSource.mass, 0));
           const gainedStellarMass = Math.max(0, mass - previousStellarMass);
@@ -164,10 +174,12 @@
                 : 0,
             starEmissionAccumulator: tier.name === "star"
               ? finiteOr(visualSource.starEmissionAccumulator, 0)
-              : 0
+              : 0,
+            ownerPlayerId
           };
-          applySurvivalCampMergeState(merged, [visualSource, absorbingPair.absorber, absorbingPair.absorbed, a, b], {
-            clearCampState: absorberIsScoredBody
+          inheritGadgetPullContactIntent(merged, absorbingPair.absorber, absorbingPair.absorbed);
+          applySurvivalCampMergeState(merged, absorbingPair.absorber, {
+            clearCampState: Boolean(ownerPlayerId) && absorberHasCampOwner
           });
           if (graduated) {
             merged.promotionStartedAt = performance.now();
@@ -247,7 +259,7 @@
           playSound(graduated ? "milestone" : "merge", {
             volume: clamp(0.45 + Math.log2(Math.max(1, mass)) * 0.08, 0.45, 1.1)
           });
-          recordObjectiveCreatedBodyMass(mass);
+          recordObjectiveCreatedBodyMass(mass, tier.name);
           maybeNotifyTier(tier, previousTier);
           mergesThisFrame += 1;
           if (clusternautsTestConfig) {
@@ -315,6 +327,7 @@
 
     body.mass = Math.max(1, finiteOr(body.mass, 1) - count);
     body.tier = tierForMassAndStellarOutcome(body.mass, body.stellarOutcome);
+    if (body.tier.name === "particle") body.ownerPlayerId = "";
     body.radius = radiusFromMassForTier(body.mass, body.tier);
     normalizeBodyEnergy(body);
     return count;

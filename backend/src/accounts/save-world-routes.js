@@ -103,13 +103,14 @@ async function handleWorldRequest(request, response, url) {
 
     writeJson(response, 404, { ok: false, message: "World endpoint not found." });
   } catch (error) {
+    const status = error && Number.isFinite(error.status) ? error.status : 500;
     logClusternautsError("world request error", {
       method: request.method,
       path: url.pathname,
       message: error instanceof Error ? error.message : "unknown error",
       stack: error instanceof Error ? error.stack : ""
     });
-    writeJson(response, 500, {
+    writeJson(response, status, {
       ok: false,
       message: error instanceof Error ? error.message : "World persistence request failed."
     });
@@ -140,6 +141,7 @@ async function handleLeaderboardRequest(request, response, url) {
     if (request.method === "GET" && url.pathname === "/api/leaderboard") {
       const limit = Math.floor(clampNumber(url.searchParams.get("limit"), 1, 100) || 40);
       const filters = {
+        gameMode: normalizeLeaderboardGameModeFilter(url.searchParams.get("gameMode")),
         mode: normalizeLeaderboardModeFilter(url.searchParams.get("mode")),
         difficulty: normalizeLeaderboardDifficultyFilter(url.searchParams.get("difficulty"))
       };
@@ -159,6 +161,28 @@ async function handleLeaderboardRequest(request, response, url) {
         serverTime: Date.now(),
         entry,
         entries: await listLeaderboardEntries(40, {
+          gameMode: "all",
+          mode: "all",
+          difficulty: "all"
+        })
+      });
+      return;
+    }
+
+    const entryId = sanitizeText(url.pathname.slice("/api/leaderboard/".length), 80);
+    if (request.method === "PATCH" && entryId) {
+      const body = await readJsonBody(request);
+      const entry = await updateLeaderboardEntryName(entryId, body && body.playerId, body && body.name);
+      if (!entry) {
+        writeJson(response, 404, { ok: false, message: "Leaderboard entry not found." });
+        return;
+      }
+      writeJson(response, 200, {
+        ok: true,
+        serverTime: Date.now(),
+        entry,
+        entries: await listLeaderboardEntries(40, {
+          gameMode: "all",
           mode: "all",
           difficulty: "all"
         })
@@ -248,4 +272,3 @@ async function handleResetRequest(request, response, url) {
     });
   }
 }
-

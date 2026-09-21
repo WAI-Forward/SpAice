@@ -96,6 +96,11 @@
         pushMultiplayerV2EventSpark(event, { radius: 34, life: 0.22, fallbackColor: { r: 255, g: 115, b: 173 } });
       } else if (event.type === "structure.shieldBlockedProjectile") {
         pushMultiplayerV2EventSpark(event, { radius: 58, life: 0.28, fallbackColor: { r: 119, g: 167, b: 255 } });
+      } else if (event.type === "structure.shieldBlockedPlayer") {
+        if (String(event.playerId || "") === player.id) {
+          playSound("shield", { throttleKey: "mpV2ShieldPlayerBounce", throttle: 0.12 });
+        }
+        pushMultiplayerV2EventSpark(event, { radius: 64, life: 0.3, fallbackColor: { r: 119, g: 167, b: 255 } });
       } else if (event.type === "player.hitByPlayerProjectile") {
         playSound("mobHit", { throttleKey: "mpV2PlayerProjectileHit", throttle: 0.06 });
         pushMultiplayerV2EventSpark(event, { radius: 42, life: 0.28, fallbackColor: { r: 255, g: 115, b: 173 } });
@@ -110,6 +115,9 @@
         pushMultiplayerV2EventSpark(event, { radius: 58, life: 0.34, fallbackColor: { r: 255, g: 196, b: 76 } });
       } else if (event.type === "body.merged") {
         processMultiplayerV2BodyMergeEvent(event);
+      } else if (event.type === "body.impactDebris") {
+        playSound("merge", { throttleKey: "mpV2BodyImpactDebris", throttle: 0.1, volume: 0.38 });
+        pushMultiplayerV2EventSpark(event, { radius: 38 + Math.max(0, finiteOr(event.count, 1)) * 8, life: 0.24, fallbackColor: { r: 255, g: 210, b: 126 } });
       } else if (event.type === "pickup.tech") {
         pushMultiplayerV2EventSpark(event, { radius: 42, life: 0.28, fallbackColor: hslToRgb(330, 0.88, 0.64) });
         if (String(event.playerId || "") === player.id) {
@@ -159,6 +167,7 @@
     multiplayer.v2.lastServerTick = multiplayer.v2.state.tick || 0;
     multiplayer.v2.lastAckInputSeq = 0;
     multiplayer.v2.pendingInputs = [];
+    multiplayer.v2.firstStepPending = true;
     multiplayer.partyPhysicsSessions.clear();
     multiplayer.localPartyPhysicsSessions.clear();
     multiplayer.partyPlayerSnapshots.clear();

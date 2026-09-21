@@ -326,35 +326,76 @@
 
     if (projectile.rocket) {
       const angle = Math.atan2(dirY, dirX);
+      const targetCount = Math.max(1, finiteOr(projectile.targetCount, 1));
+      const rocketScale = projectile.launchedByStructure ? 1.18 : 1;
+      const flameLength = clamp(projectile.length * 0.8, 48, 96) * rocketScale;
+      const plumeX = projectile.x - dirX * 16;
+      const plumeY = projectile.y - dirY * 16;
       const trail = ctx.createLinearGradient(tailX, tailY, projectile.x, projectile.y);
       trail.addColorStop(0, "rgba(169, 133, 255, 0)");
-      trail.addColorStop(0.42, colorString(projectile.color, 0.28 * fade));
-      trail.addColorStop(1, colorString(projectile.color, 0.82 * fade));
+      trail.addColorStop(0.28, "rgba(255, 115, 173, " + (0.16 * fade) + ")");
+      trail.addColorStop(0.64, colorString(projectile.color, 0.36 * fade));
+      trail.addColorStop(1, "rgba(255, 245, 220, " + (0.9 * fade) + ")");
       ctx.strokeStyle = trail;
-      ctx.lineWidth = 16;
+      ctx.lineWidth = 18 * rocketScale;
       ctx.beginPath();
-      ctx.moveTo(tailX, tailY);
-      ctx.lineTo(projectile.x, projectile.y);
+      ctx.moveTo(projectile.x - dirX * flameLength, projectile.y - dirY * flameLength);
+      ctx.lineTo(plumeX, plumeY);
       ctx.stroke();
+
+      ctx.strokeStyle = "rgba(255, 255, 255, " + (0.54 * fade) + ")";
+      ctx.lineWidth = 5 * rocketScale;
+      ctx.beginPath();
+      ctx.moveTo(projectile.x - dirX * flameLength * 0.58, projectile.y - dirY * flameLength * 0.58);
+      ctx.lineTo(plumeX, plumeY);
+      ctx.stroke();
+
+      if (projectile.targetX !== undefined && projectile.targetY !== undefined) {
+        ctx.strokeStyle = colorString(projectile.color, clamp(0.12 + targetCount * 0.025, 0.14, 0.32) * fade);
+        ctx.lineWidth = clamp(1.5 + targetCount * 0.12, 1.5, 3.6);
+        ctx.setLineDash([10, 15]);
+        ctx.beginPath();
+        ctx.moveTo(projectile.x, projectile.y);
+        ctx.lineTo(projectile.targetX, projectile.targetY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       ctx.translate(projectile.x, projectile.y);
       ctx.rotate(angle + Math.PI / 2);
       ctx.globalCompositeOperation = "source-over";
+      ctx.scale(rocketScale, rocketScale);
       ctx.fillStyle = "#1b2130";
       ctx.strokeStyle = colorString(projectile.color, 0.9 * fade);
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(0, -13);
-      ctx.lineTo(9, 8);
-      ctx.lineTo(0, 14);
-      ctx.lineTo(-9, 8);
+      ctx.moveTo(0, -18);
+      ctx.lineTo(10, 4);
+      ctx.lineTo(6, 17);
+      ctx.lineTo(0, 12);
+      ctx.lineTo(-6, 17);
+      ctx.lineTo(-10, 4);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
+      ctx.fillStyle = colorString(projectile.color, 0.72 * fade);
+      ctx.beginPath();
+      ctx.moveTo(-10, 5);
+      ctx.lineTo(-18, 13);
+      ctx.lineTo(-7, 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(10, 5);
+      ctx.lineTo(18, 13);
+      ctx.lineTo(7, 12);
+      ctx.closePath();
+      ctx.fill();
+
       ctx.fillStyle = "rgba(255, 255, 255, " + (0.82 * fade) + ")";
       ctx.beginPath();
-      ctx.arc(0, -6, 3.5, 0, Math.PI * 2);
+      ctx.arc(0, -7, 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       return;

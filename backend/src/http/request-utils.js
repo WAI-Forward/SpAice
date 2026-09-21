@@ -1,24 +1,34 @@
 function readJsonBody(request) {
   return new Promise((resolveBody, rejectBody) => {
-    let body = "";
+    const chunks = [];
+    let byteLength = 0;
+    let bodyTooLarge = false;
 
     request.on("data", (chunk) => {
-      body += chunk;
-
-      if (body.length > maxJsonBodyBytes) {
-        request.destroy();
-        rejectBody(new Error("Request body too large."));
+      if (bodyTooLarge) {
+        return;
       }
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      byteLength += buffer.length;
+      if (byteLength > maxHttpJsonBodyBytes) {
+        bodyTooLarge = true;
+        return;
+      }
+      chunks.push(buffer);
     });
 
     request.on("end", () => {
-      if (!body) {
+      if (bodyTooLarge) {
+        rejectBody(createRequestBodyTooLargeError());
+        return;
+      }
+      if (!byteLength) {
         resolveBody(null);
         return;
       }
 
       try {
-        resolveBody(JSON.parse(body));
+        resolveBody(JSON.parse(Buffer.concat(chunks, byteLength).toString("utf8")));
       } catch {
         rejectBody(new Error("Invalid JSON."));
       }
@@ -32,24 +42,37 @@ function readRawBody(request) {
   return new Promise((resolveBody, rejectBody) => {
     const chunks = [];
     let byteLength = 0;
+    let bodyTooLarge = false;
 
     request.on("data", (chunk) => {
+      if (bodyTooLarge) {
+        return;
+      }
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       byteLength += buffer.length;
-      if (byteLength > maxJsonBodyBytes) {
-        request.destroy();
-        rejectBody(new Error("Request body too large."));
+      if (byteLength > maxHttpJsonBodyBytes) {
+        bodyTooLarge = true;
         return;
       }
       chunks.push(buffer);
     });
 
     request.on("end", () => {
+      if (bodyTooLarge) {
+        rejectBody(createRequestBodyTooLargeError());
+        return;
+      }
       resolveBody(Buffer.concat(chunks, byteLength));
     });
 
     request.on("error", rejectBody);
   });
+}
+
+function createRequestBodyTooLargeError() {
+  const error = new Error("Request body too large.");
+  error.status = 413;
+  return error;
 }
 
 function writeJson(response, status, payload) {
@@ -305,4 +328,3 @@ function requestOrigin(request) {
 function serviceBaseUrl(request) {
   return configuredPublicUrl || requestOrigin(request);
 }
-

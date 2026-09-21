@@ -68,7 +68,12 @@ function stepPartyV2RoomsOnce() {
 
     if (room.state.tick - room.lastSnapshotTick >= partyV2SnapshotIntervalTicks(session)) {
       room.lastSnapshotTick = room.state.tick;
-      session.worldSnapshot = buildPartyV2StartSnapshot(room);
+      // Shared-world clients receive per-player interest snapshots below.
+      // Avoid cloning and serializing the entire unbounded world at 10 Hz just
+      // to immediately discard most of it for every recipient.
+      if (!isSharedWorldSession(session)) {
+        session.worldSnapshot = buildPartyV2StartSnapshot(room);
+      }
       sendPartyV2Snapshot(session, room);
     }
   }
@@ -257,21 +262,31 @@ function sendPartyV2Snapshot(session, room) {
   for (const playerId of session.players) {
     ackInputSeq[playerId] = room.lastAckByPlayerId.get(playerId) || 0;
   }
-  const stateSnapshot = session.worldSnapshot && session.worldSnapshot.v2 && session.worldSnapshot.state
-    ? session.worldSnapshot.state
-    : mpV2Sim.serializeState(room.state);
   const events = Array.isArray(room.pendingEvents) ? room.pendingEvents.slice() : [];
   const sharedWorld = isSharedWorldSession(session);
+  const stateSnapshot = sharedWorld
+    ? room.state
+    : session.worldSnapshot && session.worldSnapshot.v2 && session.worldSnapshot.state
+      ? session.worldSnapshot.state
+      : mpV2Sim.serializeState(room.state);
   const includeSharedStats = sharedWorld && (
     !Number.isFinite(Number(room.lastSharedWorldStatsTick)) ||
     room.state.tick - Number(room.lastSharedWorldStatsTick) >= (mpV2Sim.TICK_RATE || 60)
   );
-  const sharedWorldStats = includeSharedStats ? buildSharedWorldStats(session, room) : null;
+  const sharedWorldStats = includeSharedStats ? buildSharedWorldStats(session, room, stateSnapshot) : null;
+  // Byte size is diagnostic-only. Sample it with the once-per-second shared
+  // stats update; snapshot construction and delivery still run every tick.
+  const measureSnapshotBytes = !sharedWorld || includeSharedStats || !(room.perf && room.perf.snapshotBytesEma > 0);
   let totalSnapshotBytes = 0;
   let snapshotCount = 0;
   if (sharedWorld) {
     for (const playerId of session.players) {
-      const interestState = buildPartyV2InterestState(stateSnapshot, playerId);
+      // Filter the live authoritative state first, then serialize only the
+      // retained working set. This changes neither visibility nor authority,
+      // but makes snapshot cost proportional to nearby entities rather than
+      // everything ever created in the shared world.
+      const interestState = mpV2Sim.serializeState(buildPartyV2InterestState(stateSnapshot, playerId));
+      interestState.world.partial = true;
       const payload = {
         type: "mp.v2.snapshot",
         roomId: session.id,
@@ -291,8 +306,10 @@ function sendPartyV2Snapshot(session, room) {
       if (sharedWorldStats) {
         payload.sharedWorldStats = sharedWorldStats;
       }
-      totalSnapshotBytes += Buffer.byteLength(JSON.stringify(payload.state));
-      snapshotCount += 1;
+      if (measureSnapshotBytes) {
+        totalSnapshotBytes += Buffer.byteLength(JSON.stringify(payload.state));
+        snapshotCount += 1;
+      }
       relayToPlayer(playerId, payload);
     }
     if (includeSharedStats) {
@@ -317,8 +334,9 @@ function sendPartyV2Snapshot(session, room) {
     room.pendingEvents.length = 0;
   }
   if (room.perf) {
-    room.perf.snapshotBytesEma = smoothMetric(room.perf.snapshotBytesEma, snapshotCount ? totalSnapshotBytes / snapshotCount : 0, 0.18);
+    if (snapshotCount) {
+      room.perf.snapshotBytesEma = smoothMetric(room.perf.snapshotBytesEma, totalSnapshotBytes / snapshotCount, 0.18);
+    }
     room.perf.maxInputQueue = 0;
   }
 }
-

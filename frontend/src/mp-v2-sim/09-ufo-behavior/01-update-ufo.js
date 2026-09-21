@@ -20,15 +20,21 @@
     const tangentY = nx * (Number(ufo.strafeSign) < 0 ? -1 : 1);
     const desiredDistance = salvageTarget ? 0 : cleanupBody && moveTarget === cleanupBody ? clamp(finiteOr(cleanupBody.radius, 0) + 350, 430, 660) : 430;
     const noBeamBoost = ufo.isBoss && beamMode === "cooldown" ? 1.34 : 1;
-    const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
-    const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);
-
-    ufo.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
-    ufo.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
-    ufo.vx += Math.sin(state.tick * 0.0348 + finiteOr(ufo.wobble, 0)) * 10 * dt;
-    ufo.vy += Math.cos(state.tick * 0.0312 + finiteOr(ufo.wobble, 0)) * 10 * dt;
-    ufo.vx *= Math.pow(0.75, dt);
-    ufo.vy *= Math.pow(0.75, dt);
+    if (salvageTarget) {
+      const approachSpeed = clamp(dist * 0.72, 0, 150);
+      const velocityBlend = Math.min(1, dt * 2.6);
+      ufo.vx += (nx * approachSpeed - ufo.vx) * velocityBlend;
+      ufo.vy += (ny * approachSpeed - ufo.vy) * velocityBlend;
+    } else {
+      const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
+      const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);
+      ufo.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
+      ufo.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
+      ufo.vx += Math.sin(state.tick * 0.0348 + finiteOr(ufo.wobble, 0)) * 10 * dt;
+      ufo.vy += Math.cos(state.tick * 0.0312 + finiteOr(ufo.wobble, 0)) * 10 * dt;
+      ufo.vx *= Math.pow(0.75, dt);
+      ufo.vy *= Math.pow(0.75, dt);
+    }
 
     const speed = Math.hypot(ufo.vx, ufo.vy);
     const maxSpeed = bossChaseMaxSpeed(ufo, (dist > 760 ? 170 : 132) * noBeamBoost, nx, ny);
@@ -39,11 +45,13 @@
 
     ufo.x += ufo.vx * dt;
     ufo.y += ufo.vy * dt;
-    applyUfoTractorBeam(state, seedHolder, ufo, dt);
-    if (target) {
+    applyUfoTractorBeam(state, seedHolder, ufo, dt, salvageTarget);
+    if (target && !isSurvivalLogisticsUfo(state, ufo)) {
       applyUfoBossPlayerDrainBeam(state, ufo, target, dt);
     }
-    updateUfoUndersideImpact(state, ufo, players);
+    if (!isSurvivalLogisticsUfo(state, ufo)) {
+      updateUfoUndersideImpact(state, ufo, players);
+    }
     ufo.rotation = finiteOr(ufo.beamAngle, Math.PI / 2) - Math.PI / 2;
   }
 

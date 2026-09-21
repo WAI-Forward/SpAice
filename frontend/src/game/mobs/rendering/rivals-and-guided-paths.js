@@ -5,6 +5,12 @@
     ctx.rotate(cameraRoll);
     ctx.translate(-player.x, -player.y);
 
+    for (const collection of [ufos, rambots, engineers, teslas, rockets, fighters, rivals]) {
+      for (const mob of collection) {
+        applySurvivalCampColor(mob);
+      }
+    }
+
     for (const ufo of ufos) {
       if (!isWorldCircleNearView(ufo.x, ufo.y, 340, 520)) {
         continue;
@@ -97,6 +103,20 @@
         continue;
       }
       drawRival(rival, time);
+    }
+
+    for (const collection of [ufos, rambots, engineers, teslas, rockets, fighters, rivals]) {
+      for (const mob of collection) {
+        if (finiteOr(mob.survivalAggroAlertTimer, 0) <= 0 || !isWorldCircleNearView(mob.x, mob.y, mob.radius || 40, 360)) continue;
+        drawMobAggroAlert(mob, time);
+      }
+    }
+
+    for (const collection of [ufos, rambots, engineers, teslas, rockets, fighters, rivals]) {
+      for (const mob of collection) {
+        if (!isWorldCircleNearView(mob.x, mob.y, mob.radius || 40, 360)) continue;
+        drawSurvivalCampIdLabel(mob, mob.radius);
+      }
     }
 
     ctx.restore();

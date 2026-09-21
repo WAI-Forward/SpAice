@@ -112,10 +112,14 @@
 
   function updateStructures(state, inputs, dt) {
     const structures = state && state.world && Array.isArray(state.world.structures) ? state.world.structures : [];
+    const activePlayers = Object.values(state && state.players || {}).filter((entry) => entry && entry.health > 0 && !entry.spacecraftInterior);
     for (let i = structures.length - 1; i >= 0; i -= 1) {
       const structure = structures[i];
       if (!applyStructureSurfaceConstraint(state.world, structure)) {
         structures.splice(i, 1);
+        continue;
+      }
+      if (shouldSleepDistantSurvivalStructure(state, structure, activePlayers)) {
         continue;
       }
 
@@ -127,6 +131,7 @@
       structure.shootCooldown = Math.max(0, finiteOr(structure.shootCooldown, 0) - dt);
       if (isSurvivalCampStructure(state, structure)) {
         structure.survivalCampAggroTimer = Math.max(0, finiteOr(structure.survivalCampAggroTimer, 0) - dt);
+        structure.survivalAggroAlertTimer = Math.max(0, finiteOr(structure.survivalAggroAlertTimer, 0) - dt);
         if (structure.survivalCampAggroTimer <= 0) {
           structure.survivalTargetPlayerId = "";
         }
@@ -208,8 +213,9 @@
 
   function resolveMobBodyCollisions(state) {
     const world = state.world;
+    const activePlayers = Object.values(state.players || {}).filter((entry) => entry && entry.health > 0 && !entry.spacecraftInterior);
     for (const mob of allCombatMobs(world)) {
-      if (!mob || mob.health <= 0) {
+      if (!mob || mob.health <= 0 || shouldSleepDistantSurvivalMob(state, mob, activePlayers)) {
         continue;
       }
       for (const body of world.particles || []) {
@@ -231,6 +237,8 @@
         const bodyShare = clamp(2.6 / (body.mass + 2.6), 0.006, 0.18);
         const mobShare = 1 - bodyShare;
         const bodySpeed = Math.hypot(body.vx, body.vy);
+        const bodyControllerPlayerId = controllingPlayerIdForBody(state, body);
+        if (bodyControllerPlayerId) aggroNearbyMobsFromPlayerDamage(state, mob, bodyControllerPlayerId);
         const relativeVelocity = (mob.vx - body.vx) * nx + (mob.vy - body.vy) * ny;
         const impactSpeed = Math.max(0, -relativeVelocity);
         const canTriggerBodyDamage = bodySpeed > SOLID_BODY_DAMAGE_SPEED && mob.hitCooldown <= 0 && mobBodyImpactCooldown(mob, body) <= 0;
@@ -261,7 +269,12 @@
           const force = bodyImpactKnockbackForce(body, impactSpeedForDamage);
           knockMob(mob, nx, ny, force);
           triggerBossBodyEvade(mob, body, nx, ny, impactSpeedForDamage);
-          if (damageMob(state, mob, damage, "body-impact")) {
+          if (damageMob(state, mob, damage, "body-impact", {
+            playerId: controllingPlayerIdForBody(state, body),
+            bodyId: body.id,
+            cause: "body-impact",
+            hostileActionType: "player-controlled-body-impact"
+          })) {
             break;
           }
         }
@@ -271,6 +284,7 @@
 
   function resolveMobProjectileCollisions(state) {
     const world = state.world;
+    const activePlayers = Object.values(state.players || {}).filter((entry) => entry && entry.health > 0 && !entry.spacecraftInterior);
     for (const body of world.particles || []) {
       if (!body || !body.tier || body.tier.solid || body.tier.threshold < 10) {
         continue;
@@ -282,7 +296,7 @@
 
       let hit = false;
       for (const mob of allCombatMobs(world)) {
-        if (!mob || mob.health <= 0 || mob.hitCooldown > 0 || mobBodyImpactCooldown(mob, body) > 0) {
+        if (!mob || mob.health <= 0 || shouldSleepDistantSurvivalMob(state, mob, activePlayers) || mobBodyImpactCooldown(mob, body) > 0) {
           continue;
         }
         const dx = mob.x - body.x;
@@ -293,6 +307,10 @@
           continue;
         }
 
+        const bodyControllerPlayerId = controllingPlayerIdForBody(state, body);
+        if (bodyControllerPlayerId) aggroNearbyMobsFromPlayerDamage(state, mob, bodyControllerPlayerId);
+        if (mob.hitCooldown > 0) continue;
+
         const nx = dx / dist;
         const ny = dy / dist;
         const damage = projectileBodyImpactDamage(body, bodySpeed);
@@ -301,7 +319,12 @@
         triggerBossBodyEvade(mob, body, nx, ny, bodySpeed);
         body.vx *= 0.92;
         body.vy *= 0.92;
-        damageMob(state, mob, damage, "projectile-impact");
+        damageMob(state, mob, damage, "projectile-impact", {
+          playerId: controllingPlayerIdForBody(state, body),
+          bodyId: body.id,
+          cause: "projectile-impact",
+          hostileActionType: "player-controlled-body-impact"
+        });
         hit = true;
         break;
       }

@@ -172,6 +172,10 @@
   color: #f8fbff;
 }
 
+.map-filter select option:disabled {
+  color: rgba(248, 251, 255, 0.36);
+}
+
 .map-filter select option:checked {
   background: #1d5c99;
   color: #ffffff;

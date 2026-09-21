@@ -11,6 +11,9 @@
       if (isMobSummoning(rival)) {
         continue;
       }
+      if (shouldSleepDistantSurvivalMob(rival)) {
+        continue;
+      }
       updateBossSpawnPressure(rival, dt);
 
       rival.shootCooldown = Math.max(0, rival.shootCooldown - dt);
@@ -86,4 +89,3 @@
 
     updateRivalProjectiles(dt);
   }
-

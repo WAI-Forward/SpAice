@@ -1,5 +1,11 @@
   function stepGameplaySimulation(dt, options) {
     const includeExternalSystems = !options || options.includeExternalSystems !== false;
+    if (typeof invalidateSurvivalCampSpatialCache === "function") {
+      invalidateSurvivalCampSpatialCache();
+    }
+    if (typeof refreshSurvivalMobSimulationAnchors === "function") {
+      refreshSurvivalMobSimulationAnchors();
+    }
     if (isMultiplayerV2Active()) {
       stepMultiplayerV2Simulation(dt, includeExternalSystems);
       return;
@@ -37,6 +43,7 @@
     applyLandedSurfaceConstraint();
     updatePlayerLasers(dt);
     updateLauncherMissiles(dt);
+    resolveShieldGeneratorPlayerCollisions();
     resolveShieldGeneratorMobCollisions(dt);
     resolveMobBodyCollisions();
     damageMobsWithProjectiles();
@@ -468,4 +475,3 @@
     );
     return particles.map(serializeParticle);
   }
-

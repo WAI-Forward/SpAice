@@ -87,6 +87,7 @@
   }
 
   function drawParticles(time) {
+    const developerBodyOwners = developerMetricsState.open ? developerBodyOwnerRecords() : null;
     ctx.save();
     ctx.translate(width / 2, height / 2);
     ctx.scale(cameraZoom, cameraZoom);
@@ -137,7 +138,10 @@
       if (!isWorldCircleNearView(particle.x, particle.y, particle.radius, 340)) {
         continue;
       }
+      applySurvivalCampColor(particle);
       drawBody(particle, time);
+      drawSurvivalCampIdLabel(particle, particle.radius);
+      drawDeveloperBodyOwnerLabel(particle, particle.radius, developerBodyOwners && developerBodyOwners.get(particle.id));
     }
 
     ctx.globalCompositeOperation = "source-over";

@@ -170,6 +170,7 @@
       ufoExtractedById: Math.max(0, Math.floor(finiteOr(snapshot.ufoExtractedById, 0))),
       ufoExtractedFromId: Math.max(0, Math.floor(finiteOr(snapshot.ufoExtractedFromId, 0))),
       ufoSapParticleBuffer: Math.max(0, finiteOr(snapshot.ufoSapParticleBuffer, 0)),
+      ownerPlayerId: tier.name !== "particle" && typeof snapshot.ownerPlayerId === "string" ? snapshot.ownerPlayerId : "",
       survivalCampId: typeof snapshot.survivalCampId === "string" ? snapshot.survivalCampId : "",
       survivalCampX: finiteOr(snapshot.survivalCampX, 0),
       survivalCampY: finiteOr(snapshot.survivalCampY, 0),
@@ -178,6 +179,9 @@
       survivalCampMovedByPlayer: Boolean(snapshot.survivalCampMovedByPlayer),
       survivalCampBodyMovedWakeSent: Boolean(snapshot.survivalCampBodyMovedWakeSent),
       survivalCampLastMoverPlayerId: typeof snapshot.survivalCampLastMoverPlayerId === "string" ? snapshot.survivalCampLastMoverPlayerId : "",
+      lastControllingPlayerId: typeof snapshot.lastControllingPlayerId === "string" ? snapshot.lastControllingPlayerId : "",
+      lastPlayerControlBelowSpeedAt: Math.max(0, finiteOr(snapshot.lastPlayerControlBelowSpeedAt, 0)),
+      playerImpactDebrisCooldown: Math.max(0, finiteOr(snapshot.playerImpactDebrisCooldown, 0)),
       survivalCampBody: Boolean(snapshot.survivalCampBody),
       ambientSpawnRock: Boolean(snapshot.ambientSpawnRock)
     };
@@ -404,7 +408,7 @@
         tooCloseToPlayer * (bowWave ? 3.8 : 7.5) -
         spacingPenalty * (3.2 - patchAffinity * 1.25 + voidAffinity * 1.2);
       if (!best || score > best.score) {
-        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount, bowWave };
+        best = { x, y, angle, score, patchAffinity, voidAffinity, densityNearest: density.nearest, crowdCount: density.crowdCount, bowWave, localFill };
       }
     }
     return best || {
@@ -416,7 +420,8 @@
       densityNearest: 480,
       crowdCount: 0,
       score: 0,
-      bowWave
+      bowWave,
+      localFill
     };
   }
 
@@ -436,7 +441,8 @@
     const resourceRoom = spacingRoom * crowdRoom;
     const roll = nextRandom(seedHolder);
     const detail = ambientMassDetail(spawnPoint, roll, 1);
-    const rockChance = Math.max(0, (richness - 0.28) / 0.72) * (0.04 + richness * 0.065) * resourceRoom;
+    const rockChanceScale = spawnPoint && spawnPoint.bowWave ? 0.12 : spawnPoint && spawnPoint.localFill ? 0.35 : 1;
+    const rockChance = Math.max(0, (richness - 0.28) / 0.72) * (0.04 + richness * 0.065) * resourceRoom * rockChanceScale;
 
     if (roll < rockChance) {
       return 10;

@@ -21,6 +21,28 @@
     setDeveloperOverlayOpen(!developerMetricsState.open);
   }
 
+  function setDeveloperOverlayMinimized(minimized) {
+    developerMetricsState.minimized = Boolean(minimized);
+    if (!developerOverlay) {
+      return;
+    }
+    developerOverlay.classList.toggle("is-minimized", developerMetricsState.minimized);
+    if (developerMetricsMinimize) {
+      const expanded = !developerMetricsState.minimized;
+      developerMetricsMinimize.textContent = expanded ? "−" : "+";
+      developerMetricsMinimize.setAttribute("aria-expanded", expanded ? "true" : "false");
+      developerMetricsMinimize.setAttribute("aria-label", expanded ? "Minimize developer metrics" : "Show developer metrics");
+      developerMetricsMinimize.title = expanded ? "Minimize developer metrics" : "Show developer metrics";
+    }
+    if (!developerMetricsState.minimized && developerMetricsState.open) {
+      updateDeveloperOverlay(true);
+    }
+  }
+
+  function toggleDeveloperOverlayMinimized() {
+    setDeveloperOverlayMinimized(!developerMetricsState.minimized);
+  }
+
   function formatDeveloperNumber(value, digits) {
     const number = Number(value);
     if (!Number.isFinite(number)) {
@@ -104,7 +126,7 @@
     ) {
       return false;
     }
-    if (isSurvivalCampMob(mob) && finiteOr(mob.survivalCampAggroTimer, 0) <= 0) {
+    if (isSurvivalCampMob(mob) && !["engage", "revenge"].includes(String(mob.survivalAiState || ""))) {
       return false;
     }
     if (deathState.active || player.health <= 0) {
@@ -113,6 +135,20 @@
 
     const target = combatTargetForMob(mob);
     return Boolean(target && target.local && target.player === player);
+  }
+
+  function developerSurvivalAiSummary() {
+    return hostileCombatMobs().filter((mob) => mob && mob.health > 0 && (mob.survivalCampId || mob.survivalAiState)).slice(0, 12).map((mob) => {
+      const controller = survivalEngagementStore()[String(mob.survivalCampId || "")];
+      const homeX = controller ? controller.homeX : finiteOr(mob.survivalCampX, mob.x);
+      const homeY = controller ? controller.homeY : finiteOr(mob.survivalCampY, mob.y);
+      return survivalMobKey(mob) + " " + (mob.survivalAiState || "guard") + "/" + (mob.survivalAiRole || "-") +
+        " camp=" + (mob.survivalCampId || "-") + " party=" + (mob.survivalTargetPartyId || controller && controller.primaryPartyId || "-") +
+        " target=" + (mob.survivalTargetEntityId || mob.survivalTargetPlayerId || "-") +
+        " leash=" + Math.round(Math.hypot(mob.x - homeX, mob.y - homeY)) +
+        " goal=" + (Number.isFinite(mob.survivalGoalX) ? Math.round(mob.survivalGoalX) + "," + Math.round(mob.survivalGoalY) : "-") +
+        " replans=" + Math.max(0, Math.floor(finiteOr(mob.survivalReplanCount, 0)));
+    }).join("\n  ");
   }
 
   function developerLocalTargetingMobSummary() {

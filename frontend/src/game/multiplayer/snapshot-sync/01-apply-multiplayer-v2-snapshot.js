@@ -331,6 +331,12 @@
     }
     const frameDt = multiplayerV2FrameDt(dt);
     updateGadgetAim(frameDt);
+    if (multiplayer.v2.firstStepPending) {
+      multiplayer.v2.firstStepPending = false;
+      multiplayer.v2.fixedAccumulator += frameDt < mpV2Sim.TICK_DT
+        ? Math.max(0, mpV2Sim.TICK_DT - frameDt)
+        : 0.000001;
+    }
     multiplayer.v2.fixedAccumulator = Math.min(multiplayerV2MaxAccumulator, multiplayer.v2.fixedAccumulator + frameDt);
     const stepStart = performance.now();
     let stepped = 0;
@@ -421,4 +427,3 @@
     updateSharedTeamFromSession(multiplayer.partySession, { notifyJoins: true });
     updateSettingsJoinCodeUi();
   }
-

@@ -193,7 +193,7 @@
         return createClusternautsFrameRateSnapshot();
       },
       respawnMultiplayerPlayer: function () {
-        respawnMultiplayerPlayer();
+        respawnMultiplayerPlayer({ skipLeaderboardPersistence: true });
         return createClusternautsFrameRateSnapshot();
       },
       setPlayerState: function (options) {

@@ -50,6 +50,9 @@
       clearCrazyGamesRoomState("death");
     }
     resetDeathLeaderboardForm();
+    if (!clusternautsTestConfig) {
+      void saveDeathLeaderboardRun();
+    }
     playSound("death", { throttle: 0.8 });
     keys.clear();
     resetMouseButtons();
@@ -116,21 +119,23 @@
     if (!deathState.summaryReady && deathState.timer >= deathAnimationDuration) {
       deathState.summaryReady = true;
       renderDeathStats();
-      resetDeathLeaderboardForm();
       setDeathScreenOpen(true);
     }
   }
 
-  async function hardResetAfterDeath(options) {
+  async function resetAfterDeath(options) {
     if (deathState.resetInFlight) {
       return;
     }
 
     const config = options && typeof options === "object" ? options : {};
+    const restartRun = config.restartRun === true;
     const loadingButton = config.button || playAgainButton;
     const nextStartMenuView = config.startMenuView || "main";
-    const loadingText = config.loadingText || "Resetting...";
-    const doneText = config.doneText || (loadingButton === deathMainMenuButton ? "Exit to main menu" : "Play again");
+    const loadingText = config.loadingText || (restartRun ? "Restarting..." : "Resetting...");
+    const doneText = config.doneText || (loadingButton === deathMainMenuButton ? "Exit to main menu" : "Restart run");
+    const previousDifficultyId = runState.difficultyId;
+    const previousGameMode = normalizeGameMode(runState.gameMode);
 
     deathState.resetInFlight = true;
     if (playAgainButton) {
@@ -147,6 +152,7 @@
     const previousPlayerId = player.id;
 
     try {
+      await renameDeathLeaderboardRun();
       await waitForPersistenceIdle();
       if (persistence.enabled && previousPlayerId) {
         await fetchPersistentJson("/api/reset/life", {
@@ -185,20 +191,26 @@
       persistence.saveTimer = persistenceSaveInterval;
       persistence.pollTimer = persistencePollInterval;
       resetDeathState();
-      setStartMenuView(nextStartMenuView, { push: false });
-      setDifficultyScreenOpen(true);
-      ensureOnlinePresence();
-      resetMouseButtons();
-      resetFrameClock();
-      void refreshLeaderboard(true);
-      updateHud();
+      if (restartRun) {
+        setSelectedGameMode(previousGameMode);
+        await beginRunWithDifficulty(previousDifficultyId);
+        maybeNotifyText("Run restarted.");
+      } else {
+        setStartMenuView(nextStartMenuView, { push: false });
+        setDifficultyScreenOpen(true);
+        ensureOnlinePresence();
+        resetMouseButtons();
+        resetFrameClock();
+        void refreshLeaderboard(true);
+        updateHud();
+      }
     } catch (error) {
       console.warn("Clusternauts death reset failed.", error);
       deathState.resetInFlight = false;
     } finally {
       if (playAgainButton) {
         playAgainButton.disabled = false;
-        playAgainButton.textContent = "Play again";
+        playAgainButton.textContent = isPartySessionActive() ? "Respawn" : "Restart run";
         playAgainButton.classList.remove("is-loading");
       }
       if (deathMainMenuButton) {
@@ -213,11 +225,20 @@
     }
   }
 
+  function restartSingleplayerAfterDeath() {
+    return resetAfterDeath({
+      button: playAgainButton,
+      restartRun: true,
+      loadingText: "Restarting...",
+      doneText: "Restart run"
+    });
+  }
+
   function exitDeathToMainMenu() {
     if (deathState.resetInFlight) {
       return;
     }
-    void hardResetAfterDeath({
+    void resetAfterDeath({
       button: deathMainMenuButton,
       loadingText: "Exiting...",
       doneText: "Exit to main menu",
@@ -337,12 +358,15 @@
     };
   }
 
-  function respawnMultiplayerPlayer() {
+  async function respawnMultiplayerPlayer(options) {
     if (!isPartySessionActive() || deathState.resetInFlight) {
       return;
     }
 
     deathState.resetInFlight = true;
+    if (!(options && options.skipLeaderboardPersistence)) {
+      await renameDeathLeaderboardRun();
+    }
     const spawn = chooseMultiplayerRespawnPoint(player.x, player.y);
     resetLocalPlayerState();
     resetLifeStats();
@@ -382,4 +406,10 @@
       }
     });
     maybeNotifyText("Respawned.");
+  }
+
+  function continueAfterDeath() {
+    return isPartySessionActive()
+      ? respawnMultiplayerPlayer()
+      : restartSingleplayerAfterDeath();
   }

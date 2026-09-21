@@ -30,6 +30,30 @@
   pointer-events: auto;
 }
 
+.developer-overlay.is-minimized {
+  width: 36px;
+  max-height: 36px;
+  border-radius: 9px;
+}
+
+.developer-overlay.is-minimized .developer-overlay__header {
+  justify-content: center;
+  padding: 6px;
+  border-bottom: 0;
+}
+
+.developer-overlay.is-minimized .developer-overlay__header strong,
+.developer-overlay.is-minimized .developer-overlay__copy,
+.developer-overlay.is-minimized .developer-overlay__shortcut,
+.developer-overlay.is-minimized .developer-overlay__copy-status,
+.developer-overlay.is-minimized .developer-overlay__metrics {
+  display: none;
+}
+
+.developer-overlay.is-minimized .developer-overlay__actions {
+  gap: 0;
+}
+
 .developer-overlay__header {
   display: flex;
   align-items: center;
@@ -60,6 +84,7 @@
 }
 
 .developer-overlay__copy,
+.developer-overlay__minimize,
 .developer-overlay__shortcut {
   display: inline-grid;
   place-items: center;
@@ -73,6 +98,20 @@
   font-size: 11px;
   font-weight: 900;
   line-height: 1;
+}
+
+.developer-overlay__minimize {
+  cursor: pointer;
+  min-width: 24px;
+  width: 24px;
+  padding: 0;
+  color: #dffcff;
+}
+
+.developer-overlay__minimize:hover,
+.developer-overlay__minimize:focus-visible {
+  border-color: rgba(141, 244, 255, 0.72);
+  background: rgba(141, 244, 255, 0.2);
 }
 
 .developer-overlay__copy {
@@ -133,4 +172,3 @@
     0 0 10px rgba(84, 226, 255, 0.32),
     inset 0 0 8px rgba(84, 226, 255, 0.22);
 }
-

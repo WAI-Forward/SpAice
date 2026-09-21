@@ -336,6 +336,10 @@
     return gadgetForceReach * gadgetRangeFactorForState(state);
   }
 
+  function gadgetPushReachForState(state) {
+    return gadgetPushReach * Math.max(0.1, finiteOr(state && state.blowFactor, 1));
+  }
+
   function gadgetHoldReachForState(state) {
     return gadgetHoldReach * gadgetRangeFactorForState(state);
   }
@@ -376,7 +380,7 @@
       partyGadgetMiddleGatherRange(forward, side, target.radius, padding, state);
     const pushRange = state.right &&
       forward > -28 - padding * 0.2 &&
-      forward < 470 + target.radius + padding &&
+      forward < gadgetPushReachForState(state) + target.radius + padding &&
       side < coneWidth * 0.9 + target.radius + padding * 0.35;
     const bucket = partyGadgetBucketContact(state, target, padding);
     const funnel = state.funnel || actorFunnel(actor, aimWorld);
@@ -391,4 +395,3 @@
       )
     };
   }
-

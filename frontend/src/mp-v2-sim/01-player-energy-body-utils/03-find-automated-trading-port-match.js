@@ -307,7 +307,10 @@
   }
 
   function serializeParticleState(body) {
-    return body ? {
+    if (!body) {
+      return null;
+    }
+    const result = {
       id: body.id,
       x: body.x,
       y: body.y,
@@ -344,6 +347,7 @@
       ufoExtractedById: body.ufoExtractedById,
       ufoExtractedFromId: body.ufoExtractedFromId,
       ufoSapParticleBuffer: body.ufoSapParticleBuffer,
+      ownerPlayerId: body.tier && body.tier.name !== "particle" ? body.ownerPlayerId || "" : "",
       survivalCampId: body.survivalCampId || "",
       survivalCampX: body.survivalCampX,
       survivalCampY: body.survivalCampY,
@@ -352,9 +356,67 @@
       survivalCampMovedByPlayer: Boolean(body.survivalCampMovedByPlayer),
       survivalCampBodyMovedWakeSent: Boolean(body.survivalCampBodyMovedWakeSent),
       survivalCampLastMoverPlayerId: body.survivalCampLastMoverPlayerId || "",
+      lastControllingPlayerId: body.lastControllingPlayerId || "",
+      lastPlayerControlBelowSpeedAt: Math.max(0, finiteOr(body.lastPlayerControlBelowSpeedAt, 0)),
+      playerImpactDebrisCooldown: Math.max(0, finiteOr(body.playerImpactDebrisCooldown, 0)),
       survivalCampBody: Boolean(body.survivalCampBody),
       ambientSpawnRock: Boolean(body.ambientSpawnRock)
-    } : null;
+    };
+
+    const serializedMaxEnergy = Math.max(0, finiteOr(result.maxEnergy, 0));
+    if (serializedMaxEnergy <= 0) {
+      delete result.energy;
+      delete result.maxEnergy;
+    } else if (finiteOr(result.energy, serializedMaxEnergy) >= serializedMaxEnergy) {
+      delete result.energy;
+    }
+    delete result.radius;
+    if (!finiteOr(result.rotation, 0)) delete result.rotation;
+    if (!finiteOr(result.angularVelocity, 0)) delete result.angularVelocity;
+    if (!finiteOr(result.orbitHostId, 0)) delete result.orbitHostId;
+    if (!finiteOr(result.orbitRingIndex, 0)) delete result.orbitRingIndex;
+    if (finiteOr(result.orbitDirection, 1) === 1) delete result.orbitDirection;
+    if (!finiteOr(result.orbitStrength, 0)) delete result.orbitStrength;
+    if (!finiteOr(result.orbitGrace, 0)) delete result.orbitGrace;
+    if (body.tier && body.tier.name === "star") {
+      if (finiteOr(result.starBirthAge, STAR_BIRTH_TRANSITION_DURATION) >= STAR_BIRTH_TRANSITION_DURATION) delete result.starBirthAge;
+    } else if (!finiteOr(result.starBirthAge, 0)) {
+      delete result.starBirthAge;
+    }
+    if (!finiteOr(result.starEmissionAccumulator, 0)) delete result.starEmissionAccumulator;
+    if (!result.stellarGrowthStarted) delete result.stellarGrowthStarted;
+    if (!finiteOr(result.stellarGrowthRate, 0)) delete result.stellarGrowthRate;
+    if (!finiteOr(result.stellarGrowthLastSampleAt, 0)) delete result.stellarGrowthLastSampleAt;
+    if (!result.stellarOutcome) delete result.stellarOutcome;
+    if (!result.randomEventId) {
+      delete result.randomEventId;
+      delete result.randomEventRegionX;
+      delete result.randomEventRegionY;
+    }
+    if (!finiteOr(result.ufoSapTimer, 0)) delete result.ufoSapTimer;
+    if (!finiteOr(result.ufoSapSourceGraceTimer, 0)) delete result.ufoSapSourceGraceTimer;
+    if (!finiteOr(result.ufoExtractedById, 0)) delete result.ufoExtractedById;
+    if (!finiteOr(result.ufoExtractedFromId, 0)) delete result.ufoExtractedFromId;
+    if (!finiteOr(result.ufoSapParticleBuffer, 0)) delete result.ufoSapParticleBuffer;
+    if (!result.ownerPlayerId) delete result.ownerPlayerId;
+    if (!result.survivalCampId && !result.survivalCampBody) {
+      delete result.survivalCampId;
+      delete result.survivalCampX;
+      delete result.survivalCampY;
+      delete result.survivalCampHomeX;
+      delete result.survivalCampHomeY;
+      delete result.survivalCampMovedByPlayer;
+      delete result.survivalCampBodyMovedWakeSent;
+      delete result.survivalCampLastMoverPlayerId;
+    }
+    if (!result.lastControllingPlayerId) delete result.lastControllingPlayerId;
+    if (!finiteOr(result.lastPlayerControlBelowSpeedAt, 0)) delete result.lastPlayerControlBelowSpeedAt;
+    if (!finiteOr(result.playerImpactDebrisCooldown, 0)) delete result.playerImpactDebrisCooldown;
+    if (!result.survivalCampBody) delete result.survivalCampBody;
+    if (!result.ambientSpawnRock) delete result.ambientSpawnRock;
+    if (finiteOr(result.spawnSizeScale, 1) === 1) delete result.spawnSizeScale;
+    if (finiteOr(result.spawnAge, PARTICLE_SPAWN_TRANSITION_DURATION) >= PARTICLE_SPAWN_TRANSITION_DURATION) delete result.spawnAge;
+    return result;
   }
 
   function serializePickupState(pickup, type) {

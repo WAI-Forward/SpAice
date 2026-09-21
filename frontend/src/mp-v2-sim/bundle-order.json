@@ -24,6 +24,7 @@
   "07-particle-merging/03-clump-offset.js",
   "07-particle-merging/04-create-mob.js",
   "gamemodes/horde/spawning.js",
+  "gamemodes/survival/spawning/00-survival-camp-identity.js",
   "gamemodes/survival/spawning/01-survival-allowance-mob-costs.js",
   "gamemodes/survival/spawning/02-survival-camp-ecology.js",
   "gamemodes/survival/spawning/03-survival-camp-creation.js",
@@ -37,6 +38,8 @@
   "11-projectile-guidance/01-steer-heat-seeking-projectile.js",
   "11-projectile-guidance/02-update-shield-generator.js",
   "11-projectile-guidance/03-update-medbay.js",
+  "11-projectile-guidance/04-resolve-shield-generator-player-collisions.js",
+  "12-boss-pressure-serialization/00-survival-camp-mob-compression.js",
   "12-boss-pressure-serialization/01-update-boss-spawn-pressure.js",
   "12-boss-pressure-serialization/02-step.js"
 ]

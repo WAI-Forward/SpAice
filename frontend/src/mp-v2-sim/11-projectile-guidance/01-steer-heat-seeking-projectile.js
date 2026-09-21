@@ -31,8 +31,14 @@
       const sourceStructureId = String(projectile.sourceStructureId || "");
       const sourceMobId = Math.max(0, Math.floor(finiteOr(projectile.sourceMobId, 0)));
       const playerTeamMobProjectile = projectile.team === "player" && sourceMobId > 0;
-      const ownerPlayerId = String(projectile.ownerPlayerId || sourcePlayerId || "");
-      const friendlyProjectile = Boolean(sourcePlayerId || sourceStructureId || playerTeamMobProjectile);
+      const sourceStructure = sourceStructureId
+        ? (world.structures || []).find((structure) => String(structure && structure.id || "") === sourceStructureId)
+        : null;
+      const structureIsMobOwned = Boolean(sourceStructure && isMobOwnedStructure(sourceStructure));
+      const ownerPlayerId = structureIsMobOwned ? "" : String(projectile.ownerPlayerId || sourcePlayerId || "");
+      const playerOwnedProjectile = Boolean(sourcePlayerId || ownerPlayerId || playerTeamMobProjectile);
+      const nonMobStructureProjectile = Boolean(sourceStructureId && !structureIsMobOwned);
+      const friendlyProjectile = playerOwnedProjectile || nonMobStructureProjectile;
       const previousX = projectile.x;
       const previousY = projectile.y;
       projectile.life = finiteOr(projectile.life, 0) - dt;
@@ -92,7 +98,7 @@
         const hitMobIds = Array.isArray(projectile.hitMobIds) ? projectile.hitMobIds : (projectile.hitMobIds = []);
         let hitMob = false;
         for (const mob of allCombatMobs(world)) {
-          if (!mob || mob.health <= 0 || mob.hitCooldown > 0 || isPlayerTeamMob(mob)) {
+          if (!mob || mob.health <= 0 || isPlayerTeamMob(mob)) {
             continue;
           }
           if (playerTeamMobProjectile && mob.id === sourceMobId) {
@@ -107,12 +113,26 @@
             continue;
           }
 
+          if (ownerPlayerId) aggroNearbyMobsFromPlayerDamage(state, mob, ownerPlayerId);
+          if (mob.hitCooldown > 0) {
+            if (!projectile.piercesMobs) {
+              world.rivalProjectiles.splice(i, 1);
+              hitMob = true;
+            }
+            break;
+          }
+
           const knockback = finiteOr(projectile.knockback, playerTeamMobProjectile ? 125 : PLAYER_WEAPON_DEFAULTS.knockback);
           const damage = Math.max(0, finiteOr(projectile.damage, playerTeamMobProjectile ? RIVAL_PROJECTILE_DAMAGE : PLAYER_WEAPON_DEFAULTS.damage));
           const toolDisable = Math.max(0, finiteOr(projectile.toolDisable, 0));
           knockMob(mob, dirX, dirY, knockback);
           if (damage > 0) {
-            damageMob(state, mob, damage, projectile.cause || "player-laser", ownerPlayerId);
+            damageMob(state, mob, damage, projectile.cause || "player-laser", {
+              playerId: ownerPlayerId,
+              projectileId: projectile.id,
+              cause: projectile.cause || "player-laser",
+              hostileActionType: "projectile-impact"
+            });
           }
           if (toolDisable > 0) {
             disableMob(mob, toolDisable);
@@ -166,7 +186,11 @@
       let hitStructure = false;
       if (!sourceStructureId && !playerTeamMobProjectile && (projectile.rocket || projectile.lightning)) {
         for (const structure of world.structures || []) {
-          if (!structure || finiteOr(structure.health, 0) <= 0) {
+          if (
+            !structure ||
+            finiteOr(structure.health, 0) <= 0 ||
+            projectile.lightning && isMobOwnedStructure(structure)
+          ) {
             continue;
           }
           const structureDist = distanceToSegment(structure.x, structure.y, tailX, tailY, projectile.x, projectile.y);
@@ -193,7 +217,7 @@
 
       let hitPlayer = false;
       for (const target of players) {
-        if (sourcePlayerId || sourceStructureId || playerTeamMobProjectile) {
+        if (playerOwnedProjectile || nonMobStructureProjectile) {
           if (!canPlayerOwnedDamagePlayer(state, options, ownerPlayerId, target.id)) {
             continue;
           }
@@ -249,7 +273,7 @@
     const state = stateOrWorld && stateOrWorld.world ? stateOrWorld : null;
     const world = state ? state.world : stateOrWorld;
     if (isSurvivalCampStructure(state || { world, gameMode: world && world.gameMode }, turret)) {
-      return findCampStructurePlayerTarget(state, world, turret, TURRET_RANGE);
+      return findCampTurretPlayerTarget(state, world, turret, TURRET_RANGE);
     }
 
     let best = null;
@@ -274,8 +298,14 @@
     return best;
   }
 
-  function survivalCampStructureIsAggro(structure) {
-    return Boolean(structure && finiteOr(structure.survivalCampAggroTimer, 0) > 0);
+  function survivalCampStructureIsAggro(state, structure) {
+    if (!structure || !isSurvivalCampStructure(state, structure)) {
+      return false;
+    }
+    const controller = survivalCampControllerForStructure(state, structure);
+    return controller
+      ? ["engage", "revenge"].includes(controller.phase)
+      : finiteOr(structure.survivalCampAggroTimer, 0) > 0;
   }
 
   function campStructureCanSeePlayer(world, structure, player) {
@@ -293,16 +323,20 @@
   }
 
   function findCampStructurePlayerTarget(state, world, structure, maxRange) {
-    if (!state || !survivalCampStructureIsAggro(structure)) {
+    if (!state || !survivalCampStructureIsAggro(state, structure)) {
       return null;
     }
-    const preferredTargetId = String(structure.survivalTargetPlayerId || "");
+    const controller = survivalCampControllerForStructure(state, structure);
+    const preferredTargetId = String(controller && controller.primaryAggressorId || structure.survivalTargetPlayerId || "");
     if (!preferredTargetId) {
       return null;
     }
     let best = null;
     let bestDistance = Infinity;
-    for (const target of Object.values(state.players || {})) {
+    const candidates = controller && ["engage", "revenge"].includes(controller.phase)
+      ? survivalTargetsForController(state, controller)
+      : Object.values(state.players || {});
+    for (const target of candidates) {
       if (!target || finiteOr(target.health, 0) <= 0 || target.spacecraftInterior) {
         continue;
       }
@@ -314,6 +348,36 @@
       }
       best = target;
       bestDistance = scoreDistance;
+    }
+    return best;
+  }
+
+  function findCampTurretPlayerTarget(state, world, structure, maxRange) {
+    if (!state || !world) {
+      return null;
+    }
+    let best = null;
+    let bestDistance = Infinity;
+    for (const target of Object.values(state.players || {})) {
+      if (!target || finiteOr(target.health, 0) <= 0 || target.spacecraftInterior) {
+        continue;
+      }
+      const distance = Math.hypot(target.x - structure.x, target.y - structure.y);
+      if (distance > maxRange || distance >= bestDistance || !campStructureCanSeePlayer(world, structure, target)) {
+        continue;
+      }
+      best = target;
+      bestDistance = distance;
+    }
+    if (best) {
+      const targetId = String(best.id || "");
+      if (targetId && structure.survivalProximityTargetPlayerId !== targetId) {
+        structure.survivalAggroAlertTimer = SURVIVAL_AGGRO_ALERT_DURATION;
+      }
+      structure.survivalProximityTargetPlayerId = targetId;
+      structure.survivalTargetPlayerId = targetId;
+    } else {
+      structure.survivalProximityTargetPlayerId = "";
     }
     return best;
   }
@@ -548,7 +612,12 @@
     let nearest = null;
     const cost = projectileShieldCost(projectile);
     for (const structure of world.structures || []) {
-      if (structure.type !== "shield-generator" || finiteOr(structure.health, 0) <= 0 || isStructureDisabled(structure)) {
+      if (
+        structure.type !== "shield-generator" ||
+        finiteOr(structure.health, 0) <= 0 ||
+        isStructureDisabled(structure) ||
+        projectile && projectile.lightning && isMobOwnedStructure(structure)
+      ) {
         continue;
       }
       const body = bodyById(world, structure.bodyId);

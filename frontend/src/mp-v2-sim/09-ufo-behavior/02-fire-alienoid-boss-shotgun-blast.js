@@ -103,6 +103,18 @@
   }
 
   function rambotAttackTarget(state, player) {
+    if (player && player.survivalDefenseBody && player.body) {
+      return {
+        kind: "defense-body",
+        body: player.body,
+        protectedBody: player.protectedBody,
+        x: player.body.x,
+        y: player.body.y,
+        vx: finiteOr(player.body.vx, 0),
+        vy: finiteOr(player.body.vy, 0),
+        radius: solidContactRadius(player.body)
+      };
+    }
     if (isCombatMobEntity(player)) {
       return playerTarget(player);
     }
@@ -121,6 +133,58 @@
       }
     }
     return playerTarget(player);
+  }
+
+  function updateRambotDefenseBodyImpact(state, rambot, attackTarget) {
+    if (!attackTarget || attackTarget.kind !== "defense-body" || !attackTarget.body || !attackTarget.protectedBody) {
+      return;
+    }
+    const body = attackTarget.body;
+    const protectedBody = attackTarget.protectedBody;
+    const dx = finiteOr(body.x, 0) - rambot.x;
+    const dy = finiteOr(body.y, 0) - rambot.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const hitDistance = solidContactRadius(body) + rambot.radius;
+    if (distance > hitDistance) {
+      return;
+    }
+
+    const nx = dx / distance;
+    const ny = dy / distance;
+    const overlap = hitDistance - distance;
+    rambot.x -= nx * overlap * 0.82;
+    rambot.y -= ny * overlap * 0.82;
+    body.x += nx * overlap * 0.18;
+    body.y += ny * overlap * 0.18;
+    const speed = Math.hypot(rambot.vx, rambot.vy);
+    if (rambot.impactCooldown > 0 || !(rambot.chargeTimer > 0 || speed > RAMBOT_IMPACT_SPEED)) {
+      return;
+    }
+
+    const awayDx = finiteOr(body.x, 0) - finiteOr(protectedBody.x, 0);
+    const awayDy = finiteOr(body.y, 0) - finiteOr(protectedBody.y, 0);
+    const awayDistance = Math.hypot(awayDx, awayDy) || 1;
+    const awayX = awayDx / awayDistance;
+    const awayY = awayDy / awayDistance;
+    const relativeOutwardSpeed = (finiteOr(body.vx, 0) - finiteOr(protectedBody.vx, 0)) * awayX +
+      (finiteOr(body.vy, 0) - finiteOr(protectedBody.vy, 0)) * awayY;
+    const push = SURVIVAL_RAMBOT_DEFENSE_BODY_IMPULSE * (rambot.isBoss ? 1.28 : 1) + Math.max(0, -relativeOutwardSpeed) * 0.72;
+    const contactX = body.x - awayX * solidContactRadius(body);
+    const contactY = body.y - awayY * solidContactRadius(body);
+    applyBodyVelocityChangeAtPoint(body, awayX * push, awayY * push, contactX, contactY, BODY_CONSTRAINT_TORQUE_RESPONSE);
+    markMobDamagedByBody(rambot, body);
+    rambot.vx -= awayX * 245;
+    rambot.vy -= awayY * 245;
+    rambot.impactCooldown = 0.95;
+    rambot.recoverTimer = Math.max(finiteOr(rambot.recoverTimer, 0), 0.62);
+    rambot.chargeTimer = 0;
+    state.events.push({
+      type: "mob.camp.rambotDefendedBody",
+      mobId: rambot.id,
+      bodyId: body.id,
+      campBodyId: protectedBody.id,
+      tick: state.tick
+    });
   }
 
   function hitPlayerWithMob(state, mob, target, nx, ny, damage, cause, impulse) {
@@ -350,7 +414,13 @@
     const tangentX = -ny * rambot.strafeSign;
     const tangentY = nx * rambot.strafeSign;
 
-    if (rambot.isBoss && finiteOr(rambot.pistonTimer, 0) > 0) {
+    const defenseTarget = Boolean(targetPlayer.survivalDefenseBody && targetPlayer.body);
+    if (defenseTarget && finiteOr(rambot.pistonTimer, 0) > 0) {
+      rambot.pistonTimer = 0;
+      rambot.pistonHit = false;
+    }
+
+    if (!defenseTarget && rambot.isBoss && finiteOr(rambot.pistonTimer, 0) > 0) {
       rambot.pistonTimer = Math.max(0, finiteOr(rambot.pistonTimer, 0) - dt);
       updateRambotBossHeadTracking(rambot, targetPlayer.x, targetPlayer.y, dt, 8.5);
       updateRambotBossPistonImpact(state, rambot, targetPlayer);
@@ -379,7 +449,7 @@
       const strafeForce = bossStrafeForce(rambot, rambot.isBoss ? 32 : 22);
       rambot.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
       rambot.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
-      const chargeRange = attackTarget.kind === "body" ? attackTarget.radius + 860 : 1080;
+      const chargeRange = attackTarget.kind === "player" ? 1080 : attackTarget.radius + 860;
       if (dist < chargeRange && rambot.chargeCooldown <= 0) {
         rambot.chargeDirX = nx;
         rambot.chargeDirY = ny;
@@ -409,7 +479,11 @@
     }
     rambot.x += rambot.vx * dt;
     rambot.y += rambot.vy * dt;
-    updateRambotPlayerImpact(state, rambot, targetPlayer);
+    if (defenseTarget) {
+      updateRambotDefenseBodyImpact(state, rambot, attackTarget);
+    } else {
+      updateRambotPlayerImpact(state, rambot, targetPlayer);
+    }
     updateRambotStructureImpact(state, rambot);
     rambot.rotation = Math.atan2(rambot.vy || ny, rambot.vx || nx) + Math.PI / 2;
     updateRambotBossHeadTracking(rambot, targetPlayer.x, targetPlayer.y, dt, rambot.chargeTimer > 0 ? 6.5 : 3.6);

@@ -1,9 +1,17 @@
 async function getDbPool() {
+  if (Date.now() < dbPoolRetryAfter) {
+    return null;
+  }
   if (!dbPoolPromise) {
     dbPoolPromise = createDbPool();
   }
 
-  return dbPoolPromise;
+  const pool = await dbPoolPromise;
+  if (!pool && readDatabaseAddress()) {
+    dbPoolPromise = null;
+    dbPoolRetryAfter = Date.now() + databaseReconnectDelayMs;
+  }
+  return pool;
 }
 
 async function createDbPool() {
@@ -169,4 +177,3 @@ async function ensureDatabaseSchema(pool) {
     )
   `);
 }
-

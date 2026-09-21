@@ -2,7 +2,7 @@
     if (!mob) {
       return baseMaxSpeed;
     }
-    let chaseMaxSpeed = baseMaxSpeed;
+    let chaseMaxSpeed = baseMaxSpeed * (isPlayerTeamMob(mob) ? 1 : Math.max(1, finiteOr(mob.difficultySpeedMultiplier, 1)));
     if (mob.isBoss) {
       const speed = Math.hypot(finiteOr(mob.vx, 0), finiteOr(mob.vy, 0));
       const desiredLength = Math.hypot(finiteOr(desiredX, 0), finiteOr(desiredY, 0));
@@ -209,6 +209,7 @@
 
   function updateBodyAfterMassChange(body) {
     body.tier = clone(tierForMassAndStellarOutcome(body.mass, body.stellarOutcome));
+    if (body.tier.name === "particle") body.ownerPlayerId = "";
     body.radius = radiusFromMassForTier(body.mass, body.tier);
     body.textureSeed = finiteOr(body.textureSeed, 0) + 0.09;
   }
@@ -280,17 +281,20 @@
     }
   }
 
-  function applyUfoTractorBeam(state, seedHolder, ufo, dt) {
+  function applyUfoTractorBeam(state, seedHolder, ufo, dt, towTarget) {
     if (!ufoHasTractorBeam(ufo)) {
       return;
     }
-
     const world = state.world;
     const assignedSalvageBody = survivalSalvageBody(world, ufo);
+    const usesSurvivalTowRules = ufoUsesSurvivalTowRules(state, ufo);
     let bestBody = assignedSalvageBody;
     let bestScore = Infinity;
     for (const body of assignedSalvageBody ? [] : world.particles || []) {
       if (!canUfoTractorAffectParticle(body) || !canUfoPreferTractorTarget(ufo, body)) {
+        continue;
+      }
+      if (usesSurvivalTowRules && isAsteroidOrLarger(body)) {
         continue;
       }
       const distance = Math.hypot(body.x - ufo.x, body.y - ufo.y);
@@ -306,7 +310,6 @@
         bestScore = score;
       }
     }
-
     if (!Number.isFinite(ufo.beamAngle)) {
       ufo.beamAngle = Math.PI / 2;
     }
@@ -347,7 +350,14 @@
       const toOriginY = originY - body.y;
       const isAssignedSalvageBody = body === assignedSalvageBody;
 
-      if (!isAssignedSalvageBody && shouldUfoSiphonBody(ufo, body)) {
+      if (usesSurvivalTowRules && isAsteroidOrLarger(body)) {
+        if (isAssignedSalvageBody) {
+          applyControlledSurvivalTow(state, ufo, body, towTarget, pullStrength, centerStrength, dt);
+        }
+        continue;
+      }
+
+      if (!isAssignedSalvageBody && !isSurvivalLogisticsUfo(state, ufo) && shouldUfoSiphonBody(ufo, body)) {
         drainBodyWithUfoTractor(state, seedHolder, ufo, body, pullStrength, centerStrength, dt);
         continue;
       }
@@ -373,7 +383,12 @@
           const damage = Math.min(90, 20 + Math.max(0, bodySpeed - 110) * 0.18 + Math.sqrt(body.mass) * 0.8);
           knockMob(ufo, toOrigin.x, toOrigin.y, 150 + bodySpeed * 0.34);
           triggerBossBodyEvade(ufo, body, toOrigin.x, toOrigin.y, bodySpeed);
-          damageMob(state, ufo, damage, "ufo-tractor-impact");
+          damageMob(state, ufo, damage, "ufo-tractor-impact", {
+            playerId: controllingPlayerIdForBody(state, body),
+            bodyId: body.id,
+            cause: "ufo-tractor-impact",
+            hostileActionType: "player-controlled-body-impact"
+          });
           if (ufo.isBoss) {
             ufo.tractorDisabledTimer = Math.max(finiteOr(ufo.tractorDisabledTimer, 0), UFO_BOSS_TRACTOR_IMPACT_DISABLE_DURATION);
           }
@@ -381,6 +396,9 @@
         body.vx -= toOrigin.x * (210 + bodySpeed * 0.18);
         body.vy -= toOrigin.y * (210 + bodySpeed * 0.18);
       } else if (canUfoAbsorbParticle(ufo, body)) {
+        if (isSurvivalLogisticsUfo(state, ufo)) {
+          addSurvivalUfoCargo(state, ufo, body);
+        }
         world.particles.splice(i, 1);
         state.events.push({ type: "ufo.absorbedParticle", mobId: ufo.id, bodyId: body.id, tick: state.tick });
       }

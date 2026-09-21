@@ -93,6 +93,9 @@
       if (isMobSummoning(ufo)) {
         continue;
       }
+      if (shouldSleepDistantSurvivalMob(ufo)) {
+        continue;
+      }
       updateBossSpawnPressure(ufo, dt);
       const beamMode = updateUfoBossBeamState(ufo, dt);
       if (isMobDisabled(ufo)) {
@@ -140,15 +143,21 @@
       const tangentY = nx * ufo.strafeSign;
       const desiredDistance = attackTarget.kind === "salvage" ? 0 : attackTarget.kind === "body" ? clamp(attackTarget.radius + 350, 430, 660) : 430;
       const noBeamBoost = ufo.isBoss && beamMode === "cooldown" ? 1.34 : 1;
-      const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
-      const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);
-
-      ufo.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
-      ufo.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
-      ufo.vx += Math.sin(performance.now() * 0.00058 + ufo.wobble) * 10 * dt;
-      ufo.vy += Math.cos(performance.now() * 0.00052 + ufo.wobble) * 10 * dt;
-      ufo.vx *= Math.pow(0.75, dt);
-      ufo.vy *= Math.pow(0.75, dt);
+      if (salvageTarget) {
+        const approachSpeed = clamp(dist * 0.72, 0, 150);
+        const velocityBlend = Math.min(1, dt * 2.6);
+        ufo.vx += (nx * approachSpeed - ufo.vx) * velocityBlend;
+        ufo.vy += (ny * approachSpeed - ufo.vy) * velocityBlend;
+      } else {
+        const chaseForce = bossChaseForce(ufo, (dist > desiredDistance ? 92 : -44) * noBeamBoost);
+        const strafeForce = bossStrafeForce(ufo, (dist < 880 ? 56 : 18) * noBeamBoost);
+        ufo.vx += nx * chaseForce * dt + tangentX * strafeForce * dt;
+        ufo.vy += ny * chaseForce * dt + tangentY * strafeForce * dt;
+        ufo.vx += Math.sin(performance.now() * 0.00058 + ufo.wobble) * 10 * dt;
+        ufo.vy += Math.cos(performance.now() * 0.00052 + ufo.wobble) * 10 * dt;
+        ufo.vx *= Math.pow(0.75, dt);
+        ufo.vy *= Math.pow(0.75, dt);
+      }
 
       const speed = Math.hypot(ufo.vx, ufo.vy);
       const maxSpeed = bossChaseMaxSpeed(ufo, (dist > 760 ? 170 : 132) * noBeamBoost, nx, ny);
@@ -159,9 +168,9 @@
 
       ufo.x += ufo.vx * dt;
       ufo.y += ufo.vy * dt;
-      applyUfoTractorBeam(ufo, dt);
+      applyUfoTractorBeam(ufo, dt, salvageTarget);
       if (target) applyUfoBossPlayerDrainBeam(ufo, target, dt);
-      if (!isPlayerTeamMob(ufo)) {
+      if (!isPlayerTeamMob(ufo) && !isSurvivalLogisticsUfo(ufo)) {
         updateUfoUndersideImpact(ufo);
       }
       ufo.rotation = ufo.beamAngle - Math.PI / 2;

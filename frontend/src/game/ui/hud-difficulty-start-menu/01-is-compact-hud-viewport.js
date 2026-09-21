@@ -389,6 +389,10 @@
     return Math.max(0, finiteOr(damage, 0) * finiteOr(activeDifficulty().mobDamageMultiplier, 1));
   }
 
+  function difficultyMobSpeedMultiplier() {
+    return Math.max(1, finiteOr(activeDifficulty().mobSpeedMultiplier, 1));
+  }
+
   function difficultyHealthDropChance(baseChance) {
     return clamp(finiteOr(baseChance, 0) * finiteOr(activeDifficulty().healthDropMultiplier, 1), 0, 0.96);
   }
@@ -408,6 +412,7 @@
     survivalSpawnState.exploredMaxX = 0;
     survivalSpawnState.exploredMinY = 0;
     survivalSpawnState.exploredMaxY = 0;
+    survivalSpawnState.engagements = {};
   }
 
   function setDifficultyScreenOpen(open) {

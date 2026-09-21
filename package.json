@@ -24,7 +24,17 @@
     "test:crazygames:package": "node tests/crazygames-package-smoke.test.js",
     "test:itch:package": "node tests/itch-package-smoke.test.js",
     "test:gamepix:package": "node tests/gamepix-package-smoke.test.js",
+    "test:http:body-limit": "node tests/http-body-limit-recovery.test.js",
     "test:physics:framerate": "node tests/crazygames-framerate-consistency.test.js",
+    "test:vacuum:upgrades": "node tests/vacuum-propulsion-upgrades.test.js",
+    "test:survival:engagement": "node tests/survival-engagement-state-machine.test.js",
+    "test:survival:rambot-defense": "node tests/survival-rambot-defense.test.js",
+    "test:survival:tesla-targeting": "node tests/tesla-structure-targeting.test.js",
+    "test:survival:crowded-camp": "node tests/survival-crowded-camp-benchmark.test.js",
+    "test:survival:large-world": "node tests/survival-large-world-benchmark.test.js",
+    "test:survival:distant-sleep": "node tests/survival-distant-camp-sleep.test.js",
+    "test:survival:alert-render": "node tests/mob-aggro-alert-render.test.js",
+    "test:shield-generators": "node tests/shield-generator-collision.test.js",
     "check:file-sizes": "node scripts/check-editable-file-sizes.js"
   },
   "dependencies": {

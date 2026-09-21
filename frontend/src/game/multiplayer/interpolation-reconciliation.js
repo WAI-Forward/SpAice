@@ -44,7 +44,7 @@
         }),
         structures: interpolateRemoteEntityList(fromWorld.structures, toWorld.structures, progress, lead, {
           angleKeys: ["angle", "linkedAngle", "aimAngle"],
-          scalarKeys: ["x2", "y2", "deploy", "thrustAmount", "thrustDirection", "health", "maxHealth", "disabledTimer", "flash", "restLength", "restCenterDx", "restCenterDy", "bridgeAngleOffset", "bridgeLinkedAngleOffset", "linkedSurfaceOffset", "burstTimer", "burstCooldown", "missileCharge", "lockTimer", "beepTimer", "targetX", "targetY", "targetCount"]
+          scalarKeys: ["x2", "y2", "deploy", "thrustAmount", "thrustDirection", "health", "maxHealth", "disabledTimer", "flash", "restLength", "restCenterDx", "restCenterDy", "bridgeAngleOffset", "bridgeLinkedAngleOffset", "linkedSurfaceOffset", "burstTimer", "burstCooldown", "missileCharge", "lockTimer", "beepTimer", "targetX", "targetY", "targetCount", "survivalAggroAlertTimer"]
         }),
         rivalProjectiles: interpolateRemoteEntityList(fromWorld.rivalProjectiles, toWorld.rivalProjectiles, progress, lead, {
           scalarKeys: ["radius", "length", "life", "maxLife"]
@@ -155,6 +155,7 @@
 
     body.mass = Math.max(1, finiteOr(body.mass, 1));
     body.tier = tierForMassAndStellarOutcome(body.mass, body.stellarOutcome);
+    if (body.tier.name === "particle") body.ownerPlayerId = "";
     body.radius = radiusFromMassForTier(body.mass, body.tier);
     normalizeBodyEnergy(body);
     return body;

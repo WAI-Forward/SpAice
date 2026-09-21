@@ -59,6 +59,8 @@
     const deploy = clamp(structure.deploy || 0, 0, 1);
     const charge = clamp(finiteOr(structure.missileCharge, valid === false ? 0.35 : 1), 0, 1);
     const locking = finiteOr(structure.targetCount, 0) >= missileLauncherMinClusterSize && charge >= 1;
+    const launchFlash = clamp(finiteOr(structure.launchFlash, 0), 0, 1);
+    const recoil = clamp(finiteOr(structure.recoil, 0), 0, 1);
     const baseRotation = structure.angle + Math.PI / 2;
     const barrelAngle = Number.isFinite(Number(structure.aimAngle)) ? structure.aimAngle : structure.angle;
     const accent = valid === false ? { r: 255, g: 100, b: 100 } : { r: 255, g: 184, b: 88 };
@@ -89,8 +91,9 @@
 
     ctx.restore();
 
-    const railBaseX = structure.x + Math.cos(structure.angle) * (12 + deploy * 8);
-    const railBaseY = structure.y + Math.sin(structure.angle) * (12 + deploy * 8);
+    const recoilOffset = recoil * 11;
+    const railBaseX = structure.x + Math.cos(structure.angle) * (12 + deploy * 8) - Math.cos(barrelAngle) * recoilOffset;
+    const railBaseY = structure.y + Math.sin(structure.angle) * (12 + deploy * 8) - Math.sin(barrelAngle) * recoilOffset;
     const railLength = 36 + deploy * 32;
 
     ctx.save();
@@ -111,16 +114,36 @@
     ctx.stroke();
 
     if (charge > 0.08) {
+      const rocketX = railLength * clamp(charge * 0.9 + 0.1, 0, 1);
       ctx.fillStyle = "rgba(19, 25, 39, 0.96)";
       ctx.strokeStyle = colorString(accent, 0.6 + charge * 0.32);
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(railLength * charge - 10, -12);
-      ctx.lineTo(railLength * charge + 12, 0);
-      ctx.lineTo(railLength * charge - 10, 12);
+      ctx.moveTo(rocketX - 18, -10);
+      ctx.lineTo(rocketX + 17, 0);
+      ctx.lineTo(rocketX - 18, 10);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+
+      ctx.fillStyle = colorString(accent, 0.42 + charge * 0.34);
+      ctx.beginPath();
+      ctx.arc(rocketX - 20, 0, 5 + charge * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (launchFlash > 0) {
+      ctx.globalCompositeOperation = "lighter";
+      const muzzleX = railLength + 4;
+      const flare = 18 + launchFlash * 32;
+      const flame = ctx.createRadialGradient(muzzleX, 0, 0, muzzleX, 0, flare);
+      flame.addColorStop(0, "rgba(255, 255, 255, " + (0.74 * launchFlash) + ")");
+      flame.addColorStop(0.34, colorString(accent, 0.72 * launchFlash));
+      flame.addColorStop(1, "rgba(255, 115, 173, 0)");
+      ctx.fillStyle = flame;
+      ctx.beginPath();
+      ctx.arc(muzzleX, 0, flare, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
 
@@ -300,4 +323,3 @@
 
     ctx.restore();
   }
-

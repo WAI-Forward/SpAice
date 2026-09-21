@@ -91,7 +91,7 @@
       let hitStructure = false;
       if (projectile.rocket || projectile.lightning) {
         for (const structure of structures) {
-          if (structure.health <= 0) {
+          if (structure.health <= 0 || projectile.lightning && isMobOwnedStructure(structure)) {
             continue;
           }
 

@@ -48,7 +48,7 @@ function readBundleOrder(partsDir, extension) {
     throw new Error(`${orderPath} must contain an array of source file paths.`);
   }
 
-  return manifest.map((entry) => {
+  const orderedFiles = manifest.map((entry) => {
     if (
       typeof entry !== "string" ||
       !entry.endsWith(wantedExtension) ||
@@ -64,6 +64,14 @@ function readBundleOrder(partsDir, extension) {
     }
     return filePath;
   });
+  const included = new Set(orderedFiles.map((filePath) => toBundlePath(filePath, partsDir)));
+  const omitted = listSourceFiles(partsDir, wantedExtension)
+    .map((filePath) => toBundlePath(filePath, partsDir))
+    .filter((filePath) => !included.has(filePath));
+  if (omitted.length) {
+    throw new Error(`${orderPath} omits source files:\n${omitted.join("\n")}`);
+  }
+  return orderedFiles;
 }
 
 function orderedSourceFiles(partsDir, extension) {

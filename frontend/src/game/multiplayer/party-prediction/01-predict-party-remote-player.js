@@ -86,7 +86,8 @@
       return false;
     }
 
-    const reach = gadgetForceReachForState(state) + Math.max(0, finiteOr(target.radius, 0)) + Math.max(0, finiteOr(padding, 0)) + 180;
+    const activeReach = state.right ? gadgetPushReachForState(state) : gadgetForceReachForState(state);
+    const reach = activeReach + Math.max(0, finiteOr(target.radius, 0)) + Math.max(0, finiteOr(padding, 0)) + 180;
     const dx = target.x - state.actor.x;
     const dy = target.y - state.actor.y;
     return dx * dx + dy * dy <= reach * reach;
@@ -128,15 +129,7 @@
     let best = null;
     let bestDistance = -Infinity;
     for (const particle of particles) {
-      if (
-        !particle ||
-        !particle.tier ||
-        particle.tier.solid ||
-        particle.randomEventId ||
-        particle.survivalCampBody ||
-        finiteOr(particle.ufoSapTimer, 0) > 0 ||
-        isUfoBeamCargo(particle)
-      ) {
+      if (!isRecyclableAmbientMatter(particle)) {
         continue;
       }
       const distance = nearestPartyAnchorDistance(particle.x, particle.y, anchors);
@@ -147,6 +140,35 @@
       bestDistance = distance;
     }
     return best;
+  }
+
+  function pruneDistantAmbientMatter(anchors, keepRadius, maxRemovals) {
+    const limit = Math.max(0, Math.floor(finiteOr(maxRemovals, 0)));
+    let removedParticles = 0;
+    for (let removed = 0; removed < limit; removed += 1) {
+      let removeIndex = -1;
+      let removeDistance = keepRadius;
+      for (let i = 0; i < particles.length; i += 1) {
+        const particle = particles[i];
+        if (!isRecyclableAmbientMatter(particle)) {
+          continue;
+        }
+        const distance = nearestPartyAnchorDistance(particle.x, particle.y, anchors);
+        if (distance <= removeDistance) {
+          continue;
+        }
+        removeDistance = distance;
+        removeIndex = i;
+      }
+      if (removeIndex < 0) {
+        break;
+      }
+      const removedParticle = particles.splice(removeIndex, 1)[0];
+      if (isAmbientDensityParticle(removedParticle)) {
+        removedParticles += 1;
+      }
+    }
+    return removedParticles;
   }
 
   function pruneInvalidParticles() {

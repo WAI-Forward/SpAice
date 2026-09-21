@@ -28,6 +28,7 @@
     }
 
     drawStructureStatus(structure, alpha, valid);
+    drawStructureAggroAlert(structure, time, alpha);
   }
 
   function drawStructureStatus(structure, alpha, valid) {
@@ -152,4 +153,3 @@
     }
     ctx.restore();
   }
-
