@@ -1,6 +1,12 @@
 function evolveWorldState(snapshot) {
   const world = normalizeWorldState(snapshot);
   const now = Date.now();
+  if (world.gameMode === "survival" || world.particles.some((body) => body && body.survivalCampId) ||
+      world.ufos.some((mob) => mob && mob.survivalEncounterType)) {
+    // A survival run advances only while its client or simulation is open.
+    world.lastEvolvedAt = now;
+    return world;
+  }
   const elapsedTicks = Math.min(720, Math.floor((now - world.lastEvolvedAt) / worldTickMs));
 
   if (elapsedTicks <= 0) {
@@ -78,8 +84,9 @@ function normalizeWorldState(snapshot) {
   return {
     ...defaults,
     version: 1,
+    gameMode: source.gameMode === "horde" ? "horde" : "survival",
     elapsed: clampNumber(source.elapsed, 0, Number.MAX_SAFE_INTEGER),
-    particles: Array.isArray(source.particles) ? source.particles.map(normalizeParticle).filter(Boolean).slice(0, 240) : [],
+    particles: Array.isArray(source.particles) ? source.particles.map(normalizeParticle).filter(Boolean).slice(0, 4000) : [],
     alienoids: Array.isArray(alienoidSource) ? alienoidSource.map(normalizeAlienoid).filter(Boolean).slice(0, 80) : [],
     ufos: Array.isArray(source.ufos) ? source.ufos.map(normalizeUfo).filter(Boolean).slice(0, 40) : [],
     rambots: Array.isArray(source.rambots) ? source.rambots.map(normalizeRambot).filter(Boolean).slice(0, 40) : [],
@@ -87,7 +94,7 @@ function normalizeWorldState(snapshot) {
     teslas: Array.isArray(source.teslas) ? source.teslas.map(normalizeTesla).filter(Boolean).slice(0, 40) : [],
     rockets: Array.isArray(source.rockets) ? source.rockets.map(normalizeRocket).filter(Boolean).slice(0, 40) : [],
     fighters: Array.isArray(source.fighters) ? source.fighters.map(normalizeFighter).filter(Boolean).slice(0, 40) : [],
-    structures: Array.isArray(source.structures) ? source.structures.map(normalizeStructure).filter(Boolean).slice(0, 120) : [],
+    structures: Array.isArray(source.structures) ? source.structures.map(normalizeStructure).filter(Boolean).slice(0, 1000) : [],
     rivalProjectiles: Array.isArray(source.rivalProjectiles)
       ? source.rivalProjectiles.map(normalizeProjectile).filter(Boolean).slice(0, 160)
       : [],
@@ -162,4 +169,3 @@ function normalizePlayerSnapshot(playerId, snapshot) {
     savedAt: Date.now()
   };
 }
-

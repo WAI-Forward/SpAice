@@ -36,12 +36,46 @@ function normalizeEquippedToolInventory(source, ownedTools) {
   return tools.filter((tool, index) => toolKeys.includes(tool) && owned.includes(tool) && tools.indexOf(tool) === index);
 }
 
+const survivalBodySaveKeys = [
+  "ownerPlayerId", "survivalCampId", "survivalCampX", "survivalCampY",
+  "survivalCampHomeX", "survivalCampHomeY", "survivalCampMovedByPlayer",
+  "survivalCampBodyMovedWakeSent", "survivalCampLastMoverPlayerId",
+  "lastControllingPlayerId", "lastPlayerControlAt", "lastPlayerControlBelowSpeedAt",
+  "playerImpactDebrisCooldown", "survivalCampBody", "ambientSpawnRock",
+  "orbitHostId", "orbitRingIndex", "orbitDirection", "orbitStrength", "orbitGrace",
+  "stellarOutcome", "stellarGrowthStarted", "stellarGrowthRate", "stellarGrowthLastSampleAt",
+  "randomEventId", "randomEventRegionX", "randomEventRegionY", "ufoSapTimer",
+  "ufoSapSourceGraceTimer", "ufoExtractedById", "ufoExtractedFromId", "ufoSapParticleBuffer"
+];
+const survivalMobSaveKeys = [
+  "survivalCampId", "survivalCampX", "survivalCampY", "survivalCampBand",
+  "survivalCampBudget", "survivalCampSlotAngle", "survivalCampSlotRadius",
+  "survivalCampReturning", "survivalCampAggroTimer", "survivalAiState",
+  "survivalEncounterType", "survivalEncounterId", "survivalMigrationCampId",
+  "survivalMigrationCampX", "survivalMigrationCampY", "survivalMigrationStraightTime",
+  "survivalMigrationDirX", "survivalMigrationDirY", "survivalSalvageBodyId",
+  "survivalSalvageSourceCampId", "survivalSalvageTargetCampId", "survivalSalvageAge",
+  "survivalCargoMass", "survivalCargoSourceCount", "survivalTargetPlayerId"
+];
+
+function normalizeSurvivalSaveFields(source, keys) {
+  const result = {};
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string") result[key] = value.slice(0, 128);
+    else if (typeof value === "boolean") result[key] = value;
+    else if (typeof value === "number" && Number.isFinite(value)) result[key] = clampNumber(value, -1000000, 1000000);
+  }
+  return result;
+}
+
 function normalizeParticle(source) {
   if (!source || typeof source !== "object") {
     return null;
   }
 
   return {
+    ...normalizeSurvivalSaveFields(source, survivalBodySaveKeys),
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
     y: clampNumber(source.y, -1000000, 1000000),
@@ -123,6 +157,7 @@ function normalizeAlienoid(source) {
 
   const boss = normalizeMobBossFields(source, "alienoid", 100);
   return {
+    ...normalizeSurvivalSaveFields(source, survivalMobSaveKeys),
     kind: "alienoid",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
@@ -156,6 +191,7 @@ function normalizeUfo(source) {
 
   const boss = normalizeMobBossFields(source, "ufo", 130);
   return {
+    ...normalizeSurvivalSaveFields(source, survivalMobSaveKeys),
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
     y: clampNumber(source.y, -1000000, 1000000),
@@ -188,6 +224,7 @@ function normalizeRambot(source) {
 
   const boss = normalizeMobBossFields(source, "rambot", 210);
   return {
+    ...normalizeSurvivalSaveFields(source, survivalMobSaveKeys),
     kind: "rambot",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
@@ -223,6 +260,7 @@ function normalizeEngineer(source) {
 
   const boss = normalizeMobBossFields(source, "engineer", 140);
   return {
+    ...normalizeSurvivalSaveFields(source, survivalMobSaveKeys),
     kind: "engineer",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
@@ -257,6 +295,7 @@ function normalizeTesla(source) {
 
   const boss = normalizeMobBossFields(source, "tesla", 150);
   return {
+    ...normalizeSurvivalSaveFields(source, survivalMobSaveKeys),
     kind: "tesla",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
@@ -294,6 +333,7 @@ function normalizeRocket(source) {
   const boss = normalizeMobBossFields(source, kind, maxHealth);
 
   return {
+    ...normalizeSurvivalSaveFields(source, survivalMobSaveKeys),
     kind,
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
@@ -340,6 +380,7 @@ function normalizeFighter(source) {
 
   const boss = normalizeMobBossFields(source, "fighter", 230);
   return {
+    ...normalizeSurvivalSaveFields(source, survivalMobSaveKeys),
     kind: "fighter",
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     x: clampNumber(source.x, -1000000, 1000000),
@@ -368,4 +409,3 @@ function normalizeFighter(source) {
     altAttackCooldown: boss.isBoss ? clampNumber(source.altAttackCooldown, 0, mobBossAltAttackCooldownMax) : 0
   };
 }
-

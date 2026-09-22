@@ -420,10 +420,13 @@
         return;
       }
 
+      const saveStartedAt = performance.now();
+      const body = JSON.stringify(buildPersistentPayload(includeWorld));
+      gamePhaseMetrics.saveMs = performance.now() - saveStartedAt;
       const data = await fetchPersistentJson("/api/world/snapshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPersistentPayload(includeWorld))
+        body
       });
       persistence.online = true;
       persistence.serverUnavailable = false;

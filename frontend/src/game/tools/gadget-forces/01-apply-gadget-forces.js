@@ -340,8 +340,26 @@
     return gadgetPushReach * Math.max(0.1, finiteOr(state && state.blowFactor, 1));
   }
 
+  function gadgetHoldBalanceFactor(suckFactor, blowFactor) {
+    const suction = Math.max(0.1, finiteOr(suckFactor, 1));
+    const propulsion = Math.max(0.1, finiteOr(blowFactor, 1));
+    return clamp(1 + 1.25 * (propulsion - suction) / Math.max(suction, propulsion), 0.3, 1.7);
+  }
+
+  function gadgetHoldFarReach(rangeFactor) {
+    const nearReach = funnelShape.rimX + 5;
+    return nearReach + 2 * (gadgetHoldReach - nearReach) * Math.max(1, finiteOr(rangeFactor, 1));
+  }
+
+  function gadgetHoldReachFromFactors(holdFactor, rangeFactor) {
+    const nearReach = funnelShape.rimX + 5;
+    return nearReach + (gadgetHoldFarReach(rangeFactor) - nearReach) * 0.5 * Math.max(0.1, finiteOr(holdFactor, 1));
+  }
+
   function gadgetHoldReachForState(state) {
-    return gadgetHoldReach * gadgetRangeFactorForState(state);
+    const suction = Math.max(0.1, finiteOr(state && state.suckFactor, 1));
+    const propulsion = Math.max(0.1, finiteOr(state && state.blowFactor, 1));
+    return gadgetHoldReachFromFactors(gadgetHoldBalanceFactor(suction, propulsion), Math.max(suction, propulsion));
   }
 
   function partyGadgetMiddleGatherRange(forward, side, targetRadius, padding, state) {

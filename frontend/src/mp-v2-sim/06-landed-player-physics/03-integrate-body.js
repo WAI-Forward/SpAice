@@ -2,19 +2,24 @@
   const PLAYER_BODY_IMPACT_DEBRIS_SPEED = 320;
   const PLAYER_BODY_IMPACT_DEBRIS_COOLDOWN = 0.16;
 
-  function applySolidBodyBackgroundDamping(body, dt) {
+  function applySolidBodyBackgroundDamping(body, dt, players) {
     if (!body || !body.tier || !body.tier.solid || body.gadgetStabilized) {
       return;
     }
-    body.vx *= Math.pow(SOLID_BODY_BACKGROUND_DAMPING, dt);
-    body.vy *= Math.pow(SOLID_BODY_BACKGROUND_DAMPING, dt);
-    if (Math.hypot(finiteOr(body.vx, 0), finiteOr(body.vy, 0)) < 0.08) {
+    const speed = Math.hypot(finiteOr(body.vx, 0), finiteOr(body.vy, 0));
+    const fastTravel = clamp((speed - 300) / 700, 0, 1);
+    const distance = fastTravel > 0 ? players.length ? nearestPlayerDistance(body.x, body.y, players) : Infinity : 0;
+    const emptySpace = clamp((distance - AMBIENT_PARTICLE_DENSITY_RADIUS) / AMBIENT_PARTICLE_PLAYFIELD_RADIUS, 0, 1);
+    const damping = Math.pow(SOLID_BODY_BACKGROUND_DAMPING, dt) * Math.exp(-0.1 * fastTravel * emptySpace * dt);
+    body.vx *= damping;
+    body.vy *= damping;
+    if (speed * damping < 0.08) {
       body.vx = 0;
       body.vy = 0;
     }
   }
 
-  function integrateBody(state, body, dt, tick) {
+  function integrateBody(state, body, dt, tick, players) {
     if (!body) {
       return;
     }
@@ -29,7 +34,7 @@
       body.vx *= Math.pow(0.82, dt);
       body.vy *= Math.pow(0.82, dt);
     } else {
-      applySolidBodyBackgroundDamping(body, dt);
+      applySolidBodyBackgroundDamping(body, dt, players);
     }
     body.ufoSapTimer = Math.max(0, finiteOr(body.ufoSapTimer, 0) - dt);
     body.ufoSapSourceGraceTimer = Math.max(0, finiteOr(body.ufoSapSourceGraceTimer, 0) - dt);

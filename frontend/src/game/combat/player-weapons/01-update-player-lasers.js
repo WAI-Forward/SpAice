@@ -117,7 +117,7 @@
         continue;
       }
 
-      for (const particle of particles) {
+      for (const particle of bodiesNearWorldCircle(mob.x, mob.y, mob.radius)) {
         if (!particle.tier.solid) {
           continue;
         }
@@ -173,6 +173,7 @@
         mob.y += ny * correctionDistance * mobShare;
         particle.x -= nx * correctionDistance * bodyShare;
         particle.y -= ny * correctionDistance * bodyShare;
+        invalidateNearbyBodyIndex();
 
         if (relativeVelocity < 0) {
           const impulse = -relativeVelocity * 0.96;

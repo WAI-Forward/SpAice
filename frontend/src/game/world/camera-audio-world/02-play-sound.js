@@ -283,7 +283,10 @@
     }
     let best = null;
     const preferredHostId = Math.max(0, Math.floor(finiteOr(body.orbitHostId, 0)));
-    for (const host of bodies) {
+    const candidates = bodies === particles
+      ? bodiesNearWorldCircle(body.x, body.y, orbitHostSearchBase + Math.max(0, finiteOr(body.radius, 0)) * 1.7 + 256)
+      : bodies;
+    for (const host of candidates) {
       const candidate = bestOrbitRingForBody(body, host);
       if (!candidate) {
         continue;
@@ -295,6 +298,19 @@
       }
     }
     return best;
+  }
+
+  let orbitHostSearchBase = 0;
+  function refreshOrbitHostSearchBase(bodies) {
+    let maxReach = 0;
+    for (const host of bodies) {
+      if (!host || host.survivalCampBody) continue;
+      const rings = orbitRingCountForBody(host);
+      if (!rings) continue;
+      const ring = orbitRingRadius(host, rings - 1);
+      maxReach = Math.max(maxReach, ring + 2.35 * Math.max(orbitCaptureMinBand, ring * orbitCaptureBandScale));
+    }
+    orbitHostSearchBase = maxReach;
   }
 
   function clearOrbitState(body) {

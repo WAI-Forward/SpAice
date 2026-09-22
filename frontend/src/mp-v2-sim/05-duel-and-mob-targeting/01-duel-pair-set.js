@@ -106,7 +106,12 @@
   }
 
   function gadgetHoldReachForInput(player, input) {
-    return GADGET_HOLD_REACH * Math.max(0.1, finiteOr(gadgetRangeFactor(player, input), 1));
+    const suction = Math.max(0.1, finiteOr(gadgetSuckFactor(player, input), 1));
+    const propulsion = Math.max(0.1, finiteOr(gadgetBlowFactor(player, input), 1));
+    const nearReach = FUNNEL.rimX + 5;
+    const farReach = nearReach + 2 * (GADGET_HOLD_REACH - nearReach) * Math.max(suction, propulsion);
+    const balance = clamp(1 + 1.25 * (propulsion - suction) / Math.max(suction, propulsion), 0.3, 1.7);
+    return nearReach + (farReach - nearReach) * 0.5 * balance;
   }
 
   function gadgetPushReachForInput(player, input) {

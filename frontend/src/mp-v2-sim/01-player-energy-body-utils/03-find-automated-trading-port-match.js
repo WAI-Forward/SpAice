@@ -357,6 +357,7 @@
       survivalCampBodyMovedWakeSent: Boolean(body.survivalCampBodyMovedWakeSent),
       survivalCampLastMoverPlayerId: body.survivalCampLastMoverPlayerId || "",
       lastControllingPlayerId: body.lastControllingPlayerId || "",
+      lastPlayerControlAt: Math.max(0, finiteOr(body.lastPlayerControlAt, 0)),
       lastPlayerControlBelowSpeedAt: Math.max(0, finiteOr(body.lastPlayerControlBelowSpeedAt, 0)),
       playerImpactDebrisCooldown: Math.max(0, finiteOr(body.playerImpactDebrisCooldown, 0)),
       survivalCampBody: Boolean(body.survivalCampBody),

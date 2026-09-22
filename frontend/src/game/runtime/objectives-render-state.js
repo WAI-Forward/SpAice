@@ -386,6 +386,7 @@
   }
 
   function beginRenderFrame(frameDt) {
+    gamePhaseMetrics.current = Object.create(null);
     const dt = clamp(finiteOr(frameDt, 1 / 60), 0, 0.25);
     renderPerformance.frameId += 1;
     renderPerformance.lastFrameDt = dt;

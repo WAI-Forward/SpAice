@@ -379,6 +379,13 @@
     const maxEnergy = clamp(finiteOr(snapshot.maxEnergy, playerBaseMaxEnergy), playerBaseMaxEnergy, playerMaxEnergyCap);
     const energy = clamp(finiteOr(snapshot.energy, maxEnergy), 0, maxEnergy);
     const equippedTool = toolCatalog.some((tool) => tool.id === snapshot.equippedTool) ? snapshot.equippedTool : null;
+    const upgradeLevels = equippedTool && snapshot.toolUpgrades && snapshot.toolUpgrades[equippedTool] || {};
+    const suckUpgrade = equippedTool && toolUpgradeById(equippedTool, "suck");
+    const blowUpgrade = equippedTool && toolUpgradeById(equippedTool, "blow");
+    const suckFactor = 1 + upgradeBonus(upgradeLevels.suck, suckUpgrade && suckUpgrade.bonusScale);
+    const blowFactor = 1 + upgradeBonus(upgradeLevels.blow, blowUpgrade && blowUpgrade.bonusScale);
+    const holdFactor = gadgetHoldBalanceFactor(suckFactor, blowFactor);
+    const holdRangeFactor = Math.max(suckFactor, blowFactor);
     const statusEffects = normalizeRemotePlayerStatusEffects(snapshot.statusEffects, snapshot.toolDisabledTimer);
     const toolDisabledTimer = statusEffects.disabled;
     const toolMode = ["pull", "push", "hold", "fire", "release", "idle"].includes(snapshot.toolMode) ? snapshot.toolMode : "idle";
@@ -414,6 +421,8 @@
       aimLocalAngle,
       visualAimLocalAngle,
       equippedTool,
+      holdFactor,
+      holdRangeFactor,
       toolMode: activeToolMode,
       toolActive: Boolean(equippedTool && activeToolMode !== "idle" && (snapshot.toolActive || activeToolMode !== "idle")),
       moving: Boolean(snapshot.moving),

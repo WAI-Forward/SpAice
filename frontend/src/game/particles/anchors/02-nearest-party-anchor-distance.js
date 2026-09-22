@@ -1,3 +1,38 @@
+  let nearbyBodyIndex = null;
+  function invalidateNearbyBodyIndex() {
+    nearbyBodyIndex = null;
+  }
+
+  function bodiesNearWorldCircle(x, y, radius) {
+    if (!nearbyBodyIndex || nearbyBodyIndex.count !== particles.length) {
+      const cellSize = 1024;
+      const cells = new Map();
+      let maxRadius = 0;
+      for (const body of particles) {
+        if (!body) continue;
+        const key = Math.floor(body.x / cellSize) + ":" + Math.floor(body.y / cellSize);
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(body);
+        maxRadius = Math.max(maxRadius, finiteOr(body.radius, 0));
+      }
+      nearbyBodyIndex = { cells, cellSize, maxRadius, count: particles.length };
+    }
+    const index = nearbyBodyIndex;
+    const reach = Math.max(0, radius) + index.maxRadius;
+    const minX = Math.floor((x - reach) / index.cellSize);
+    const maxX = Math.floor((x + reach) / index.cellSize);
+    const minY = Math.floor((y - reach) / index.cellSize);
+    const maxY = Math.floor((y + reach) / index.cellSize);
+    const result = [];
+    for (let cellX = minX; cellX <= maxX; cellX += 1) {
+      for (let cellY = minY; cellY <= maxY; cellY += 1) {
+        const bucket = index.cells.get(cellX + ":" + cellY);
+        if (bucket) result.push(...bucket);
+      }
+    }
+    return result;
+  }
+
   function nearestPartyAnchorDistance(x, y, anchors) {
     const source = Array.isArray(anchors) && anchors.length ? anchors : activePartyPlayerAnchors();
     let nearest = Infinity;
@@ -87,9 +122,10 @@
   }
 
   const fastParticleBodyAnchorBaseMass = 150;
-  const fastParticleBodyAnchorBaseSpeed = 700;
-  const fastParticleBodyAnchorMinSpeedFloor = 420;
-  const fastParticleBodyAnchorFullSpeedWindow = 420;
+  const fastParticleBodyAnchorFullMass = thresholdForTierName("planet");
+  const fastParticleBodyAnchorBaseSpeed = 1200;
+  const fastParticleBodyAnchorMinSpeedFloor = 1000;
+  const fastParticleBodyAnchorFullSpeedWindow = 500;
   const fastParticleBodyAnchorMaxCount = 5;
   const solidBodyBackgroundDamping = 0.992;
 
@@ -121,6 +157,12 @@
     );
   }
 
+  function fastBodyParticleWaveYieldScale(body, speedWeight) {
+    const mass = Math.max(fastParticleBodyAnchorBaseMass, finiteOr(body && body.mass, fastParticleBodyAnchorBaseMass));
+    const massProgress = clamp(Math.log2(mass / fastParticleBodyAnchorBaseMass) / Math.log2(fastParticleBodyAnchorFullMass / fastParticleBodyAnchorBaseMass), 0, 1);
+    return 0.38 + (0.12 + 0.06 * massProgress) * speedWeight;
+  }
+
   function isFastParticleBodyAnchor(body) {
     return Boolean(
       body &&
@@ -132,13 +174,19 @@
     );
   }
 
-  function applySolidBodyBackgroundDamping(body, dt) {
+  function applySolidBodyBackgroundDamping(body, dt, playerAnchors) {
     if (!body || !body.tier || !body.tier.solid || body.gadgetStabilized) {
       return;
     }
-    body.vx *= Math.pow(solidBodyBackgroundDamping, dt);
-    body.vy *= Math.pow(solidBodyBackgroundDamping, dt);
-    if (Math.hypot(finiteOr(body.vx, 0), finiteOr(body.vy, 0)) < 0.08) {
+    const speed = Math.hypot(finiteOr(body.vx, 0), finiteOr(body.vy, 0));
+    const fastTravel = clamp((speed - 300) / 700, 0, 1);
+    const anchors = fastTravel > 0 ? Array.isArray(playerAnchors) ? playerAnchors : activePartyPlayerAnchors() : [];
+    const distance = fastTravel > 0 ? anchors.length ? nearestPartyAnchorDistance(body.x, body.y, anchors) : Infinity : 0;
+    const emptySpace = clamp((distance - particleDensityRadius()) / particlePlayfieldRadius(), 0, 1);
+    const damping = Math.pow(solidBodyBackgroundDamping, dt) * Math.exp(-0.1 * fastTravel * emptySpace * dt);
+    body.vx *= damping;
+    body.vy *= damping;
+    if (speed * damping < 0.08) {
       body.vx = 0;
       body.vy = 0;
     }
@@ -165,14 +213,17 @@
 
     const anchors = [];
     const sourcePlayerAnchors = Array.isArray(playerAnchors) && playerAnchors.length ? playerAnchors : activePartyPlayerAnchors();
-    const nearPlayerRadius = particleDensityRadius() * 0.5;
+    const visibleRadius = particlePlayfieldRadius();
     for (const candidate of candidates) {
       const body = candidate.body;
-      const nearPlayer = nearestPartyAnchorDistance(body.x, body.y, sourcePlayerAnchors) <= nearPlayerRadius;
-      const weight = nearPlayer ? candidate.weight * 0.42 : candidate.weight;
+      if (nearestPartyAnchorDistance(body.x, body.y, sourcePlayerAnchors) > visibleRadius) {
+        continue;
+      }
+      const weight = candidate.weight;
       if (weight < 0.12) {
         continue;
       }
+      const waveYieldScale = fastBodyParticleWaveYieldScale(body, weight);
       anchors.push({
         x: body.x,
         y: body.y,
@@ -181,7 +232,8 @@
         radius: Math.max(0, finiteOr(body.radius, 0)),
         bodyId: body.id,
         particleAnchorWeight: weight,
-        particleAnchorTargetScale: 0.08 + weight * 0.72,
+        particleAnchorTargetScale: (0.08 + weight * 0.72) * waveYieldScale,
+        particleAnchorWaveYieldScale: waveYieldScale,
         particleAnchorType: "fast-body",
         particleAnchorBowWave: true
       });
@@ -193,8 +245,20 @@
   }
 
   function activeParticleSpawnAnchors() {
-    const anchors = activePartyPlayerAnchors();
-    return anchors.concat(activeFastBodyParticleAnchors(anchors));
+    const players = activePartyPlayerAnchors();
+    const waves = activeFastBodyParticleAnchors(players);
+    if (!waves.length) {
+      return players;
+    }
+    const ambientPlayers = players.map(function (anchor) {
+      const influence = waves.reduce(function (strongest, wave) {
+        const distance = Math.hypot(anchor.x - wave.x, anchor.y - wave.y);
+        return Math.max(strongest, particleAnchorWeight(wave) * clamp(1 - distance / particlePlayfieldRadius(), 0, 1));
+      }, 0);
+      const ambientScale = 1 - influence * 0.75;
+      return Object.assign({}, anchor, { particleAnchorWeight: ambientScale, particleAnchorTargetScale: ambientScale });
+    });
+    return ambientPlayers.concat(waves);
   }
 
   function effectiveParticleAnchorCount(anchors) {

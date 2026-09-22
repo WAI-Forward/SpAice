@@ -350,7 +350,7 @@
       const toOriginY = originY - body.y;
       const isAssignedSalvageBody = body === assignedSalvageBody;
 
-      if (usesSurvivalTowRules && isAsteroidOrLarger(body)) {
+      if (usesSurvivalTowRules && (isAsteroidOrLarger(body) || (isAssignedSalvageBody && isBoulderBody(body)))) {
         if (isAssignedSalvageBody) {
           applyControlledSurvivalTow(state, ufo, body, towTarget, pullStrength, centerStrength, dt);
         }

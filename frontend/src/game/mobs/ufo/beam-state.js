@@ -176,7 +176,7 @@
     let bestScore = Infinity;
     const playerBody = player.landed ? bodyById(player.landed.bodyId) : null;
 
-    for (const particle of assignedSalvageBody ? [] : particles) {
+    for (const particle of assignedSalvageBody ? [] : bodiesNearWorldCircle(ufo.x, ufo.y, ufoTractorRange + 26)) {
       if (!canUfoTractorAffectParticle(particle) || !canUfoPreferTractorTarget(ufo, particle)) {
         continue;
       }
@@ -215,8 +215,9 @@
     const originX = ufo.x + dirX * 26;
     const originY = ufo.y + dirY * 26;
 
-    for (let i = particles.length - 1; i >= 0; i -= 1) {
-      const particle = particles[i];
+    const beamBodies = bodiesNearWorldCircle(ufo.x, ufo.y, ufoTractorRange + 26);
+    for (let i = beamBodies.length - 1; i >= 0; i -= 1) {
+      const particle = beamBodies[i];
       if (!canUfoTractorAffectParticle(particle)) {
         continue;
       }
@@ -239,7 +240,7 @@
       const toOriginY = originY - particle.y;
       const isAssignedSalvageBody = particle === assignedSalvageBody;
 
-      if (usesSurvivalTowRules && isAsteroidOrLarger(particle)) {
+      if (usesSurvivalTowRules && (isAsteroidOrLarger(particle) || (isAssignedSalvageBody && isBoulderBody(particle)))) {
         if (isAssignedSalvageBody) {
           applyControlledSurvivalTow(ufo, particle, towTarget, pullStrength, centerStrength, dt);
         }
@@ -297,7 +298,11 @@
           life: 0.2,
           maxLife: 0.2
         });
-        particles.splice(i, 1);
+        const particleIndex = particles.indexOf(particle);
+        if (particleIndex >= 0) {
+          particles.splice(particleIndex, 1);
+          invalidateNearbyBodyIndex();
+        }
       }
     }
   }

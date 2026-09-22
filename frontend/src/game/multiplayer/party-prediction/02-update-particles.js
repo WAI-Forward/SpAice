@@ -1,4 +1,6 @@
   function updateParticles(dt) {
+    invalidateNearbyBodyIndex();
+    refreshOrbitHostSearchBase(particles);
     const aim = getAim();
     const funnel = getFunnel(aim);
     const landedBodyId = player.landed ? player.landed.bodyId : null;
@@ -6,9 +8,10 @@
     const suctionActive = localGadgetState.active;
     const vacuumBucketActive = hasVacuumBucketCollider();
     const partyGadgetStates = activePartyGadgetStates();
-    const particleSpawnAnchors = activeParticleSpawnAnchors();
     const playerCleanupAnchors = activePartyPlayerAnchors();
-    const activeTargetParticles = activeParticleTargetCount(particleSpawnAnchors);
+    const particleSpawnAnchors = activeParticleSpawnAnchors();
+    const waveActive = particleSpawnAnchors.some((anchor) => anchor.particleAnchorBowWave);
+    const activeTargetParticles = activeParticleTargetCount(playerCleanupAnchors);
     const maxParticleBudget = activeTargetParticles;
     const playfieldFill = useParticlePlayfieldFill();
     const localFillRadius = playfieldFill ? particlePlayfieldRadius() : particleDensityRadius();
@@ -25,11 +28,16 @@
       const underdense = mostUnderdenseParticleAnchor(particleSpawnAnchors);
       const needsLocalFill = underdense.score > 0.5 && underdense.localCount < underdense.localTarget;
       if (ambientParticleCount >= activeTargetParticles && (!needsLocalFill || ambientParticleCount >= maxParticleBudget)) {
-        const recycled = needsLocalFill && playfieldFill ? farthestRecyclableAmbientParticle(playerCleanupAnchors, localFillRadius * 1.18) : null;
+        const recycleRadius = waveActive
+          ? (underdense.anchor.particleAnchorBowWave ? 600 : particleDensityRadius() * 0.7)
+          : localFillRadius * 1.18;
+        const recycled = needsLocalFill && (playfieldFill || waveActive)
+          ? farthestRecyclableAmbientParticle(waveActive ? [underdense.anchor] : playerCleanupAnchors, recycleRadius)
+          : null;
         if (!recycled || !recycleParticleNearPlayer(recycled, underdense.anchor, { localFill: true, playfieldFill: true, anchors: particleSpawnAnchors })) {
           break;
         }
-        spawnTimer += 0.028;
+        spawnTimer += 0.028 / (underdense.anchor.particleAnchorWaveYieldScale || 1);
         continue;
       }
       spawnParticleNearPlayer(needsLocalFill ? underdense.anchor : randomParticleSpawnAnchor(particleSpawnAnchors), {
@@ -39,7 +47,9 @@
       });
       ambientParticleCount += 1;
       const deficit = clamp((activeTargetParticles - ambientParticleCount) / Math.max(1, activeTargetParticles), 0, 1);
-      spawnTimer += needsLocalFill ? 0.028 : 0.11 - deficit * 0.07;
+      spawnTimer += needsLocalFill
+        ? 0.028 / (underdense.anchor.particleAnchorWaveYieldScale || 1)
+        : 0.11 - deficit * 0.07;
     }
 
     if (isPartySessionActive() || multiplayer.remoteUniverses.size > 0) {
@@ -90,7 +100,7 @@
         particle.vx *= Math.pow(0.82, dt);
         particle.vy *= Math.pow(0.82, dt);
       } else {
-        applySolidBodyBackgroundDamping(particle, dt);
+        applySolidBodyBackgroundDamping(particle, dt, playerCleanupAnchors);
       }
       if (particle.gadgetStabilized && particle.tier.solid && length(particle.vx, particle.vy) <= gadgetStabilizedBreakSpeed) {
         particle.vx = 0;
@@ -127,6 +137,7 @@
 
     mergeParticles();
     resolvePlayerBodyCollisions();
+    invalidateNearbyBodyIndex();
   }
 
   function canLocalGravityClusterBody(body) {

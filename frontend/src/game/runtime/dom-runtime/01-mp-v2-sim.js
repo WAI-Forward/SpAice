@@ -278,6 +278,41 @@
     recoveryDelay: 0,
     lastFrameDt: 1 / 60
   };
+  const gamePhaseMetrics = {
+    current: Object.create(null),
+    last: Object.create(null),
+    samples: [],
+    saveMs: 0,
+    gcMs: 0,
+    gcEvents: 0,
+    gcSupported: false
+  };
+  if (typeof PerformanceObserver === "function" &&
+      Array.isArray(PerformanceObserver.supportedEntryTypes) &&
+      PerformanceObserver.supportedEntryTypes.includes("gc")) {
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          gamePhaseMetrics.gcMs += Math.max(0, finiteOr(entry.duration, 0));
+          gamePhaseMetrics.gcEvents += 1;
+        }
+      }).observe({ entryTypes: ["gc"] });
+      gamePhaseMetrics.gcSupported = true;
+    } catch (_) { /* GC entries are optional in browsers. */ }
+  }
+  function addGamePhaseTime(name, startedAt) {
+    gamePhaseMetrics.current[name] = (gamePhaseMetrics.current[name] || 0) + performance.now() - startedAt;
+  }
+  function finishGamePhaseFrame() {
+    const sample = { ...gamePhaseMetrics.current };
+    gamePhaseMetrics.last = sample;
+    gamePhaseMetrics.samples.push(sample);
+    if (gamePhaseMetrics.samples.length > 120) gamePhaseMetrics.samples.shift();
+  }
+  function gamePhaseP95(name) {
+    const values = gamePhaseMetrics.samples.map((sample) => sample[name] || 0).sort((a, b) => a - b);
+    return values.length ? values[Math.floor((values.length - 1) * 0.95)] : 0;
+  }
   const renderBudgets = {
     tinyParticleGlows: 0,
     bodyGlows: 0

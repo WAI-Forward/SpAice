@@ -10,7 +10,7 @@
 
     mapBodyCache.frameId = frameId;
     mapBodyCache.sourceCount = particles.length;
-    mapBodyCache.bodies = particles.filter(isBodyVisibleOnMap).sort((a, b) => a.mass - b.mass);
+    mapBodyCache.bodies = particles.concat(survivalDormantBodies()).filter(isBodyVisibleOnMap).sort((a, b) => a.mass - b.mass);
     return mapBodyCache.bodies;
   }
 

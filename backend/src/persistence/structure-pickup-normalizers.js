@@ -3,7 +3,9 @@ function normalizeStructure(source) {
     return null;
   }
 
-  const type = source.type === "turret" || source.type === "missile-launcher" || source.type === "accumulator" || source.type === "shield-generator" || source.type === "plating-block" || source.type === "battery" || source.type === "communication-relay" || source.type === "jet" || source.type === "tether" || source.type === "bridge" ? source.type : null;
+  const type = ["turret", "missile-launcher", "accumulator", "shield-generator", "plating-block",
+    "container", "trading-port", "battery", "medbay", "communication-relay", "jet", "tether", "bridge"]
+    .includes(source.type) ? source.type : null;
   if (!type) {
     return null;
   }
@@ -17,6 +19,9 @@ function normalizeStructure(source) {
     : maxHealth;
 
   return {
+    ...normalizeSurvivalSaveFields(source, ["survivalCampId", "survivalCampX", "survivalCampY", "survivalCampAggroTimer",
+      "survivalAggroAlertTimer", "survivalTargetPlayerId", "survivalEncounterType", "survivalEncounterId",
+      "survivalCampBudget", "survivalCampBand"]),
     id: Math.max(1, Math.floor(Number(source.id) || 1)),
     type,
     bodyId: Math.max(1, Math.floor(Number(source.bodyId) || 1)),
@@ -32,6 +37,8 @@ function normalizeStructure(source) {
     restLength: Number.isFinite(Number(source.restLength)) ? clampNumber(source.restLength, 0, 1000000) : 0,
     restCenterDx: Number.isFinite(Number(source.restCenterDx)) ? clampNumber(source.restCenterDx, -1000000, 1000000) : 0,
     restCenterDy: Number.isFinite(Number(source.restCenterDy)) ? clampNumber(source.restCenterDy, -1000000, 1000000) : 0,
+    bridgeAngleOffset: clampNumber(source.bridgeAngleOffset, -Math.PI * 16, Math.PI * 16),
+    bridgeLinkedAngleOffset: clampNumber(source.bridgeLinkedAngleOffset, -Math.PI * 16, Math.PI * 16),
     aimAngle: clampNumber(source.aimAngle, -Math.PI * 16, Math.PI * 16),
     deploy: clampNumber(source.deploy, 0, 1),
     thrustAmount: clampNumber(source.thrustAmount, 0, 1),
@@ -39,6 +46,7 @@ function normalizeStructure(source) {
     shootCooldown: clampNumber(source.shootCooldown, 0, 60),
     burstTimer: clampNumber(source.burstTimer, 0, 60),
     burstCooldown: clampNumber(source.burstCooldown, 0, 60),
+    healPulse: clampNumber(source.healPulse, 0, 1),
     missileCharge: clampNumber(source.missileCharge, 0, 1),
     lockTimer: clampNumber(source.lockTimer, 0, 10),
     beepTimer: clampNumber(source.beepTimer, 0, 10),
@@ -49,8 +57,22 @@ function normalizeStructure(source) {
     maxHealth,
     disabledTimer: clampNumber(source.disabledTimer, 0, 20),
     flash: clampNumber(source.flash, 0, 5),
+    tech: normalizeBoundedStructureData(source.tech),
+    tradeOffers: normalizeBoundedStructureData(source.tradeOffers),
+    tradeOfferSeq: Math.max(1, Math.floor(Number(source.tradeOfferSeq) || 1)),
+    tradeVessel: normalizeBoundedStructureData(source.tradeVessel),
     wobble: clampNumber(source.wobble, -Math.PI * 16, Math.PI * 16)
   };
+}
+
+function normalizeBoundedStructureData(value) {
+  if (!value || typeof value !== "object") return undefined;
+  try {
+    const json = JSON.stringify(value);
+    return json.length <= 8192 ? JSON.parse(json) : undefined;
+  } catch (_) {
+    return undefined;
+  }
 }
 
 function normalizeProjectile(source) {
@@ -162,4 +184,3 @@ function normalizeLanding(source) {
     walkCycle: clampNumber(source.walkCycle, 0, Number.MAX_SAFE_INTEGER)
   };
 }
-

@@ -55,7 +55,7 @@
     gadgetGatherCache.targets = [];
   }
 
-  function drawBackground() {
+  function drawBackground(time) {
     const gradient = ctx.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, "#06102d");
     gradient.addColorStop(0.5, "#080716");
@@ -84,6 +84,7 @@
     }
 
     ctx.restore();
+    drawHyperspaceSpeedLines(finiteOr(time, performance.now()));
   }
 
   function drawParticles(time) {

@@ -20,6 +20,7 @@
     updateEnergySystems(dt);
     updateToolEnergyUsage(dt);
     updatePlayer(dt);
+    updateSurvivalDormantWorld(dt);
     updatePersonalTether(dt);
     updateGadgetAim(dt);
     updateEquippedTool(dt);
@@ -28,7 +29,9 @@
     updateRandomEvents(dt);
     updateMobSpawns(dt);
     updateMobBeaconGadgetForces(dt);
+    const particlesStartedAt = performance.now();
     updateParticles(dt);
+    addGamePhaseTime("particles", particlesStartedAt);
     updateVisciousVacuumMobs(dt);
     updateSpacecrafts(dt);
     applyLandedSurfaceConstraint();
@@ -45,7 +48,9 @@
     updateLauncherMissiles(dt);
     resolveShieldGeneratorPlayerCollisions();
     resolveShieldGeneratorMobCollisions(dt);
+    const collisionStartedAt = performance.now();
     resolveMobBodyCollisions();
+    addGamePhaseTime("collisions", collisionStartedAt);
     damageMobsWithProjectiles();
     resolveRemoteBodyPlayerCollisions();
     resolveRemoteBodyMobCollisions();
@@ -126,7 +131,7 @@
     if (!runState.active) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      drawBackground();
+      drawBackground(now);
       drawParticles(now);
       drawDynamicLighting(now);
       updateHud();
@@ -138,7 +143,7 @@
       updateDeath(dt);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      drawBackground();
+      drawBackground(now);
       drawParticles(now);
       drawRemoteUniverses(now);
       drawRivals(now);
@@ -153,7 +158,7 @@
     if (gamePaused) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      drawBackground();
+      drawBackground(now);
       drawParticles(now);
       drawRemoteUniverses(now);
       drawRivals(now);
@@ -166,11 +171,14 @@
       return;
     }
 
+    const simulationStartedAt = performance.now();
     stepRuntimeGameplayFrame(frameDt);
+    addGamePhaseTime("simulation", simulationStartedAt);
 
+    const renderStartedAt = performance.now();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    drawBackground();
+    drawBackground(now);
     drawParticles(now);
     drawRemoteUniverses(now);
     drawRivals(now);
@@ -179,6 +187,8 @@
     drawVignette();
     drawMapOverlay();
     updateHud();
+    addGamePhaseTime("render", renderStartedAt);
+    finishGamePhaseFrame();
 
     requestAnimationFrame(tick);
   }

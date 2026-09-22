@@ -3,6 +3,7 @@
       return state;
     }
     const dt = clamp(options && options.dt, 0.001, 0.05) || TICK_DT;
+    survivalCurrentTick = Math.max(0, Math.floor(finiteOr(state.tick, 0)));
     const enableMobs = Boolean(options && options.enableMobs === true);
     const inputs = inputsByPlayerId && typeof inputsByPlayerId === "object" ? inputsByPlayerId : {};
     state.gameMode = normalizeGameMode(options && options.gameMode || state.gameMode || state.world && state.world.gameMode);
@@ -13,10 +14,12 @@
     for (const [playerId, player] of Object.entries(state.players)) {
       stepPlayer(state, player, inputs[playerId] || {}, dt);
     }
+    if (enableMobs) updateSurvivalDormantWorld(state, dt);
     applyGadgets(state, inputs, dt);
     applyLocalBodyGravity(state, dt);
+    const activePlayers = Object.values(state.players).filter((entry) => entry && entry.health > 0);
     for (const body of state.world.particles) {
-      integrateBody(state, body, dt, state.tick);
+      integrateBody(state, body, dt, state.tick, activePlayers);
     }
     updateBodyEnergySystems(state, dt);
     updateStructures(state, inputs, dt);
@@ -119,7 +122,8 @@
     const source = world && typeof world === "object" ? world : {};
     const includeCosmetic = !(options && options.compact === true);
     const result = {
-      particles: Array.isArray(source.particles) ? source.particles.map(serializeParticleState).filter(Boolean) : [],
+      particles: Array.isArray(source.particles) ? source.particles.map(serializeParticleState).filter(Boolean)
+        .concat(survivalDormantBodies(source)) : [],
       techPickups: Array.isArray(source.techPickups) ? source.techPickups.map((pickup) => serializePickupState(pickup, "tech")).filter(Boolean) : [],
       healthPickups: Array.isArray(source.healthPickups) ? source.healthPickups.map((pickup) => serializePickupState(pickup, "health")).filter(Boolean) : [],
       alienoids: Array.isArray(source.alienoids) ? source.alienoids.map(serializeLiveMobState).filter(Boolean) : [],
@@ -131,7 +135,7 @@
       fighters: Array.isArray(source.fighters) ? source.fighters.map(serializeLiveMobState).filter(Boolean) : [],
       mobBeacons: isHordeGameMode(source.gameMode) && Array.isArray(source.mobBeacons) ? source.mobBeacons.map(serializeEntityState).filter(Boolean) : [],
       rivalProjectiles: Array.isArray(source.rivalProjectiles) ? source.rivalProjectiles.map(serializeEntityState).filter(Boolean) : [],
-      structures: Array.isArray(source.structures) ? clone(source.structures) : [],
+      structures: Array.isArray(source.structures) ? clone(source.structures).concat(clone(survivalDormantStructures(source))) : [],
       spacecrafts: Array.isArray(source.spacecrafts) ? source.spacecrafts.map(serializeSpacecraftState).filter(Boolean) : [],
       claimedTechPickupIds: serializeClaimedPickupIds(source.claimedTechPickupIds),
       claimedHealthPickupIds: serializeClaimedPickupIds(source.claimedHealthPickupIds),

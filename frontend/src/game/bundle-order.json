@@ -160,6 +160,7 @@
   "mobs/rendering/aggro-alert.js",
   "mobs/rendering/camp-identities.js",
   "mobs/rendering/rivals-and-guided-paths.js",
+  "rendering/lighting/00-hyperspace-speed-lines.js",
   "rendering/lighting/01-dynamic-lighting-warm-color.js",
   "rendering/lighting/02-draw-projectile-dynamic-light.js",
   "rendering/remote-universes/01-draw-remote-universes.js",

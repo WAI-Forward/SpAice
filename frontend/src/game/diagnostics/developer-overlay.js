@@ -242,7 +242,9 @@
 
     addDeveloperWorldBound(bounds, player.x, player.y, player.radius);
     addDeveloperListBounds(bounds, particles, 8);
+    addDeveloperListBounds(bounds, survivalDormantBodies(), 8);
     addDeveloperListBounds(bounds, structures, 60);
+    addDeveloperListBounds(bounds, survivalDormantStructures(), 60);
     addDeveloperListBounds(bounds, spacecrafts, 220);
     addDeveloperListBounds(bounds, healthPickups, 18);
     addDeveloperListBounds(bounds, techPickups, 18);
@@ -271,7 +273,7 @@
     let largestMass = 0;
     let majorBodies = 0;
 
-    for (const particle of particles) {
+    for (const particle of particles.concat(survivalDormantBodies())) {
       const mass = Math.max(0, finiteOr(particle && particle.mass, 0));
       totalMass += mass;
       largestMass = Math.max(largestMass, mass);
@@ -301,7 +303,7 @@
     };
     let largestMass = -1;
 
-    for (const body of particles) {
+    for (const body of particles.concat(survivalDormantBodies())) {
       const tierName = developerBodyTierName(body);
       if (tierName === "particle") {
         summary.particle += 1;

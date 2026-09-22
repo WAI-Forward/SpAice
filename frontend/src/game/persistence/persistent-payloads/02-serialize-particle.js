@@ -46,6 +46,7 @@
       survivalCampBodyMovedWakeSent: Boolean(particle.survivalCampBodyMovedWakeSent),
       survivalCampLastMoverPlayerId: particle.survivalCampLastMoverPlayerId || "",
       lastControllingPlayerId: particle.lastControllingPlayerId || "",
+      lastPlayerControlAt: Math.max(0, finiteOr(particle.lastPlayerControlAt, 0)),
       lastPlayerControlBelowSpeedAt: Math.max(0, finiteOr(particle.lastPlayerControlBelowSpeedAt, 0)),
       playerImpactDebrisCooldown: Math.max(0, finiteOr(particle.playerImpactDebrisCooldown, 0)),
       survivalCampBody: Boolean(particle.survivalCampBody),

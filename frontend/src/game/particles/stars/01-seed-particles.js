@@ -1,4 +1,5 @@
   function seedParticles() {
+    survivalDormantRegions.clear();
     particles.length = 0;
     const anchors = activePartyPlayerAnchors();
     const targetCount = activeParticleTargetCount(anchors);

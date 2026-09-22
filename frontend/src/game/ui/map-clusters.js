@@ -100,12 +100,19 @@
     };
   }
 
+  let mapBodyClusterCache = null;
+
   function collectMapBodyClusters(bodies) {
+    if (mapBodyClusterCache && mapBodyClusterCache.source === bodies) {
+      return mapBodyClusterCache.result;
+    }
     if (!Array.isArray(bodies) || bodies.length < 2) {
-      return {
+      const result = {
         singles: Array.isArray(bodies) ? bodies : [],
         clusters: []
       };
+      mapBodyClusterCache = { source: bodies, result };
+      return result;
     }
 
     const parent = bodies.map((_, index) => index);
@@ -125,11 +132,44 @@
       }
     }
 
+    // Most mapped bodies are many thousands of units apart.  Bucket the
+    // proximity checks, while retaining the exact camp/orbit predicate for
+    // candidates (including unusually large stellar bodies).
+    const cellSize = 2048;
+    const cells = new Map();
+    const indicesById = new Map();
+    let largestRadius = 0;
     for (let i = 0; i < bodies.length; i += 1) {
-      for (let j = i + 1; j < bodies.length; j += 1) {
-        if (mapBodiesShouldCluster(bodies[i], bodies[j])) {
-          union(i, j);
+      const body = bodies[i];
+      const cellX = Math.floor(finiteOr(body.x, 0) / cellSize);
+      const cellY = Math.floor(finiteOr(body.y, 0) / cellSize);
+      const key = cellX + ":" + cellY;
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key).push(i);
+      indicesById.set(body.id, i);
+      largestRadius = Math.max(largestRadius, mapClusterBodyRadius(body));
+    }
+    const campReach = Math.max(720, finiteOr(survivalCampIdleRadius, 780) * 1.3);
+    const gravityReach = finiteOr(localBodyGravityRadius, 260) * 1.75;
+    for (let i = 0; i < bodies.length; i += 1) {
+      const body = bodies[i];
+      const reach = Math.max(campReach, gravityReach, (mapClusterBodyRadius(body) + largestRadius) * 2.2);
+      const minX = Math.floor((finiteOr(body.x, 0) - reach) / cellSize);
+      const maxX = Math.floor((finiteOr(body.x, 0) + reach) / cellSize);
+      const minY = Math.floor((finiteOr(body.y, 0) - reach) / cellSize);
+      const maxY = Math.floor((finiteOr(body.y, 0) + reach) / cellSize);
+      for (let x = minX; x <= maxX; x += 1) {
+        for (let y = minY; y <= maxY; y += 1) {
+          const bucket = cells.get(x + ":" + y);
+          if (!bucket) continue;
+          for (const j of bucket) {
+            if (j > i && mapBodiesShouldCluster(body, bodies[j])) union(i, j);
+          }
         }
+      }
+      const orbitHost = indicesById.get(Math.max(0, Math.floor(finiteOr(body.orbitHostId, 0))));
+      if (orbitHost !== undefined && orbitHost !== i && mapBodiesShouldCluster(body, bodies[orbitHost])) {
+        union(i, orbitHost);
       }
     }
 
@@ -154,7 +194,9 @@
 
     clusters.sort((a, b) => a.totalMass - b.totalMass);
     singles.sort((a, b) => a.mass - b.mass);
-    return { singles, clusters };
+    const result = { singles, clusters };
+    mapBodyClusterCache = { source: bodies, result };
+    return result;
   }
 
   function mapClusterScreenRadius(cluster, mapRadius, range) {

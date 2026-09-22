@@ -1,7 +1,8 @@
   const FAST_AMBIENT_BODY_ANCHOR_BASE_MASS = 150;
-  const FAST_AMBIENT_BODY_ANCHOR_BASE_SPEED = 700;
-  const FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED_FLOOR = 420;
-  const FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED_WINDOW = 420;
+  const FAST_AMBIENT_BODY_ANCHOR_FULL_MASS = thresholdForTierName("planet");
+  const FAST_AMBIENT_BODY_ANCHOR_BASE_SPEED = 1200;
+  const FAST_AMBIENT_BODY_ANCHOR_MIN_SPEED_FLOOR = 1000;
+  const FAST_AMBIENT_BODY_ANCHOR_FULL_SPEED_WINDOW = 500;
   const FAST_AMBIENT_BODY_ANCHOR_MAX_COUNT = 5;
 
   function ambientParticleAnchorWeight(anchor) {
@@ -32,6 +33,12 @@
     );
   }
 
+  function fastAmbientBodyWaveYieldScale(body, speedWeight) {
+    const mass = Math.max(FAST_AMBIENT_BODY_ANCHOR_BASE_MASS, finiteOr(body && body.mass, FAST_AMBIENT_BODY_ANCHOR_BASE_MASS));
+    const massProgress = clamp(Math.log2(mass / FAST_AMBIENT_BODY_ANCHOR_BASE_MASS) / Math.log2(FAST_AMBIENT_BODY_ANCHOR_FULL_MASS / FAST_AMBIENT_BODY_ANCHOR_BASE_MASS), 0, 1);
+    return 0.38 + (0.12 + 0.06 * massProgress) * speedWeight;
+  }
+
   function isFastAmbientBodyAnchor(body) {
     return Boolean(
       body &&
@@ -45,7 +52,7 @@
   }
 
   function activeAmbientParticleSpawnAnchors(world, players) {
-    const anchors = Array.isArray(players) ? players.slice() : [];
+    const anchors = [];
     const candidates = [];
     for (const body of world.particles) {
       if (!isFastAmbientBodyAnchor(body)) {
@@ -58,14 +65,17 @@
 
     candidates.sort((a, b) => b.weight - a.weight || b.speed - a.speed || b.body.mass - a.body.mass);
 
-    const nearPlayerRadius = AMBIENT_PARTICLE_DENSITY_RADIUS * 0.5;
+    const visibleRadius = AMBIENT_PARTICLE_PLAYFIELD_RADIUS;
     for (const candidate of candidates) {
       const body = candidate.body;
-      const nearPlayer = players.length ? nearestPlayerDistance(body.x, body.y, players) <= nearPlayerRadius : false;
-      const weight = nearPlayer ? candidate.weight * 0.42 : candidate.weight;
+      if (!players.length || nearestPlayerDistance(body.x, body.y, players) > visibleRadius) {
+        continue;
+      }
+      const weight = candidate.weight;
       if (weight < 0.12) {
         continue;
       }
+      const waveYieldScale = fastAmbientBodyWaveYieldScale(body, weight);
       anchors.push({
         x: body.x,
         y: body.y,
@@ -74,15 +84,24 @@
         radius: Math.max(0, finiteOr(body.radius, 0)),
         bodyId: body.id,
         ambientAnchorWeight: weight,
-        ambientAnchorTargetScale: 0.08 + weight * 0.72,
+        ambientAnchorTargetScale: (0.08 + weight * 0.72) * waveYieldScale,
+        ambientAnchorWaveYieldScale: waveYieldScale,
         ambientAnchorType: "fast-body",
         ambientAnchorBowWave: true
       });
-      if (anchors.length - players.length >= FAST_AMBIENT_BODY_ANCHOR_MAX_COUNT) {
+      if (anchors.length >= FAST_AMBIENT_BODY_ANCHOR_MAX_COUNT) {
         break;
       }
     }
-    return anchors;
+    const ambientPlayers = players.map((player) => {
+      const influence = anchors.reduce((strongest, wave) => {
+        const distance = Math.hypot(player.x - wave.x, player.y - wave.y);
+        return Math.max(strongest, ambientParticleAnchorWeight(wave) * clamp(1 - distance / visibleRadius, 0, 1));
+      }, 0);
+      const ambientScale = 1 - influence * 0.75;
+      return Object.assign({}, player, { ambientAnchorWeight: ambientScale, ambientAnchorTargetScale: ambientScale });
+    });
+    return ambientPlayers.concat(anchors);
   }
 
   function countAmbientParticlesNearPlayer(world, player, radius) {
@@ -238,8 +257,9 @@
     }
 
     const anchors = activeAmbientParticleSpawnAnchors(world, players);
-    const effectiveAnchorCount = effectiveParticleAnchorCount(anchors);
-    const targetCount = Math.round(TARGET_AMBIENT_PARTICLES * (0.96 + Math.max(0, effectiveAnchorCount - 1) * 0.62));
+    const waveActive = anchors.some((anchor) => anchor.ambientAnchorBowWave);
+    const effectivePlayerCount = effectiveParticlePlayerCount(players);
+    const targetCount = Math.round(TARGET_AMBIENT_PARTICLES * (0.96 + Math.max(0, effectivePlayerCount - 1) * 0.62));
     const maxAmbientBudget = targetCount;
     const localTarget = AMBIENT_PARTICLE_PLAYFIELD_TARGET;
     const densityRadius = AMBIENT_PARTICLE_PLAYFIELD_RADIUS;
@@ -249,25 +269,39 @@
       ambientCount - pruneDistantAmbientMatter(world, players, Math.max(densityRadius * 1.75, 3200), AMBIENT_PARTICLE_CATCHUP_SPAWNS * 2)
     );
     const seedHolder = { seed: state.seed >>> 0 };
+    let waveSpawns = 0;
     for (let spawned = 0; spawned < AMBIENT_PARTICLE_CATCHUP_SPAWNS; spawned += 1) {
       const underdense = mostUnderdenseAmbientPlayer(world, anchors, localTarget, densityRadius);
       const needsLocalFill = underdense.score > 0.5 && underdense.localCount < underdense.localTarget;
+      if (ambientCount >= targetCount && !needsLocalFill) {
+        break;
+      }
+      const spawnAnchor = needsLocalFill ? underdense.anchor : randomAmbientParticleSpawnAnchor(anchors, seedHolder);
+      if (spawnAnchor.ambientAnchorBowWave &&
+        waveSpawns >= Math.round(AMBIENT_PARTICLE_CATCHUP_SPAWNS * spawnAnchor.ambientAnchorWaveYieldScale)) {
+        break;
+      }
       if (ambientCount >= targetCount && (!needsLocalFill || ambientCount >= maxAmbientBudget)) {
-        const recycled = needsLocalFill ? farthestRecyclableAmbientParticle(world, players, densityRadius * 1.18) : null;
+        const recycleRadius = waveActive
+          ? (underdense.anchor.ambientAnchorBowWave ? 600 : AMBIENT_PARTICLE_DENSITY_RADIUS * 0.7)
+          : densityRadius * 1.18;
+        const recycled = needsLocalFill ? farthestRecyclableAmbientParticle(world, waveActive ? [underdense.anchor] : players, recycleRadius) : null;
         if (!recycled) {
           break;
         }
-        createAmbientParticle(world, underdense.anchor, anchors, seedHolder, { localFill: true, recycledBody: recycled });
+        createAmbientParticle(world, spawnAnchor, anchors, seedHolder, { localFill: true, recycledBody: recycled });
+        if (spawnAnchor.ambientAnchorBowWave) waveSpawns += 1;
         continue;
       }
       world.particles.push(createAmbientParticle(
         world,
-        needsLocalFill ? underdense.anchor : randomAmbientParticleSpawnAnchor(anchors, seedHolder),
+        spawnAnchor,
         anchors,
         seedHolder,
         { localFill: needsLocalFill }
       ));
       ambientCount += 1;
+      if (spawnAnchor.ambientAnchorBowWave) waveSpawns += 1;
       if (!needsLocalFill) {
         break;
       }

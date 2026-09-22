@@ -545,6 +545,7 @@
     }
     const controllingPlayerId = String(playerId || "");
     body.lastControllingPlayerId = controllingPlayerId;
+    body.lastPlayerControlAt = Math.max(0, finiteOr(survivalCurrentTick, 0)) * TICK_DT;
     body.lastPlayerControlBelowSpeedAt = 0;
     if (!body.survivalCampBody) return;
     ensureSurvivalCampBodyHome(body);
@@ -666,6 +667,8 @@
 
     const anchor = currentSurvivalCampSpatialCache(state).anchorsByCamp.get(cleanCampId);
     if (!anchor || anchor.totalWeight <= 0) {
+      const dormant = survivalDormantBodies(world).find((body) => body.survivalCampBody && body.survivalCampId === cleanCampId);
+      if (dormant) return { x: dormant.x, y: dormant.y, hasCampBody: true };
       return { x: finiteOr(fallbackX, 0), y: finiteOr(fallbackY, 0), hasCampBody: false };
     }
     return {
@@ -824,6 +827,8 @@
     const distance = Math.hypot(dx, dy) || 1;
     const speed = Math.hypot(finiteOr(mob.vx, 0), finiteOr(mob.vy, 0));
     if (distance <= SURVIVAL_CAMP_IDLE_RADIUS * 0.58 && speed < 130) {
+      const dormantCampBody = survivalDormantBodies(state.world).find((body) => body.survivalCampId === targetCamp.campId);
+      if (dormantCampBody) wakeSurvivalDormantBody(state, dormantCampBody.id);
       mob.survivalCampId = targetCamp.campId;
       mob.survivalCampX = targetCamp.x;
       mob.survivalCampY = targetCamp.y;
@@ -1259,6 +1264,21 @@
   }
 
   function shouldSleepDistantSurvivalMob(state, mob, players) {
+    if (state && mob && normalizeGameMode(state.gameMode || state.world && state.world.gameMode) === "survival" &&
+        !isPlayerTeamMob(mob) && (mob.survivalEncounterType === "migration" || mob.survivalEncounterType === "salvage")) {
+      if (finiteOr(mob.playerDamageAggroTimer, 0) > 0 || finiteOr(mob.survivalCampAggroTimer, 0) > 0 ||
+          ["engage", "revenge", "return"].includes(String(mob.survivalAiState || ""))) {
+        mob.survivalCoarseSleeping = false;
+        return false;
+      }
+      const activePlayers = Array.isArray(players) && players.length ? players :
+        Object.values(state.players || {}).filter((entry) => entry && entry.health > 0 && !entry.spacecraftInterior);
+      const body = mob.survivalSalvageBodyId ? survivalSalvageBody(state.world, mob) : null;
+      const bodyNearPlayer = body && nearestPlayerDistance(body.x, body.y, activePlayers) <= 32000;
+      mob.survivalCoarseSleeping = activePlayers.length > 0 && !bodyNearPlayer &&
+        nearestPlayerDistance(mob.x, mob.y, activePlayers) > (mob.survivalCoarseSleeping ? 28000 : 32000);
+      return mob.survivalCoarseSleeping;
+    }
     if (
       !state ||
       !mob ||
@@ -1320,6 +1340,12 @@
     if (!players.length) {
       updateRivalProjectiles(state, dt, options);
       return;
+    }
+    state.world.survivalCoarseTimer = Math.max(0, finiteOr(state.world.survivalCoarseTimer, 0)) + dt;
+    if (state.gameMode === "survival" && state.world.survivalCoarseTimer >= 1) {
+      const elapsed = Math.min(5, state.world.survivalCoarseTimer);
+      state.world.survivalCoarseTimer = 0;
+      advanceDistantSurvivalLogistics(state, elapsed, players);
     }
     const seedHolder = { seed: state.seed >>> 0 };
     for (const collectionName of MOB_COLLECTIONS) {

@@ -11,8 +11,12 @@
     const mouthX = centerX + aim.local.x * funnelShape.rimX;
     const mouthY = centerY + aim.local.y * funnelShape.rimX;
     const normal = { x: -aim.local.y, y: aim.local.x };
-    const rangeFactor = Math.max(0.1, pulling || holding ? currentGadgetRangeFactor() : currentGadgetBlowFactor());
-    const fieldLength = holding ? gadgetHoldReach * rangeFactor - funnelShape.rimX : pulling ? 320 * rangeFactor : 250 * rangeFactor;
+    const rangeFactor = Math.max(0.1, pulling ? currentGadgetRangeFactor() : currentGadgetBlowFactor());
+    const suckFactor = currentGadgetSuckFactor();
+    const blowFactor = currentGadgetBlowFactor();
+    const holdFactor = gadgetHoldBalanceFactor(suckFactor, blowFactor);
+    const holdRangeFactor = Math.max(suckFactor, blowFactor);
+    const fieldLength = pulling ? 320 * rangeFactor : 250 * rangeFactor;
     const time = performance.now() * 0.004;
     const gatherColor = pulling ? activeGadgetGatherColor(aim) : null;
     const gatherLight = gatherColor ? normalizeDynamicLightColor(gatherColor, { r: 114, g: 244, b: 255 }) : null;
@@ -23,7 +27,7 @@
     ctx.lineCap = "round";
 
     if (holding) {
-      drawGadgetHoldField(centerX, centerY, aim.local.x, aim.local.y, normal.x, normal.y, time, false, rangeFactor);
+      drawGadgetHoldField(centerX, centerY, aim.local.x, aim.local.y, normal.x, normal.y, time, false, holdFactor, holdRangeFactor);
       ctx.restore();
       return;
     }

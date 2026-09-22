@@ -168,7 +168,9 @@
 
       ufo.x += ufo.vx * dt;
       ufo.y += ufo.vy * dt;
+      const beamStartedAt = performance.now();
       applyUfoTractorBeam(ufo, dt, salvageTarget);
+      addGamePhaseTime("beams", beamStartedAt);
       if (target) applyUfoBossPlayerDrainBeam(ufo, target, dt);
       if (!isPlayerTeamMob(ufo) && !isSurvivalLogisticsUfo(ufo)) {
         updateUfoUndersideImpact(ufo);

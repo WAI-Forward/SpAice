@@ -54,7 +54,7 @@
     if (includeWorld) {
       payload.world = {
         elapsed: performance.now() / 1000,
-        particles: particles.map(serializeParticle),
+        particles: particles.map(serializeParticle).concat(survivalDormantBodies().map(serializeParticle)),
         alienoids: rivals.map(serializeRival),
         ufos: ufos.map(serializeUfo),
         rambots: rambots.map(serializeRambot),
@@ -63,7 +63,7 @@
         rockets: rockets.map(serializeRocket),
         fighters: fighters.map(serializeFighter),
         mobBeacons: isHordeModeActive() ? mobBeacons.map(serializeMobBeacon) : [],
-        structures: structures.map(serializeStructure),
+        structures: structures.map(serializeStructure).concat(survivalDormantStructures().map(serializeStructure)),
         spacecrafts: spacecrafts.map(serializeSpacecraft),
         rivalProjectiles: rivalProjectiles.map(serializeProjectile),
         techPickups: techPickups.map(serializeTechPickup),
@@ -150,6 +150,7 @@
       if (options && options.smoothParticles) {
         applySmoothedParticleSnapshots(snapshot.particles);
       } else {
+        survivalDormantRegions.clear();
         particles.length = 0;
         particles.push(...snapshot.particles.map(normalizeParticleSnapshot).filter(Boolean));
       }

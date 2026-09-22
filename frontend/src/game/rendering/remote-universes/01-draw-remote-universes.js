@@ -239,15 +239,17 @@
     ctx.restore();
   }
 
-  function drawGadgetHoldField(originX, originY, dirX, dirY, normalX, normalY, time, compact, rangeFactor) {
+  function drawGadgetHoldField(originX, originY, dirX, dirY, normalX, normalY, time, compact, holdFactor, reachFactor) {
     const mouthX = originX + dirX * funnelShape.rimX;
     const mouthY = originY + dirY * funnelShape.rimX;
-    const holdReach = gadgetHoldReach * Math.max(0.1, finiteOr(rangeFactor, 1));
+    const holdReach = gadgetHoldReachFromFactors(holdFactor, reachFactor);
     const pointX = originX + dirX * holdReach;
     const pointY = originY + dirY * holdReach;
     const innerWidth = compact ? 106 : 124;
     const outerWidth = compact ? 88 : 106;
-    const outerLength = compact ? 84 : 108;
+    const farReach = gadgetHoldFarReach(reachFactor);
+    const farX = originX + dirX * farReach;
+    const farY = originY + dirY * farReach;
 
     ctx.save();
     ctx.filter = "blur(5px)";
@@ -282,12 +284,12 @@
       const t = i / 7;
       const side = (t - 0.5) * outerWidth;
       const wave = Math.sin(time * 1.1 + i * 1.7) * (compact ? 5 : 6);
-      const startX = pointX + dirX * outerLength + normalX * (side + wave);
-      const startY = pointY + dirY * outerLength + normalY * (side + wave);
+      const startX = farX + normalX * (side + wave);
+      const startY = farY + normalY * (side + wave);
       const endX = pointX + normalX * side * 0.03;
       const endY = pointY + normalY * side * 0.03;
-      const controlX = pointX + dirX * outerLength * 0.52 + normalX * (side * 0.44 + wave * 0.35);
-      const controlY = pointY + dirY * outerLength * 0.52 + normalY * (side * 0.44 + wave * 0.35);
+      const controlX = pointX + dirX * (farReach - holdReach) * 0.52 + normalX * (side * 0.44 + wave * 0.35);
+      const controlY = pointY + dirY * (farReach - holdReach) * 0.52 + normalY * (side * 0.44 + wave * 0.35);
       const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
       gradient.addColorStop(0, "rgba(172, 255, 164, 0.28)");
       gradient.addColorStop(0.58, "rgba(126, 255, 191, 0.18)");
@@ -322,7 +324,7 @@
     ctx.lineCap = "round";
 
     if (holding) {
-      drawGadgetHoldField(remotePlayer.x, remotePlayer.y, dirX, dirY, normalX, normalY, time * 0.004, true);
+      drawGadgetHoldField(remotePlayer.x, remotePlayer.y, dirX, dirY, normalX, normalY, time * 0.004, true, remotePlayer.holdFactor, remotePlayer.holdRangeFactor);
       ctx.restore();
       return;
     }
@@ -444,4 +446,3 @@
       shouldEmit ? null : { emit: false, drawFlame: false }
     );
   }
-

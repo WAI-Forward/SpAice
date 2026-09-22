@@ -59,6 +59,22 @@
   }
 
   function shouldSleepDistantSurvivalMob(mob) {
+    if (runState.gameMode === "survival" && mob && !isPlayerTeamMob(mob) &&
+        (mob.survivalEncounterType === "migration" || mob.survivalEncounterType === "salvage")) {
+      if (finiteOr(mob.playerDamageAggroTimer, 0) > 0 || finiteOr(mob.survivalCampAggroTimer, 0) > 0 ||
+          ["engage", "revenge", "return"].includes(String(mob.survivalAiState || ""))) {
+        mob.survivalCoarseSleeping = false;
+        return false;
+      }
+      const anchors = Array.isArray(survivalMobSimulationAnchors) && survivalMobSimulationAnchors.length
+        ? survivalMobSimulationAnchors : activePartyPlayerAnchors();
+      const distance = nearestPartyAnchorDistance(mob.x, mob.y, anchors);
+      const body = mob.survivalSalvageBodyId ? survivalSalvageBody(mob) : null;
+      const bodyNearPlayer = body && nearestPartyAnchorDistance(body.x, body.y, anchors) <= 32000;
+      mob.survivalCoarseSleeping = !bodyNearPlayer &&
+        distance > (mob.survivalCoarseSleeping ? 28000 : 32000);
+      return mob.survivalCoarseSleeping;
+    }
     if (!isSurvivalCampMob(mob) || String(mob.survivalEncounterType || "camp") !== "camp") {
       return false;
     }
@@ -603,6 +619,8 @@
     }
     const anchor = currentSurvivalCampSpatialCache().anchorsByCamp.get(cleanCampId);
     if (!anchor || anchor.totalWeight <= 0) {
+      const dormant = survivalDormantBodies().find((body) => body.survivalCampBody && body.survivalCampId === cleanCampId);
+      if (dormant) return { x: dormant.x, y: dormant.y, hasCampBody: true };
       return { x: finiteOr(fallbackX, 0), y: finiteOr(fallbackY, 0), hasCampBody: false };
     }
     return {
@@ -753,6 +771,8 @@
     const distance = Math.hypot(dx, dy) || 1;
     const speed = Math.hypot(finiteOr(mob.vx, 0), finiteOr(mob.vy, 0));
     if (distance <= survivalCampIdleRadius * 0.58 && speed < 130) {
+      const dormantCampBody = survivalDormantBodies().find((body) => body.survivalCampId === targetCamp.campId);
+      if (dormantCampBody) wakeSurvivalDormantBody(dormantCampBody.id);
       mob.survivalCampId = targetCamp.campId;
       mob.survivalCampX = targetCamp.x;
       mob.survivalCampY = targetCamp.y;

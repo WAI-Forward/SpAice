@@ -86,7 +86,9 @@
       return false;
     }
 
-    const activeReach = state.right ? gadgetPushReachForState(state) : gadgetForceReachForState(state);
+    const activeReach = state.right
+      ? gadgetPushReachForState(state)
+      : Math.max(gadgetForceReachForState(state), state.middle ? gadgetHoldReachForState(state) + 90 : 0);
     const reach = activeReach + Math.max(0, finiteOr(target.radius, 0)) + Math.max(0, finiteOr(padding, 0)) + 180;
     const dx = target.x - state.actor.x;
     const dy = target.y - state.actor.y;

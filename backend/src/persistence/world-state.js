@@ -1,6 +1,7 @@
 function createDefaultWorldState() {
   return {
     version: 1,
+    gameMode: "survival",
     elapsed: 0,
     particles: [],
     alienoids: [],
@@ -58,4 +59,3 @@ function createDefaultWorldState() {
     lastEvolvedAt: Date.now()
   };
 }
-

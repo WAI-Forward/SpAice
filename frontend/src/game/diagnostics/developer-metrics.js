@@ -6,6 +6,9 @@
     const world = developerWorldBounds();
     const mass = developerWorldMassSummary();
     const bodies = developerBodySummary();
+    const dormant = survivalDormantCounts();
+    const dormantMobs = hostileCombatMobs().filter((mob) => mob && mob.health > 0 &&
+      (mob.survivalCoarseSleeping || shouldSleepDistantSurvivalMob(mob))).length;
     const network = developerNetworkSummary();
     const sharedStats = multiplayer.sharedWorldStats;
     const sharedWorld = sharedStats && sharedStats.world ? sharedStats.world : null;
@@ -37,14 +40,27 @@
       "  fps: " + formatDeveloperNumber(fps, 1) + " | frame dt: " + formatDeveloperNumber(frameDt * 1000, 1) + " ms | frame: " + renderPerformance.frameId,
       "  render quality: " + formatDeveloperPercent(renderQuality()) + " | glow budgets: tiny " + renderBudgets.tinyParticleGlows + ", body " + renderBudgets.bodyGlows,
       "  viewport: " + width + "x" + height + " @ " + formatDeveloperNumber(dpr, 2) + " dpr | zoom " + formatDeveloperNumber(cameraZoom * 100) + "%",
+      "  timings last/p95 ms: sim " + formatDeveloperNumber(gamePhaseMetrics.last.simulation || 0, 1) + "/" + formatDeveloperNumber(gamePhaseP95("simulation"), 1) +
+        " | render " + formatDeveloperNumber(gamePhaseMetrics.last.render || 0, 1) + "/" + formatDeveloperNumber(gamePhaseP95("render"), 1) +
+        " | map " + formatDeveloperNumber(gamePhaseMetrics.last.map || 0, 1) + "/" + formatDeveloperNumber(gamePhaseP95("map"), 1),
+      "  work last ms: particles " + formatDeveloperNumber(gamePhaseMetrics.last.particles || 0, 1) +
+        " | collisions " + formatDeveloperNumber(gamePhaseMetrics.last.collisions || 0, 1) +
+        " | beams " + formatDeveloperNumber(gamePhaseMetrics.last.beams || 0, 1) +
+        " | salvage " + formatDeveloperNumber(gamePhaseMetrics.last.salvage || 0, 1) +
+        " | last save serialize " + formatDeveloperNumber(gamePhaseMetrics.saveMs, 1),
+      "  GC observed: " + (gamePhaseMetrics.gcSupported
+        ? formatDeveloperNumber(gamePhaseMetrics.gcEvents) + " events / " + formatDeveloperNumber(gamePhaseMetrics.gcMs, 1) + " ms"
+        : "unavailable in this browser"),
       "",
       "World",
       "  size: " + formatDeveloperNumber(world.width) + " x " + formatDeveloperNumber(world.height) + " | area " + formatDeveloperNumber(world.area) + " | farthest " + formatDeveloperNumber(world.radiusFromPlayer),
-      "  bodies: total " + particles.length + " / target " + targetParticles + " | major " + mass.majorBodies + " | mapped " + bodies.mapped,
+      "  bodies: total " + (particles.length + dormant.bodies) + " / target " + targetParticles + " | major " + mass.majorBodies + " | mapped " + bodies.mapped,
+      "  active/dormant: bodies " + particles.length + "/" + dormant.bodies + " | structures " + structures.length + "/" + dormant.structures + " | regions " + dormant.regions,
+      "  mobs active/dormant: " + (mobs.total - dormantMobs) + "/" + dormantMobs,
       "  by tier: particle " + bodies.particle + ", rock " + bodies.rock + ", boulder " + bodies.boulder + ", asteroid " + bodies.asteroid,
       "  by tier: moon " + bodies.moon + ", planet " + bodies.planet + ", star+ " + bodies.stellar,
       "  mass: total " + formatDeveloperNumber(mass.totalMass) + " | largest " + formatDeveloperNumber(mass.largestMass) + " (" + bodies.largestTier + ")",
-      "  structures: " + structures.length + " | spacecraft: " + spacecrafts.length + " | pickups: health " + healthPickups.length + ", tech " + techPickups.length,
+      "  structures: " + (structures.length + dormant.structures) + " | spacecraft: " + spacecrafts.length + " | pickups: health " + healthPickups.length + ", tech " + techPickups.length,
       "",
       ...developerSurvivalCampMetricLines(),
       "Combat",
@@ -216,6 +232,7 @@
   }
 
   function drawMapOverlay() {
+    if (clusternautsTestConfig && clusternautsTestConfig.skipMapOverlay) return;
     if (gameSettings.hudEnabled === false) {
       return;
     }
@@ -223,6 +240,7 @@
     if (isCompactHudViewport() && !mapHudOpen) {
       return;
     }
+    const mapStartedAt = performance.now();
 
     const margin = width <= 560 ? 10 : 16;
     const size = Math.round(clamp(Math.min(width, height) * (width <= 560 ? 0.34 : 0.31), width <= 560 ? 160 : 190, width <= 560 ? 228 : 292));
@@ -398,6 +416,7 @@
     ctx.restore();
 
     drawMapHoverPanel(hoverTarget, performance.now());
+    addGamePhaseTime("map", mapStartedAt);
   }
 
   function updateHud() {
